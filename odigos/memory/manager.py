@@ -1,0 +1,104 @@
+import logging
+
+from odigos.memory.graph import EntityGraph
+from odigos.memory.resolver import EntityResolver
+from odigos.memory.summarizer import ConversationSummarizer
+from odigos.memory.vectors import VectorMemory
+
+logger = logging.getLogger(__name__)
+
+
+class MemoryManager:
+    """Unified recall/store interface for the agent core."""
+
+    def __init__(
+        self,
+        vector_memory: VectorMemory,
+        graph: EntityGraph,
+        resolver: EntityResolver,
+        summarizer: ConversationSummarizer,
+    ) -> None:
+        self.vector_memory = vector_memory
+        self.graph = graph
+        self.resolver = resolver
+        self.summarizer = summarizer
+
+    async def recall(self, query: str, limit: int = 5) -> str:
+        """Recall relevant memories for the given query.
+
+        Returns a formatted context string for injection into the prompt.
+        """
+        sections = []
+
+        # 1. Vector search for relevant memories
+        vector_results = await self.vector_memory.search(query, limit=limit)
+        memory_lines = []
+        for result in vector_results:
+            if result.source_type != "entity_name":  # Skip entity name embeddings
+                memory_lines.append(f"- {result.content_preview}")
+
+        if memory_lines:
+            sections.append("## Relevant memories\n" + "\n".join(memory_lines))
+
+        # 2. Entity lookup
+        entity_lines = []
+        words = [w for w in query.split() if len(w) > 2]
+        seen_entities = set()
+        for word in words:
+            entities = await self.graph.find_entity(word)
+            for entity in entities:
+                if entity["id"] not in seen_entities:
+                    seen_entities.add(entity["id"])
+                    related = await self.graph.get_related(entity["id"])
+                    related_names = [r["name"] for r in related[:3]]
+                    line = f"- {entity['name']}: {entity['type']}"
+                    if entity.get("summary"):
+                        line += f", {entity['summary']}"
+                    if related_names:
+                        line += f" (related: {', '.join(related_names)})"
+                    entity_lines.append(line)
+
+        if entity_lines:
+            sections.append("## Known entities\n" + "\n".join(entity_lines))
+
+        return "\n\n".join(sections)
+
+    async def store(
+        self,
+        conversation_id: str,
+        user_message: str,
+        assistant_response: str,
+        extracted_entities: list[dict],
+    ) -> None:
+        """Process and store memories from a conversation turn."""
+        # 1. Resolve and store entities
+        for entity_data in extracted_entities:
+            result = await self.resolver.resolve(
+                name=entity_data["name"],
+                entity_type=entity_data.get("type", "concept"),
+                context=user_message,
+            )
+
+            # If entity has a relationship, create an edge
+            if entity_data.get("relationship") and entity_data.get("detail"):
+                detail = entity_data["detail"]
+                target_result = await self.resolver.resolve(
+                    name=detail,
+                    entity_type="concept",
+                    context=user_message,
+                )
+                await self.graph.create_edge(
+                    source_id=result.entity_id,
+                    relationship=entity_data["relationship"],
+                    target_id=target_result.entity_id,
+                )
+
+        # 2. Embed the user message for semantic search
+        await self.vector_memory.store(
+            text=user_message,
+            source_type="user_message",
+            source_id=conversation_id,
+        )
+
+        # 3. Check if summarization is needed
+        await self.summarizer.summarize_if_needed(conversation_id)
