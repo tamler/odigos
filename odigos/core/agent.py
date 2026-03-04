@@ -38,9 +38,7 @@ class Agent:
             memory_manager=memory_manager,
             personality_path=personality_path,
         )
-        self.executor = Executor(
-            provider, self.context_assembler, tool_registry=tool_registry
-        )
+        self.executor = Executor(provider, self.context_assembler, tool_registry=tool_registry)
         self.reflector = Reflector(db, memory_manager=memory_manager)
 
     async def handle_message(self, message: UniversalMessage) -> str:
@@ -54,12 +52,8 @@ class Agent:
 
         # Plan -> Execute -> Reflect
         plan = await self.planner.plan(message.content)
-        response = await self.executor.execute(
-            conversation_id, message.content, plan=plan
-        )
-        await self.reflector.reflect(
-            conversation_id, response, user_message=message.content
-        )
+        response = await self.executor.execute(conversation_id, message.content, plan=plan)
+        await self.reflector.reflect(conversation_id, response, user_message=message.content)
 
         await self.db.execute(
             "UPDATE conversations SET last_message_at = datetime('now'), "

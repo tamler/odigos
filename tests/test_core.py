@@ -273,9 +273,7 @@ class TestExecutor:
         """Search plan calls tool then LLM with results in context."""
         mock_tool = AsyncMock()
         mock_tool.name = "web_search"
-        mock_tool.execute.return_value = ToolResult(
-            success=True, data="## Results\n1. Python docs"
-        )
+        mock_tool.execute.return_value = ToolResult(success=True, data="## Results\n1. Python docs")
 
         registry = ToolRegistry()
         registry.register(mock_tool)

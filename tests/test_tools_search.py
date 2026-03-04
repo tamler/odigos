@@ -11,8 +11,14 @@ class TestSearchTool:
     def mock_searxng(self):
         provider = AsyncMock()
         provider.search.return_value = [
-            SearchResult(title="Python Docs", url="https://docs.python.org", snippet="Official Python documentation."),
-            SearchResult(title="Real Python", url="https://realpython.com", snippet="Python tutorials."),
+            SearchResult(
+                title="Python Docs",
+                url="https://docs.python.org",
+                snippet="Official Python documentation.",
+            ),
+            SearchResult(
+                title="Real Python", url="https://realpython.com", snippet="Python tutorials."
+            ),
         ]
         return provider
 

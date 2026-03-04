@@ -51,7 +51,11 @@ class TestSearxngProvider:
             200,
             json={
                 "results": [
-                    {"title": f"Result {i}", "url": f"https://example.com/{i}", "content": f"Snippet {i}"}
+                    {
+                        "title": f"Result {i}",
+                        "url": f"https://example.com/{i}",
+                        "content": f"Snippet {i}",
+                    }
                     for i in range(10)
                 ]
             },
