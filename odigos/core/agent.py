@@ -27,7 +27,7 @@ class Agent:
         personality_path: str = "data/personality.yaml",
     ) -> None:
         self.db = db
-        self.planner = Planner()
+        self.planner = Planner(provider=provider)
         self.context_assembler = ContextAssembler(
             db,
             agent_name,

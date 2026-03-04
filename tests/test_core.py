@@ -177,11 +177,62 @@ class TestContextAssemblerWithPersonality:
 
 
 class TestPlanner:
-    async def test_returns_respond_plan(self):
-        planner = Planner()
-        plan = await planner.plan("Hello")
+    @pytest.fixture
+    def mock_classify_provider(self):
+        provider = AsyncMock()
+        return provider
+
+    async def test_classify_as_respond(self, mock_classify_provider):
+        """Planner returns respond when LLM says no search needed."""
+        mock_classify_provider.complete.return_value = LLMResponse(
+            content='{"action": "respond"}',
+            model="test/model",
+            tokens_in=10,
+            tokens_out=5,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_classify_provider)
+        plan = await planner.plan("Hello, how are you?")
+
         assert plan.action == "respond"
-        assert plan.requires_tools is False
+        assert plan.tool_params == {}
+
+    async def test_classify_as_search(self, mock_classify_provider):
+        """Planner returns search with query when LLM says search needed."""
+        mock_classify_provider.complete.return_value = LLMResponse(
+            content='{"action": "search", "query": "weather in NYC today"}',
+            model="test/model",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_classify_provider)
+        plan = await planner.plan("What's the weather in NYC?")
+
+        assert plan.action == "search"
+        assert plan.tool_params == {"query": "weather in NYC today"}
+
+    async def test_fallback_to_respond_on_parse_error(self, mock_classify_provider):
+        """Planner falls back to respond if LLM returns unparseable response."""
+        mock_classify_provider.complete.return_value = LLMResponse(
+            content="I'm not sure what you mean",
+            model="test/model",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_classify_provider)
+        plan = await planner.plan("something weird")
+
+        assert plan.action == "respond"
+
+    async def test_fallback_to_respond_on_provider_error(self, mock_classify_provider):
+        """Planner falls back to respond if LLM call fails entirely."""
+        mock_classify_provider.complete.side_effect = RuntimeError("API down")
+        planner = Planner(provider=mock_classify_provider)
+        plan = await planner.plan("search for something")
+
+        assert plan.action == "respond"
 
 
 class TestExecutor:
