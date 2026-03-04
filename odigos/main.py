@@ -8,6 +8,12 @@ from odigos.channels.telegram import TelegramChannel
 from odigos.config import load_settings
 from odigos.core.agent import Agent
 from odigos.db import Database
+from odigos.memory.graph import EntityGraph
+from odigos.memory.manager import MemoryManager
+from odigos.memory.resolver import EntityResolver
+from odigos.memory.summarizer import ConversationSummarizer
+from odigos.memory.vectors import VectorMemory
+from odigos.providers.embeddings import EmbeddingProvider
 from odigos.providers.openrouter import OpenRouterProvider
 
 logging.basicConfig(
@@ -19,13 +25,14 @@ logger = logging.getLogger(__name__)
 # Module-level references for cleanup
 _db: Database | None = None
 _provider: OpenRouterProvider | None = None
+_embedder: EmbeddingProvider | None = None
 _telegram: TelegramChannel | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
-    global _db, _provider, _telegram
+    global _db, _provider, _embedder, _telegram
 
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     settings = load_settings(config_path)
@@ -46,11 +53,32 @@ async def lifespan(app: FastAPI):
         temperature=settings.openrouter.temperature,
     )
 
+    # Initialize embedding provider
+    _embedder = EmbeddingProvider(api_key=settings.openrouter_api_key)
+
+    # Initialize memory stack
+    vector_memory = VectorMemory(db=_db, embedder=_embedder)
+    await vector_memory.initialize()
+
+    graph = EntityGraph(db=_db)
+    resolver = EntityResolver(graph=graph, vector_memory=vector_memory)
+    summarizer = ConversationSummarizer(
+        db=_db, vector_memory=vector_memory, llm_provider=_provider
+    )
+    memory_manager = MemoryManager(
+        vector_memory=vector_memory,
+        graph=graph,
+        resolver=resolver,
+        summarizer=summarizer,
+    )
+    logger.info("Memory system initialized")
+
     # Initialize agent
     agent = Agent(
         db=_db,
         provider=_provider,
         agent_name=settings.agent.name,
+        memory_manager=memory_manager,
     )
 
     # Initialize Telegram channel
@@ -71,6 +99,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Odigos...")
     if _telegram:
         await _telegram.stop()
+    if _embedder:
+        await _embedder.close()
     if _provider:
         await _provider.close()
     if _db:

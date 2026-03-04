@@ -253,6 +253,28 @@ class TestReflectorWithMemory:
         assert msg["content"] == "Hi there"
 
 
+class TestAgentWithMemory:
+    async def test_full_loop_with_memory(self, db: Database, mock_provider: AsyncMock):
+        """Agent passes user_message to reflector when memory is wired."""
+        mock_memory = AsyncMock()
+        mock_memory.recall.return_value = ""
+
+        agent = Agent(
+            db=db,
+            provider=mock_provider,
+            agent_name="TestBot",
+            history_limit=20,
+            memory_manager=mock_memory,
+        )
+        message = _make_message("Hello agent")
+
+        response = await agent.handle_message(message)
+        assert response == "I'm Odigos, your assistant."
+
+        # Verify memory_manager.store was called (via reflector)
+        mock_memory.store.assert_called_once()
+
+
 class TestAgent:
     async def test_full_loop(self, db: Database, mock_provider: AsyncMock):
         agent = Agent(

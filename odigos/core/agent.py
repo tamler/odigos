@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from odigos.channels.base import UniversalMessage
 from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor
@@ -5,6 +9,9 @@ from odigos.core.planner import Planner
 from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.providers.base import LLMProvider
+
+if TYPE_CHECKING:
+    from odigos.memory.manager import MemoryManager
 
 
 class Agent:
@@ -16,12 +23,15 @@ class Agent:
         provider: LLMProvider,
         agent_name: str = "Odigos",
         history_limit: int = 20,
+        memory_manager: MemoryManager | None = None,
     ) -> None:
         self.db = db
         self.planner = Planner()
-        self.context_assembler = ContextAssembler(db, agent_name, history_limit)
+        self.context_assembler = ContextAssembler(
+            db, agent_name, history_limit, memory_manager=memory_manager
+        )
         self.executor = Executor(provider, self.context_assembler)
-        self.reflector = Reflector(db)
+        self.reflector = Reflector(db, memory_manager=memory_manager)
 
     async def handle_message(self, message: UniversalMessage) -> str:
         """Process an incoming message and return a response string."""
@@ -37,7 +47,9 @@ class Agent:
         # Plan -> Execute -> Reflect
         await self.planner.plan(message.content)
         response = await self.executor.execute(conversation_id, message.content)
-        await self.reflector.reflect(conversation_id, response)
+        await self.reflector.reflect(
+            conversation_id, response, user_message=message.content
+        )
 
         # Update conversation
         await self.db.execute(
