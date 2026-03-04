@@ -92,6 +92,24 @@ class TestContextAssembler:
         assert messages[2]["content"] == "Previous response"
         assert messages[3]["content"] == "New message"
 
+    async def test_includes_tool_context(self, db: Database):
+        assembler = ContextAssembler(
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
+            personality_path="/nonexistent",
+        )
+
+        messages = await assembler.build(
+            "conv-1",
+            "What is Python 3.13?",
+            tool_context="## Web search results\n1. Python 3.13 release notes.",
+        )
+
+        system_content = messages[0]["content"]
+        assert "Web search results" in system_content
+        assert "Python 3.13 release notes" in system_content
+
 
 class TestContextAssemblerWithMemory:
     async def test_injects_memories(self, db: Database):

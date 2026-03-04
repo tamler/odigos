@@ -27,7 +27,9 @@ class ContextAssembler:
         self.memory_manager = memory_manager
         self.personality_path = personality_path
 
-    async def build(self, conversation_id: str, current_message: str) -> list[dict]:
+    async def build(
+        self, conversation_id: str, current_message: str, tool_context: str = ""
+    ) -> list[dict]:
         """Assemble the full messages list: system + history + current."""
         messages: list[dict] = []
 
@@ -43,6 +45,7 @@ class ContextAssembler:
         system_prompt = build_system_prompt(
             personality=personality,
             memory_context=memory_context,
+            tool_context=tool_context,
         )
 
         messages.append({"role": "system", "content": system_prompt})
