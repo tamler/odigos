@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -46,7 +47,7 @@ class Planner:
                 max_tokens=100,
                 temperature=0.0,
             )
-            result = json.loads(response.content.strip())
+            result = _parse_json(response.content)
             action = result.get("action", "respond")
 
             if action == "search":
@@ -58,3 +59,18 @@ class Planner:
         except (json.JSONDecodeError, KeyError, RuntimeError):
             logger.warning("Intent classification failed, falling back to respond")
             return Plan(action="respond")
+
+
+def _parse_json(text: str) -> dict:
+    """Extract and parse JSON from LLM output, handling markdown code blocks."""
+    text = text.strip()
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Strip markdown code fences (```json ... ``` or ``` ... ```)
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        return json.loads(match.group())
+    raise json.JSONDecodeError("No JSON object found", text, 0)

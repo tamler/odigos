@@ -232,6 +232,21 @@ class TestPlanner:
         assert plan.action == "search"
         assert plan.tool_params == {"query": "weather in NYC today"}
 
+    async def test_handles_markdown_wrapped_json(self, mock_classify_provider):
+        """Planner extracts JSON from markdown code blocks."""
+        mock_classify_provider.complete.return_value = LLMResponse(
+            content='```json\n{"action": "search", "query": "test query"}\n```',
+            model="test/model",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_classify_provider)
+        plan = await planner.plan("search for something")
+
+        assert plan.action == "search"
+        assert plan.tool_params == {"query": "test query"}
+
     async def test_fallback_to_respond_on_parse_error(self, mock_classify_provider):
         """Planner falls back to respond if LLM returns unparseable response."""
         mock_classify_provider.complete.return_value = LLMResponse(
