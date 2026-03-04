@@ -11,6 +11,7 @@ If none are relevant, omit the block entirely."""
 def build_system_prompt(
     personality: Personality,
     memory_context: str = "",
+    tool_context: str = "",
 ) -> str:
     """Compose the system prompt from structured sections.
 
@@ -18,7 +19,8 @@ def build_system_prompt(
     1. Identity -- who the agent is
     2. Voice guidelines -- how to communicate
     3. Memory context -- relevant memories (if any)
-    4. Entity extraction -- always appended
+    4. Tool context -- results from tool execution (if any)
+    5. Entity extraction -- always appended
     """
     sections = []
 
@@ -32,7 +34,11 @@ def build_system_prompt(
     if memory_context:
         sections.append(memory_context)
 
-    # 4. Entity extraction (always)
+    # 4. Tool context (optional)
+    if tool_context:
+        sections.append(tool_context)
+
+    # 5. Entity extraction (always)
     sections.append(ENTITY_EXTRACTION_INSTRUCTION)
 
     return "\n\n".join(sections)
