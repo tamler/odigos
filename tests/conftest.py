@@ -32,6 +32,9 @@ if Settings is not None:
         return Settings(
             telegram_bot_token="test-token",
             openrouter_api_key="test-key",
+            searxng_url="https://search.example.com",
+            searxng_username="testuser",
+            searxng_password="testpass",
             agent={"name": "TestAgent"},
             database={"path": tmp_db_path},
             openrouter={

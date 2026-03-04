@@ -56,3 +56,19 @@ def test_settings_defaults():
     assert settings.openrouter.max_tokens == 4096
     assert settings.telegram.mode == "polling"
     assert settings.server.port == 8000
+
+
+def test_searxng_config_from_env(monkeypatch):
+    """SearXNG config reads URL, username, password from env vars."""
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("SEARXNG_URL", "https://search.example.com")
+    monkeypatch.setenv("SEARXNG_USERNAME", "nimda")
+    monkeypatch.setenv("SEARXNG_PASSWORD", "secret123")
+
+    from odigos.config import Settings
+
+    settings = Settings()
+    assert settings.searxng_url == "https://search.example.com"
+    assert settings.searxng_username == "nimda"
+    assert settings.searxng_password == "secret123"
