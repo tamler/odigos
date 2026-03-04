@@ -8,10 +8,12 @@ from odigos.channels.base import UniversalMessage
 from odigos.core.agent import Agent
 from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor
-from odigos.core.planner import Planner
+from odigos.core.planner import Plan, Planner
 from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.providers.base import LLMResponse
+from odigos.tools.base import ToolResult
+from odigos.tools.registry import ToolRegistry
 
 
 @pytest.fixture
@@ -254,19 +256,82 @@ class TestPlanner:
 
 
 class TestExecutor:
-    async def test_calls_provider(self, db: Database, mock_provider: AsyncMock):
+    async def test_execute_respond(self, db: Database, mock_provider: AsyncMock):
+        """Respond plan calls LLM directly without tools."""
         assembler = ContextAssembler(
-            db=db,
-            agent_name="TestBot",
-            history_limit=20,
-            personality_path="/nonexistent",
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
+        )
+        executor = Executor(provider=mock_provider, context_assembler=assembler)
+        plan = Plan(action="respond")
+
+        result = await executor.execute("conv-1", "Hello", plan=plan)
+
+        assert result.content == "I'm Odigos, your assistant."
+        mock_provider.complete.assert_called_once()
+
+    async def test_execute_search(self, db: Database, mock_provider: AsyncMock):
+        """Search plan calls tool then LLM with results in context."""
+        mock_tool = AsyncMock()
+        mock_tool.name = "web_search"
+        mock_tool.execute.return_value = ToolResult(
+            success=True, data="## Results\n1. Python docs"
+        )
+
+        registry = ToolRegistry()
+        registry.register(mock_tool)
+
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
+        )
+        executor = Executor(
+            provider=mock_provider, context_assembler=assembler, tool_registry=registry
+        )
+        plan = Plan(action="search", requires_tools=True, tool_params={"query": "python docs"})
+
+        _result = await executor.execute("conv-1", "Find python docs", plan=plan)
+
+        # Tool should have been called
+        mock_tool.execute.assert_called_once_with({"query": "python docs"})
+        # LLM should have been called with tool results in context
+        mock_provider.complete.assert_called_once()
+        call_messages = mock_provider.complete.call_args[0][0]
+        system_content = call_messages[0]["content"]
+        assert "Results" in system_content
+
+    async def test_execute_search_tool_failure(self, db: Database, mock_provider: AsyncMock):
+        """Search falls back to normal response if tool fails."""
+        mock_tool = AsyncMock()
+        mock_tool.name = "web_search"
+        mock_tool.execute.return_value = ToolResult(
+            success=False, data="", error="Connection refused"
+        )
+
+        registry = ToolRegistry()
+        registry.register(mock_tool)
+
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
+        )
+        executor = Executor(
+            provider=mock_provider, context_assembler=assembler, tool_registry=registry
+        )
+        plan = Plan(action="search", requires_tools=True, tool_params={"query": "test"})
+
+        result = await executor.execute("conv-1", "search for test", plan=plan)
+
+        # Should still get a response (LLM called without tool results)
+        assert result.content == "I'm Odigos, your assistant."
+
+    async def test_backward_compat_no_plan(self, db: Database, mock_provider: AsyncMock):
+        """Executor works without plan (backward compat, defaults to respond)."""
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
         )
         executor = Executor(provider=mock_provider, context_assembler=assembler)
 
         result = await executor.execute("conv-1", "Hello")
 
         assert result.content == "I'm Odigos, your assistant."
-        mock_provider.complete.assert_called_once()
 
 
 class TestReflector:
