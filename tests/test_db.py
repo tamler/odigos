@@ -70,6 +70,40 @@ async def test_fetch_one_returns_none(db: Database):
     assert row is None
 
 
+async def test_memory_tables_created(tmp_db_path: str):
+    """Verify migration 002 creates entities, edges, and conversation_summaries tables."""
+    db = Database(tmp_db_path, migrations_dir="migrations")
+    await db.initialize()
+    try:
+        # Check entities table exists
+        entity_row = await db.fetch_one(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='entities'"
+        )
+        assert entity_row is not None
+
+        # Check edges table exists
+        edge_row = await db.fetch_one(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='edges'"
+        )
+        assert edge_row is not None
+
+        # Check conversation_summaries table exists
+        summary_row = await db.fetch_one(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='conversation_summaries'"
+        )
+        assert summary_row is not None
+
+        # Verify we can insert an entity
+        await db.execute(
+            "INSERT INTO entities (id, type, name) VALUES (?, ?, ?)",
+            ("e1", "person", "Alice"),
+        )
+        row = await db.fetch_one("SELECT name FROM entities WHERE id = 'e1'")
+        assert row["name"] == "Alice"
+    finally:
+        await db.close()
+
+
 async def test_sqlite_vec_extension_loaded(tmp_db_path: str):
     """Verify sqlite-vec extension is loaded and vec0 is available."""
     db = Database(tmp_db_path, migrations_dir="migrations")
