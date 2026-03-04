@@ -27,12 +27,13 @@ _db: Database | None = None
 _provider: OpenRouterProvider | None = None
 _embedder: EmbeddingProvider | None = None
 _telegram: TelegramChannel | None = None
+_searxng = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
-    global _db, _provider, _embedder, _telegram
+    global _db, _provider, _embedder, _telegram, _searxng
 
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     settings = load_settings(config_path)
@@ -71,6 +72,23 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Memory system initialized")
 
+    # Initialize search tools (if SearXNG is configured)
+    tool_registry = None
+    if settings.searxng_url:
+        from odigos.providers.searxng import SearxngProvider
+        from odigos.tools.registry import ToolRegistry
+        from odigos.tools.search import SearchTool
+
+        _searxng = SearxngProvider(
+            url=settings.searxng_url,
+            username=settings.searxng_username,
+            password=settings.searxng_password,
+        )
+        search_tool = SearchTool(searxng=_searxng)
+        tool_registry = ToolRegistry()
+        tool_registry.register(search_tool)
+        logger.info("Search tools initialized (SearXNG: %s)", settings.searxng_url)
+
     # Initialize agent
     agent = Agent(
         db=_db,
@@ -78,6 +96,8 @@ async def lifespan(app: FastAPI):
         agent_name=settings.agent.name,
         memory_manager=memory_manager,
         personality_path=settings.personality.path,
+        planner_provider=_provider,
+        tool_registry=tool_registry,
     )
 
     # Initialize Telegram channel
@@ -98,6 +118,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Odigos...")
     if _telegram:
         await _telegram.stop()
+    if _searxng:
+        await _searxng.close()
     if _embedder:
         await _embedder.close()
     if _provider:

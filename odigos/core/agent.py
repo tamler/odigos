@@ -12,6 +12,7 @@ from odigos.providers.base import LLMProvider
 
 if TYPE_CHECKING:
     from odigos.memory.manager import MemoryManager
+    from odigos.tools.registry import ToolRegistry
 
 
 class Agent:
@@ -25,9 +26,11 @@ class Agent:
         history_limit: int = 20,
         memory_manager: MemoryManager | None = None,
         personality_path: str = "data/personality.yaml",
+        planner_provider: LLMProvider | None = None,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         self.db = db
-        self.planner = Planner(provider=provider)
+        self.planner = Planner(provider=planner_provider or provider)
         self.context_assembler = ContextAssembler(
             db,
             agent_name,
@@ -35,26 +38,29 @@ class Agent:
             memory_manager=memory_manager,
             personality_path=personality_path,
         )
-        self.executor = Executor(provider, self.context_assembler)
+        self.executor = Executor(
+            provider, self.context_assembler, tool_registry=tool_registry
+        )
         self.reflector = Reflector(db, memory_manager=memory_manager)
 
     async def handle_message(self, message: UniversalMessage) -> str:
         """Process an incoming message and return a response string."""
-        # Find or create conversation
         conversation_id = await self._get_or_create_conversation(message)
 
-        # Store user message
         await self.db.execute(
             "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
             (message.id, conversation_id, "user", message.content),
         )
 
         # Plan -> Execute -> Reflect
-        await self.planner.plan(message.content)
-        response = await self.executor.execute(conversation_id, message.content)
-        await self.reflector.reflect(conversation_id, response, user_message=message.content)
+        plan = await self.planner.plan(message.content)
+        response = await self.executor.execute(
+            conversation_id, message.content, plan=plan
+        )
+        await self.reflector.reflect(
+            conversation_id, response, user_message=message.content
+        )
 
-        # Update conversation
         await self.db.execute(
             "UPDATE conversations SET last_message_at = datetime('now'), "
             "message_count = message_count + 2 WHERE id = ?",

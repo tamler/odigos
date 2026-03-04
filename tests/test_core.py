@@ -451,6 +451,15 @@ class TestAgentWithMemory:
         mock_memory = AsyncMock()
         mock_memory.recall.return_value = ""
 
+        mock_planner_provider = AsyncMock()
+        mock_planner_provider.complete.return_value = LLMResponse(
+            content='{"action": "respond"}',
+            model="test/model",
+            tokens_in=5,
+            tokens_out=5,
+            cost_usd=0.0,
+        )
+
         agent = Agent(
             db=db,
             provider=mock_provider,
@@ -458,24 +467,34 @@ class TestAgentWithMemory:
             history_limit=20,
             memory_manager=mock_memory,
             personality_path="/nonexistent",
+            planner_provider=mock_planner_provider,
         )
         message = _make_message("Hello agent")
 
         response = await agent.handle_message(message)
         assert response == "I'm Odigos, your assistant."
 
-        # Verify memory_manager.store was called (via reflector)
         mock_memory.store.assert_called_once()
 
 
 class TestAgent:
     async def test_full_loop(self, db: Database, mock_provider: AsyncMock):
+        mock_planner_provider = AsyncMock()
+        mock_planner_provider.complete.return_value = LLMResponse(
+            content='{"action": "respond"}',
+            model="test/model",
+            tokens_in=5,
+            tokens_out=5,
+            cost_usd=0.0,
+        )
+
         agent = Agent(
             db=db,
             provider=mock_provider,
             agent_name="TestBot",
             history_limit=20,
             personality_path="/nonexistent",
+            planner_provider=mock_planner_provider,
         )
         message = _make_message("Hello agent")
 
@@ -483,13 +502,47 @@ class TestAgent:
 
         assert response == "I'm Odigos, your assistant."
 
-        # Verify conversation was created
         conv = await db.fetch_one("SELECT * FROM conversations LIMIT 1")
         assert conv is not None
         assert conv["channel"] == "telegram"
 
-        # Verify messages stored (user + assistant)
         msgs = await db.fetch_all("SELECT role FROM messages ORDER BY timestamp")
         roles = [m["role"] for m in msgs]
         assert "user" in roles
         assert "assistant" in roles
+
+    async def test_search_flow(self, db: Database, mock_provider: AsyncMock):
+        """Agent performs search when planner classifies as search intent."""
+        mock_planner_provider = AsyncMock()
+        mock_planner_provider.complete.return_value = LLMResponse(
+            content='{"action": "search", "query": "python 3.13 features"}',
+            model="test/model",
+            tokens_in=5,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+
+        mock_tool = AsyncMock()
+        mock_tool.name = "web_search"
+        mock_tool.execute.return_value = ToolResult(
+            success=True, data="## Results\n1. Python 3.13 released"
+        )
+
+        registry = ToolRegistry()
+        registry.register(mock_tool)
+
+        agent = Agent(
+            db=db,
+            provider=mock_provider,
+            agent_name="TestBot",
+            history_limit=20,
+            personality_path="/nonexistent",
+            planner_provider=mock_planner_provider,
+            tool_registry=registry,
+        )
+        message = _make_message("What's new in Python 3.13?")
+
+        response = await agent.handle_message(message)
+        assert response == "I'm Odigos, your assistant."
+
+        mock_tool.execute.assert_called_once()
