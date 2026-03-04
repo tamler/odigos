@@ -20,6 +20,10 @@ class OpenRouterConfig(BaseModel):
     temperature: float = 0.7
 
 
+class PersonalityConfig(BaseModel):
+    path: str = "data/personality.yaml"
+
+
 class TelegramConfig(BaseModel):
     mode: str = "polling"
     webhook_url: str = ""
@@ -37,6 +41,7 @@ class Settings(BaseSettings):
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()
     openrouter: OpenRouterConfig = OpenRouterConfig()
+    personality: PersonalityConfig = PersonalityConfig()
     telegram: TelegramConfig = TelegramConfig()
     server: ServerConfig = ServerConfig()
 

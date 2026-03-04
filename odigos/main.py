@@ -77,6 +77,7 @@ async def lifespan(app: FastAPI):
         provider=_provider,
         agent_name=settings.agent.name,
         memory_manager=memory_manager,
+        personality_path=settings.personality.path,
     )
 
     # Initialize Telegram channel

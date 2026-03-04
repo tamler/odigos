@@ -24,11 +24,14 @@ class Agent:
         agent_name: str = "Odigos",
         history_limit: int = 20,
         memory_manager: MemoryManager | None = None,
+        personality_path: str = "data/personality.yaml",
     ) -> None:
         self.db = db
         self.planner = Planner()
         self.context_assembler = ContextAssembler(
-            db, agent_name, history_limit, memory_manager=memory_manager
+            db, agent_name, history_limit,
+            memory_manager=memory_manager,
+            personality_path=personality_path,
         )
         self.executor = Executor(provider, self.context_assembler)
         self.reflector = Reflector(db, memory_manager=memory_manager)

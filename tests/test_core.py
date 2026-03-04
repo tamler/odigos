@@ -48,17 +48,23 @@ def _make_message(content: str = "Hello") -> UniversalMessage:
 
 class TestContextAssembler:
     async def test_builds_messages_list(self, db: Database):
-        assembler = ContextAssembler(db=db, agent_name="TestBot", history_limit=20)
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20,
+            personality_path="/nonexistent",
+        )
 
         messages = await assembler.build("conv-1", "Hello there")
 
         assert messages[0]["role"] == "system"
-        assert "TestBot" in messages[0]["content"]
+        assert "Odigos" in messages[0]["content"]
         assert messages[-1]["role"] == "user"
         assert messages[-1]["content"] == "Hello there"
 
     async def test_includes_conversation_history(self, db: Database):
-        assembler = ContextAssembler(db=db, agent_name="TestBot", history_limit=20)
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20,
+            personality_path="/nonexistent",
+        )
 
         # Insert some history
         await db.execute(
@@ -90,7 +96,9 @@ class TestContextAssemblerWithMemory:
         mock_memory.recall.return_value = "## Relevant memories\n- Alice prefers morning meetings."
 
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, memory_manager=mock_memory
+            db=db, agent_name="TestBot", history_limit=20,
+            memory_manager=mock_memory,
+            personality_path="/nonexistent",
         )
         messages = await assembler.build("conv-1", "When should we meet?")
 
@@ -100,7 +108,10 @@ class TestContextAssemblerWithMemory:
 
     async def test_includes_entity_extraction_instruction(self, db: Database):
         """System prompt includes entity extraction instruction."""
-        assembler = ContextAssembler(db=db, agent_name="TestBot", history_limit=20)
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20,
+            personality_path="/nonexistent",
+        )
         messages = await assembler.build("conv-1", "Hello")
 
         system_content = messages[0]["content"]
@@ -108,11 +119,51 @@ class TestContextAssemblerWithMemory:
 
     async def test_no_memory_manager_still_works(self, db: Database):
         """Without memory manager, context assembler works as before."""
-        assembler = ContextAssembler(db=db, agent_name="TestBot", history_limit=20)
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20,
+            personality_path="/nonexistent",
+        )
         messages = await assembler.build("conv-1", "Hello")
 
         assert messages[0]["role"] == "system"
         assert messages[-1]["content"] == "Hello"
+
+
+class TestContextAssemblerWithPersonality:
+    async def test_uses_personality_from_file(self, db: Database, tmp_path):
+        """Context assembler loads personality from file and uses it in prompt."""
+        import yaml
+
+        personality_file = tmp_path / "personality.yaml"
+        personality_file.write_text(
+            yaml.dump({"name": "Hal", "voice": {"tone": "robotic and precise"}})
+        )
+
+        assembler = ContextAssembler(
+            db=db,
+            agent_name="Hal",
+            history_limit=20,
+            personality_path=str(personality_file),
+        )
+        messages = await assembler.build("conv-1", "Hello")
+
+        system_content = messages[0]["content"]
+        assert "Hal" in system_content
+        assert "robotic and precise" in system_content
+
+    async def test_falls_back_to_defaults(self, db: Database):
+        """Missing personality file falls back to defaults."""
+        assembler = ContextAssembler(
+            db=db,
+            agent_name="Odigos",
+            history_limit=20,
+            personality_path="/nonexistent/file.yaml",
+        )
+        messages = await assembler.build("conv-1", "Hello")
+
+        system_content = messages[0]["content"]
+        assert "Odigos" in system_content
+        assert "direct, warm" in system_content
 
 
 class TestPlanner:
@@ -125,7 +176,10 @@ class TestPlanner:
 
 class TestExecutor:
     async def test_calls_provider(self, db: Database, mock_provider: AsyncMock):
-        assembler = ContextAssembler(db=db, agent_name="TestBot", history_limit=20)
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20,
+            personality_path="/nonexistent",
+        )
         executor = Executor(provider=mock_provider, context_assembler=assembler)
 
         result = await executor.execute("conv-1", "Hello")
@@ -257,6 +311,7 @@ class TestAgentWithMemory:
             agent_name="TestBot",
             history_limit=20,
             memory_manager=mock_memory,
+            personality_path="/nonexistent",
         )
         message = _make_message("Hello agent")
 
@@ -274,6 +329,7 @@ class TestAgent:
             provider=mock_provider,
             agent_name="TestBot",
             history_limit=20,
+            personality_path="/nonexistent",
         )
         message = _make_message("Hello agent")
 

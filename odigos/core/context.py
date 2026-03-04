@@ -3,22 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from odigos.db import Database
+from odigos.personality.loader import load_personality
+from odigos.personality.prompt_builder import build_system_prompt
 
 if TYPE_CHECKING:
     from odigos.memory.manager import MemoryManager
-
-SYSTEM_PROMPT_TEMPLATE = """You are {agent_name}, a personal AI assistant.
-
-You are helpful, direct, and concise. You remember past conversations and provide thoughtful responses.
-When you don't know something, say so honestly rather than guessing."""
-
-ENTITY_EXTRACTION_INSTRUCTION = """
-After your response, on a new line, include extracted entities in this exact format:
-<!--entities
-[{{"name": "...", "type": "person|project|preference|concept", "relationship": "...", "detail": "..."}}]
--->
-Only include entities if the conversation mentions specific people, projects, preferences, or important concepts.
-If none are relevant, omit the block entirely."""
 
 
 class ContextAssembler:
@@ -30,29 +19,33 @@ class ContextAssembler:
         agent_name: str,
         history_limit: int = 20,
         memory_manager: MemoryManager | None = None,
+        personality_path: str = "data/personality.yaml",
     ) -> None:
         self.db = db
         self.agent_name = agent_name
         self.history_limit = history_limit
         self.memory_manager = memory_manager
+        self.personality_path = personality_path
 
     async def build(self, conversation_id: str, current_message: str) -> list[dict]:
-        """Assemble the full messages list: system + memories + history + current."""
+        """Assemble the full messages list: system + history + current."""
         messages: list[dict] = []
 
-        # Build system prompt
-        system_parts = [SYSTEM_PROMPT_TEMPLATE.format(agent_name=self.agent_name)]
+        # Load personality (hot reload -- re-read on every call)
+        personality = load_personality(self.personality_path)
 
-        # Inject relevant memories
+        # Get memory context if available
+        memory_context = ""
         if self.memory_manager:
             memory_context = await self.memory_manager.recall(current_message)
-            if memory_context:
-                system_parts.append(memory_context)
 
-        # Add entity extraction instruction
-        system_parts.append(ENTITY_EXTRACTION_INSTRUCTION)
+        # Build system prompt via structured prompt builder
+        system_prompt = build_system_prompt(
+            personality=personality,
+            memory_context=memory_context,
+        )
 
-        messages.append({"role": "system", "content": "\n\n".join(system_parts)})
+        messages.append({"role": "system", "content": system_prompt})
 
         # Conversation history
         history = await self.db.fetch_all(
