@@ -47,10 +47,7 @@ class Database:
         await self.conn.commit()
 
         applied = {
-            row[0]
-            for row in await self.conn.execute_fetchall(
-                "SELECT name FROM _migrations"
-            )
+            row[0] for row in await self.conn.execute_fetchall("SELECT name FROM _migrations")
         }
 
         if not self.migrations_dir.exists():

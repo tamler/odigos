@@ -30,9 +30,7 @@ class TelegramChannel(Channel):
     async def start(self) -> None:
         """Build and start the Telegram bot."""
         self._app = Application.builder().token(self.token).build()
-        self._app.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text)
-        )
+        self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
 
         await self._app.initialize()
 
@@ -84,6 +82,4 @@ class TelegramChannel(Channel):
             await update.effective_message.reply_text(response)
         except Exception:
             logger.exception("Error handling message")
-            await update.effective_message.reply_text(
-                "Something went wrong. Please try again."
-            )
+            await update.effective_message.reply_text("Something went wrong. Please try again.")

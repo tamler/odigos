@@ -64,9 +64,7 @@ class OpenRouterProvider(LLMProvider):
         response = await self._client.post(OPENROUTER_API_URL, json=payload)
 
         if response.status_code != 200:
-            raise RuntimeError(
-                f"OpenRouter API error {response.status_code}: {response.text}"
-            )
+            raise RuntimeError(f"OpenRouter API error {response.status_code}: {response.text}")
 
         data = response.json()
         usage = data.get("usage", {})

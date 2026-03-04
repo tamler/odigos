@@ -54,9 +54,7 @@ def mock_provider():
 
 @pytest.fixture
 def summarizer(db, vector_memory, mock_provider):
-    return ConversationSummarizer(
-        db=db, vector_memory=vector_memory, llm_provider=mock_provider
-    )
+    return ConversationSummarizer(db=db, vector_memory=vector_memory, llm_provider=mock_provider)
 
 
 @pytest.fixture
@@ -103,14 +101,21 @@ class TestMemoryManager:
         # The embedder should have been called to embed the user message
         mock_embedder.embed.assert_called()
 
-    async def test_recall_returns_formatted_context(self, manager, graph, vector_memory, mock_embedder):
+    async def test_recall_returns_formatted_context(
+        self, manager, graph, vector_memory, mock_embedder
+    ):
         """After storing data, recall returns formatted memory context."""
         await manager.store(
             conversation_id="conv-1",
             user_message="Alice works on the Odigos project",
             assistant_response="Got it!",
             extracted_entities=[
-                {"name": "Alice", "type": "person", "relationship": "works_on", "detail": "Odigos project"},
+                {
+                    "name": "Alice",
+                    "type": "person",
+                    "relationship": "works_on",
+                    "detail": "Odigos project",
+                },
             ],
         )
 

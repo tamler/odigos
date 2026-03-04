@@ -13,9 +13,7 @@ async def db(tmp_db_path: str) -> Database:
 
 async def test_migrations_applied(db: Database):
     """Migrations create the expected tables."""
-    tables = await db.fetch_all(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
+    tables = await db.fetch_all("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     table_names = [row["name"] for row in tables]
     assert "conversations" in table_names
     assert "messages" in table_names
@@ -25,9 +23,7 @@ async def test_migrations_applied(db: Database):
 async def test_migrations_idempotent(db: Database):
     """Running migrations twice doesn't error."""
     await db.run_migrations()
-    tables = await db.fetch_all(
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-    )
+    tables = await db.fetch_all("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
     table_names = [row["name"] for row in tables]
     assert "conversations" in table_names
 
@@ -38,9 +34,7 @@ async def test_execute_and_fetch(db: Database):
         "INSERT INTO conversations (id, channel) VALUES (?, ?)",
         ("conv-1", "telegram"),
     )
-    row = await db.fetch_one(
-        "SELECT id, channel FROM conversations WHERE id = ?", ("conv-1",)
-    )
+    row = await db.fetch_one("SELECT id, channel FROM conversations WHERE id = ?", ("conv-1",))
     assert row is not None
     assert row["id"] == "conv-1"
     assert row["channel"] == "telegram"
@@ -64,9 +58,7 @@ async def test_fetch_all(db: Database):
 
 async def test_fetch_one_returns_none(db: Database):
     """fetch_one returns None when no rows match."""
-    row = await db.fetch_one(
-        "SELECT id FROM conversations WHERE id = ?", ("nonexistent",)
-    )
+    row = await db.fetch_one("SELECT id FROM conversations WHERE id = ?", ("nonexistent",))
     assert row is None
 
 

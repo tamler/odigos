@@ -47,9 +47,7 @@ class Agent:
         # Plan -> Execute -> Reflect
         await self.planner.plan(message.content)
         response = await self.executor.execute(conversation_id, message.content)
-        await self.reflector.reflect(
-            conversation_id, response, user_message=message.content
-        )
+        await self.reflector.reflect(conversation_id, response, user_message=message.content)
 
         # Update conversation
         await self.db.execute(

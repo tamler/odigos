@@ -34,9 +34,7 @@ class EntityResolver:
         self.vector_memory = vector_memory
         self.llm_provider = llm_provider
 
-    async def resolve(
-        self, name: str, entity_type: str, context: str
-    ) -> ResolutionResult:
+    async def resolve(self, name: str, entity_type: str, context: str) -> ResolutionResult:
         """Resolve a candidate entity against the existing graph."""
 
         # Stage 1: Exact match
@@ -68,9 +66,7 @@ class EntityResolver:
             pass
 
         # Stage 4: Vector match
-        vector_results = await self.vector_memory.search(
-            f"{entity_type}: {name}", limit=3
-        )
+        vector_results = await self.vector_memory.search(f"{entity_type}: {name}", limit=3)
         for vr in vector_results:
             if vr.source_type == "entity_name" and vr.distance < 0.3:
                 entity = await self.graph.get_entity(vr.source_id)

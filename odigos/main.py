@@ -62,9 +62,7 @@ async def lifespan(app: FastAPI):
 
     graph = EntityGraph(db=_db)
     resolver = EntityResolver(graph=graph, vector_memory=vector_memory)
-    summarizer = ConversationSummarizer(
-        db=_db, vector_memory=vector_memory, llm_provider=_provider
-    )
+    summarizer = ConversationSummarizer(db=_db, vector_memory=vector_memory, llm_provider=_provider)
     memory_manager = MemoryManager(
         vector_memory=vector_memory,
         graph=graph,

@@ -4,7 +4,7 @@ import pytest
 
 from odigos.db import Database
 from odigos.memory.graph import EntityGraph
-from odigos.memory.resolver import EntityResolver, ResolutionResult
+from odigos.memory.resolver import EntityResolver
 from odigos.memory.vectors import VectorMemory
 
 
@@ -45,9 +45,7 @@ class TestEntityResolver:
         """Exact name match returns existing entity."""
         entity_id = await graph.create_entity(entity_type="person", name="Alice")
 
-        result = await resolver.resolve(
-            name="Alice", entity_type="person", context=""
-        )
+        result = await resolver.resolve(name="Alice", entity_type="person", context="")
 
         assert result.entity_id == entity_id
         assert result.action == "matched"
@@ -64,9 +62,7 @@ class TestEntityResolver:
 
     async def test_no_match_creates_new(self, resolver: EntityResolver):
         """No match creates a new entity."""
-        result = await resolver.resolve(
-            name="NewPerson", entity_type="person", context=""
-        )
+        result = await resolver.resolve(name="NewPerson", entity_type="person", context="")
 
         assert result.entity_id is not None
         assert result.action == "created"
@@ -75,9 +71,7 @@ class TestEntityResolver:
         """Fuzzy match (LIKE) finds similar names of same type."""
         entity_id = await graph.create_entity(entity_type="project", name="Odigos Project")
 
-        result = await resolver.resolve(
-            name="Odigos", entity_type="project", context=""
-        )
+        result = await resolver.resolve(name="Odigos", entity_type="project", context="")
 
         assert result.entity_id == entity_id
         assert result.action == "matched"

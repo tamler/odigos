@@ -14,9 +14,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-ENTITY_PATTERN = re.compile(
-    r"<!--entities\s*\n(.*?)\n-->", re.DOTALL
-)
+ENTITY_PATTERN = re.compile(r"<!--entities\s*\n(.*?)\n-->", re.DOTALL)
 
 
 class Reflector:

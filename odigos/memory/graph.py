@@ -36,9 +36,7 @@ class EntityGraph:
 
     async def get_entity(self, entity_id: str) -> dict | None:
         """Get a single entity by ID."""
-        return await self.db.fetch_one(
-            "SELECT * FROM entities WHERE id = ?", (entity_id,)
-        )
+        return await self.db.fetch_one("SELECT * FROM entities WHERE id = ?", (entity_id,))
 
     async def find_entity(self, name: str) -> list[dict]:
         """Find entities by exact name or alias match."""

@@ -41,9 +41,7 @@ class EmbeddingProvider:
         response = await self._client.post(OPENROUTER_EMBEDDINGS_URL, json=payload)
 
         if response.status_code != 200:
-            raise RuntimeError(
-                f"Embedding API error {response.status_code}: {response.text}"
-            )
+            raise RuntimeError(f"Embedding API error {response.status_code}: {response.text}")
 
         data = response.json()
         return [item["embedding"] for item in data["data"]]

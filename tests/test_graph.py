@@ -51,9 +51,7 @@ class TestEntityGraph:
         id_a = await graph.create_entity(entity_type="person", name="Alice")
         id_b = await graph.create_entity(entity_type="project", name="Odigos")
 
-        edge_id = await graph.create_edge(
-            source_id=id_a, relationship="works_on", target_id=id_b
-        )
+        edge_id = await graph.create_edge(source_id=id_a, relationship="works_on", target_id=id_b)
         assert edge_id is not None
 
     async def test_get_related(self, graph: EntityGraph):
@@ -90,9 +88,7 @@ class TestEntityGraph:
         id_remove = await graph.create_entity(entity_type="person", name="Bob")
         id_project = await graph.create_entity(entity_type="project", name="Odigos")
 
-        await graph.create_edge(
-            source_id=id_remove, relationship="works_on", target_id=id_project
-        )
+        await graph.create_edge(source_id=id_remove, relationship="works_on", target_id=id_project)
 
         await graph.merge_entities(keep_id=id_keep, remove_id=id_remove)
 

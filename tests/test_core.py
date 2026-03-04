@@ -87,9 +87,7 @@ class TestContextAssemblerWithMemory:
     async def test_injects_memories(self, db: Database):
         """Context includes memory section when memory manager has data."""
         mock_memory = AsyncMock()
-        mock_memory.recall.return_value = (
-            "## Relevant memories\n- Alice prefers morning meetings."
-        )
+        mock_memory.recall.return_value = "## Relevant memories\n- Alice prefers morning meetings."
 
         assembler = ContextAssembler(
             db=db, agent_name="TestBot", history_limit=20, memory_manager=mock_memory
@@ -102,9 +100,7 @@ class TestContextAssemblerWithMemory:
 
     async def test_includes_entity_extraction_instruction(self, db: Database):
         """System prompt includes entity extraction instruction."""
-        assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20
-        )
+        assembler = ContextAssembler(db=db, agent_name="TestBot", history_limit=20)
         messages = await assembler.build("conv-1", "Hello")
 
         system_content = messages[0]["content"]
@@ -112,9 +108,7 @@ class TestContextAssemblerWithMemory:
 
     async def test_no_memory_manager_still_works(self, db: Database):
         """Without memory manager, context assembler works as before."""
-        assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20
-        )
+        assembler = ContextAssembler(db=db, agent_name="TestBot", history_limit=20)
         messages = await assembler.build("conv-1", "Hello")
 
         assert messages[0]["role"] == "system"
@@ -174,10 +168,10 @@ class TestReflectorWithMemory:
         reflector = Reflector(db=db, memory_manager=mock_memory)
 
         content_with_entities = (
-            'Hello! I can help with that.\n\n'
-            '<!--entities\n'
+            "Hello! I can help with that.\n\n"
+            "<!--entities\n"
             '[{"name": "Alice", "type": "person", "relationship": "friend", "detail": "engineer"}]\n'
-            '-->'
+            "-->"
         )
         response = LLMResponse(
             content=content_with_entities,
@@ -247,9 +241,7 @@ class TestReflectorWithMemory:
 
         await reflector.reflect("conv-3", response)
 
-        msg = await db.fetch_one(
-            "SELECT content FROM messages WHERE conversation_id = 'conv-3'"
-        )
+        msg = await db.fetch_one("SELECT content FROM messages WHERE conversation_id = 'conv-3'")
         assert msg["content"] == "Hi there"
 
 
