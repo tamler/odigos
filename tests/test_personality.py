@@ -1,7 +1,6 @@
 import yaml
 from pathlib import Path
 
-import pytest
 
 from odigos.personality.loader import Personality, VoiceConfig, IdentityConfig, load_personality
 from odigos.personality.prompt_builder import build_system_prompt
@@ -116,9 +115,7 @@ class TestPromptBuilder:
 
     def test_no_uncertainty_when_disabled(self):
         """When expresses_uncertainty is False, prompt doesn't mention it."""
-        personality = Personality(
-            identity=IdentityConfig(expresses_uncertainty=False)
-        )
+        personality = Personality(identity=IdentityConfig(expresses_uncertainty=False))
 
         prompt = build_system_prompt(personality)
 

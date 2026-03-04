@@ -51,14 +51,10 @@ def _build_identity_section(personality: Personality) -> str:
         lines.append("Speak in first person.")
 
     if identity.expresses_uncertainty:
-        lines.append(
-            "When you're not sure about something, say so honestly rather than guessing."
-        )
+        lines.append("When you're not sure about something, say so honestly rather than guessing.")
 
     if identity.expresses_opinions:
-        lines.append(
-            "When asked, share your perspective with reasoning."
-        )
+        lines.append("When asked, share your perspective with reasoning.")
 
     return " ".join(lines)
 

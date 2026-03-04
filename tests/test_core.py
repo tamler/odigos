@@ -49,7 +49,9 @@ def _make_message(content: str = "Hello") -> UniversalMessage:
 class TestContextAssembler:
     async def test_builds_messages_list(self, db: Database):
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20,
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
             personality_path="/nonexistent",
         )
 
@@ -62,7 +64,9 @@ class TestContextAssembler:
 
     async def test_includes_conversation_history(self, db: Database):
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20,
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
             personality_path="/nonexistent",
         )
 
@@ -96,7 +100,9 @@ class TestContextAssemblerWithMemory:
         mock_memory.recall.return_value = "## Relevant memories\n- Alice prefers morning meetings."
 
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20,
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
             memory_manager=mock_memory,
             personality_path="/nonexistent",
         )
@@ -109,7 +115,9 @@ class TestContextAssemblerWithMemory:
     async def test_includes_entity_extraction_instruction(self, db: Database):
         """System prompt includes entity extraction instruction."""
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20,
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
             personality_path="/nonexistent",
         )
         messages = await assembler.build("conv-1", "Hello")
@@ -120,7 +128,9 @@ class TestContextAssemblerWithMemory:
     async def test_no_memory_manager_still_works(self, db: Database):
         """Without memory manager, context assembler works as before."""
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20,
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
             personality_path="/nonexistent",
         )
         messages = await assembler.build("conv-1", "Hello")
@@ -177,7 +187,9 @@ class TestPlanner:
 class TestExecutor:
     async def test_calls_provider(self, db: Database, mock_provider: AsyncMock):
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20,
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
             personality_path="/nonexistent",
         )
         executor = Executor(provider=mock_provider, context_assembler=assembler)

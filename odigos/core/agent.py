@@ -29,7 +29,9 @@ class Agent:
         self.db = db
         self.planner = Planner()
         self.context_assembler = ContextAssembler(
-            db, agent_name, history_limit,
+            db,
+            agent_name,
+            history_limit,
             memory_manager=memory_manager,
             personality_path=personality_path,
         )

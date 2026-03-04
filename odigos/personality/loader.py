@@ -46,6 +46,10 @@ def load_personality(path: str) -> Personality:
 
     return Personality(
         name=data.get("name", "Odigos"),
-        voice=VoiceConfig(**{k: v for k, v in voice_data.items() if k in VoiceConfig.__dataclass_fields__}),
-        identity=IdentityConfig(**{k: v for k, v in identity_data.items() if k in IdentityConfig.__dataclass_fields__}),
+        voice=VoiceConfig(
+            **{k: v for k, v in voice_data.items() if k in VoiceConfig.__dataclass_fields__}
+        ),
+        identity=IdentityConfig(
+            **{k: v for k, v in identity_data.items() if k in IdentityConfig.__dataclass_fields__}
+        ),
     )
