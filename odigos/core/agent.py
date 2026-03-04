@@ -35,7 +35,7 @@ class Agent:
         )
 
         # Plan -> Execute -> Reflect
-        plan = await self.planner.plan(message.content)
+        await self.planner.plan(message.content)
         response = await self.executor.execute(conversation_id, message.content)
         await self.reflector.reflect(conversation_id, response)
 

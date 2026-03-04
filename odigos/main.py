@@ -1,13 +1,11 @@
-import asyncio
 import logging
-import signal
 import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from odigos.channels.telegram import TelegramChannel
-from odigos.config import Settings, load_settings
+from odigos.config import load_settings
 from odigos.core.agent import Agent
 from odigos.db import Database
 from odigos.providers.openrouter import OpenRouterProvider
