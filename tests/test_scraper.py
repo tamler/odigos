@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 from odigos.providers.scraper import ScrapedPage, ScraperProvider
 
@@ -29,7 +28,9 @@ class TestScraperProvider:
         mock_response.raise_for_status = MagicMock()
 
         provider = ScraperProvider()
-        with patch.object(provider._client, "get", new_callable=AsyncMock, return_value=mock_response):
+        with patch.object(
+            provider._client, "get", new_callable=AsyncMock, return_value=mock_response
+        ):
             result = await provider.scrape("https://example.com")
 
         assert result.url == "https://example.com"
@@ -46,7 +47,9 @@ class TestScraperProvider:
         mock_response.raise_for_status = MagicMock()
 
         provider = ScraperProvider(max_content_chars=100)
-        with patch.object(provider._client, "get", new_callable=AsyncMock, return_value=mock_response):
+        with patch.object(
+            provider._client, "get", new_callable=AsyncMock, return_value=mock_response
+        ):
             result = await provider.scrape("https://example.com")
 
         assert len(result.content) <= 130
@@ -71,7 +74,9 @@ class TestScraperProvider:
         mock_response.raise_for_status = MagicMock()
 
         provider = ScraperProvider()
-        with patch.object(provider._client, "get", new_callable=AsyncMock, return_value=mock_response):
+        with patch.object(
+            provider._client, "get", new_callable=AsyncMock, return_value=mock_response
+        ):
             result = await provider.scrape("https://example.com")
 
         assert "Body text only" in result.content

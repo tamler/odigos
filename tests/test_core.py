@@ -378,7 +378,9 @@ class TestExecutor:
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
-        plan = Plan(action="scrape", requires_tools=True, tool_params={"url": "https://example.com"})
+        plan = Plan(
+            action="scrape", requires_tools=True, tool_params={"url": "https://example.com"}
+        )
 
         _result = await executor.execute("conv-1", "Read this page", plan=plan)
 
@@ -616,7 +618,8 @@ class TestAgent:
         mock_tool = AsyncMock()
         mock_tool.name = "read_page"
         mock_tool.execute.return_value = ToolResult(
-            success=True, data="## Page: Example\n\n**URL:** https://example.com/page\n\nPage content here."
+            success=True,
+            data="## Page: Example\n\n**URL:** https://example.com/page\n\nPage content here.",
         )
 
         registry = ToolRegistry()

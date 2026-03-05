@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock
 
-import pytest
 
 from odigos.providers.scraper import ScrapedPage
 from odigos.tools.scrape import ScrapeTool
