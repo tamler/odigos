@@ -152,6 +152,14 @@ async def lifespan(app: FastAPI):
     goal_store = GoalStore(db=_db)
     logger.info("Goal store initialized")
 
+    # Register goal tools
+    from odigos.tools.goals import CreateReminderTool, CreateTodoTool, CreateGoalTool
+
+    tool_registry.register(CreateReminderTool(goal_store=goal_store))
+    tool_registry.register(CreateTodoTool(goal_store=goal_store))
+    tool_registry.register(CreateGoalTool(goal_store=goal_store))
+    logger.info("Goal tools initialized")
+
     # Initialize skill registry
     skill_registry = SkillRegistry()
     skill_registry.load_all(settings.skills.path)
@@ -169,12 +177,12 @@ async def lifespan(app: FastAPI):
         agent_name=settings.agent.name,
         memory_manager=memory_manager,
         personality_path=settings.personality.path,
-        planner_provider=_router,
         tool_registry=tool_registry,
         skill_registry=skill_registry,
         cost_fetcher=_delayed_cost_fetcher,
-        goal_store=goal_store,
         budget_tracker=budget_tracker,
+        max_tool_turns=settings.agent.max_tool_turns,
+        run_timeout=settings.agent.run_timeout_seconds,
     )
 
     # Initialize Telegram channel (before heartbeat so we can pass it)
