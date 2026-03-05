@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 import uuid
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from odigos.db import Database
@@ -28,9 +30,11 @@ class Reflector:
         self,
         db: Database,
         memory_manager: MemoryManager | None = None,
+        cost_fetcher: Callable | None = None,
     ) -> None:
         self.db = db
         self.memory_manager = memory_manager
+        self._cost_fetcher = cost_fetcher
 
     async def reflect(
         self,
@@ -51,11 +55,12 @@ class Reflector:
             content = ENTITY_PATTERN.sub("", content).rstrip()
 
         # Store the clean assistant message
+        msg_id = str(uuid.uuid4())
         await self.db.execute(
             "INSERT INTO messages (id, conversation_id, role, content, model_used, "
             "tokens_in, tokens_out, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                str(uuid.uuid4()),
+                msg_id,
                 conversation_id,
                 "assistant",
                 content,
@@ -65,6 +70,10 @@ class Reflector:
                 response.cost_usd,
             ),
         )
+
+        # Spawn async cost backfill if applicable
+        if response.generation_id and self._cost_fetcher:
+            asyncio.create_task(self._backfill_cost(msg_id, response.generation_id))
 
         # Pass to memory manager if available
         if self.memory_manager and user_message is not None:
@@ -85,3 +94,15 @@ class Reflector:
                 "INSERT INTO scraped_pages (id, url, title, summary) VALUES (?, ?, ?, ?)",
                 (str(uuid.uuid4()), url, title, summary),
             )
+
+    async def _backfill_cost(self, message_id: str, generation_id: str) -> None:
+        try:
+            cost = await self._cost_fetcher(generation_id)
+            if cost is not None:
+                await self.db.execute(
+                    "UPDATE messages SET cost_usd = ? WHERE id = ?",
+                    (cost, message_id),
+                )
+                logger.debug("Updated cost for message %s: $%.6f", message_id, cost)
+        except Exception:
+            logger.debug("Cost backfill failed for %s", generation_id, exc_info=True)
