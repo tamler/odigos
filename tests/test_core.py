@@ -296,7 +296,7 @@ class TestExecutor:
 
         result = await executor.execute("conv-1", "Hello", plan=plan)
 
-        assert result.content == "I'm Odigos, your assistant."
+        assert result.response.content == "I'm Odigos, your assistant."
         mock_provider.complete.assert_called_once()
 
     async def test_execute_search(self, db: Database, mock_provider: AsyncMock):
@@ -348,7 +348,7 @@ class TestExecutor:
         result = await executor.execute("conv-1", "search for test", plan=plan)
 
         # Should still get a response (LLM called without tool results)
-        assert result.content == "I'm Odigos, your assistant."
+        assert result.response.content == "I'm Odigos, your assistant."
 
     async def test_backward_compat_no_plan(self, db: Database, mock_provider: AsyncMock):
         """Executor works without plan (backward compat, defaults to respond)."""
@@ -359,7 +359,7 @@ class TestExecutor:
 
         result = await executor.execute("conv-1", "Hello")
 
-        assert result.content == "I'm Odigos, your assistant."
+        assert result.response.content == "I'm Odigos, your assistant."
 
     async def test_execute_scrape(self, db: Database, mock_provider: AsyncMock):
         """Scrape plan calls read_page tool then LLM with page content in context."""
@@ -601,6 +601,47 @@ class TestAgent:
         assert response == "I'm Odigos, your assistant."
 
         mock_tool.execute.assert_called_once()
+
+    async def test_scrape_flow(self, db: Database, mock_provider: AsyncMock):
+        """Agent performs scrape when planner classifies as scrape intent."""
+        mock_planner_provider = AsyncMock()
+        mock_planner_provider.complete.return_value = LLMResponse(
+            content='{"action": "scrape", "url": "https://example.com/page"}',
+            model="test/model",
+            tokens_in=5,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+
+        mock_tool = AsyncMock()
+        mock_tool.name = "read_page"
+        mock_tool.execute.return_value = ToolResult(
+            success=True, data="## Page: Example\n\n**URL:** https://example.com/page\n\nPage content here."
+        )
+
+        registry = ToolRegistry()
+        registry.register(mock_tool)
+
+        agent = Agent(
+            db=db,
+            provider=mock_provider,
+            agent_name="TestBot",
+            history_limit=20,
+            personality_path="/nonexistent",
+            planner_provider=mock_planner_provider,
+            tool_registry=registry,
+        )
+        message = _make_message("Read this: https://example.com/page")
+
+        response = await agent.handle_message(message)
+        assert response == "I'm Odigos, your assistant."
+
+        mock_tool.execute.assert_called_once()
+
+        # Verify scrape was logged
+        row = await db.fetch_one("SELECT url FROM scraped_pages LIMIT 1")
+        assert row is not None
+        assert row["url"] == "https://example.com/page"
 
 
 class TestReflectorScrapeLog:

@@ -52,8 +52,13 @@ class Agent:
 
         # Plan -> Execute -> Reflect
         plan = await self.planner.plan(message.content)
-        response = await self.executor.execute(conversation_id, message.content, plan=plan)
-        await self.reflector.reflect(conversation_id, response, user_message=message.content)
+        result = await self.executor.execute(conversation_id, message.content, plan=plan)
+        await self.reflector.reflect(
+            conversation_id,
+            result.response,
+            user_message=message.content,
+            scrape_metadata=result.scrape_metadata,
+        )
 
         await self.db.execute(
             "UPDATE conversations SET last_message_at = datetime('now'), "
@@ -61,7 +66,7 @@ class Agent:
             (conversation_id,),
         )
 
-        return response.content
+        return result.response.content
 
     async def _get_or_create_conversation(self, message: UniversalMessage) -> str:
         """Get existing conversation for this chat, or create a new one.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from odigos.core.context import ContextAssembler
@@ -11,6 +12,14 @@ if TYPE_CHECKING:
     from odigos.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExecuteResult:
+    """Result from executor: LLM response + optional metadata from tool execution."""
+
+    response: LLMResponse
+    scrape_metadata: dict | None = None
 
 
 class Executor:
@@ -36,11 +45,12 @@ class Executor:
         conversation_id: str,
         message_content: str,
         plan: Plan | None = None,
-    ) -> LLMResponse:
+    ) -> ExecuteResult:
         if plan is None:
             plan = Plan(action="respond")
 
         tool_context = ""
+        scrape_metadata = None
 
         # Map plan actions to tool names
         _ACTION_TOOLS = {
@@ -56,6 +66,12 @@ class Executor:
                     result = await tool.execute(plan.tool_params)
                     if result.success:
                         tool_context = result.data
+                        if plan.action == "scrape":
+                            scrape_metadata = {
+                                "url": plan.tool_params.get("url", ""),
+                                "title": "",
+                                "content": tool_context,
+                            }
                     else:
                         logger.warning("Tool %s failed: %s", tool_name, result.error)
                 except Exception:
@@ -64,4 +80,5 @@ class Executor:
         messages = await self.context_assembler.build(
             conversation_id, message_content, tool_context=tool_context
         )
-        return await self.provider.complete(messages)
+        response = await self.provider.complete(messages)
+        return ExecuteResult(response=response, scrape_metadata=scrape_metadata)
