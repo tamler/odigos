@@ -24,7 +24,7 @@ class TelegramChannel(Channel):
         agent: Agent,
         mode: str = "polling",
         webhook_url: str = "",
-        scheduler=None,
+        goal_store=None,
         heartbeat=None,
         budget_tracker=None,
     ) -> None:
@@ -33,7 +33,7 @@ class TelegramChannel(Channel):
         self.mode = mode
         self.webhook_url = webhook_url
         self._app: Application | None = None
-        self.scheduler = scheduler
+        self.goal_store = goal_store
         self.heartbeat = heartbeat
         self.budget_tracker = budget_tracker
 
@@ -42,7 +42,9 @@ class TelegramChannel(Channel):
         self._app = Application.builder().token(self.token).build()
 
         from telegram.ext import CommandHandler
-        self._app.add_handler(CommandHandler("tasks", self._handle_tasks_command))
+        self._app.add_handler(CommandHandler("goals", self._handle_goals_command))
+        self._app.add_handler(CommandHandler("todos", self._handle_todos_command))
+        self._app.add_handler(CommandHandler("reminders", self._handle_reminders_command))
         self._app.add_handler(CommandHandler("cancel", self._handle_cancel_command))
         self._app.add_handler(CommandHandler("stop", self._handle_stop_command))
         self._app.add_handler(CommandHandler("start", self._handle_start_command))
@@ -160,50 +162,80 @@ class TelegramChannel(Channel):
                 "Something went wrong. Please try again."
             )
 
-    async def _handle_tasks_command(self, update: Update, context) -> None:
-        """List pending tasks."""
-        if not self.scheduler:
-            await update.effective_message.reply_text("Task scheduler not available.")
+    async def _handle_goals_command(self, update: Update, context) -> None:
+        """List active goals."""
+        if not self.goal_store:
+            await update.effective_message.reply_text("Goal store not available.")
             return
-        tasks = await self.scheduler.list_pending(limit=10)
-        if not tasks:
-            await update.effective_message.reply_text("No pending tasks.")
+        goals = await self.goal_store.list_goals()
+        if not goals:
+            await update.effective_message.reply_text("No active goals.")
             return
         lines = []
-        for t in tasks:
+        for g in goals:
+            note = f" -- {g['progress_note']}" if g.get("progress_note") else ""
+            lines.append(f"- [{g['id'][:8]}] {g['description']}{note}")
+        await update.effective_message.reply_text("Active goals:\n" + "\n".join(lines))
+
+    async def _handle_todos_command(self, update: Update, context) -> None:
+        """List pending todos."""
+        if not self.goal_store:
+            await update.effective_message.reply_text("Goal store not available.")
+            return
+        todos = await self.goal_store.list_todos()
+        if not todos:
+            await update.effective_message.reply_text("No pending todos.")
+            return
+        lines = []
+        for t in todos:
             sched = t.get("scheduled_at", "now")[:16] if t.get("scheduled_at") else "ASAP"
             lines.append(f"- [{t['id'][:8]}] {t['description']} (at {sched})")
-        await update.effective_message.reply_text("Pending tasks:\n" + "\n".join(lines))
+        await update.effective_message.reply_text("Pending todos:\n" + "\n".join(lines))
+
+    async def _handle_reminders_command(self, update: Update, context) -> None:
+        """List pending reminders."""
+        if not self.goal_store:
+            await update.effective_message.reply_text("Goal store not available.")
+            return
+        reminders = await self.goal_store.list_reminders()
+        if not reminders:
+            await update.effective_message.reply_text("No pending reminders.")
+            return
+        lines = []
+        for r in reminders:
+            due = r.get("due_at", "")[:16] if r.get("due_at") else "now"
+            recur = f" (recurring: {r['recurrence']})" if r.get("recurrence") else ""
+            lines.append(f"- [{r['id'][:8]}] {r['description']} (due {due}){recur}")
+        await update.effective_message.reply_text("Pending reminders:\n" + "\n".join(lines))
 
     async def _handle_cancel_command(self, update: Update, context) -> None:
-        """Cancel a task by ID."""
-        if not self.scheduler:
-            await update.effective_message.reply_text("Task scheduler not available.")
+        """Cancel a goal, todo, or reminder by ID."""
+        if not self.goal_store:
+            await update.effective_message.reply_text("Goal store not available.")
             return
         if not context.args:
-            await update.effective_message.reply_text("Usage: /cancel <task_id>")
+            await update.effective_message.reply_text("Usage: /cancel <id>")
             return
-        task_id_input = context.args[0]
-        # Support prefix matching for truncated IDs shown by /tasks
-        tasks = await self.scheduler.list_pending()
-        matches = [t for t in tasks if t["id"].startswith(task_id_input)]
-        if len(matches) == 1:
-            task_id = matches[0]["id"]
-            await self.scheduler.cancel(task_id)
-            await update.effective_message.reply_text(f"Task {task_id[:8]} cancelled.")
-        elif len(matches) > 1:
-            await update.effective_message.reply_text(
-                f"Ambiguous ID '{task_id_input[:8]}' matches {len(matches)} tasks. Use more characters."
-            )
-        else:
-            # Try exact match (might be completed/failed task)
-            result = await self.scheduler.cancel(task_id_input)
-            if result:
-                await update.effective_message.reply_text(f"Task {task_id_input[:8]} cancelled.")
-            else:
+        item_id = context.args[0]
+        # Support prefix matching
+        for table_method in [self.goal_store.list_goals, self.goal_store.list_todos, self.goal_store.list_reminders]:
+            items = await table_method()
+            matches = [i for i in items if i["id"].startswith(item_id)]
+            if len(matches) == 1:
+                await self.goal_store.cancel(matches[0]["id"])
+                await update.effective_message.reply_text(f"Cancelled: {matches[0]['id'][:8]}")
+                return
+            elif len(matches) > 1:
                 await update.effective_message.reply_text(
-                    f"Task {task_id_input[:8]} not found or already completed."
+                    f"Ambiguous ID '{item_id[:8]}' matches {len(matches)} items. Use more characters."
                 )
+                return
+        # Try exact match
+        result = await self.goal_store.cancel(item_id)
+        if result:
+            await update.effective_message.reply_text(f"Cancelled: {item_id[:8]}")
+        else:
+            await update.effective_message.reply_text(f"Item {item_id[:8]} not found or already completed.")
 
     async def _handle_stop_command(self, update: Update, context) -> None:
         """Pause the heartbeat."""
@@ -240,12 +272,16 @@ class TelegramChannel(Channel):
         else:
             lines.append("Budget: not configured")
 
-        # Tasks
-        if self.scheduler:
-            tasks = await self.scheduler.list_pending()
-            lines.append(f"\nPending tasks: {len(tasks)}")
+        # Goals/Todos/Reminders
+        if self.goal_store:
+            goals = await self.goal_store.list_goals()
+            todos = await self.goal_store.list_todos()
+            reminders = await self.goal_store.list_reminders()
+            lines.append(f"\nGoals: {len(goals)} active")
+            lines.append(f"Todos: {len(todos)} pending")
+            lines.append(f"Reminders: {len(reminders)} pending")
         else:
-            lines.append("\nTasks: not configured")
+            lines.append("\nGoal store: not configured")
 
         # Heartbeat
         if self.heartbeat:

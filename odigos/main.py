@@ -9,7 +9,7 @@ from odigos.channels.telegram import TelegramChannel
 from odigos.config import load_settings
 from odigos.core.agent import Agent
 from odigos.core.heartbeat import Heartbeat
-from odigos.core.scheduler import TaskScheduler
+from odigos.core.goal_store import GoalStore
 from odigos.db import Database
 from odigos.memory.graph import EntityGraph
 from odigos.memory.manager import MemoryManager
@@ -148,8 +148,9 @@ async def lifespan(app: FastAPI):
     tool_registry.register(code_tool)
     logger.info("Code tool initialized (sandbox)")
 
-    # Initialize task scheduler
-    scheduler = TaskScheduler(db=_db)
+    # Initialize goal store
+    goal_store = GoalStore(db=_db)
+    logger.info("Goal store initialized")
 
     # Initialize skill registry
     skill_registry = SkillRegistry()
@@ -172,7 +173,7 @@ async def lifespan(app: FastAPI):
         tool_registry=tool_registry,
         skill_registry=skill_registry,
         cost_fetcher=_delayed_cost_fetcher,
-        scheduler=scheduler,
+        goal_store=goal_store,
         budget_tracker=budget_tracker,
     )
 
@@ -182,7 +183,7 @@ async def lifespan(app: FastAPI):
         agent=agent,
         mode=settings.telegram.mode,
         webhook_url=settings.telegram.webhook_url,
-        scheduler=scheduler,
+        goal_store=goal_store,
         budget_tracker=budget_tracker,
     )
 
@@ -191,9 +192,11 @@ async def lifespan(app: FastAPI):
         db=_db,
         agent=agent,
         telegram_channel=_telegram,
-        scheduler=scheduler,
+        goal_store=goal_store,
+        provider=_router,
         interval=settings.heartbeat.interval_seconds,
-        max_tasks_per_tick=settings.heartbeat.max_tasks_per_tick,
+        max_todos_per_tick=settings.heartbeat.max_todos_per_tick,
+        idle_think_interval=settings.heartbeat.idle_think_interval,
     )
 
     # Pass heartbeat to telegram for /stop and /start commands
