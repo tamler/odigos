@@ -18,11 +18,12 @@ class ScrapeTool(BaseTool):
         self.scraper = scraper
 
     async def execute(self, params: dict) -> ToolResult:
-        url = params.get("url")
+        url = params.get("url", "")
+        tier = params.get("tier", "standard")
         if not url:
-            return ToolResult(success=False, data="", error="Missing required parameter: url")
+            return ToolResult(success=False, data="", error="No URL provided")
 
-        page = await self.scraper.scrape(url)
+        page = await self.scraper.scrape(url, tier=tier)
 
         if not page.content:
             return ToolResult(

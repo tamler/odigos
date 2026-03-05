@@ -26,7 +26,7 @@ class TestScrapeTool:
         assert result.success is True
         assert "Example Page" in result.data
         assert "main content" in result.data
-        mock_scraper.scrape.assert_called_once_with("https://example.com")
+        mock_scraper.scrape.assert_called_once_with("https://example.com", tier="standard")
 
     async def test_execute_empty_content(self):
         mock_scraper = AsyncMock()
