@@ -42,18 +42,24 @@ class Executor:
 
         tool_context = ""
 
-        # If plan requires a tool, execute it
-        if plan.action == "search" and self.tool_registry:
-            tool = self.tool_registry.get("web_search")
+        # Map plan actions to tool names
+        _ACTION_TOOLS = {
+            "search": "web_search",
+            "scrape": "read_page",
+        }
+
+        tool_name = _ACTION_TOOLS.get(plan.action)
+        if tool_name and self.tool_registry:
+            tool = self.tool_registry.get(tool_name)
             if tool:
                 try:
                     result = await tool.execute(plan.tool_params)
                     if result.success:
                         tool_context = result.data
                     else:
-                        logger.warning("Tool web_search failed: %s", result.error)
+                        logger.warning("Tool %s failed: %s", tool_name, result.error)
                 except Exception:
-                    logger.exception("Tool web_search raised an exception")
+                    logger.exception("Tool %s raised an exception", tool_name)
 
         messages = await self.context_assembler.build(
             conversation_id, message_content, tool_context=tool_context
