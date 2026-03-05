@@ -12,6 +12,7 @@ from odigos.db import Database
 from odigos.providers.base import LLMProvider
 
 if TYPE_CHECKING:
+    from odigos.core.scheduler import TaskScheduler
     from odigos.memory.manager import MemoryManager
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
@@ -32,6 +33,7 @@ class Agent:
         tool_registry: ToolRegistry | None = None,
         skill_registry: SkillRegistry | None = None,
         cost_fetcher: Callable | None = None,
+        scheduler: TaskScheduler | None = None,
     ) -> None:
         self.db = db
         self.planner = Planner(provider=planner_provider or provider)
@@ -47,6 +49,7 @@ class Agent:
             self.context_assembler,
             tool_registry=tool_registry,
             skill_registry=skill_registry,
+            scheduler=scheduler,
         )
         self.reflector = Reflector(db, memory_manager=memory_manager, cost_fetcher=cost_fetcher)
 

@@ -960,3 +960,56 @@ class TestPlannerCodeAction:
         assert plan.action == "code"
         assert plan.tool_params["code"] == "print(2+2)"
         assert plan.tool_params["language"] == "python"
+
+
+class TestExecutorScheduleAction:
+    async def test_schedule_creates_task_and_returns_confirmation(self):
+        mock_provider = AsyncMock()
+        mock_assembler = AsyncMock()
+        mock_scheduler = AsyncMock()
+        mock_scheduler.create = AsyncMock(return_value="task-123")
+
+        executor = Executor(
+            provider=mock_provider,
+            context_assembler=mock_assembler,
+            scheduler=mock_scheduler,
+        )
+
+        plan = Plan(
+            action="schedule",
+            tool_params={"description": "check email"},
+            schedule_seconds=3600,
+        )
+
+        result = await executor.execute("conv1", "remind me in 1 hour to check email", plan=plan)
+        assert result.response.content is not None
+        assert "scheduled" in result.response.content.lower() or "check email" in result.response.content.lower()
+        mock_scheduler.create.assert_called_once()
+
+
+class TestExecutorCodeAction:
+    async def test_code_action_uses_run_code_tool(self, db: Database, mock_provider: AsyncMock):
+        mock_code_tool = AsyncMock()
+        mock_code_tool.name = "run_code"
+        mock_code_tool.execute.return_value = ToolResult(success=True, data="42\n")
+
+        registry = ToolRegistry()
+        registry.register(mock_code_tool)
+
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
+        )
+        executor = Executor(
+            provider=mock_provider, context_assembler=assembler, tool_registry=registry
+        )
+        plan = Plan(
+            action="code",
+            requires_tools=True,
+            tool_params={"code": "print(42)", "language": "python"},
+        )
+
+        result = await executor.execute("conv-1", "calculate 42", plan=plan)
+        registry_tool = registry.get("run_code")
+        assert registry_tool is not None
+        mock_code_tool.execute.assert_called_once_with({"code": "print(42)", "language": "python"})
+        assert result.response.content == "I'm Odigos, your assistant."

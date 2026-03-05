@@ -9,6 +9,7 @@ from odigos.core.planner import Plan
 from odigos.providers.base import LLMProvider, LLMResponse
 
 if TYPE_CHECKING:
+    from odigos.core.scheduler import TaskScheduler
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
@@ -37,11 +38,13 @@ class Executor:
         context_assembler: ContextAssembler,
         tool_registry: ToolRegistry | None = None,
         skill_registry: SkillRegistry | None = None,
+        scheduler: TaskScheduler | None = None,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
         self.tool_registry = tool_registry
         self.skill_registry = skill_registry
+        self.scheduler = scheduler
 
     async def execute(
         self,
@@ -55,11 +58,53 @@ class Executor:
         tool_context = ""
         scrape_metadata = None
 
+        # Handle schedule action directly (no LLM call needed)
+        if plan.action == "schedule" and self.scheduler:
+            description = plan.tool_params.get("description", "")
+            await self.scheduler.create(
+                description=description,
+                delay_seconds=plan.schedule_seconds or 0,
+                recurrence_seconds=plan.recurrence_seconds,
+                conversation_id=conversation_id,
+            )
+            if plan.recurrence_seconds:
+                interval = plan.recurrence_seconds
+                unit = "seconds"
+                if interval >= 3600:
+                    interval = interval // 3600
+                    unit = "hour" if interval == 1 else "hours"
+                elif interval >= 60:
+                    interval = interval // 60
+                    unit = "minute" if interval == 1 else "minutes"
+                confirmation = f"Scheduled recurring task: {description} (every {interval} {unit})"
+            elif plan.schedule_seconds and plan.schedule_seconds > 0:
+                delay = plan.schedule_seconds
+                if delay >= 3600:
+                    time_str = f"{delay // 3600} hour{'s' if delay >= 7200 else ''}"
+                elif delay >= 60:
+                    time_str = f"{delay // 60} minute{'s' if delay >= 120 else ''}"
+                else:
+                    time_str = f"{delay} second{'s' if delay != 1 else ''}"
+                confirmation = f"Got it, I'll do that in {time_str}: {description}"
+            else:
+                confirmation = f"Task scheduled: {description}"
+
+            return ExecuteResult(
+                response=LLMResponse(
+                    content=confirmation,
+                    model="system",
+                    tokens_in=0,
+                    tokens_out=0,
+                    cost_usd=0.0,
+                )
+            )
+
         # Map plan actions to tool names
         _ACTION_TOOLS = {
             "search": "web_search",
             "scrape": "read_page",
             "document": "read_document",
+            "code": "run_code",
         }
 
         tool_name = _ACTION_TOOLS.get(plan.action)
