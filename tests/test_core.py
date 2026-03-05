@@ -420,6 +420,72 @@ class TestExecutor:
         assert "article content" in system_content
 
 
+class TestExecutorWithSkill:
+    async def test_applies_skill_system_prompt(self, db: Database, mock_provider: AsyncMock):
+        """Executor replaces system prompt when skill is set on plan."""
+        from odigos.skills.registry import Skill, SkillRegistry
+
+        skill = Skill(
+            name="research-deep-dive",
+            description="Research",
+            tools=["web_search"],
+            complexity="standard",
+            system_prompt="You are a thorough research assistant.",
+        )
+        skill_registry = SkillRegistry()
+        skill_registry._skills["research-deep-dive"] = skill
+
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
+        )
+
+        mock_tool = AsyncMock()
+        mock_tool.name = "web_search"
+        mock_tool.execute.return_value = ToolResult(success=True, data="## Results\n1. Found it")
+
+        tool_registry = ToolRegistry()
+        tool_registry.register(mock_tool)
+
+        executor = Executor(
+            provider=mock_provider,
+            context_assembler=assembler,
+            tool_registry=tool_registry,
+            skill_registry=skill_registry,
+        )
+        plan = Plan(
+            action="search", requires_tools=True,
+            tool_params={"query": "test"}, skill="research-deep-dive",
+        )
+
+        await executor.execute("conv-skill", "research this", plan=plan)
+
+        call_messages = mock_provider.complete.call_args[0][0]
+        system_content = call_messages[0]["content"]
+        assert "thorough research assistant" in system_content
+
+    async def test_no_skill_uses_default_prompt(self, db: Database, mock_provider: AsyncMock):
+        """Executor uses default personality prompt when no skill is set."""
+        from odigos.skills.registry import SkillRegistry
+
+        skill_registry = SkillRegistry()
+
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
+        )
+        executor = Executor(
+            provider=mock_provider,
+            context_assembler=assembler,
+            skill_registry=skill_registry,
+        )
+        plan = Plan(action="respond")
+
+        await executor.execute("conv-noskill", "Hello", plan=plan)
+
+        call_messages = mock_provider.complete.call_args[0][0]
+        system_content = call_messages[0]["content"]
+        assert "Odigos" in system_content
+
+
 class TestReflector:
     async def test_stores_message(self, db: Database):
         reflector = Reflector(db=db)

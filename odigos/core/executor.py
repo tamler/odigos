@@ -9,6 +9,7 @@ from odigos.core.planner import Plan
 from odigos.providers.base import LLMProvider, LLMResponse
 
 if TYPE_CHECKING:
+    from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -35,10 +36,12 @@ class Executor:
         provider: LLMProvider,
         context_assembler: ContextAssembler,
         tool_registry: ToolRegistry | None = None,
+        skill_registry: SkillRegistry | None = None,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
         self.tool_registry = tool_registry
+        self.skill_registry = skill_registry
 
     async def execute(
         self,
@@ -80,5 +83,12 @@ class Executor:
         messages = await self.context_assembler.build(
             conversation_id, message_content, tool_context=tool_context
         )
+
+        # Apply skill system prompt if a skill is selected
+        if plan.skill and self.skill_registry:
+            skill = self.skill_registry.get(plan.skill)
+            if skill:
+                messages[0]["content"] = skill.system_prompt
+
         response = await self.provider.complete(messages)
         return ExecuteResult(response=response, scrape_metadata=scrape_metadata)
