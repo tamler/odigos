@@ -12,7 +12,7 @@ from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse
 
 if TYPE_CHECKING:
-    from odigos.core.scheduler import TaskScheduler
+    from odigos.core.goal_store import GoalStore
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
@@ -41,14 +41,14 @@ class Executor:
         context_assembler: ContextAssembler,
         tool_registry: ToolRegistry | None = None,
         skill_registry: SkillRegistry | None = None,
-        scheduler: TaskScheduler | None = None,
+        goal_store: GoalStore | None = None,
         db: Database | None = None,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
         self.tool_registry = tool_registry
         self.skill_registry = skill_registry
-        self.scheduler = scheduler
+        self.goal_store = goal_store
         self.db = db
 
     async def execute(
@@ -63,27 +63,43 @@ class Executor:
         tool_context = ""
         scrape_metadata = None
 
-        # Handle schedule action directly (no LLM call needed)
-        if plan.action == "schedule" and self.scheduler:
+        # Handle remind action (no LLM call)
+        if plan.action == "remind" and self.goal_store:
             description = plan.tool_params.get("description", "")
-            await self.scheduler.create(
+            due_seconds = int(plan.tool_params.get("due_at_seconds", 0))
+            recurrence = plan.tool_params.get("recurrence")
+            await self.goal_store.create_reminder(
                 description=description,
-                delay_seconds=plan.schedule_seconds or 0,
-                recurrence_seconds=plan.recurrence_seconds,
+                due_seconds=due_seconds,
+                recurrence=recurrence,
                 conversation_id=conversation_id,
             )
-            if plan.recurrence_seconds:
-                interval = plan.recurrence_seconds
-                unit = "seconds"
-                if interval >= 3600:
-                    interval = interval // 3600
-                    unit = "hour" if interval == 1 else "hours"
-                elif interval >= 60:
-                    interval = interval // 60
-                    unit = "minute" if interval == 1 else "minutes"
-                confirmation = f"Scheduled recurring task: {description} (every {interval} {unit})"
-            elif plan.schedule_seconds and plan.schedule_seconds > 0:
-                delay = plan.schedule_seconds
+            if due_seconds > 0:
+                if due_seconds >= 3600:
+                    time_str = f"{due_seconds // 3600} hour{'s' if due_seconds >= 7200 else ''}"
+                elif due_seconds >= 60:
+                    time_str = f"{due_seconds // 60} minute{'s' if due_seconds >= 120 else ''}"
+                else:
+                    time_str = f"{due_seconds} second{'s' if due_seconds != 1 else ''}"
+                confirmation = f"Reminder set for {time_str} from now: {description}"
+            else:
+                confirmation = f"Reminder set: {description}"
+            if recurrence:
+                confirmation += f" (recurring: {recurrence})"
+            return ExecuteResult(
+                response=LLMResponse(content=confirmation, model="system", tokens_in=0, tokens_out=0, cost_usd=0.0)
+            )
+
+        # Handle todo action (no LLM call)
+        if plan.action == "todo" and self.goal_store:
+            description = plan.tool_params.get("description", "")
+            delay = int(plan.tool_params.get("delay_seconds", 0))
+            await self.goal_store.create_todo(
+                description=description,
+                delay_seconds=delay,
+                conversation_id=conversation_id,
+            )
+            if delay > 0:
                 if delay >= 3600:
                     time_str = f"{delay // 3600} hour{'s' if delay >= 7200 else ''}"
                 elif delay >= 60:
@@ -92,16 +108,18 @@ class Executor:
                     time_str = f"{delay} second{'s' if delay != 1 else ''}"
                 confirmation = f"Got it, I'll do that in {time_str}: {description}"
             else:
-                confirmation = f"Task scheduled: {description}"
-
+                confirmation = f"Todo added: {description}"
             return ExecuteResult(
-                response=LLMResponse(
-                    content=confirmation,
-                    model="system",
-                    tokens_in=0,
-                    tokens_out=0,
-                    cost_usd=0.0,
-                )
+                response=LLMResponse(content=confirmation, model="system", tokens_in=0, tokens_out=0, cost_usd=0.0)
+            )
+
+        # Handle goal action (no LLM call)
+        if plan.action == "goal" and self.goal_store:
+            description = plan.tool_params.get("description", "")
+            await self.goal_store.create_goal(description=description)
+            confirmation = f"Goal noted: {description}"
+            return ExecuteResult(
+                response=LLMResponse(content=confirmation, model="system", tokens_in=0, tokens_out=0, cost_usd=0.0)
             )
 
         # Map plan actions to tool names

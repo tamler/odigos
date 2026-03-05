@@ -914,35 +914,45 @@ class TestExecutorDocumentAction:
         assert result.response.content == "I'm Odigos, your assistant."
 
 
-class TestPlannerScheduleAction:
-    async def test_schedule_action_parsed(self):
+class TestPlannerRemindAction:
+    async def test_remind_action_parsed(self):
         mock_provider = AsyncMock()
         mock_provider.complete.return_value = LLMResponse(
-            content='{"action": "schedule", "description": "check email", "delay_seconds": 3600}',
-            model="test",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
+            content='{"action": "remind", "description": "dentist appointment", "due_at_seconds": 7200}',
+            model="test", tokens_in=10, tokens_out=10, cost_usd=0.0,
         )
         planner = Planner(provider=mock_provider)
-        plan = await planner.plan("remind me to check email in 1 hour")
-        assert plan.action == "schedule"
-        assert plan.schedule_seconds == 3600
-        assert plan.tool_params["description"] == "check email"
+        plan = await planner.plan("remind me about dentist in 2 hours")
+        assert plan.action == "remind"
+        assert plan.tool_params["description"] == "dentist appointment"
+        assert plan.tool_params["due_at_seconds"] == 7200
 
-    async def test_recurring_schedule(self):
+
+class TestPlannerTodoAction:
+    async def test_todo_action_parsed(self):
         mock_provider = AsyncMock()
         mock_provider.complete.return_value = LLMResponse(
-            content='{"action": "schedule", "description": "check email", "delay_seconds": 0, "recurrence_seconds": 3600}',
-            model="test",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
+            content='{"action": "todo", "description": "research flights", "delay_seconds": 0}',
+            model="test", tokens_in=10, tokens_out=10, cost_usd=0.0,
         )
         planner = Planner(provider=mock_provider)
-        plan = await planner.plan("check my email every hour")
-        assert plan.action == "schedule"
-        assert plan.recurrence_seconds == 3600
+        plan = await planner.plan("look up flights to Tokyo")
+        assert plan.action == "todo"
+        assert plan.tool_params["description"] == "research flights"
+        assert plan.tool_params["delay_seconds"] == 0
+
+
+class TestPlannerGoalAction:
+    async def test_goal_action_parsed(self):
+        mock_provider = AsyncMock()
+        mock_provider.complete.return_value = LLMResponse(
+            content='{"action": "goal", "description": "learn Spanish"}',
+            model="test", tokens_in=10, tokens_out=10, cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_provider)
+        plan = await planner.plan("I want to learn Spanish")
+        assert plan.action == "goal"
+        assert plan.tool_params["description"] == "learn Spanish"
 
 
 class TestPlannerCodeAction:
@@ -962,29 +972,67 @@ class TestPlannerCodeAction:
         assert plan.tool_params["language"] == "python"
 
 
-class TestExecutorScheduleAction:
-    async def test_schedule_creates_task_and_returns_confirmation(self):
+class TestExecutorRemindAction:
+    async def test_remind_creates_reminder(self):
         mock_provider = AsyncMock()
         mock_assembler = AsyncMock()
-        mock_scheduler = AsyncMock()
-        mock_scheduler.create = AsyncMock(return_value="task-123")
+        mock_store = AsyncMock()
+        mock_store.create_reminder = AsyncMock(return_value="rem-123")
 
         executor = Executor(
             provider=mock_provider,
             context_assembler=mock_assembler,
-            scheduler=mock_scheduler,
+            goal_store=mock_store,
         )
-
         plan = Plan(
-            action="schedule",
-            tool_params={"description": "check email"},
-            schedule_seconds=3600,
+            action="remind",
+            tool_params={"description": "call dentist", "due_at_seconds": 7200},
         )
+        result = await executor.execute("conv1", "remind me", plan=plan)
+        assert "dentist" in result.response.content.lower() or "reminder" in result.response.content.lower()
+        mock_store.create_reminder.assert_called_once()
 
-        result = await executor.execute("conv1", "remind me in 1 hour to check email", plan=plan)
-        assert result.response.content is not None
-        assert "scheduled" in result.response.content.lower() or "check email" in result.response.content.lower()
-        mock_scheduler.create.assert_called_once()
+
+class TestExecutorTodoAction:
+    async def test_todo_creates_todo(self):
+        mock_provider = AsyncMock()
+        mock_assembler = AsyncMock()
+        mock_store = AsyncMock()
+        mock_store.create_todo = AsyncMock(return_value="todo-123")
+
+        executor = Executor(
+            provider=mock_provider,
+            context_assembler=mock_assembler,
+            goal_store=mock_store,
+        )
+        plan = Plan(
+            action="todo",
+            tool_params={"description": "research flights", "delay_seconds": 0},
+        )
+        result = await executor.execute("conv1", "look up flights", plan=plan)
+        assert "flights" in result.response.content.lower() or "todo" in result.response.content.lower()
+        mock_store.create_todo.assert_called_once()
+
+
+class TestExecutorGoalAction:
+    async def test_goal_creates_goal(self):
+        mock_provider = AsyncMock()
+        mock_assembler = AsyncMock()
+        mock_store = AsyncMock()
+        mock_store.create_goal = AsyncMock(return_value="goal-123")
+
+        executor = Executor(
+            provider=mock_provider,
+            context_assembler=mock_assembler,
+            goal_store=mock_store,
+        )
+        plan = Plan(
+            action="goal",
+            tool_params={"description": "learn Spanish"},
+        )
+        result = await executor.execute("conv1", "I want to learn Spanish", plan=plan)
+        assert "spanish" in result.response.content.lower() or "goal" in result.response.content.lower()
+        mock_store.create_goal.assert_called_once()
 
 
 class TestExecutorCodeAction:
