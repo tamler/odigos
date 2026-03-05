@@ -1,8 +1,9 @@
+import json as json_module
 import logging
 
 import httpx
 
-from odigos.providers.base import LLMProvider, LLMResponse
+from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,9 @@ class OpenRouterProvider(LLMProvider):
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             "temperature": kwargs.get("temperature", self.temperature),
         }
+        tools = kwargs.get("tools")
+        if tools:
+            payload["tools"] = tools
 
         response = await self._client.post(OPENROUTER_API_URL, json=payload)
 
@@ -69,14 +73,30 @@ class OpenRouterProvider(LLMProvider):
 
         data = response.json()
         usage = data.get("usage", {})
+        message = data["choices"][0]["message"]
+
+        tool_calls = None
+        raw_tool_calls = message.get("tool_calls")
+        if raw_tool_calls:
+            tool_calls = []
+            for tc in raw_tool_calls:
+                args = tc["function"]["arguments"]
+                if isinstance(args, str):
+                    args = json_module.loads(args)
+                tool_calls.append(ToolCall(
+                    id=tc["id"],
+                    name=tc["function"]["name"],
+                    arguments=args,
+                ))
 
         return LLMResponse(
-            content=data["choices"][0]["message"]["content"],
+            content=message.get("content") or "",
             model=data.get("model", model),
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
             cost_usd=0.0,
             generation_id=data.get("id"),
+            tool_calls=tool_calls,
         )
 
     async def fetch_generation_cost(self, generation_id: str) -> float | None:
