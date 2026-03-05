@@ -8,6 +8,8 @@ from fastapi import FastAPI
 from odigos.channels.telegram import TelegramChannel
 from odigos.config import load_settings
 from odigos.core.agent import Agent
+from odigos.core.heartbeat import Heartbeat
+from odigos.core.scheduler import TaskScheduler
 from odigos.db import Database
 from odigos.memory.graph import EntityGraph
 from odigos.memory.manager import MemoryManager
@@ -16,6 +18,7 @@ from odigos.memory.summarizer import ConversationSummarizer
 from odigos.memory.vectors import VectorMemory
 from odigos.providers.embeddings import EmbeddingProvider
 from odigos.providers.openrouter import OpenRouterProvider
+from odigos.providers.sandbox import SandboxProvider
 from odigos.core.budget import BudgetTracker
 from odigos.core.router import ModelRouter
 from odigos.skills.registry import SkillRegistry
@@ -34,12 +37,13 @@ _telegram: TelegramChannel | None = None
 _searxng = None
 _scraper = None
 _router: ModelRouter | None = None
+_heartbeat: Heartbeat | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
-    global _db, _provider, _embedder, _telegram, _searxng, _scraper, _router
+    global _db, _provider, _embedder, _telegram, _searxng, _scraper, _router, _heartbeat
 
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     settings = load_settings(config_path)
@@ -133,6 +137,20 @@ async def lifespan(app: FastAPI):
     tool_registry.register(doc_tool)
     logger.info("Document tool initialized (docling)")
 
+    # Initialize code execution sandbox
+    from odigos.tools.code import CodeTool
+
+    sandbox = SandboxProvider(
+        timeout=settings.sandbox.timeout_seconds,
+        max_memory_mb=settings.sandbox.max_memory_mb,
+    )
+    code_tool = CodeTool(sandbox=sandbox)
+    tool_registry.register(code_tool)
+    logger.info("Code tool initialized (sandbox)")
+
+    # Initialize task scheduler
+    scheduler = TaskScheduler(db=_db)
+
     # Initialize skill registry
     skill_registry = SkillRegistry()
     skill_registry.load_all(settings.skills.path)
@@ -154,17 +172,37 @@ async def lifespan(app: FastAPI):
         tool_registry=tool_registry,
         skill_registry=skill_registry,
         cost_fetcher=_delayed_cost_fetcher,
+        scheduler=scheduler,
     )
 
-    # Initialize Telegram channel
+    # Initialize Telegram channel (before heartbeat so we can pass it)
     _telegram = TelegramChannel(
         token=settings.telegram_bot_token,
         agent=agent,
         mode=settings.telegram.mode,
         webhook_url=settings.telegram.webhook_url,
+        scheduler=scheduler,
     )
+
+    # Initialize heartbeat
+    _heartbeat = Heartbeat(
+        db=_db,
+        agent=agent,
+        telegram_channel=_telegram,
+        scheduler=scheduler,
+        interval=settings.heartbeat.interval_seconds,
+        max_tasks_per_tick=settings.heartbeat.max_tasks_per_tick,
+    )
+
+    # Pass heartbeat to telegram for /stop and /start commands
+    _telegram.heartbeat = _heartbeat
+
     await _telegram.start()
     logger.info("Telegram channel started in %s mode", settings.telegram.mode)
+
+    # Start heartbeat loop
+    await _heartbeat.start()
+    logger.info("Heartbeat started (interval=%ds)", settings.heartbeat.interval_seconds)
 
     logger.info("Odigos is ready.")
 
@@ -172,6 +210,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Odigos...")
+    if _heartbeat:
+        await _heartbeat.stop()
     if _telegram:
         await _telegram.stop()
     if _scraper:
