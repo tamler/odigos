@@ -72,3 +72,41 @@ def test_searxng_config_from_env(monkeypatch):
     assert settings.searxng_url == "https://search.example.com"
     assert settings.searxng_username == "nimda"
     assert settings.searxng_password == "secret123"
+
+
+from odigos.config import (
+    BudgetConfig,
+    ContextConfig,
+    RouterConfig,
+    SkillsConfig,
+)
+
+
+class TestNewConfigSections:
+    def test_budget_config_defaults(self):
+        cfg = BudgetConfig()
+        assert cfg.daily_limit_usd == 1.00
+        assert cfg.monthly_limit_usd == 20.00
+
+    def test_router_config_defaults(self):
+        cfg = RouterConfig()
+        assert len(cfg.free_pool) > 0
+        assert cfg.rate_limit_rpm == 20
+
+    def test_context_config_defaults(self):
+        cfg = ContextConfig()
+        assert cfg.max_tokens == 12000
+
+    def test_skills_config_defaults(self):
+        cfg = SkillsConfig()
+        assert cfg.path == "skills"
+
+    def test_settings_includes_new_sections(self):
+        settings = Settings(
+            telegram_bot_token="test",
+            openrouter_api_key="test",
+        )
+        assert settings.budget.daily_limit_usd == 1.00
+        assert settings.router.free_pool is not None
+        assert settings.context.max_tokens == 12000
+        assert settings.skills.path == "skills"

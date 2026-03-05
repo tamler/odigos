@@ -34,6 +34,28 @@ class ServerConfig(BaseModel):
     port: int = 8000
 
 
+class BudgetConfig(BaseModel):
+    daily_limit_usd: float = 1.00
+    monthly_limit_usd: float = 20.00
+
+
+class RouterConfig(BaseModel):
+    free_pool: list[str] = [
+        "meta-llama/llama-4-scout:free",
+        "google/gemma-3-27b-it:free",
+        "mistralai/mistral-small-3.2-24b-instruct:free",
+    ]
+    rate_limit_rpm: int = 20
+
+
+class ContextConfig(BaseModel):
+    max_tokens: int = 12000
+
+
+class SkillsConfig(BaseModel):
+    path: str = "skills"
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str
     openrouter_api_key: str
@@ -47,6 +69,10 @@ class Settings(BaseSettings):
     personality: PersonalityConfig = PersonalityConfig()
     telegram: TelegramConfig = TelegramConfig()
     server: ServerConfig = ServerConfig()
+    budget: BudgetConfig = BudgetConfig()
+    router: RouterConfig = RouterConfig()
+    context: ContextConfig = ContextConfig()
+    skills: SkillsConfig = SkillsConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
