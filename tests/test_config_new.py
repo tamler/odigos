@@ -34,3 +34,11 @@ def test_sandbox_config_override():
     assert s.sandbox.timeout_seconds == 10
     assert s.sandbox.max_memory_mb == 1024
     assert s.sandbox.allow_network is True
+
+
+def test_agent_config_has_react_settings():
+    from odigos.config import AgentConfig
+
+    config = AgentConfig()
+    assert config.max_tool_turns == 25
+    assert config.run_timeout_seconds == 300

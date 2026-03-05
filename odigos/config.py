@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings
 
 class AgentConfig(BaseModel):
     name: str = "Odigos"
+    max_tool_turns: int = 25
+    run_timeout_seconds: int = 300
 
 
 class DatabaseConfig(BaseModel):
