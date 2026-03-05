@@ -24,16 +24,27 @@ class TelegramChannel(Channel):
         agent: Agent,
         mode: str = "polling",
         webhook_url: str = "",
+        scheduler=None,
+        heartbeat=None,
     ) -> None:
         self.token = token
         self.agent = agent
         self.mode = mode
         self.webhook_url = webhook_url
         self._app: Application | None = None
+        self.scheduler = scheduler
+        self.heartbeat = heartbeat
 
     async def start(self) -> None:
         """Build and start the Telegram bot."""
         self._app = Application.builder().token(self.token).build()
+
+        from telegram.ext import CommandHandler
+        self._app.add_handler(CommandHandler("tasks", self._handle_tasks_command))
+        self._app.add_handler(CommandHandler("cancel", self._handle_cancel_command))
+        self._app.add_handler(CommandHandler("stop", self._handle_stop_command))
+        self._app.add_handler(CommandHandler("start", self._handle_start_command))
+
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         self._app.add_handler(MessageHandler(filters.Document.ALL, self._handle_document))
 
@@ -55,6 +66,11 @@ class TelegramChannel(Channel):
             if self._app.running:
                 await self._app.stop()
             await self._app.shutdown()
+
+    async def send_message(self, chat_id: int, text: str) -> None:
+        """Send a message to a specific chat."""
+        if self._app:
+            await self._app.bot.send_message(chat_id=chat_id, text=text)
 
     async def _handle_text(self, update: Update, context) -> None:
         """Handle incoming text messages."""
@@ -140,3 +156,49 @@ class TelegramChannel(Channel):
             await update.effective_message.reply_text(
                 "Something went wrong. Please try again."
             )
+
+    async def _handle_tasks_command(self, update: Update, context) -> None:
+        """List pending tasks."""
+        if not self.scheduler:
+            await update.effective_message.reply_text("Task scheduler not available.")
+            return
+        tasks = await self.scheduler.list_pending(limit=10)
+        if not tasks:
+            await update.effective_message.reply_text("No pending tasks.")
+            return
+        lines = []
+        for t in tasks:
+            sched = t.get("scheduled_at", "now")[:16] if t.get("scheduled_at") else "ASAP"
+            lines.append(f"- [{t['id'][:8]}] {t['description']} (at {sched})")
+        await update.effective_message.reply_text("Pending tasks:\n" + "\n".join(lines))
+
+    async def _handle_cancel_command(self, update: Update, context) -> None:
+        """Cancel a task by ID."""
+        if not self.scheduler:
+            await update.effective_message.reply_text("Task scheduler not available.")
+            return
+        if not context.args:
+            await update.effective_message.reply_text("Usage: /cancel <task_id>")
+            return
+        task_id = context.args[0]
+        result = await self.scheduler.cancel(task_id)
+        if result:
+            await update.effective_message.reply_text(f"Task {task_id[:8]} cancelled.")
+        else:
+            await update.effective_message.reply_text(f"Task {task_id[:8]} not found or already completed.")
+
+    async def _handle_stop_command(self, update: Update, context) -> None:
+        """Pause the heartbeat."""
+        if self.heartbeat:
+            self.heartbeat.paused = True
+            await update.effective_message.reply_text("Heartbeat paused.")
+        else:
+            await update.effective_message.reply_text("Heartbeat not available.")
+
+    async def _handle_start_command(self, update: Update, context) -> None:
+        """Resume the heartbeat."""
+        if self.heartbeat:
+            self.heartbeat.paused = False
+            await update.effective_message.reply_text("Heartbeat resumed.")
+        else:
+            await update.effective_message.reply_text("Heartbeat not available.")
