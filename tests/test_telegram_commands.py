@@ -50,6 +50,9 @@ async def test_cancel_command():
     agent = MagicMock()
     scheduler = MagicMock()
     scheduler.cancel = AsyncMock(return_value=True)
+    scheduler.list_pending = AsyncMock(return_value=[
+        {"id": "abc-123-full-uuid", "description": "test task"},
+    ])
 
     channel = TelegramChannel(token="fake", agent=agent, scheduler=scheduler)
 
@@ -61,7 +64,7 @@ async def test_cancel_command():
     context.args = ["abc-123"]
 
     await channel._handle_cancel_command(update, context)
-    scheduler.cancel.assert_called_once_with("abc-123")
+    scheduler.cancel.assert_called_once_with("abc-123-full-uuid")
     call_text = update.effective_message.reply_text.call_args[0][0]
     assert "cancelled" in call_text.lower()
 

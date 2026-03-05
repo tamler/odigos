@@ -130,6 +130,7 @@ class Heartbeat:
                         task["conversation_id"],
                         description,
                         f"Task failed after {retry_count} attempts: {e}",
+                        failed=True,
                     )
             else:
                 await self.db.execute(
@@ -138,12 +139,15 @@ class Heartbeat:
                 )
                 logger.warning("Task %s failed (attempt %d/%d): %s", task_id, retry_count, max_retries, e)
 
-    async def _send_result(self, conversation_id: str, description: str, result: str) -> None:
+    async def _send_result(
+        self, conversation_id: str, description: str, result: str, *, failed: bool = False,
+    ) -> None:
         try:
             parts = conversation_id.split(":", 1)
             if len(parts) == 2 and parts[0] == "telegram":
                 chat_id = int(parts[1])
-                message = f"Task completed: {description}\n\n{result}"
+                prefix = "Task failed" if failed else "Task completed"
+                message = f"{prefix}: {description}\n\n{result}"
                 await self.telegram_channel.send_message(chat_id, message[:4000])
         except Exception:
             logger.exception("Failed to send task result via Telegram")

@@ -143,6 +143,7 @@ async def lifespan(app: FastAPI):
     sandbox = SandboxProvider(
         timeout=settings.sandbox.timeout_seconds,
         max_memory_mb=settings.sandbox.max_memory_mb,
+        allow_network=settings.sandbox.allow_network,
     )
     code_tool = CodeTool(sandbox=sandbox)
     tool_registry.register(code_tool)

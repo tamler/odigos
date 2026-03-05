@@ -180,12 +180,27 @@ class TelegramChannel(Channel):
         if not context.args:
             await update.effective_message.reply_text("Usage: /cancel <task_id>")
             return
-        task_id = context.args[0]
-        result = await self.scheduler.cancel(task_id)
-        if result:
+        task_id_input = context.args[0]
+        # Support prefix matching for truncated IDs shown by /tasks
+        tasks = await self.scheduler.list_pending()
+        matches = [t for t in tasks if t["id"].startswith(task_id_input)]
+        if len(matches) == 1:
+            task_id = matches[0]["id"]
+            await self.scheduler.cancel(task_id)
             await update.effective_message.reply_text(f"Task {task_id[:8]} cancelled.")
+        elif len(matches) > 1:
+            await update.effective_message.reply_text(
+                f"Ambiguous ID '{task_id_input[:8]}' matches {len(matches)} tasks. Use more characters."
+            )
         else:
-            await update.effective_message.reply_text(f"Task {task_id[:8]} not found or already completed.")
+            # Try exact match (might be completed/failed task)
+            result = await self.scheduler.cancel(task_id_input)
+            if result:
+                await update.effective_message.reply_text(f"Task {task_id_input[:8]} cancelled.")
+            else:
+                await update.effective_message.reply_text(
+                    f"Task {task_id_input[:8]} not found or already completed."
+                )
 
     async def _handle_stop_command(self, update: Update, context) -> None:
         """Pause the heartbeat."""
