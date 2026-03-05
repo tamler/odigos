@@ -124,6 +124,15 @@ async def lifespan(app: FastAPI):
         tool_registry.register(search_tool)
         logger.info("Search tool initialized (SearXNG: %s)", settings.searxng_url)
 
+    # Initialize document processing
+    from odigos.providers.docling import DoclingProvider
+    from odigos.tools.document import DocTool
+
+    docling_provider = DoclingProvider()
+    doc_tool = DocTool(provider=docling_provider)
+    tool_registry.register(doc_tool)
+    logger.info("Document tool initialized (docling)")
+
     # Initialize skill registry
     skill_registry = SkillRegistry()
     skill_registry.load_all(settings.skills.path)
