@@ -7,6 +7,7 @@ from odigos.providers.base import LLMProvider, LLMResponse
 logger = logging.getLogger(__name__)
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
 
 
 class OpenRouterProvider(LLMProvider):
@@ -77,6 +78,24 @@ class OpenRouterProvider(LLMProvider):
             cost_usd=0.0,
             generation_id=data.get("id"),
         )
+
+    async def fetch_generation_cost(self, generation_id: str) -> float | None:
+        """Fetch the total cost for a generation from OpenRouter."""
+        try:
+            response = await self._client.get(
+                OPENROUTER_GENERATION_URL,
+                params={"id": generation_id},
+            )
+            if response.status_code != 200:
+                return None
+            data = response.json().get("data", {})
+            cost = data.get("total_cost")
+            if cost is not None:
+                return float(cost)
+            return None
+        except Exception:
+            logger.debug("Failed to fetch generation cost for %s", generation_id, exc_info=True)
+            return None
 
     async def close(self) -> None:
         await self._client.aclose()
