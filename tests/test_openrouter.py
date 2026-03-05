@@ -1,8 +1,7 @@
 import httpx
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-from odigos.providers.base import LLMResponse
 from odigos.providers.openrouter import OpenRouterProvider
 
 

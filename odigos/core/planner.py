@@ -62,16 +62,20 @@ class Planner:
             if action == "search":
                 query = result.get("query", message_content)
                 return Plan(
-                    action="search", requires_tools=True,
-                    tool_params={"query": query}, skill=skill,
+                    action="search",
+                    requires_tools=True,
+                    tool_params={"query": query},
+                    skill=skill,
                 )
 
             if action == "scrape":
                 url = result.get("url", "")
                 if url:
                     return Plan(
-                        action="scrape", requires_tools=True,
-                        tool_params={"url": url}, skill=skill,
+                        action="scrape",
+                        requires_tools=True,
+                        tool_params={"url": url},
+                        skill=skill,
                     )
 
             return Plan(action="respond", skill=skill)

@@ -31,10 +31,7 @@ class ModelRouter(LLMProvider):
     ) -> None:
         self._provider = provider
         self._rate_limit_rpm = rate_limit_rpm
-        self._pool = [
-            _ModelState(model_id=m, remaining_requests=rate_limit_rpm)
-            for m in free_pool
-        ]
+        self._pool = [_ModelState(model_id=m, remaining_requests=rate_limit_rpm) for m in free_pool]
         self._index = 0
 
     async def complete(self, messages: list[dict], **kwargs) -> LLMResponse:
@@ -58,9 +55,7 @@ class ModelRouter(LLMProvider):
                 state.consecutive_failures = 0
 
             try:
-                result = await self._provider.complete(
-                    messages, model=state.model_id, **kwargs
-                )
+                result = await self._provider.complete(messages, model=state.model_id, **kwargs)
                 state.remaining_requests -= 1
                 state.consecutive_failures = 0
                 return result
@@ -75,15 +70,11 @@ class ModelRouter(LLMProvider):
                     )
                 else:
                     state.consecutive_failures += 1
-                    logger.warning(
-                        "Model %s failed: %s", state.model_id, e
-                    )
+                    logger.warning("Model %s failed: %s", state.model_id, e)
                 last_error = e
                 tried += 1
 
-        raise RuntimeError(
-            f"All models exhausted in free pool. Last error: {last_error}"
-        )
+        raise RuntimeError(f"All models exhausted in free pool. Last error: {last_error}")
 
     async def close(self) -> None:
         await self._provider.close()

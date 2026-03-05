@@ -453,8 +453,10 @@ class TestExecutorWithSkill:
             skill_registry=skill_registry,
         )
         plan = Plan(
-            action="search", requires_tools=True,
-            tool_params={"query": "test"}, skill="research-deep-dive",
+            action="search",
+            requires_tools=True,
+            tool_params={"query": "test"},
+            skill="research-deep-dive",
         )
 
         await executor.execute("conv-skill", "research this", plan=plan)
@@ -745,6 +747,7 @@ class TestAgent:
 class TestContextBudget:
     async def test_estimate_tokens(self, db: Database):
         from odigos.core.context import estimate_tokens
+
         assert estimate_tokens("hello world") == len("hello world") // 4
 
     async def test_trims_history_when_over_budget(self, db: Database):
@@ -767,9 +770,7 @@ class TestContextBudget:
                 (f"msg-{i}", "conv-budget", role, f"Message {i} " + "x" * 200),
             )
 
-        messages = await assembler.build(
-            "conv-budget", "New message", max_tokens=500
-        )
+        messages = await assembler.build("conv-budget", "New message", max_tokens=500)
 
         history_count = len(messages) - 2  # minus system and current
         assert history_count < 10
@@ -783,9 +784,7 @@ class TestContextBudget:
             personality_path="/nonexistent",
         )
 
-        messages = await assembler.build(
-            "conv-notrim", "Short message", max_tokens=12000
-        )
+        messages = await assembler.build("conv-notrim", "Short message", max_tokens=12000)
 
         assert len(messages) == 2
 

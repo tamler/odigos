@@ -1,5 +1,3 @@
-import asyncio
-from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -105,6 +103,7 @@ class TestModelRouter:
     async def test_implements_llm_provider(self):
         """ModelRouter is a subclass of LLMProvider."""
         from odigos.providers.base import LLMProvider
+
         assert issubclass(ModelRouter, LLMProvider)
 
     async def test_close_delegates(self, mock_provider):

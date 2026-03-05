@@ -1,9 +1,8 @@
 import uuid
-from datetime import datetime, timezone
 
 import pytest
 
-from odigos.core.budget import BudgetStatus, BudgetTracker
+from odigos.core.budget import BudgetTracker
 from odigos.db import Database
 
 
@@ -17,9 +16,7 @@ async def db(tmp_db_path: str) -> Database:
 
 async def _insert_message(db: Database, cost: float, conv_id: str = "conv-1") -> None:
     """Insert a message with a specific cost for budget testing."""
-    existing = await db.fetch_one(
-        "SELECT id FROM conversations WHERE id = ?", (conv_id,)
-    )
+    existing = await db.fetch_one("SELECT id FROM conversations WHERE id = ?", (conv_id,))
     if not existing:
         await db.execute(
             "INSERT INTO conversations (id, channel) VALUES (?, ?)",
@@ -53,25 +50,19 @@ class TestBudgetTracker:
         assert abs(spend - 0.15) < 1e-9
 
     async def test_check_budget_within(self, db: Database):
-        tracker = BudgetTracker(
-            db=db, daily_limit=1.00, monthly_limit=20.00
-        )
+        tracker = BudgetTracker(db=db, daily_limit=1.00, monthly_limit=20.00)
         status = await tracker.check_budget()
         assert status.within_budget is True
         assert status.daily_spend == 0.0
 
     async def test_check_budget_warns_at_80_pct(self, db: Database):
-        tracker = BudgetTracker(
-            db=db, daily_limit=0.10, monthly_limit=20.00
-        )
+        tracker = BudgetTracker(db=db, daily_limit=0.10, monthly_limit=20.00)
         await _insert_message(db, 0.09)  # 90% of daily
         status = await tracker.check_budget()
         assert status.within_budget is False
 
     async def test_check_budget_monthly_warn(self, db: Database):
-        tracker = BudgetTracker(
-            db=db, daily_limit=100.00, monthly_limit=0.10
-        )
+        tracker = BudgetTracker(db=db, daily_limit=100.00, monthly_limit=0.10)
         await _insert_message(db, 0.09)  # 90% of monthly
         status = await tracker.check_budget()
         assert status.within_budget is False

@@ -3,7 +3,14 @@ import tempfile
 
 import yaml
 
-from odigos.config import Settings, load_settings
+from odigos.config import (
+    BudgetConfig,
+    ContextConfig,
+    RouterConfig,
+    Settings,
+    SkillsConfig,
+    load_settings,
+)
 
 
 def test_settings_from_env_and_yaml():
@@ -72,14 +79,6 @@ def test_searxng_config_from_env(monkeypatch):
     assert settings.searxng_url == "https://search.example.com"
     assert settings.searxng_username == "nimda"
     assert settings.searxng_password == "secret123"
-
-
-from odigos.config import (
-    BudgetConfig,
-    ContextConfig,
-    RouterConfig,
-    SkillsConfig,
-)
 
 
 class TestNewConfigSections:

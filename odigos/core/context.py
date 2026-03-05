@@ -36,7 +36,11 @@ class ContextAssembler:
         self.personality_path = personality_path
 
     async def build(
-        self, conversation_id: str, current_message: str, tool_context: str = "", max_tokens: int = 0
+        self,
+        conversation_id: str,
+        current_message: str,
+        tool_context: str = "",
+        max_tokens: int = 0,
     ) -> list[dict]:
         """Assemble the full messages list: system + history + current."""
         messages: list[dict] = []
@@ -77,9 +81,7 @@ class ContextAssembler:
 
         return messages
 
-    def _trim_to_budget(
-        self, messages: list[dict], max_tokens: int
-    ) -> list[dict]:
+    def _trim_to_budget(self, messages: list[dict], max_tokens: int) -> list[dict]:
         """Trim history messages (oldest first) to fit within token budget."""
         total = sum(estimate_tokens(m["content"]) for m in messages)
 
@@ -94,8 +96,9 @@ class ContextAssembler:
 
         if total > max_tokens:
             logger.warning(
-                "Context still over budget after trimming all history "
-                "(%d > %d tokens)", total, max_tokens,
+                "Context still over budget after trimming all history (%d > %d tokens)",
+                total,
+                max_tokens,
             )
 
         return messages
