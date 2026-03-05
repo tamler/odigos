@@ -5,7 +5,7 @@ from odigos.config import Settings
 def test_heartbeat_config_defaults():
     s = Settings(telegram_bot_token="t", openrouter_api_key="k")
     assert s.heartbeat.interval_seconds == 30
-    assert s.heartbeat.max_tasks_per_tick == 5
+    assert s.heartbeat.max_todos_per_tick == 3
 
 
 def test_sandbox_config_defaults():
@@ -19,10 +19,10 @@ def test_heartbeat_config_override():
     s = Settings(
         telegram_bot_token="t",
         openrouter_api_key="k",
-        heartbeat={"interval_seconds": 60, "max_tasks_per_tick": 10},
+        heartbeat={"interval_seconds": 60, "max_todos_per_tick": 10},
     )
     assert s.heartbeat.interval_seconds == 60
-    assert s.heartbeat.max_tasks_per_tick == 10
+    assert s.heartbeat.max_todos_per_tick == 10
 
 
 def test_sandbox_config_override():
