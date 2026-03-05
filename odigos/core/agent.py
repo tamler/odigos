@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
 import uuid
+from collections import defaultdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from odigos.channels.base import UniversalMessage
 from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor
-from odigos.core.planner import Planner
 from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.providers.base import LLMProvider
@@ -18,14 +18,13 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from odigos.core.budget import BudgetTracker
-    from odigos.core.goal_store import GoalStore
     from odigos.memory.manager import MemoryManager
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
 
 class Agent:
-    """Main agent: receives messages, runs plan->execute->reflect loop."""
+    """Main agent: receives messages, runs ReAct agentic loop."""
 
     def __init__(
         self,
@@ -35,16 +34,18 @@ class Agent:
         history_limit: int = 20,
         memory_manager: MemoryManager | None = None,
         personality_path: str = "data/personality.yaml",
-        planner_provider: LLMProvider | None = None,
         tool_registry: ToolRegistry | None = None,
         skill_registry: SkillRegistry | None = None,
         cost_fetcher: Callable | None = None,
-        goal_store: GoalStore | None = None,
         budget_tracker: BudgetTracker | None = None,
+        max_tool_turns: int = 25,
+        run_timeout: int = 300,
     ) -> None:
         self.db = db
         self.budget_tracker = budget_tracker
-        self.planner = Planner(provider=planner_provider or provider)
+        self._max_tool_turns = max_tool_turns
+        self._run_timeout = run_timeout
+        self._session_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self.context_assembler = ContextAssembler(
             db,
             agent_name,
@@ -56,22 +57,27 @@ class Agent:
             provider,
             self.context_assembler,
             tool_registry=tool_registry,
-            skill_registry=skill_registry,
-            goal_store=goal_store,
             db=db,
+            max_tool_turns=max_tool_turns,
         )
         self.reflector = Reflector(db, memory_manager=memory_manager, cost_fetcher=cost_fetcher)
 
     async def handle_message(self, message: UniversalMessage) -> str:
-        """Process an incoming message and return a response string."""
+        """Process an incoming message through the ReAct loop."""
         conversation_id = await self._get_or_create_conversation(message)
 
+        # Session serialization -- one turn at a time per session
+        async with self._session_locks[conversation_id]:
+            return await self._run(conversation_id, message)
+
+    async def _run(self, conversation_id: str, message: UniversalMessage) -> str:
+        """Execute the agent loop with timeout."""
         await self.db.execute(
             "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
             (message.id, conversation_id, "user", message.content),
         )
 
-        # Budget check before LLM calls
+        # Budget check
         if self.budget_tracker:
             status = await self.budget_tracker.check_budget()
             if not status.within_budget:
@@ -82,32 +88,17 @@ class Agent:
                     "Use /status to see current budget usage."
                 )
 
-        # Plan -> Execute -> Reflect
-        plan = await self.planner.plan(message.content)
+        try:
+            async with asyncio.timeout(self._run_timeout):
+                result = await self.executor.execute(conversation_id, message.content)
+        except asyncio.TimeoutError:
+            logger.warning("Run timed out after %ds for %s", self._run_timeout, conversation_id)
+            return "I ran out of time working on that. Try breaking it into smaller pieces."
 
-        # Log planner decision
-        await self.db.execute(
-            "INSERT INTO action_log (id, conversation_id, action_type, action_name, details_json) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (
-                str(uuid.uuid4()),
-                conversation_id,
-                "plan",
-                plan.action,
-                json.dumps({
-                    "skill": plan.skill,
-                    "requires_tools": plan.requires_tools,
-                    "tool_params": plan.tool_params,
-                }),
-            ),
-        )
-
-        result = await self.executor.execute(conversation_id, message.content, plan=plan)
         await self.reflector.reflect(
             conversation_id,
             result.response,
             user_message=message.content,
-            scrape_metadata=result.scrape_metadata,
         )
 
         await self.db.execute(
@@ -119,10 +110,7 @@ class Agent:
         return result.response.content
 
     async def _get_or_create_conversation(self, message: UniversalMessage) -> str:
-        """Get existing conversation for this chat, or create a new one.
-
-        Uses chat_id from metadata for Telegram (one conversation per chat).
-        """
+        """Get existing conversation for this chat, or create a new one."""
         chat_id = message.metadata.get("chat_id", message.sender)
         lookup_id = f"{message.channel}:{chat_id}"
 
@@ -133,7 +121,7 @@ class Agent:
             return existing["id"]
 
         await self.db.execute(
-            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            "INSERT OR IGNORE INTO conversations (id, channel) VALUES (?, ?)",
             (lookup_id, message.channel),
         )
         return lookup_id
