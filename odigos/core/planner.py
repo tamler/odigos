@@ -11,19 +11,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-CLASSIFY_PROMPT = """You are an intent classifier. Given the user's message, decide if the assistant needs to search the web to answer well.
+CLASSIFY_PROMPT = """You are an intent classifier. Given the user's message, decide if the assistant needs to search the web or read a specific page to answer well.
 
 Respond with ONLY a JSON object (no markdown, no explanation):
 - If web search is needed: {"action": "search", "query": "<optimized search query>"}
-- If no search is needed: {"action": "respond"}
+- If reading a specific URL is needed: {"action": "scrape", "url": "<the URL>"}
+- If no tools are needed: {"action": "respond"}
 
 Search IS needed for: current events, factual questions, looking things up, "find me", "what is", recent news, prices, weather, technical questions the assistant might not know.
-Search is NOT needed for: greetings, personal questions, opinions, creative writing, math, conversation about things already discussed."""
+Scrape IS needed for: when the user shares a URL and wants to know what it says, "read this", "summarize this page", "what does this link say", any message containing a URL that the user wants analyzed.
+Neither is needed for: greetings, personal questions, opinions, creative writing, math, conversation about things already discussed."""
 
 
 @dataclass
 class Plan:
-    action: str  # "respond" or "search"
+    action: str  # "respond", "search", or "scrape"
     requires_tools: bool = False
     tool_params: dict = field(default_factory=dict)
 
@@ -53,6 +55,11 @@ class Planner:
             if action == "search":
                 query = result.get("query", message_content)
                 return Plan(action="search", requires_tools=True, tool_params={"query": query})
+
+            if action == "scrape":
+                url = result.get("url", "")
+                if url:
+                    return Plan(action="scrape", requires_tools=True, tool_params={"url": url})
 
             return Plan(action="respond")
 
