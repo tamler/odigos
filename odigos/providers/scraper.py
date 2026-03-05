@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-import httpx
+from scrapling.fetchers import StealthyFetcher, DynamicFetcher
 
 logger = logging.getLogger(__name__)
 
@@ -27,33 +28,26 @@ class ScrapedPage:
 
 
 class ScraperProvider:
-    """Fetches web pages and extracts clean text content."""
+    """Fetches web pages using Scrapling fetchers and extracts clean text content.
+
+    Tiers:
+        - "standard": StealthyFetcher (anti-bot evasion, default)
+        - "browser": DynamicFetcher (full browser rendering for JS-heavy sites)
+    """
 
     def __init__(self, max_content_chars: int = 4000) -> None:
         self.max_content_chars = max_content_chars
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(15.0, connect=5.0),
-            follow_redirects=True,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; Odigos/0.1)"},
-        )
 
-    async def scrape(self, url: str) -> ScrapedPage:
+    async def scrape(self, url: str, tier: str = "standard") -> ScrapedPage:
         try:
-            response = await self._client.get(url)
-            response.raise_for_status()
+            page = await asyncio.to_thread(self._fetch, url, tier)
         except Exception:
-            logger.warning("Failed to fetch %s", url, exc_info=True)
+            logger.warning("Failed to fetch %s (tier=%s)", url, tier, exc_info=True)
             return ScrapedPage(url=url, title="", content="")
 
         try:
-            from scrapling.parser import Adaptor
-
-            page = Adaptor(response.text, url=url)
-
-            # Extract title
             title = page.css("title::text").get() or ""
 
-            # Try content-specific selectors, fall back to body
             content_text = ""
             for selector in _CONTENT_SELECTORS:
                 elements = page.css(selector)
@@ -66,7 +60,6 @@ class ScraperProvider:
                 if body:
                     content_text = body[0].get_all_text(separator="\n", strip=True)
 
-            # Truncate if needed
             if len(content_text) > self.max_content_chars:
                 content_text = content_text[: self.max_content_chars] + "\n\n[truncated]"
 
@@ -76,5 +69,11 @@ class ScraperProvider:
             logger.warning("Failed to parse content from %s", url, exc_info=True)
             return ScrapedPage(url=url, title="", content="")
 
+    @staticmethod
+    def _fetch(url: str, tier: str):
+        if tier == "browser":
+            return DynamicFetcher.fetch(url)
+        return StealthyFetcher.fetch(url)
+
     async def close(self) -> None:
-        await self._client.aclose()
+        pass
