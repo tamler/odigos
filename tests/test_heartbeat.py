@@ -234,3 +234,19 @@ async def test_idle_think_noop_on_idle_response(heartbeat, store, mock_provider,
     await heartbeat._tick()
     todos = await store.list_todos()
     assert len(todos) == 0
+
+
+@pytest.mark.asyncio
+async def test_idle_think_handles_markdown_wrapped_json(heartbeat, store, mock_provider, db):
+    """Idle-think extracts JSON from markdown code blocks."""
+    await store.create_goal("Learn Spanish")
+    mock_provider.complete = AsyncMock(
+        return_value=LLMResponse(
+            content='```json\n{"todo": "Practice vocabulary"}\n```',
+            model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+        )
+    )
+    await heartbeat._tick()
+    todos = await store.list_todos()
+    assert len(todos) == 1
+    assert todos[0]["description"] == "Practice vocabulary"

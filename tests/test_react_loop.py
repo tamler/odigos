@@ -331,3 +331,24 @@ class TestAgentReAct:
         agent = Agent(db=db, provider=provider, run_timeout=1)  # 1 second timeout
         response = await agent.handle_message(_make_message("hello"))
         assert "time" in response.lower()
+
+    @pytest.mark.asyncio
+    async def test_session_lock_eviction(self, db):
+        """Stale session locks are evicted after TTL."""
+        provider = AsyncMock()
+        provider.complete.return_value = LLMResponse(
+            content="ok", model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
+        )
+
+        agent = Agent(db=db, provider=provider)
+        agent._lock_ttl = 0  # expire immediately
+
+        await agent.handle_message(_make_message("hello"))
+        assert len(agent._session_locks) == 1
+
+        # Next message triggers eviction of the stale lock
+        import time
+        time.sleep(0.01)
+        await agent.handle_message(_make_message("hello again"))
+        # Lock for this conversation is recreated, but old stale ones would be gone
+        assert len(agent._session_locks) == 1

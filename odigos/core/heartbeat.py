@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -200,7 +201,14 @@ class Heartbeat:
         try:
             parsed = json.loads(content)
         except (json.JSONDecodeError, TypeError):
-            return
+            # Try extracting JSON from markdown code blocks
+            match = re.search(r"\{.*\}", content, re.DOTALL)
+            if not match:
+                return
+            try:
+                parsed = json.loads(match.group())
+            except (json.JSONDecodeError, TypeError):
+                return
         if parsed.get("idle"):
             return
         if "todo" in parsed:

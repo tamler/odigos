@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
-from collections import defaultdict
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -45,7 +45,9 @@ class Agent:
         self.budget_tracker = budget_tracker
         self._max_tool_turns = max_tool_turns
         self._run_timeout = run_timeout
-        self._session_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._session_locks: dict[str, asyncio.Lock] = {}
+        self._session_lock_times: dict[str, float] = {}
+        self._lock_ttl = 86400  # evict locks idle >24h
         self.context_assembler = ContextAssembler(
             db,
             agent_name,
@@ -67,7 +69,8 @@ class Agent:
         conversation_id = await self._get_or_create_conversation(message)
 
         # Session serialization -- one turn at a time per session
-        async with self._session_locks[conversation_id]:
+        lock = self._get_session_lock(conversation_id)
+        async with lock:
             return await self._run(conversation_id, message)
 
     async def _run(self, conversation_id: str, message: UniversalMessage) -> str:
@@ -108,6 +111,22 @@ class Agent:
         )
 
         return result.response.content
+
+    def _get_session_lock(self, conversation_id: str) -> asyncio.Lock:
+        """Get or create a session lock, evicting stale entries."""
+        now = time.monotonic()
+        # Evict locks idle for longer than TTL (only unlocked ones)
+        stale = [
+            k for k, t in self._session_lock_times.items()
+            if now - t > self._lock_ttl and not self._session_locks[k].locked()
+        ]
+        for k in stale:
+            del self._session_locks[k]
+            del self._session_lock_times[k]
+        if conversation_id not in self._session_locks:
+            self._session_locks[conversation_id] = asyncio.Lock()
+        self._session_lock_times[conversation_id] = now
+        return self._session_locks[conversation_id]
 
     async def _get_or_create_conversation(self, message: UniversalMessage) -> str:
         """Get existing conversation for this chat, or create a new one."""
