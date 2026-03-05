@@ -16,6 +16,7 @@ CLASSIFY_PROMPT = """You are an intent classifier. Given the user's message, dec
 Respond with ONLY a JSON object (no markdown, no explanation):
 - If web search is needed: {"action": "search", "query": "<optimized search query>", "skill": "<skill or null>"}
 - If reading a specific URL is needed: {"action": "scrape", "url": "<the URL>", "skill": "<skill or null>"}
+- If processing a document/file is needed: {"action": "document", "path": "<path or URL>", "skill": "<skill or null>"}
 - If no tools are needed: {"action": "respond", "skill": "<skill or null>"}
 
 Available skills (use the name or null if none fits):
@@ -25,6 +26,7 @@ Available skills (use the name or null if none fits):
 
 Search IS needed for: current events, factual questions, looking things up, "find me", "what is", recent news, prices, weather, technical questions the assistant might not know.
 Scrape IS needed for: when the user shares a URL and wants to know what it says, "read this", "summarize this page", "what does this link say", any message containing a URL that the user wants analyzed.
+Document IS needed for: when the user shares a file attachment, asks about a PDF/document, "read this document", "summarize this PDF", any message with a file attachment or a path to a document.
 Neither is needed for: greetings, personal questions, opinions, creative writing, math, conversation about things already discussed."""
 
 
@@ -75,6 +77,16 @@ class Planner:
                         action="scrape",
                         requires_tools=True,
                         tool_params={"url": url},
+                        skill=skill,
+                    )
+
+            if action == "document":
+                path = result.get("path", "")
+                if path:
+                    return Plan(
+                        action="document",
+                        requires_tools=True,
+                        tool_params={"path": path},
                         skill=skill,
                     )
 

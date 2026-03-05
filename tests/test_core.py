@@ -846,3 +846,69 @@ class TestReflectorScrapeLog:
 
         rows = await db.fetch_all("SELECT * FROM scraped_pages")
         assert len(rows) == 0
+
+
+class TestPlannerDocumentAction:
+    async def test_classifies_document_request(self):
+        mock_provider = AsyncMock()
+        mock_provider.complete.return_value = LLMResponse(
+            content='{"action": "document", "path": "/tmp/test.pdf", "skill": null}',
+            model="test",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+
+        planner = Planner(provider=mock_provider)
+        plan = await planner.plan("Please read this document")
+
+        assert plan.action == "document"
+        assert plan.tool_params.get("path") == "/tmp/test.pdf"
+        assert plan.requires_tools is True
+
+    async def test_classifies_file_attachment(self):
+        mock_provider = AsyncMock()
+        mock_provider.complete.return_value = LLMResponse(
+            content='{"action": "document", "path": "/tmp/odigos/photo.jpg", "skill": null}',
+            model="test",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+
+        planner = Planner(provider=mock_provider)
+        plan = await planner.plan("What does this image say?")
+
+        assert plan.action == "document"
+        assert plan.requires_tools is True
+
+
+class TestExecutorDocumentAction:
+    async def test_executor_calls_document_tool(self, db: Database, mock_provider: AsyncMock):
+        mock_doc_tool = AsyncMock()
+        mock_doc_tool.name = "read_document"
+        mock_doc_tool.execute.return_value = ToolResult(
+            success=True, data="# Meeting Notes\n\n- Action items listed"
+        )
+
+        registry = ToolRegistry()
+        registry.register(mock_doc_tool)
+
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
+        )
+        executor = Executor(
+            provider=mock_provider, context_assembler=assembler, tool_registry=registry
+        )
+        plan = Plan(
+            action="document",
+            requires_tools=True,
+            tool_params={"path": "/tmp/test.pdf"},
+        )
+
+        result = await executor.execute("conv-1", "Read this document", plan=plan)
+
+        registry_tool = registry.get("read_document")
+        assert registry_tool is not None
+        mock_doc_tool.execute.assert_called_once_with({"path": "/tmp/test.pdf"})
+        assert result.response.content == "I'm Odigos, your assistant."

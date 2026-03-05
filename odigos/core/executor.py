@@ -59,6 +59,7 @@ class Executor:
         _ACTION_TOOLS = {
             "search": "web_search",
             "scrape": "read_page",
+            "document": "read_document",
         }
 
         tool_name = _ACTION_TOOLS.get(plan.action)
