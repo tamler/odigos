@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -128,6 +129,11 @@ async def lifespan(app: FastAPI):
     skill_registry.load_all(settings.skills.path)
     logger.info("Loaded %d skills", len(skill_registry.list()))
 
+    # Create delayed cost fetcher for async backfill
+    async def _delayed_cost_fetcher(generation_id: str) -> float | None:
+        await asyncio.sleep(2)
+        return await _provider.fetch_generation_cost(generation_id)
+
     # Initialize agent
     agent = Agent(
         db=_db,
@@ -138,6 +144,7 @@ async def lifespan(app: FastAPI):
         planner_provider=_router,
         tool_registry=tool_registry,
         skill_registry=skill_registry,
+        cost_fetcher=_delayed_cost_fetcher,
     )
 
     # Initialize Telegram channel

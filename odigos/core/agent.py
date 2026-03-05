@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from odigos.channels.base import UniversalMessage
@@ -30,6 +31,7 @@ class Agent:
         planner_provider: LLMProvider | None = None,
         tool_registry: ToolRegistry | None = None,
         skill_registry: SkillRegistry | None = None,
+        cost_fetcher: Callable | None = None,
     ) -> None:
         self.db = db
         self.planner = Planner(provider=planner_provider or provider)
@@ -46,7 +48,7 @@ class Agent:
             tool_registry=tool_registry,
             skill_registry=skill_registry,
         )
-        self.reflector = Reflector(db, memory_manager=memory_manager)
+        self.reflector = Reflector(db, memory_manager=memory_manager, cost_fetcher=cost_fetcher)
 
     async def handle_message(self, message: UniversalMessage) -> str:
         """Process an incoming message and return a response string."""
