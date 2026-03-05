@@ -8,10 +8,9 @@ from odigos.channels.base import UniversalMessage
 from odigos.core.agent import Agent
 from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor
-from odigos.core.planner import Plan, Planner
 from odigos.core.reflector import Reflector
 from odigos.db import Database
-from odigos.providers.base import LLMResponse
+from odigos.providers.base import LLMResponse, ToolCall
 from odigos.tools.base import ToolResult
 from odigos.tools.registry import ToolRegistry
 
@@ -196,142 +195,25 @@ class TestContextAssemblerWithPersonality:
         assert "direct, warm" in system_content
 
 
-class TestPlanner:
-    @pytest.fixture
-    def mock_classify_provider(self):
-        provider = AsyncMock()
-        return provider
-
-    async def test_classify_as_respond(self, mock_classify_provider):
-        """Planner returns respond when LLM says no search needed."""
-        mock_classify_provider.complete.return_value = LLMResponse(
-            content='{"action": "respond"}',
-            model="test/model",
-            tokens_in=10,
-            tokens_out=5,
-            cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_classify_provider)
-        plan = await planner.plan("Hello, how are you?")
-
-        assert plan.action == "respond"
-        assert plan.tool_params == {}
-
-    async def test_classify_as_search(self, mock_classify_provider):
-        """Planner returns search with query when LLM says search needed."""
-        mock_classify_provider.complete.return_value = LLMResponse(
-            content='{"action": "search", "query": "weather in NYC today"}',
-            model="test/model",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_classify_provider)
-        plan = await planner.plan("What's the weather in NYC?")
-
-        assert plan.action == "search"
-        assert plan.tool_params == {"query": "weather in NYC today"}
-
-    async def test_handles_markdown_wrapped_json(self, mock_classify_provider):
-        """Planner extracts JSON from markdown code blocks."""
-        mock_classify_provider.complete.return_value = LLMResponse(
-            content='```json\n{"action": "search", "query": "test query"}\n```',
-            model="test/model",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_classify_provider)
-        plan = await planner.plan("search for something")
-
-        assert plan.action == "search"
-        assert plan.tool_params == {"query": "test query"}
-
-    async def test_fallback_to_respond_on_parse_error(self, mock_classify_provider):
-        """Planner falls back to respond if LLM returns unparseable response."""
-        mock_classify_provider.complete.return_value = LLMResponse(
-            content="I'm not sure what you mean",
-            model="test/model",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_classify_provider)
-        plan = await planner.plan("something weird")
-
-        assert plan.action == "respond"
-
-    async def test_fallback_to_respond_on_provider_error(self, mock_classify_provider):
-        """Planner falls back to respond if LLM call fails entirely."""
-        mock_classify_provider.complete.side_effect = RuntimeError("API down")
-        planner = Planner(provider=mock_classify_provider)
-        plan = await planner.plan("search for something")
-
-        assert plan.action == "respond"
-
-    async def test_classify_as_scrape(self, mock_classify_provider):
-        """Planner returns scrape with URL when LLM detects page-reading intent."""
-        mock_classify_provider.complete.return_value = LLMResponse(
-            content='{"action": "scrape", "url": "https://example.com/article"}',
-            model="test/model",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_classify_provider)
-        plan = await planner.plan("Read this page: https://example.com/article")
-
-        assert plan.action == "scrape"
-        assert plan.tool_params == {"url": "https://example.com/article"}
-
-    async def test_classify_with_skill(self, mock_classify_provider):
-        """Planner returns skill name when LLM selects one."""
-        mock_classify_provider.complete.return_value = LLMResponse(
-            content='{"action": "search", "query": "AI news 2026", "skill": "research-deep-dive"}',
-            model="test/model",
-            tokens_in=10,
-            tokens_out=15,
-            cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_classify_provider)
-        plan = await planner.plan("What's the latest AI news?")
-
-        assert plan.action == "search"
-        assert plan.skill == "research-deep-dive"
-
-    async def test_classify_no_skill(self, mock_classify_provider):
-        """Planner returns skill=None when LLM doesn't select one."""
-        mock_classify_provider.complete.return_value = LLMResponse(
-            content='{"action": "respond"}',
-            model="test/model",
-            tokens_in=10,
-            tokens_out=5,
-            cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_classify_provider)
-        plan = await planner.plan("Hello")
-
-        assert plan.skill is None
-
-
 class TestExecutor:
     async def test_execute_respond(self, db: Database, mock_provider: AsyncMock):
-        """Respond plan calls LLM directly without tools."""
+        """Simple response without tool calls."""
         assembler = ContextAssembler(
             db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
         )
         executor = Executor(provider=mock_provider, context_assembler=assembler)
-        plan = Plan(action="respond")
 
-        result = await executor.execute("conv-1", "Hello", plan=plan)
+        result = await executor.execute("conv-1", "Hello")
 
         assert result.response.content == "I'm Odigos, your assistant."
         mock_provider.complete.assert_called_once()
 
     async def test_execute_search(self, db: Database, mock_provider: AsyncMock):
-        """Search plan calls tool then LLM with results in context."""
+        """LLM calls web_search tool, gets results, then responds."""
         mock_tool = AsyncMock()
         mock_tool.name = "web_search"
+        mock_tool.description = "Search"
+        mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
         mock_tool.execute.return_value = ToolResult(success=True, data="## Results\n1. Python docs")
 
         registry = ToolRegistry()
@@ -343,22 +225,30 @@ class TestExecutor:
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
-        plan = Plan(action="search", requires_tools=True, tool_params={"query": "python docs"})
 
-        _result = await executor.execute("conv-1", "Find python docs", plan=plan)
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test/model", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="web_search", arguments={"query": "python docs"})],
+            ),
+            LLMResponse(
+                content="Here are the Python docs.", model="test/model",
+                tokens_in=20, tokens_out=15, cost_usd=0.002,
+            ),
+        ]
 
-        # Tool should have been called
+        result = await executor.execute("conv-1", "Find python docs")
+
         mock_tool.execute.assert_called_once_with({"query": "python docs"})
-        # LLM should have been called with tool results in context
-        mock_provider.complete.assert_called_once()
-        call_messages = mock_provider.complete.call_args[0][0]
-        system_content = call_messages[0]["content"]
-        assert "Results" in system_content
+        assert mock_provider.complete.call_count == 2
+        assert "Python docs" in result.response.content
 
     async def test_execute_search_tool_failure(self, db: Database, mock_provider: AsyncMock):
-        """Search falls back to normal response if tool fails."""
+        """Tool failure feeds error back, LLM responds gracefully."""
         mock_tool = AsyncMock()
         mock_tool.name = "web_search"
+        mock_tool.description = "Search"
+        mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
         mock_tool.execute.return_value = ToolResult(
             success=False, data="", error="Connection refused"
         )
@@ -372,15 +262,24 @@ class TestExecutor:
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
-        plan = Plan(action="search", requires_tools=True, tool_params={"query": "test"})
 
-        result = await executor.execute("conv-1", "search for test", plan=plan)
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test/model", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="web_search", arguments={"query": "test"})],
+            ),
+            LLMResponse(
+                content="I'm Odigos, your assistant.", model="test/model",
+                tokens_in=20, tokens_out=10, cost_usd=0.001,
+            ),
+        ]
 
-        # Should still get a response (LLM called without tool results)
+        result = await executor.execute("conv-1", "search for test")
+
         assert result.response.content == "I'm Odigos, your assistant."
 
-    async def test_backward_compat_no_plan(self, db: Database, mock_provider: AsyncMock):
-        """Executor works without plan (backward compat, defaults to respond)."""
+    async def test_simple_respond_no_tools(self, db: Database, mock_provider: AsyncMock):
+        """Executor responds directly when LLM returns no tool calls."""
         assembler = ContextAssembler(
             db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
         )
@@ -391,9 +290,11 @@ class TestExecutor:
         assert result.response.content == "I'm Odigos, your assistant."
 
     async def test_execute_scrape(self, db: Database, mock_provider: AsyncMock):
-        """Scrape plan calls read_page tool then LLM with page content in context."""
+        """LLM calls read_page tool, gets page content, then responds."""
         mock_tool = AsyncMock()
         mock_tool.name = "read_page"
+        mock_tool.description = "Read page"
+        mock_tool.parameters_schema = {"type": "object", "properties": {"url": {"type": "string"}}}
         mock_tool.execute.return_value = ToolResult(
             success=True, data="## Page: Example\n\nThe article content."
         )
@@ -407,85 +308,22 @@ class TestExecutor:
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
-        plan = Plan(
-            action="scrape", requires_tools=True, tool_params={"url": "https://example.com"}
-        )
 
-        _result = await executor.execute("conv-1", "Read this page", plan=plan)
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test/model", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="read_page", arguments={"url": "https://example.com"})],
+            ),
+            LLMResponse(
+                content="Here is the article content.", model="test/model",
+                tokens_in=20, tokens_out=15, cost_usd=0.002,
+            ),
+        ]
+
+        result = await executor.execute("conv-1", "Read this page")
 
         mock_tool.execute.assert_called_once_with({"url": "https://example.com"})
-        mock_provider.complete.assert_called_once()
-        call_messages = mock_provider.complete.call_args[0][0]
-        system_content = call_messages[0]["content"]
-        assert "article content" in system_content
-
-
-class TestExecutorWithSkill:
-    async def test_applies_skill_system_prompt(self, db: Database, mock_provider: AsyncMock):
-        """Executor replaces system prompt when skill is set on plan."""
-        from odigos.skills.registry import Skill, SkillRegistry
-
-        skill = Skill(
-            name="research-deep-dive",
-            description="Research",
-            tools=["web_search"],
-            complexity="standard",
-            system_prompt="You are a thorough research assistant.",
-        )
-        skill_registry = SkillRegistry()
-        skill_registry._skills["research-deep-dive"] = skill
-
-        assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
-
-        mock_tool = AsyncMock()
-        mock_tool.name = "web_search"
-        mock_tool.execute.return_value = ToolResult(success=True, data="## Results\n1. Found it")
-
-        tool_registry = ToolRegistry()
-        tool_registry.register(mock_tool)
-
-        executor = Executor(
-            provider=mock_provider,
-            context_assembler=assembler,
-            tool_registry=tool_registry,
-            skill_registry=skill_registry,
-        )
-        plan = Plan(
-            action="search",
-            requires_tools=True,
-            tool_params={"query": "test"},
-            skill="research-deep-dive",
-        )
-
-        await executor.execute("conv-skill", "research this", plan=plan)
-
-        call_messages = mock_provider.complete.call_args[0][0]
-        system_content = call_messages[0]["content"]
-        assert "thorough research assistant" in system_content
-
-    async def test_no_skill_uses_default_prompt(self, db: Database, mock_provider: AsyncMock):
-        """Executor uses default personality prompt when no skill is set."""
-        from odigos.skills.registry import SkillRegistry
-
-        skill_registry = SkillRegistry()
-
-        assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
-        executor = Executor(
-            provider=mock_provider,
-            context_assembler=assembler,
-            skill_registry=skill_registry,
-        )
-        plan = Plan(action="respond")
-
-        await executor.execute("conv-noskill", "Hello", plan=plan)
-
-        call_messages = mock_provider.complete.call_args[0][0]
-        system_content = call_messages[0]["content"]
-        assert "Odigos" in system_content
+        assert mock_provider.complete.call_count == 2
 
 
 class TestReflector:
@@ -605,15 +443,6 @@ class TestAgentWithMemory:
         mock_memory = AsyncMock()
         mock_memory.recall.return_value = ""
 
-        mock_planner_provider = AsyncMock()
-        mock_planner_provider.complete.return_value = LLMResponse(
-            content='{"action": "respond"}',
-            model="test/model",
-            tokens_in=5,
-            tokens_out=5,
-            cost_usd=0.0,
-        )
-
         agent = Agent(
             db=db,
             provider=mock_provider,
@@ -621,7 +450,6 @@ class TestAgentWithMemory:
             history_limit=20,
             memory_manager=mock_memory,
             personality_path="/nonexistent",
-            planner_provider=mock_planner_provider,
         )
         message = _make_message("Hello agent")
 
@@ -633,22 +461,12 @@ class TestAgentWithMemory:
 
 class TestAgent:
     async def test_full_loop(self, db: Database, mock_provider: AsyncMock):
-        mock_planner_provider = AsyncMock()
-        mock_planner_provider.complete.return_value = LLMResponse(
-            content='{"action": "respond"}',
-            model="test/model",
-            tokens_in=5,
-            tokens_out=5,
-            cost_usd=0.0,
-        )
-
         agent = Agent(
             db=db,
             provider=mock_provider,
             agent_name="TestBot",
             history_limit=20,
             personality_path="/nonexistent",
-            planner_provider=mock_planner_provider,
         )
         message = _make_message("Hello agent")
 
@@ -666,18 +484,11 @@ class TestAgent:
         assert "assistant" in roles
 
     async def test_search_flow(self, db: Database, mock_provider: AsyncMock):
-        """Agent performs search when planner classifies as search intent."""
-        mock_planner_provider = AsyncMock()
-        mock_planner_provider.complete.return_value = LLMResponse(
-            content='{"action": "search", "query": "python 3.13 features"}',
-            model="test/model",
-            tokens_in=5,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-
+        """Agent performs search when LLM decides to call web_search tool."""
         mock_tool = AsyncMock()
         mock_tool.name = "web_search"
+        mock_tool.description = "Search"
+        mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
         mock_tool.execute.return_value = ToolResult(
             success=True, data="## Results\n1. Python 3.13 released"
         )
@@ -685,35 +496,38 @@ class TestAgent:
         registry = ToolRegistry()
         registry.register(mock_tool)
 
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test/model", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="web_search", arguments={"query": "python 3.13 features"})],
+            ),
+            LLMResponse(
+                content="Python 3.13 has exciting new features!", model="test/model",
+                tokens_in=20, tokens_out=15, cost_usd=0.002,
+            ),
+        ]
+
         agent = Agent(
             db=db,
             provider=mock_provider,
             agent_name="TestBot",
             history_limit=20,
             personality_path="/nonexistent",
-            planner_provider=mock_planner_provider,
             tool_registry=registry,
         )
         message = _make_message("What's new in Python 3.13?")
 
         response = await agent.handle_message(message)
-        assert response == "I'm Odigos, your assistant."
+        assert "Python 3.13" in response
 
         mock_tool.execute.assert_called_once()
 
     async def test_scrape_flow(self, db: Database, mock_provider: AsyncMock):
-        """Agent performs scrape when planner classifies as scrape intent."""
-        mock_planner_provider = AsyncMock()
-        mock_planner_provider.complete.return_value = LLMResponse(
-            content='{"action": "scrape", "url": "https://example.com/page"}',
-            model="test/model",
-            tokens_in=5,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-
+        """Agent performs scrape when LLM decides to call read_page tool."""
         mock_tool = AsyncMock()
         mock_tool.name = "read_page"
+        mock_tool.description = "Read page"
+        mock_tool.parameters_schema = {"type": "object", "properties": {"url": {"type": "string"}}}
         mock_tool.execute.return_value = ToolResult(
             success=True,
             data="## Page: Example\n\n**URL:** https://example.com/page\n\nPage content here.",
@@ -722,26 +536,31 @@ class TestAgent:
         registry = ToolRegistry()
         registry.register(mock_tool)
 
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test/model", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="read_page", arguments={"url": "https://example.com/page"})],
+            ),
+            LLMResponse(
+                content="Here's a summary of the page.", model="test/model",
+                tokens_in=20, tokens_out=15, cost_usd=0.002,
+            ),
+        ]
+
         agent = Agent(
             db=db,
             provider=mock_provider,
             agent_name="TestBot",
             history_limit=20,
             personality_path="/nonexistent",
-            planner_provider=mock_planner_provider,
             tool_registry=registry,
         )
         message = _make_message("Read this: https://example.com/page")
 
         response = await agent.handle_message(message)
-        assert response == "I'm Odigos, your assistant."
+        assert response == "Here's a summary of the page."
 
         mock_tool.execute.assert_called_once()
-
-        # Verify scrape was logged
-        row = await db.fetch_one("SELECT url FROM scraped_pages LIMIT 1")
-        assert row is not None
-        assert row["url"] == "https://example.com/page"
 
 
 class TestContextBudget:
@@ -848,45 +667,12 @@ class TestReflectorScrapeLog:
         assert len(rows) == 0
 
 
-class TestPlannerDocumentAction:
-    async def test_classifies_document_request(self):
-        mock_provider = AsyncMock()
-        mock_provider.complete.return_value = LLMResponse(
-            content='{"action": "document", "path": "/tmp/test.pdf", "skill": null}',
-            model="test",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-
-        planner = Planner(provider=mock_provider)
-        plan = await planner.plan("Please read this document")
-
-        assert plan.action == "document"
-        assert plan.tool_params.get("path") == "/tmp/test.pdf"
-        assert plan.requires_tools is True
-
-    async def test_classifies_file_attachment(self):
-        mock_provider = AsyncMock()
-        mock_provider.complete.return_value = LLMResponse(
-            content='{"action": "document", "path": "/tmp/odigos/photo.jpg", "skill": null}',
-            model="test",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-
-        planner = Planner(provider=mock_provider)
-        plan = await planner.plan("What does this image say?")
-
-        assert plan.action == "document"
-        assert plan.requires_tools is True
-
-
 class TestExecutorDocumentAction:
     async def test_executor_calls_document_tool(self, db: Database, mock_provider: AsyncMock):
         mock_doc_tool = AsyncMock()
         mock_doc_tool.name = "read_document"
+        mock_doc_tool.description = "Read document"
+        mock_doc_tool.parameters_schema = {"type": "object", "properties": {"path": {"type": "string"}}}
         mock_doc_tool.execute.return_value = ToolResult(
             success=True, data="# Meeting Notes\n\n- Action items listed"
         )
@@ -900,145 +686,38 @@ class TestExecutorDocumentAction:
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
-        plan = Plan(
-            action="document",
-            requires_tools=True,
-            tool_params={"path": "/tmp/test.pdf"},
-        )
 
-        result = await executor.execute("conv-1", "Read this document", plan=plan)
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="read_document", arguments={"path": "/tmp/test.pdf"})],
+            ),
+            LLMResponse(
+                content="Here are the meeting notes.", model="test",
+                tokens_in=20, tokens_out=15, cost_usd=0.002,
+            ),
+        ]
+
+        result = await executor.execute("conv-1", "Read this document")
 
         registry_tool = registry.get("read_document")
         assert registry_tool is not None
         mock_doc_tool.execute.assert_called_once_with({"path": "/tmp/test.pdf"})
-        assert result.response.content == "I'm Odigos, your assistant."
-
-
-class TestPlannerRemindAction:
-    async def test_remind_action_parsed(self):
-        mock_provider = AsyncMock()
-        mock_provider.complete.return_value = LLMResponse(
-            content='{"action": "remind", "description": "dentist appointment", "due_at_seconds": 7200}',
-            model="test", tokens_in=10, tokens_out=10, cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_provider)
-        plan = await planner.plan("remind me about dentist in 2 hours")
-        assert plan.action == "remind"
-        assert plan.tool_params["description"] == "dentist appointment"
-        assert plan.tool_params["due_at_seconds"] == 7200
-
-
-class TestPlannerTodoAction:
-    async def test_todo_action_parsed(self):
-        mock_provider = AsyncMock()
-        mock_provider.complete.return_value = LLMResponse(
-            content='{"action": "todo", "description": "research flights", "delay_seconds": 0}',
-            model="test", tokens_in=10, tokens_out=10, cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_provider)
-        plan = await planner.plan("look up flights to Tokyo")
-        assert plan.action == "todo"
-        assert plan.tool_params["description"] == "research flights"
-        assert plan.tool_params["delay_seconds"] == 0
-
-
-class TestPlannerGoalAction:
-    async def test_goal_action_parsed(self):
-        mock_provider = AsyncMock()
-        mock_provider.complete.return_value = LLMResponse(
-            content='{"action": "goal", "description": "learn Spanish"}',
-            model="test", tokens_in=10, tokens_out=10, cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_provider)
-        plan = await planner.plan("I want to learn Spanish")
-        assert plan.action == "goal"
-        assert plan.tool_params["description"] == "learn Spanish"
-
-
-class TestPlannerCodeAction:
-    async def test_code_action_parsed(self):
-        mock_provider = AsyncMock()
-        mock_provider.complete.return_value = LLMResponse(
-            content='{"action": "code", "code": "print(2+2)", "language": "python"}',
-            model="test",
-            tokens_in=10,
-            tokens_out=10,
-            cost_usd=0.0,
-        )
-        planner = Planner(provider=mock_provider)
-        plan = await planner.plan("calculate 2+2")
-        assert plan.action == "code"
-        assert plan.tool_params["code"] == "print(2+2)"
-        assert plan.tool_params["language"] == "python"
-
-
-class TestExecutorRemindAction:
-    async def test_remind_creates_reminder(self):
-        mock_provider = AsyncMock()
-        mock_assembler = AsyncMock()
-        mock_store = AsyncMock()
-        mock_store.create_reminder = AsyncMock(return_value="rem-123")
-
-        executor = Executor(
-            provider=mock_provider,
-            context_assembler=mock_assembler,
-            goal_store=mock_store,
-        )
-        plan = Plan(
-            action="remind",
-            tool_params={"description": "call dentist", "due_at_seconds": 7200},
-        )
-        result = await executor.execute("conv1", "remind me", plan=plan)
-        assert "dentist" in result.response.content.lower() or "reminder" in result.response.content.lower()
-        mock_store.create_reminder.assert_called_once()
-
-
-class TestExecutorTodoAction:
-    async def test_todo_creates_todo(self):
-        mock_provider = AsyncMock()
-        mock_assembler = AsyncMock()
-        mock_store = AsyncMock()
-        mock_store.create_todo = AsyncMock(return_value="todo-123")
-
-        executor = Executor(
-            provider=mock_provider,
-            context_assembler=mock_assembler,
-            goal_store=mock_store,
-        )
-        plan = Plan(
-            action="todo",
-            tool_params={"description": "research flights", "delay_seconds": 0},
-        )
-        result = await executor.execute("conv1", "look up flights", plan=plan)
-        assert "flights" in result.response.content.lower() or "todo" in result.response.content.lower()
-        mock_store.create_todo.assert_called_once()
-
-
-class TestExecutorGoalAction:
-    async def test_goal_creates_goal(self):
-        mock_provider = AsyncMock()
-        mock_assembler = AsyncMock()
-        mock_store = AsyncMock()
-        mock_store.create_goal = AsyncMock(return_value="goal-123")
-
-        executor = Executor(
-            provider=mock_provider,
-            context_assembler=mock_assembler,
-            goal_store=mock_store,
-        )
-        plan = Plan(
-            action="goal",
-            tool_params={"description": "learn Spanish"},
-        )
-        result = await executor.execute("conv1", "I want to learn Spanish", plan=plan)
-        assert "spanish" in result.response.content.lower() or "goal" in result.response.content.lower()
-        mock_store.create_goal.assert_called_once()
+        assert result.response.content == "Here are the meeting notes."
 
 
 class TestExecutorCodeAction:
     async def test_code_action_uses_run_code_tool(self, db: Database, mock_provider: AsyncMock):
         mock_code_tool = AsyncMock()
         mock_code_tool.name = "run_code"
+        mock_code_tool.description = "Run code"
+        mock_code_tool.parameters_schema = {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string"},
+                "language": {"type": "string"},
+            },
+        }
         mock_code_tool.execute.return_value = ToolResult(success=True, data="42\n")
 
         registry = ToolRegistry()
@@ -1050,17 +729,23 @@ class TestExecutorCodeAction:
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
-        plan = Plan(
-            action="code",
-            requires_tools=True,
-            tool_params={"code": "print(42)", "language": "python"},
-        )
 
-        result = await executor.execute("conv-1", "calculate 42", plan=plan)
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="run_code", arguments={"code": "print(42)", "language": "python"})],
+            ),
+            LLMResponse(
+                content="The answer is 42.", model="test",
+                tokens_in=20, tokens_out=10, cost_usd=0.002,
+            ),
+        ]
+
+        result = await executor.execute("conv-1", "calculate 42")
         registry_tool = registry.get("run_code")
         assert registry_tool is not None
         mock_code_tool.execute.assert_called_once_with({"code": "print(42)", "language": "python"})
-        assert result.response.content == "I'm Odigos, your assistant."
+        assert result.response.content == "The answer is 42."
 
 
 class TestAgentBudgetEnforcement:
@@ -1111,5 +796,5 @@ class TestAgentBudgetEnforcement:
         )
         response = await agent.handle_message(message)
         assert response == "Hello!"
-        # Called at least twice: once by planner, once by executor
-        assert mock_provider.complete.call_count >= 2
+        # No planner -- executor calls provider once for simple respond
+        assert mock_provider.complete.call_count >= 1
