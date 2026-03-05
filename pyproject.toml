@@ -12,7 +12,8 @@ dependencies = [
     "pydantic-settings>=2.7.0",
     "pyyaml>=6.0",
     "sqlite-vec>=0.1.0",
-    "scrapling>=0.3.0",
+    "scrapling[fetchers]>=0.3.0",
+    "docling>=2.0.0",
 ]
 
 [project.optional-dependencies]
