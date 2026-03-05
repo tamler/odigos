@@ -75,6 +75,7 @@ class OpenRouterProvider(LLMProvider):
             tokens_in=usage.get("prompt_tokens", 0),
             tokens_out=usage.get("completion_tokens", 0),
             cost_usd=0.0,
+            generation_id=data.get("id"),
         )
 
     async def close(self) -> None:

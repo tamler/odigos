@@ -9,6 +9,7 @@ class LLMResponse:
     tokens_in: int
     tokens_out: int
     cost_usd: float
+    generation_id: str | None = None
 
 
 class LLMProvider(ABC):
