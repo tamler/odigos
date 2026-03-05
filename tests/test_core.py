@@ -284,6 +284,35 @@ class TestPlanner:
         assert plan.action == "scrape"
         assert plan.tool_params == {"url": "https://example.com/article"}
 
+    async def test_classify_with_skill(self, mock_classify_provider):
+        """Planner returns skill name when LLM selects one."""
+        mock_classify_provider.complete.return_value = LLMResponse(
+            content='{"action": "search", "query": "AI news 2026", "skill": "research-deep-dive"}',
+            model="test/model",
+            tokens_in=10,
+            tokens_out=15,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_classify_provider)
+        plan = await planner.plan("What's the latest AI news?")
+
+        assert plan.action == "search"
+        assert plan.skill == "research-deep-dive"
+
+    async def test_classify_no_skill(self, mock_classify_provider):
+        """Planner returns skill=None when LLM doesn't select one."""
+        mock_classify_provider.complete.return_value = LLMResponse(
+            content='{"action": "respond"}',
+            model="test/model",
+            tokens_in=10,
+            tokens_out=5,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_classify_provider)
+        plan = await planner.plan("Hello")
+
+        assert plan.skill is None
+
 
 class TestExecutor:
     async def test_execute_respond(self, db: Database, mock_provider: AsyncMock):

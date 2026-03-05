@@ -14,9 +14,14 @@ logger = logging.getLogger(__name__)
 CLASSIFY_PROMPT = """You are an intent classifier. Given the user's message, decide if the assistant needs to search the web or read a specific page to answer well.
 
 Respond with ONLY a JSON object (no markdown, no explanation):
-- If web search is needed: {"action": "search", "query": "<optimized search query>"}
-- If reading a specific URL is needed: {"action": "scrape", "url": "<the URL>"}
-- If no tools are needed: {"action": "respond"}
+- If web search is needed: {"action": "search", "query": "<optimized search query>", "skill": "<skill or null>"}
+- If reading a specific URL is needed: {"action": "scrape", "url": "<the URL>", "skill": "<skill or null>"}
+- If no tools are needed: {"action": "respond", "skill": "<skill or null>"}
+
+Available skills (use the name or null if none fits):
+- "research-deep-dive": For questions requiring thorough research with multiple sources
+- "summarize-page": For reading and summarizing a specific URL
+- "general-chat": For casual conversation, opinions, greetings (default)
 
 Search IS needed for: current events, factual questions, looking things up, "find me", "what is", recent news, prices, weather, technical questions the assistant might not know.
 Scrape IS needed for: when the user shares a URL and wants to know what it says, "read this", "summarize this page", "what does this link say", any message containing a URL that the user wants analyzed.
@@ -28,6 +33,7 @@ class Plan:
     action: str  # "respond", "search", or "scrape"
     requires_tools: bool = False
     tool_params: dict = field(default_factory=dict)
+    skill: str | None = None
 
 
 class Planner:
@@ -51,17 +57,24 @@ class Planner:
             )
             result = _parse_json(response.content)
             action = result.get("action", "respond")
+            skill = result.get("skill") or None
 
             if action == "search":
                 query = result.get("query", message_content)
-                return Plan(action="search", requires_tools=True, tool_params={"query": query})
+                return Plan(
+                    action="search", requires_tools=True,
+                    tool_params={"query": query}, skill=skill,
+                )
 
             if action == "scrape":
                 url = result.get("url", "")
                 if url:
-                    return Plan(action="scrape", requires_tools=True, tool_params={"url": url})
+                    return Plan(
+                        action="scrape", requires_tools=True,
+                        tool_params={"url": url}, skill=skill,
+                    )
 
-            return Plan(action="respond")
+            return Plan(action="respond", skill=skill)
 
         except (json.JSONDecodeError, KeyError, RuntimeError):
             logger.warning("Intent classification failed, falling back to respond")
