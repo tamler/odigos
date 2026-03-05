@@ -58,7 +58,8 @@ class SkillsConfig(BaseModel):
 
 class HeartbeatConfig(BaseModel):
     interval_seconds: int = 30
-    max_tasks_per_tick: int = 5
+    max_todos_per_tick: int = 3
+    idle_think_interval: int = 900
 
 
 class SandboxConfig(BaseModel):
