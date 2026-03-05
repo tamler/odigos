@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
@@ -166,7 +167,7 @@ class Heartbeat:
             return
 
         goal_text = "\n".join(
-            f"- {g['description']}"
+            f"- [{g['id'][:8]}] {g['description']}"
             + (f" (progress: {g['progress_note']})" if g.get("progress_note") else "")
             for g in goals
         )
@@ -191,8 +192,33 @@ class Heartbeat:
                 temperature=0.3,
             )
             logger.debug("Idle thought: %s", response.content[:100])
+            await self._process_idle_response(response.content, goals)
         except Exception:
             logger.debug("Idle think failed", exc_info=True)
+
+    async def _process_idle_response(self, content: str, goals: list[dict]) -> None:
+        try:
+            parsed = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            return
+        if parsed.get("idle"):
+            return
+        if "todo" in parsed:
+            await self.goal_store.create_todo(
+                description=parsed["todo"], created_by="agent",
+            )
+            logger.info("Idle-think created todo: %s", parsed["todo"][:50])
+        elif "note" in parsed and "progress" in parsed:
+            goal_id_prefix = parsed["note"]
+            for g in goals:
+                if g["id"].startswith(goal_id_prefix):
+                    await self.goal_store.update_goal(
+                        g["id"],
+                        progress_note=parsed["progress"],
+                        reviewed_at=datetime.now(timezone.utc).isoformat(),
+                    )
+                    logger.info("Idle-think updated goal %s", g["id"][:8])
+                    break
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:
         try:
@@ -206,7 +232,13 @@ class Heartbeat:
     async def _reinsert_recurring_reminder(self, reminder: dict) -> None:
         recurrence = reminder.get("recurrence", "")
         seconds_map = {"daily": 86400, "weekly": 604800, "hourly": 3600}
-        interval = seconds_map.get(recurrence, 3600)
+        if recurrence.startswith("every ") and recurrence.endswith("s"):
+            try:
+                interval = int(recurrence[6:-1])
+            except ValueError:
+                interval = 3600
+        else:
+            interval = seconds_map.get(recurrence, 3600)
         await self.goal_store.create_reminder(
             description=reminder["description"],
             due_seconds=interval,

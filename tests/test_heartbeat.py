@@ -172,3 +172,65 @@ async def test_recurring_reminder_reinserts(heartbeat, store, db):
     assert pending[0]["id"] != rid
     assert pending[0]["description"] == "Daily check"
     assert pending[0]["recurrence"] == "daily"
+
+
+@pytest.mark.asyncio
+async def test_recurring_every_ns_pattern(heartbeat, store, db):
+    rid = await store.create_reminder("Custom", due_seconds=0, recurrence="every 7200s")
+    await heartbeat._tick()
+    pending = await store.list_reminders(status="pending")
+    assert len(pending) == 1
+    assert pending[0]["recurrence"] == "every 7200s"
+
+
+@pytest.mark.asyncio
+async def test_idle_think_creates_todo(heartbeat, store, mock_provider, db):
+    """Idle-think creates a todo when LLM responds with a todo."""
+    await store.create_goal("Learn Spanish")
+    mock_provider.complete = AsyncMock(
+        return_value=LLMResponse(
+            content='{"todo": "Find Spanish learning resources"}',
+            model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+        )
+    )
+    await heartbeat._tick()
+    todos = await store.list_todos()
+    assert len(todos) == 1
+    assert todos[0]["description"] == "Find Spanish learning resources"
+    assert todos[0]["created_by"] == "agent"
+
+
+@pytest.mark.asyncio
+async def test_idle_think_updates_goal_progress(heartbeat, store, mock_provider, db):
+    """Idle-think updates a goal's progress_note."""
+    gid = await store.create_goal("Read more books")
+    short_id = gid[:8]
+    mock_provider.complete = AsyncMock(
+        return_value=LLMResponse(
+            content=f'{{"note": "{short_id}", "progress": "Started reading list"}}',
+            model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+        )
+    )
+    await heartbeat._tick()
+    row = await db.fetch_one("SELECT * FROM goals WHERE id = ?", (gid,))
+    assert row["progress_note"] == "Started reading list"
+    assert row["reviewed_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_idle_think_skips_when_todos_ran(heartbeat, store, mock_provider):
+    """Idle-think does NOT fire when todos ran in the same tick."""
+    await store.create_goal("Some goal")
+    await store.create_todo("Do something")
+    await heartbeat._tick()
+    mock_provider.complete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_idle_think_noop_on_idle_response(heartbeat, store, mock_provider, db):
+    """Idle-think does nothing when LLM says idle."""
+    await store.create_goal("Some goal")
+    # mock_provider already returns {"idle": true} by default
+    await heartbeat._tick()
+    todos = await store.list_todos()
+    assert len(todos) == 0
