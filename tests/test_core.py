@@ -912,3 +912,51 @@ class TestExecutorDocumentAction:
         assert registry_tool is not None
         mock_doc_tool.execute.assert_called_once_with({"path": "/tmp/test.pdf"})
         assert result.response.content == "I'm Odigos, your assistant."
+
+
+class TestPlannerScheduleAction:
+    async def test_schedule_action_parsed(self):
+        mock_provider = AsyncMock()
+        mock_provider.complete.return_value = LLMResponse(
+            content='{"action": "schedule", "description": "check email", "delay_seconds": 3600}',
+            model="test",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_provider)
+        plan = await planner.plan("remind me to check email in 1 hour")
+        assert plan.action == "schedule"
+        assert plan.schedule_seconds == 3600
+        assert plan.tool_params["description"] == "check email"
+
+    async def test_recurring_schedule(self):
+        mock_provider = AsyncMock()
+        mock_provider.complete.return_value = LLMResponse(
+            content='{"action": "schedule", "description": "check email", "delay_seconds": 0, "recurrence_seconds": 3600}',
+            model="test",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_provider)
+        plan = await planner.plan("check my email every hour")
+        assert plan.action == "schedule"
+        assert plan.recurrence_seconds == 3600
+
+
+class TestPlannerCodeAction:
+    async def test_code_action_parsed(self):
+        mock_provider = AsyncMock()
+        mock_provider.complete.return_value = LLMResponse(
+            content='{"action": "code", "code": "print(2+2)", "language": "python"}',
+            model="test",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_provider)
+        plan = await planner.plan("calculate 2+2")
+        assert plan.action == "code"
+        assert plan.tool_params["code"] == "print(2+2)"
+        assert plan.tool_params["language"] == "python"
