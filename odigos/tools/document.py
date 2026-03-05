@@ -17,6 +17,13 @@ class DocTool(BaseTool):
 
     name = "read_document"
     description = "Convert a document (PDF, DOCX, PPTX, image) to readable text."
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string", "description": "Path or URL to the document"},
+        },
+        "required": ["path"],
+    }
 
     def __init__(self, provider: DoclingProvider) -> None:
         self.provider = provider

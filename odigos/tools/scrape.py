@@ -13,6 +13,13 @@ class ScrapeTool(BaseTool):
 
     name = "read_page"
     description = "Read and extract content from a web page URL."
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "The URL to read"},
+        },
+        "required": ["url"],
+    }
 
     def __init__(self, scraper: ScraperProvider) -> None:
         self.scraper = scraper

@@ -3,6 +3,13 @@ from dataclasses import dataclass
 
 
 @dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict
+
+
+@dataclass
 class LLMResponse:
     content: str
     model: str
@@ -10,6 +17,7 @@ class LLMResponse:
     tokens_out: int
     cost_usd: float
     generation_id: str | None = None
+    tool_calls: list[ToolCall] | None = None
 
 
 class LLMProvider(ABC):

@@ -16,6 +16,14 @@ class CodeTool(BaseTool):
 
     name = "run_code"
     description = "Execute Python or shell code in a sandboxed environment with resource limits"
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "Code to execute"},
+            "language": {"type": "string", "description": "Programming language (python or shell)"},
+        },
+        "required": ["code"],
+    }
 
     def __init__(self, sandbox: SandboxProvider) -> None:
         self.sandbox = sandbox

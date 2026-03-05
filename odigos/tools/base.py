@@ -14,6 +14,7 @@ class ToolResult:
 class BaseTool(ABC):
     name: str
     description: str
+    parameters_schema: dict = {"type": "object", "properties": {}}
 
     @abstractmethod
     async def execute(self, params: dict) -> ToolResult:

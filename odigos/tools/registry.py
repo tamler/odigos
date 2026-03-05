@@ -17,3 +17,17 @@ class ToolRegistry:
 
     def list(self) -> list[BaseTool]:
         return list(self._tools.values())
+
+    def tool_definitions(self) -> list[dict]:
+        """Return OpenAI-compatible tool definitions for LLM tool calling."""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters_schema,
+                },
+            }
+            for tool in self._tools.values()
+        ]
