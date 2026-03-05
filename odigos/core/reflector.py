@@ -37,6 +37,7 @@ class Reflector:
         conversation_id: str,
         response: LLMResponse,
         user_message: str | None = None,
+        scrape_metadata: dict | None = None,
     ) -> None:
         # Parse and strip entity block
         content = response.content
@@ -72,4 +73,15 @@ class Reflector:
                 user_message=user_message,
                 assistant_response=content,
                 extracted_entities=entities,
+            )
+
+        # Log scrape if metadata provided
+        if scrape_metadata:
+            url = scrape_metadata.get("url", "")
+            title = scrape_metadata.get("title", "")
+            content_text = scrape_metadata.get("content", "")
+            summary = content_text[:200] if content_text else ""
+            await self.db.execute(
+                "INSERT INTO scraped_pages (id, url, title, summary) VALUES (?, ?, ?, ?)",
+                (str(uuid.uuid4()), url, title, summary),
             )

@@ -269,6 +269,21 @@ class TestPlanner:
 
         assert plan.action == "respond"
 
+    async def test_classify_as_scrape(self, mock_classify_provider):
+        """Planner returns scrape with URL when LLM detects page-reading intent."""
+        mock_classify_provider.complete.return_value = LLMResponse(
+            content='{"action": "scrape", "url": "https://example.com/article"}',
+            model="test/model",
+            tokens_in=10,
+            tokens_out=10,
+            cost_usd=0.0,
+        )
+        planner = Planner(provider=mock_classify_provider)
+        plan = await planner.plan("Read this page: https://example.com/article")
+
+        assert plan.action == "scrape"
+        assert plan.tool_params == {"url": "https://example.com/article"}
+
 
 class TestExecutor:
     async def test_execute_respond(self, db: Database, mock_provider: AsyncMock):
@@ -345,6 +360,33 @@ class TestExecutor:
         result = await executor.execute("conv-1", "Hello")
 
         assert result.content == "I'm Odigos, your assistant."
+
+    async def test_execute_scrape(self, db: Database, mock_provider: AsyncMock):
+        """Scrape plan calls read_page tool then LLM with page content in context."""
+        mock_tool = AsyncMock()
+        mock_tool.name = "read_page"
+        mock_tool.execute.return_value = ToolResult(
+            success=True, data="## Page: Example\n\nThe article content."
+        )
+
+        registry = ToolRegistry()
+        registry.register(mock_tool)
+
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
+        )
+        executor = Executor(
+            provider=mock_provider, context_assembler=assembler, tool_registry=registry
+        )
+        plan = Plan(action="scrape", requires_tools=True, tool_params={"url": "https://example.com"})
+
+        _result = await executor.execute("conv-1", "Read this page", plan=plan)
+
+        mock_tool.execute.assert_called_once_with({"url": "https://example.com"})
+        mock_provider.complete.assert_called_once()
+        call_messages = mock_provider.complete.call_args[0][0]
+        system_content = call_messages[0]["content"]
+        assert "article content" in system_content
 
 
 class TestReflector:
@@ -559,3 +601,62 @@ class TestAgent:
         assert response == "I'm Odigos, your assistant."
 
         mock_tool.execute.assert_called_once()
+
+
+class TestReflectorScrapeLog:
+    async def test_logs_scrape_to_db(self, db: Database):
+        """Reflector logs scrape metadata to scraped_pages table."""
+        reflector = Reflector(db=db)
+        response = LLMResponse(
+            content="Here's a summary of the page.",
+            model="test/model",
+            tokens_in=10,
+            tokens_out=20,
+            cost_usd=0.001,
+        )
+
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            ("conv-scrape", "test"),
+        )
+
+        await reflector.reflect(
+            "conv-scrape",
+            response,
+            user_message="Read this page",
+            scrape_metadata={
+                "url": "https://example.com/article",
+                "title": "Example Article",
+                "content": "This is the main article content about testing.",
+            },
+        )
+
+        row = await db.fetch_one(
+            "SELECT url, title, summary FROM scraped_pages WHERE url = ?",
+            ("https://example.com/article",),
+        )
+        assert row is not None
+        assert row["url"] == "https://example.com/article"
+        assert row["title"] == "Example Article"
+        assert "main article content" in row["summary"]
+
+    async def test_no_scrape_metadata_no_log(self, db: Database):
+        """Without scrape_metadata, no scraped_pages entry is created."""
+        reflector = Reflector(db=db)
+        response = LLMResponse(
+            content="Normal response.",
+            model="test/model",
+            tokens_in=10,
+            tokens_out=5,
+            cost_usd=0.001,
+        )
+
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            ("conv-no-scrape", "test"),
+        )
+
+        await reflector.reflect("conv-no-scrape", response, user_message="Hello")
+
+        rows = await db.fetch_all("SELECT * FROM scraped_pages")
+        assert len(rows) == 0
