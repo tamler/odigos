@@ -12,6 +12,7 @@ from odigos.providers.base import LLMProvider
 
 if TYPE_CHECKING:
     from odigos.memory.manager import MemoryManager
+    from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
 
@@ -28,6 +29,7 @@ class Agent:
         personality_path: str = "data/personality.yaml",
         planner_provider: LLMProvider | None = None,
         tool_registry: ToolRegistry | None = None,
+        skill_registry: SkillRegistry | None = None,
     ) -> None:
         self.db = db
         self.planner = Planner(provider=planner_provider or provider)
@@ -38,7 +40,12 @@ class Agent:
             memory_manager=memory_manager,
             personality_path=personality_path,
         )
-        self.executor = Executor(provider, self.context_assembler, tool_registry=tool_registry)
+        self.executor = Executor(
+            provider,
+            self.context_assembler,
+            tool_registry=tool_registry,
+            skill_registry=skill_registry,
+        )
         self.reflector = Reflector(db, memory_manager=memory_manager)
 
     async def handle_message(self, message: UniversalMessage) -> str:

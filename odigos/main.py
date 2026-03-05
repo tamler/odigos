@@ -15,6 +15,9 @@ from odigos.memory.summarizer import ConversationSummarizer
 from odigos.memory.vectors import VectorMemory
 from odigos.providers.embeddings import EmbeddingProvider
 from odigos.providers.openrouter import OpenRouterProvider
+from odigos.core.budget import BudgetTracker
+from odigos.core.router import ModelRouter
+from odigos.skills.registry import SkillRegistry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,12 +32,13 @@ _embedder: EmbeddingProvider | None = None
 _telegram: TelegramChannel | None = None
 _searxng = None
 _scraper = None
+_router: ModelRouter | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
-    global _db, _provider, _embedder, _telegram, _searxng, _scraper
+    global _db, _provider, _embedder, _telegram, _searxng, _scraper, _router
 
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     settings = load_settings(config_path)
@@ -54,6 +58,26 @@ async def lifespan(app: FastAPI):
         max_tokens=settings.openrouter.max_tokens,
         temperature=settings.openrouter.temperature,
     )
+
+    # Initialize model router (wraps provider for free model pool)
+    _router = ModelRouter(
+        provider=_provider,
+        free_pool=settings.router.free_pool,
+        rate_limit_rpm=settings.router.rate_limit_rpm,
+    )
+    logger.info(
+        "Model router initialized with %d free models",
+        len(settings.router.free_pool),
+    )
+
+    # Initialize budget tracker
+    budget_tracker = BudgetTracker(
+        db=_db,
+        daily_limit=settings.budget.daily_limit_usd,
+        monthly_limit=settings.budget.monthly_limit_usd,
+    )
+    _ = budget_tracker  # available for future use
+    logger.info("Budget tracker initialized")
 
     # Initialize embedding provider
     _embedder = EmbeddingProvider(api_key=settings.openrouter_api_key)
@@ -99,15 +123,21 @@ async def lifespan(app: FastAPI):
         tool_registry.register(search_tool)
         logger.info("Search tool initialized (SearXNG: %s)", settings.searxng_url)
 
+    # Initialize skill registry
+    skill_registry = SkillRegistry()
+    skill_registry.load_all(settings.skills.path)
+    logger.info("Loaded %d skills", len(skill_registry.list()))
+
     # Initialize agent
     agent = Agent(
         db=_db,
-        provider=_provider,
+        provider=_router,
         agent_name=settings.agent.name,
         memory_manager=memory_manager,
         personality_path=settings.personality.path,
-        planner_provider=_provider,
+        planner_provider=_router,
         tool_registry=tool_registry,
+        skill_registry=skill_registry,
     )
 
     # Initialize Telegram channel
@@ -134,8 +164,8 @@ async def lifespan(app: FastAPI):
         await _searxng.close()
     if _embedder:
         await _embedder.close()
-    if _provider:
-        await _provider.close()
+    if _router:
+        await _router.close()
     if _db:
         await _db.close()
     logger.info("Odigos stopped.")
