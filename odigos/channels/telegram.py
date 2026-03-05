@@ -1,4 +1,6 @@
 import logging
+import os
+import tempfile
 from datetime import datetime, timezone
 
 from telegram import Update
@@ -9,6 +11,8 @@ from odigos.channels.base import Channel, UniversalMessage
 from odigos.core.agent import Agent
 
 logger = logging.getLogger(__name__)
+
+DOCUMENT_DIR = os.path.join(tempfile.gettempdir(), "odigos")
 
 
 class TelegramChannel(Channel):
@@ -31,6 +35,7 @@ class TelegramChannel(Channel):
         """Build and start the Telegram bot."""
         self._app = Application.builder().token(self.token).build()
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
+        self._app.add_handler(MessageHandler(filters.Document.ALL, self._handle_document))
 
         await self._app.initialize()
 
@@ -83,3 +88,55 @@ class TelegramChannel(Channel):
         except Exception:
             logger.exception("Error handling message")
             await update.effective_message.reply_text("Something went wrong. Please try again.")
+
+    async def _handle_document(self, update: Update, context) -> None:
+        """Handle incoming document/file messages."""
+        if not update.effective_message or not update.effective_message.document:
+            return
+
+        try:
+            await context.bot.send_chat_action(
+                chat_id=update.effective_chat.id, action=ChatAction.TYPING
+            )
+        except Exception:
+            pass
+
+        doc = update.effective_message.document
+        os.makedirs(DOCUMENT_DIR, exist_ok=True)
+        file_path = os.path.join(
+            DOCUMENT_DIR, doc.file_name or f"file_{update.effective_message.message_id}"
+        )
+
+        try:
+            tg_file = await context.bot.get_file(doc.file_id)
+            await tg_file.download_to_drive(file_path)
+        except Exception:
+            logger.exception("Failed to download document")
+            await update.effective_message.reply_text(
+                "Failed to download the file. Please try again."
+            )
+            return
+
+        content = update.effective_message.caption or "Process this document"
+
+        message = UniversalMessage(
+            id=str(update.effective_message.message_id),
+            channel="telegram",
+            sender=str(update.effective_user.id),
+            content=content,
+            timestamp=datetime.now(timezone.utc),
+            metadata={
+                "chat_id": update.effective_chat.id,
+                "username": getattr(update.effective_user, "username", None),
+                "file_path": file_path,
+            },
+        )
+
+        try:
+            response = await self.agent.handle_message(message)
+            await update.effective_message.reply_text(response)
+        except Exception:
+            logger.exception("Error handling document message")
+            await update.effective_message.reply_text(
+                "Something went wrong. Please try again."
+            )
