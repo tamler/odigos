@@ -647,6 +647,54 @@ class TestAgent:
         assert row["url"] == "https://example.com/page"
 
 
+class TestContextBudget:
+    async def test_estimate_tokens(self, db: Database):
+        from odigos.core.context import estimate_tokens
+        assert estimate_tokens("hello world") == len("hello world") // 4
+
+    async def test_trims_history_when_over_budget(self, db: Database):
+        """Context assembler trims oldest history when over token budget."""
+        assembler = ContextAssembler(
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
+            personality_path="/nonexistent",
+        )
+
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            ("conv-budget", "test"),
+        )
+        for i in range(10):
+            role = "user" if i % 2 == 0 else "assistant"
+            await db.execute(
+                "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
+                (f"msg-{i}", "conv-budget", role, f"Message {i} " + "x" * 200),
+            )
+
+        messages = await assembler.build(
+            "conv-budget", "New message", max_tokens=500
+        )
+
+        history_count = len(messages) - 2  # minus system and current
+        assert history_count < 10
+
+    async def test_no_trimming_within_budget(self, db: Database):
+        """No trimming when within budget."""
+        assembler = ContextAssembler(
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
+            personality_path="/nonexistent",
+        )
+
+        messages = await assembler.build(
+            "conv-notrim", "Short message", max_tokens=12000
+        )
+
+        assert len(messages) == 2
+
+
 class TestReflectorScrapeLog:
     async def test_logs_scrape_to_db(self, db: Database):
         """Reflector logs scrape metadata to scraped_pages table."""
