@@ -53,16 +53,31 @@ class TestBudgetTracker:
         tracker = BudgetTracker(db=db, daily_limit=1.00, monthly_limit=20.00)
         status = await tracker.check_budget()
         assert status.within_budget is True
+        assert status.warning is False
         assert status.daily_spend == 0.0
 
     async def test_check_budget_warns_at_80_pct(self, db: Database):
         tracker = BudgetTracker(db=db, daily_limit=0.10, monthly_limit=20.00)
-        await _insert_message(db, 0.09)  # 90% of daily
+        await _insert_message(db, 0.09)  # 90% of daily -- warning but not over
+        status = await tracker.check_budget()
+        assert status.within_budget is True
+        assert status.warning is True
+
+    async def test_check_budget_over_daily(self, db: Database):
+        tracker = BudgetTracker(db=db, daily_limit=0.10, monthly_limit=20.00)
+        await _insert_message(db, 0.10)  # 100% of daily
         status = await tracker.check_budget()
         assert status.within_budget is False
 
     async def test_check_budget_monthly_warn(self, db: Database):
         tracker = BudgetTracker(db=db, daily_limit=100.00, monthly_limit=0.10)
-        await _insert_message(db, 0.09)  # 90% of monthly
+        await _insert_message(db, 0.09)  # 90% of monthly -- warning but not over
+        status = await tracker.check_budget()
+        assert status.within_budget is True
+        assert status.warning is True
+
+    async def test_check_budget_over_monthly(self, db: Database):
+        tracker = BudgetTracker(db=db, daily_limit=100.00, monthly_limit=0.10)
+        await _insert_message(db, 0.10)  # 100% of monthly
         status = await tracker.check_budget()
         assert status.within_budget is False

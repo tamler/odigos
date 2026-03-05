@@ -1013,3 +1013,55 @@ class TestExecutorCodeAction:
         assert registry_tool is not None
         mock_code_tool.execute.assert_called_once_with({"code": "print(42)", "language": "python"})
         assert result.response.content == "I'm Odigos, your assistant."
+
+
+class TestAgentBudgetEnforcement:
+    async def test_over_budget_returns_low_cost_response(self, db: Database):
+        """When budget is exceeded, agent returns canned response without LLM call."""
+        mock_provider = AsyncMock()
+        mock_budget = AsyncMock()
+        mock_budget.check_budget = AsyncMock(
+            return_value=AsyncMock(within_budget=False)
+        )
+
+        agent = Agent(db=db, provider=mock_provider, budget_tracker=mock_budget)
+
+        message = UniversalMessage(
+            id="msg-1",
+            channel="test",
+            sender="user-1",
+            content="hello",
+            timestamp=datetime.now(timezone.utc),
+            metadata={"chat_id": "123"},
+        )
+        response = await agent.handle_message(message)
+        assert "spending limit" in response
+        mock_provider.complete.assert_not_called()
+
+    async def test_within_budget_proceeds_normally(self, db: Database):
+        """When budget is fine, agent works normally."""
+        mock_provider = AsyncMock()
+        mock_provider.complete = AsyncMock(
+            return_value=LLMResponse(
+                content="Hello!", model="test", tokens_in=10, tokens_out=5, cost_usd=0.001
+            )
+        )
+        mock_budget = AsyncMock()
+        mock_budget.check_budget = AsyncMock(
+            return_value=AsyncMock(within_budget=True, warning=False)
+        )
+
+        agent = Agent(db=db, provider=mock_provider, budget_tracker=mock_budget)
+
+        message = UniversalMessage(
+            id="msg-2",
+            channel="test",
+            sender="user-1",
+            content="hi",
+            timestamp=datetime.now(timezone.utc),
+            metadata={"chat_id": "123"},
+        )
+        response = await agent.handle_message(message)
+        assert response == "Hello!"
+        # Called at least twice: once by planner, once by executor
+        assert mock_provider.complete.call_count >= 2

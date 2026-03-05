@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+import logging
+
 from odigos.channels.base import UniversalMessage
 from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor
@@ -11,7 +13,10 @@ from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.providers.base import LLMProvider
 
+logger = logging.getLogger(__name__)
+
 if TYPE_CHECKING:
+    from odigos.core.budget import BudgetTracker
     from odigos.core.scheduler import TaskScheduler
     from odigos.memory.manager import MemoryManager
     from odigos.skills.registry import SkillRegistry
@@ -34,8 +39,10 @@ class Agent:
         skill_registry: SkillRegistry | None = None,
         cost_fetcher: Callable | None = None,
         scheduler: TaskScheduler | None = None,
+        budget_tracker: BudgetTracker | None = None,
     ) -> None:
         self.db = db
+        self.budget_tracker = budget_tracker
         self.planner = Planner(provider=planner_provider or provider)
         self.context_assembler = ContextAssembler(
             db,
@@ -61,6 +68,17 @@ class Agent:
             "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
             (message.id, conversation_id, "user", message.content),
         )
+
+        # Budget check before LLM calls
+        if self.budget_tracker:
+            status = await self.budget_tracker.check_budget()
+            if not status.within_budget:
+                logger.warning("Budget exceeded, returning low-cost response")
+                return (
+                    "I've hit my spending limit for this period. "
+                    "I can still help with simple tasks that don't need an LLM call. "
+                    "Use /status to see current budget usage."
+                )
 
         # Plan -> Execute -> Reflect
         plan = await self.planner.plan(message.content)

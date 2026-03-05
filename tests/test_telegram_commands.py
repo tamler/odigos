@@ -105,3 +105,43 @@ async def test_start_command_resumes_heartbeat():
 
     await channel._handle_start_command(update, context)
     assert heartbeat.paused is False
+
+
+@pytest.mark.asyncio
+async def test_status_command():
+    from odigos.channels.telegram import TelegramChannel
+
+    agent = MagicMock()
+    budget_tracker = AsyncMock()
+    budget_tracker.check_budget = AsyncMock(return_value=AsyncMock(
+        within_budget=True,
+        warning=False,
+        daily_spend=0.05,
+        monthly_spend=1.20,
+        daily_limit=3.00,
+        monthly_limit=50.00,
+    ))
+    scheduler = MagicMock()
+    scheduler.list_pending = AsyncMock(return_value=[
+        {"id": "t1", "description": "task1"},
+        {"id": "t2", "description": "task2"},
+    ])
+    heartbeat = MagicMock()
+    heartbeat.paused = False
+
+    channel = TelegramChannel(
+        token="fake", agent=agent,
+        budget_tracker=budget_tracker, scheduler=scheduler, heartbeat=heartbeat,
+    )
+
+    update = MagicMock()
+    update.effective_message = MagicMock()
+    update.effective_message.reply_text = AsyncMock()
+    context = MagicMock()
+
+    await channel._handle_status_command(update, context)
+    call_text = update.effective_message.reply_text.call_args[0][0]
+    assert "Budget:" in call_text
+    assert "$0.0500" in call_text
+    assert "Pending tasks: 2" in call_text
+    assert "Heartbeat: running" in call_text

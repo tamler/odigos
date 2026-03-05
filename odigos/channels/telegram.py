@@ -26,6 +26,7 @@ class TelegramChannel(Channel):
         webhook_url: str = "",
         scheduler=None,
         heartbeat=None,
+        budget_tracker=None,
     ) -> None:
         self.token = token
         self.agent = agent
@@ -34,6 +35,7 @@ class TelegramChannel(Channel):
         self._app: Application | None = None
         self.scheduler = scheduler
         self.heartbeat = heartbeat
+        self.budget_tracker = budget_tracker
 
     async def start(self) -> None:
         """Build and start the Telegram bot."""
@@ -44,6 +46,7 @@ class TelegramChannel(Channel):
         self._app.add_handler(CommandHandler("cancel", self._handle_cancel_command))
         self._app.add_handler(CommandHandler("stop", self._handle_stop_command))
         self._app.add_handler(CommandHandler("start", self._handle_start_command))
+        self._app.add_handler(CommandHandler("status", self._handle_status_command))
 
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         self._app.add_handler(MessageHandler(filters.Document.ALL, self._handle_document))
@@ -217,3 +220,38 @@ class TelegramChannel(Channel):
             await update.effective_message.reply_text("Heartbeat resumed.")
         else:
             await update.effective_message.reply_text("Heartbeat not available.")
+
+    async def _handle_status_command(self, update: Update, context) -> None:
+        """Show agent status: budget, tasks, heartbeat."""
+        lines = []
+
+        # Budget
+        if self.budget_tracker:
+            status = await self.budget_tracker.check_budget()
+            daily_pct = (status.daily_spend / status.daily_limit * 100) if status.daily_limit else 0
+            monthly_pct = (status.monthly_spend / status.monthly_limit * 100) if status.monthly_limit else 0
+            lines.append("Budget:")
+            lines.append(f"  Daily: ${status.daily_spend:.4f} / ${status.daily_limit:.2f} ({daily_pct:.0f}%)")
+            lines.append(f"  Monthly: ${status.monthly_spend:.4f} / ${status.monthly_limit:.2f} ({monthly_pct:.0f}%)")
+            if not status.within_budget:
+                lines.append("  ** OVER BUDGET **")
+            elif status.warning:
+                lines.append("  ** Approaching limit **")
+        else:
+            lines.append("Budget: not configured")
+
+        # Tasks
+        if self.scheduler:
+            tasks = await self.scheduler.list_pending()
+            lines.append(f"\nPending tasks: {len(tasks)}")
+        else:
+            lines.append("\nTasks: not configured")
+
+        # Heartbeat
+        if self.heartbeat:
+            hb_status = "paused" if self.heartbeat.paused else "running"
+            lines.append(f"Heartbeat: {hb_status}")
+        else:
+            lines.append("Heartbeat: not configured")
+
+        await update.effective_message.reply_text("\n".join(lines))

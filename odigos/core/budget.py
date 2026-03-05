@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BudgetStatus:
     within_budget: bool
+    warning: bool
     daily_spend: float
     monthly_spend: float
     daily_limit: float
@@ -50,24 +51,29 @@ class BudgetTracker:
         daily = await self.get_daily_spend()
         monthly = await self.get_monthly_spend()
 
-        within = (
-            daily < self.daily_limit * self.warn_threshold
-            and monthly < self.monthly_limit * self.warn_threshold
-        )
+        over_daily = self.daily_limit > 0 and daily >= self.daily_limit
+        over_monthly = self.monthly_limit > 0 and monthly >= self.monthly_limit
+        within = not over_daily and not over_monthly
+
+        warn_daily = self.daily_limit > 0 and daily >= self.daily_limit * self.warn_threshold
+        warn_monthly = self.monthly_limit > 0 and monthly >= self.monthly_limit * self.warn_threshold
+        warning = (warn_daily or warn_monthly) and within
 
         if not within:
             logger.warning(
-                "Budget warning: daily=$%.4f/%s (%.0f%%), monthly=$%.4f/%s (%.0f%%)",
-                daily,
-                self.daily_limit,
-                (daily / self.daily_limit * 100) if self.daily_limit else 0,
-                monthly,
-                self.monthly_limit,
-                (monthly / self.monthly_limit * 100) if self.monthly_limit else 0,
+                "Budget EXCEEDED: daily=$%.4f/$%.2f, monthly=$%.4f/$%.2f",
+                daily, self.daily_limit, monthly, self.monthly_limit,
+            )
+        elif warning:
+            logger.warning(
+                "Budget warning (>%.0f%%): daily=$%.4f/$%.2f, monthly=$%.4f/$%.2f",
+                self.warn_threshold * 100,
+                daily, self.daily_limit, monthly, self.monthly_limit,
             )
 
         return BudgetStatus(
             within_budget=within,
+            warning=warning,
             daily_spend=daily,
             monthly_spend=monthly,
             daily_limit=self.daily_limit,

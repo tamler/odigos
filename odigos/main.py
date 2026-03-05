@@ -81,7 +81,6 @@ async def lifespan(app: FastAPI):
         daily_limit=settings.budget.daily_limit_usd,
         monthly_limit=settings.budget.monthly_limit_usd,
     )
-    _ = budget_tracker  # available for future use
     logger.info("Budget tracker initialized")
 
     # Initialize embedding provider
@@ -174,6 +173,7 @@ async def lifespan(app: FastAPI):
         skill_registry=skill_registry,
         cost_fetcher=_delayed_cost_fetcher,
         scheduler=scheduler,
+        budget_tracker=budget_tracker,
     )
 
     # Initialize Telegram channel (before heartbeat so we can pass it)
@@ -183,6 +183,7 @@ async def lifespan(app: FastAPI):
         mode=settings.telegram.mode,
         webhook_url=settings.telegram.webhook_url,
         scheduler=scheduler,
+        budget_tracker=budget_tracker,
     )
 
     # Initialize heartbeat
