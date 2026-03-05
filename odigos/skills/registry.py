@@ -43,6 +43,42 @@ class SkillRegistry:
     def list(self) -> list[Skill]:
         return list(self._skills.values())
 
+    def create(
+        self,
+        name: str,
+        description: str,
+        system_prompt: str,
+        tools: list[str] | None = None,
+        complexity: str = "standard",
+        skills_dir: str | None = None,
+    ) -> Skill:
+        """Create a new skill .md file and register it in the live registry."""
+        if not skills_dir:
+            raise ValueError("skills_dir is required to write skill files")
+
+        meta = {
+            "name": name,
+            "description": description,
+            "tools": tools or [],
+            "complexity": complexity,
+        }
+        content = f"---\n{yaml.dump(meta, default_flow_style=False)}---\n{system_prompt}\n"
+
+        path = Path(skills_dir) / f"{name}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+        skill = Skill(
+            name=name,
+            description=description,
+            tools=tools or [],
+            complexity=complexity,
+            system_prompt=system_prompt,
+        )
+        self._skills[name] = skill
+        logger.info("Created skill: %s at %s", name, path)
+        return skill
+
     def _parse_skill(self, path: Path) -> Skill | None:
         """Parse a SKILL.md file into a Skill dataclass."""
         text = path.read_text()

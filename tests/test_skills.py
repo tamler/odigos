@@ -78,3 +78,46 @@ class TestSkillRegistry:
         registry = SkillRegistry()
         registry.load_all(str(tmp_path))
         assert len(registry.list()) == 0
+
+    def test_create_skill(self, tmp_path):
+        registry = SkillRegistry()
+        skill = registry.create(
+            name="daily-digest",
+            description="Summarize the day",
+            system_prompt="You summarize the user's day.",
+            tools=["web_search"],
+            skills_dir=str(tmp_path),
+        )
+        assert skill.name == "daily-digest"
+        assert registry.get("daily-digest") is not None
+        # File was written to disk
+        path = tmp_path / "daily-digest.md"
+        assert path.exists()
+        content = path.read_text()
+        assert "daily-digest" in content
+        assert "You summarize the user's day." in content
+
+    def test_created_skill_is_loadable(self, tmp_path):
+        """A skill created with create() can be loaded by load_all()."""
+        registry1 = SkillRegistry()
+        registry1.create(
+            name="my-skill",
+            description="Test",
+            system_prompt="Be helpful.",
+            skills_dir=str(tmp_path),
+        )
+
+        registry2 = SkillRegistry()
+        registry2.load_all(str(tmp_path))
+        skill = registry2.get("my-skill")
+        assert skill is not None
+        assert skill.system_prompt == "Be helpful."
+
+    def test_create_requires_skills_dir(self):
+        registry = SkillRegistry()
+        with pytest.raises(ValueError, match="skills_dir"):
+            registry.create(
+                name="test",
+                description="test",
+                system_prompt="test",
+            )
