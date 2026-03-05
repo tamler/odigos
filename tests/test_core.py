@@ -239,7 +239,7 @@ class TestExecutor:
 
         result = await executor.execute("conv-1", "Find python docs")
 
-        mock_tool.execute.assert_called_once_with({"query": "python docs"})
+        mock_tool.execute.assert_called_once_with({"query": "python docs", "_conversation_id": "conv-1"})
         assert mock_provider.complete.call_count == 2
         assert "Python docs" in result.response.content
 
@@ -278,17 +278,6 @@ class TestExecutor:
 
         assert result.response.content == "I'm Odigos, your assistant."
 
-    async def test_simple_respond_no_tools(self, db: Database, mock_provider: AsyncMock):
-        """Executor responds directly when LLM returns no tool calls."""
-        assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
-        executor = Executor(provider=mock_provider, context_assembler=assembler)
-
-        result = await executor.execute("conv-1", "Hello")
-
-        assert result.response.content == "I'm Odigos, your assistant."
-
     async def test_execute_scrape(self, db: Database, mock_provider: AsyncMock):
         """LLM calls read_page tool, gets page content, then responds."""
         mock_tool = AsyncMock()
@@ -322,7 +311,7 @@ class TestExecutor:
 
         result = await executor.execute("conv-1", "Read this page")
 
-        mock_tool.execute.assert_called_once_with({"url": "https://example.com"})
+        mock_tool.execute.assert_called_once_with({"url": "https://example.com", "_conversation_id": "conv-1"})
         assert mock_provider.complete.call_count == 2
 
 
@@ -702,7 +691,7 @@ class TestExecutorDocumentAction:
 
         registry_tool = registry.get("read_document")
         assert registry_tool is not None
-        mock_doc_tool.execute.assert_called_once_with({"path": "/tmp/test.pdf"})
+        mock_doc_tool.execute.assert_called_once_with({"path": "/tmp/test.pdf", "_conversation_id": "conv-1"})
         assert result.response.content == "Here are the meeting notes."
 
 
@@ -744,7 +733,7 @@ class TestExecutorCodeAction:
         result = await executor.execute("conv-1", "calculate 42")
         registry_tool = registry.get("run_code")
         assert registry_tool is not None
-        mock_code_tool.execute.assert_called_once_with({"code": "print(42)", "language": "python"})
+        mock_code_tool.execute.assert_called_once_with({"code": "print(42)", "language": "python", "_conversation_id": "conv-1"})
         assert result.response.content == "The answer is 42."
 
 
@@ -796,5 +785,4 @@ class TestAgentBudgetEnforcement:
         )
         response = await agent.handle_message(message)
         assert response == "Hello!"
-        # No planner -- executor calls provider once for simple respond
-        assert mock_provider.complete.call_count >= 1
+        assert mock_provider.complete.call_count == 1

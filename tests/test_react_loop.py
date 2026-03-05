@@ -81,7 +81,7 @@ class TestReActLoop:
         result = await executor.execute("conv-1", "What's new in Python?")
         assert result.response.content == "Python 3.13 was just released!"
         assert mock_provider.complete.call_count == 2
-        mock_tool.execute.assert_called_once_with({"query": "python 3.13"})
+        mock_tool.execute.assert_called_once_with({"query": "python 3.13", "_conversation_id": "conv-1"})
 
     @pytest.mark.asyncio
     async def test_multi_turn_tool_calls(self, mock_provider, mock_assembler):

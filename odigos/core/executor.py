@@ -142,7 +142,8 @@ class Executor:
             return error
 
         try:
-            result = await tool.execute(tool_call.arguments)
+            args = {**tool_call.arguments, "_conversation_id": conversation_id}
+            result = await tool.execute(args)
             await self._log_action(
                 conversation_id, "tool", tool_call.name,
                 {"success": result.success, "error": result.error},
