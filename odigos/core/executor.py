@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from odigos.core.context import ContextAssembler
 from odigos.core.planner import Plan
+from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse
 
 if TYPE_CHECKING:
@@ -39,12 +42,14 @@ class Executor:
         tool_registry: ToolRegistry | None = None,
         skill_registry: SkillRegistry | None = None,
         scheduler: TaskScheduler | None = None,
+        db: Database | None = None,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
         self.tool_registry = tool_registry
         self.skill_registry = skill_registry
         self.scheduler = scheduler
+        self.db = db
 
     async def execute(
         self,
@@ -123,8 +128,17 @@ class Executor:
                             }
                     else:
                         logger.warning("Tool %s failed: %s", tool_name, result.error)
+                    # Log tool execution
+                    await self._log_action(
+                        conversation_id, "tool", tool_name,
+                        {"success": result.success, "error": result.error},
+                    )
                 except Exception:
                     logger.exception("Tool %s raised an exception", tool_name)
+                    await self._log_action(
+                        conversation_id, "tool", tool_name,
+                        {"success": False, "error": "exception"},
+                    )
 
         messages = await self.context_assembler.build(
             conversation_id, message_content, tool_context=tool_context
@@ -138,3 +152,17 @@ class Executor:
 
         response = await self.provider.complete(messages)
         return ExecuteResult(response=response, scrape_metadata=scrape_metadata)
+
+    async def _log_action(
+        self, conversation_id: str, action_type: str, action_name: str, details: dict,
+    ) -> None:
+        if not self.db:
+            return
+        try:
+            await self.db.execute(
+                "INSERT INTO action_log (id, conversation_id, action_type, action_name, details_json) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (str(uuid.uuid4()), conversation_id, action_type, action_name, json.dumps(details)),
+            )
+        except Exception:
+            logger.debug("Failed to log action", exc_info=True)

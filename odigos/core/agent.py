@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
+import logging
+import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING
-
-import logging
 
 from odigos.channels.base import UniversalMessage
 from odigos.core.context import ContextAssembler
@@ -57,6 +58,7 @@ class Agent:
             tool_registry=tool_registry,
             skill_registry=skill_registry,
             scheduler=scheduler,
+            db=db,
         )
         self.reflector = Reflector(db, memory_manager=memory_manager, cost_fetcher=cost_fetcher)
 
@@ -82,6 +84,24 @@ class Agent:
 
         # Plan -> Execute -> Reflect
         plan = await self.planner.plan(message.content)
+
+        # Log planner decision
+        await self.db.execute(
+            "INSERT INTO action_log (id, conversation_id, action_type, action_name, details_json) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                str(uuid.uuid4()),
+                conversation_id,
+                "plan",
+                plan.action,
+                json.dumps({
+                    "skill": plan.skill,
+                    "requires_tools": plan.requires_tools,
+                    "tool_params": plan.tool_params,
+                }),
+            ),
+        )
+
         result = await self.executor.execute(conversation_id, message.content, plan=plan)
         await self.reflector.reflect(
             conversation_id,
