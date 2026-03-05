@@ -56,6 +56,17 @@ class SkillsConfig(BaseModel):
     path: str = "skills"
 
 
+class HeartbeatConfig(BaseModel):
+    interval_seconds: int = 30
+    max_tasks_per_tick: int = 5
+
+
+class SandboxConfig(BaseModel):
+    timeout_seconds: int = 5
+    max_memory_mb: int = 512
+    allow_network: bool = False
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str
     openrouter_api_key: str
@@ -73,6 +84,8 @@ class Settings(BaseSettings):
     router: RouterConfig = RouterConfig()
     context: ContextConfig = ContextConfig()
     skills: SkillsConfig = SkillsConfig()
+    heartbeat: HeartbeatConfig = HeartbeatConfig()
+    sandbox: SandboxConfig = SandboxConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
