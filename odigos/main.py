@@ -165,6 +165,14 @@ async def lifespan(app: FastAPI):
     skill_registry.load_all(settings.skills.path)
     logger.info("Loaded %d skills", len(skill_registry.list()))
 
+    # Register skill activation tool
+    if skill_registry.list():
+        from odigos.tools.skill_tool import ActivateSkillTool
+
+        activate_skill_tool = ActivateSkillTool(skill_registry=skill_registry)
+        tool_registry.register(activate_skill_tool)
+        logger.info("Skill activation tool registered")
+
     # Create delayed cost fetcher for async backfill
     async def _delayed_cost_fetcher(generation_id: str) -> float | None:
         await asyncio.sleep(2)

@@ -57,11 +57,13 @@ class Agent:
             memory_manager=memory_manager,
             personality_path=personality_path,
             summarizer=summarizer,
+            skill_registry=skill_registry,
         )
         self.executor = Executor(
             provider,
             self.context_assembler,
             tool_registry=tool_registry,
+            skill_registry=skill_registry,
             db=db,
             max_tool_turns=max_tool_turns,
         )
