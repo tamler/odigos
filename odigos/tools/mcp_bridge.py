@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Protocol
 
 from mcp import ClientSession, types
@@ -37,11 +38,17 @@ class StdioTransport:
         self._cm: Any | None = None
 
     async def connect(self) -> tuple[Any, Any]:
-        expanded_env = {k: os.path.expandvars(v) for k, v in self.env.items()}
+        if self.env:
+            # Merge specified env vars on top of inherited environment
+            # so the subprocess retains PATH, HOME, etc.
+            expanded = {k: os.path.expandvars(v) for k, v in self.env.items()}
+            merged_env = {**os.environ, **expanded}
+        else:
+            merged_env = None  # inherit parent env as-is
         params = StdioServerParameters(
             command=self.command,
             args=self.args,
-            env=expanded_env or None,
+            env=merged_env,
         )
         self._cm = stdio_client(params)
         read_stream, write_stream = await self._cm.__aenter__()
@@ -64,18 +71,25 @@ class MCPServer:
 
     async def connect(self) -> None:
         read_stream, write_stream = await self._transport.connect()
-        self._session_cm = ClientSession(read_stream, write_stream)
-        self._session = await self._session_cm.__aenter__()
-        await self._session.initialize()
+        try:
+            self._session_cm = ClientSession(read_stream, write_stream)
+            self._session = await self._session_cm.__aenter__()
+            await self._session.initialize()
+        except Exception:
+            # Clean up transport/session if initialization fails
+            await self.disconnect()
+            raise
         logger.info("MCP server '%s' connected", self.name)
 
     async def disconnect(self) -> None:
-        if self._session_cm:
-            await self._session_cm.__aexit__(None, None, None)
-            self._session_cm = None
-            self._session = None
-        await self._transport.disconnect()
-        logger.info("MCP server '%s' disconnected", self.name)
+        try:
+            if self._session_cm:
+                await self._session_cm.__aexit__(None, None, None)
+                self._session_cm = None
+                self._session = None
+        finally:
+            await self._transport.disconnect()
+            logger.info("MCP server '%s' disconnected", self.name)
 
     async def list_tools(self) -> list:
         if not self._session:
@@ -110,7 +124,9 @@ class MCPToolBridge(BaseTool):
     """Wraps a single MCP tool as a native BaseTool."""
 
     def __init__(self, server: MCPServer, server_name: str, mcp_tool: Any) -> None:
-        self.name = f"mcp_{server_name}_{mcp_tool.name}"
+        safe_server = re.sub(r"[^a-zA-Z0-9_]", "_", server_name)
+        safe_tool = re.sub(r"[^a-zA-Z0-9_]", "_", mcp_tool.name)
+        self.name = f"mcp_{safe_server}_{safe_tool}"
         self.description = mcp_tool.description or f"MCP tool: {mcp_tool.name}"
         self.parameters_schema = mcp_tool.inputSchema or {"type": "object", "properties": {}}
         self._server = server

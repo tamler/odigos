@@ -192,6 +192,11 @@ async def lifespan(app: FastAPI):
                     bridge = MCPToolBridge(
                         server=server, server_name=server_name, mcp_tool=mcp_tool
                     )
+                    if tool_registry.get(bridge.name):
+                        logger.warning(
+                            "MCP tool name collision: '%s' overwrites existing tool",
+                            bridge.name,
+                        )
                     tool_registry.register(bridge)
                     logger.info("Registered MCP tool: %s", bridge.name)
                 _mcp_servers.append(server)
