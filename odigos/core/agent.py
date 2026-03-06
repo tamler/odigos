@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from odigos.core.budget import BudgetTracker
     from odigos.memory.manager import MemoryManager
+    from odigos.memory.summarizer import ConversationSummarizer
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
@@ -40,6 +41,7 @@ class Agent:
         budget_tracker: BudgetTracker | None = None,
         max_tool_turns: int = 25,
         run_timeout: int = 300,
+        summarizer: ConversationSummarizer | None = None,
     ) -> None:
         self.db = db
         self.budget_tracker = budget_tracker
@@ -54,6 +56,7 @@ class Agent:
             history_limit,
             memory_manager=memory_manager,
             personality_path=personality_path,
+            summarizer=summarizer,
         )
         self.executor = Executor(
             provider,

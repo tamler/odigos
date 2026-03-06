@@ -183,6 +183,7 @@ async def lifespan(app: FastAPI):
         budget_tracker=budget_tracker,
         max_tool_turns=settings.agent.max_tool_turns,
         run_timeout=settings.agent.run_timeout_seconds,
+        summarizer=summarizer,
     )
 
     # Initialize Telegram channel (before heartbeat so we can pass it)
