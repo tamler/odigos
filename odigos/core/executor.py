@@ -12,6 +12,7 @@ from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 if TYPE_CHECKING:
+    from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -38,12 +39,14 @@ class Executor:
         provider: LLMProvider,
         context_assembler: ContextAssembler,
         tool_registry: ToolRegistry | None = None,
+        skill_registry: SkillRegistry | None = None,
         db: Database | None = None,
         max_tool_turns: int = MAX_TOOL_TURNS,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
         self.tool_registry = tool_registry
+        self.skill_registry = skill_registry
         self.db = db
         self._max_tool_turns = max_tool_turns
 
@@ -53,6 +56,11 @@ class Executor:
         message_content: str,
         abort_event: asyncio.Event | None = None,
     ) -> ExecuteResult:
+        # Reset active skill state
+        self._active_skill_name: str | None = None
+        self._active_skill_tools: set[str] = set()
+        self._pending_skill_prompt: str | None = None
+
         # Build initial context
         messages = await self.context_assembler.build(
             conversation_id, message_content
@@ -107,6 +115,14 @@ class Executor:
                     "tool_call_id": tc.id,
                     "content": result_content,
                 })
+
+            # Check for skill activation -- inject system message
+            if self._pending_skill_prompt:
+                messages.append({
+                    "role": "system",
+                    "content": f"[Active skill instructions]:\n\n{self._pending_skill_prompt}",
+                })
+                self._pending_skill_prompt = None
         else:
             logger.warning("Hit max tool turns (%d) for conversation %s", self._max_tool_turns, conversation_id)
 
@@ -148,6 +164,15 @@ class Executor:
                 conversation_id, "tool", tool_call.name,
                 {"success": result.success, "error": result.error},
             )
+
+            # Detect skill activation
+            if tool_call.name == "activate_skill" and result.success:
+                activate_tool = self.tool_registry.get("activate_skill")
+                if activate_tool and hasattr(activate_tool, "last_activated_name"):
+                    self._active_skill_name = activate_tool.last_activated_name
+                    self._active_skill_tools = set(activate_tool.last_activated_tools or [])
+                    self._pending_skill_prompt = activate_tool.last_activated_prompt
+
             if result.success:
                 return result.data
             else:
@@ -163,6 +188,17 @@ class Executor:
     async def _log_action(
         self, conversation_id: str, action_type: str, action_name: str, details: dict,
     ) -> None:
+        # Add active skill info
+        if self._active_skill_name:
+            details["active_skill"] = self._active_skill_name
+            if action_name != "activate_skill" and action_name not in self._active_skill_tools:
+                details["skill_mismatch"] = True
+                details["expected_tools"] = sorted(self._active_skill_tools)
+                logger.info(
+                    "Tool mismatch: %s called during skill '%s' (expected: %s)",
+                    action_name, self._active_skill_name, self._active_skill_tools,
+                )
+
         if not self.db:
             return
         try:

@@ -12,8 +12,10 @@ from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor, ExecuteResult
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
+from odigos.skills.registry import SkillRegistry, Skill
 from odigos.tools.base import BaseTool, ToolResult
 from odigos.tools.registry import ToolRegistry
+from odigos.tools.skill_tool import ActivateSkillTool
 
 
 @pytest.fixture
@@ -352,3 +354,150 @@ class TestAgentReAct:
         await agent.handle_message(_make_message("hello again"))
         # Lock for this conversation is recreated, but old stale ones would be gone
         assert len(agent._session_locks) == 1
+
+
+class TestSkillActivation:
+    @pytest.fixture
+    def skill_registry(self):
+        registry = SkillRegistry()
+        registry._skills = {
+            "research": Skill(
+                name="research",
+                description="In-depth research",
+                tools=["web_search", "read_page"],
+                complexity="standard",
+                system_prompt="You are a thorough research assistant.",
+            ),
+        }
+        return registry
+
+    @pytest.mark.asyncio
+    async def test_skill_activation_injects_system_message(self, mock_provider, mock_assembler, skill_registry):
+        """Activating a skill injects its body as a system message."""
+        activate_tool = ActivateSkillTool(skill_registry=skill_registry)
+        registry = ToolRegistry()
+        registry.register(activate_tool)
+
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="activate_skill", arguments={"name": "research"})],
+            ),
+            LLMResponse(
+                content="Research complete.", model="test",
+                tokens_in=20, tokens_out=10, cost_usd=0.002,
+            ),
+        ]
+
+        executor = Executor(
+            provider=mock_provider,
+            context_assembler=mock_assembler,
+            tool_registry=registry,
+            skill_registry=skill_registry,
+        )
+        result = await executor.execute("conv-1", "Research AI trends")
+
+        assert result.response.content == "Research complete."
+        # Verify second LLM call received system message with skill body
+        second_call_messages = mock_provider.complete.call_args_list[1][0][0]
+        system_msgs = [m for m in second_call_messages if m.get("role") == "system"
+                       and "Active skill" in m.get("content", "")]
+        assert len(system_msgs) == 1
+        assert "thorough research assistant" in system_msgs[0]["content"]
+
+    @pytest.mark.asyncio
+    async def test_tool_mismatch_logged(self, mock_provider, mock_assembler, skill_registry):
+        """Using a tool not in the skill's tools list logs a mismatch."""
+        activate_tool = ActivateSkillTool(skill_registry=skill_registry)
+        mock_other_tool = AsyncMock(spec=BaseTool)
+        mock_other_tool.name = "send_email"
+        mock_other_tool.description = "Send email"
+        mock_other_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_other_tool.execute.return_value = ToolResult(success=True, data="Sent")
+
+        registry = ToolRegistry()
+        registry.register(activate_tool)
+        registry.register(mock_other_tool)
+
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="activate_skill", arguments={"name": "research"})],
+            ),
+            LLMResponse(
+                content="", model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_2", name="send_email", arguments={"to": "a@b.com"})],
+            ),
+            LLMResponse(
+                content="Done.", model="test",
+                tokens_in=20, tokens_out=10, cost_usd=0.002,
+            ),
+        ]
+
+        from odigos.db import Database
+
+        db = AsyncMock(spec=Database)
+        db.execute = AsyncMock()
+
+        executor = Executor(
+            provider=mock_provider,
+            context_assembler=mock_assembler,
+            tool_registry=registry,
+            skill_registry=skill_registry,
+            db=db,
+        )
+        await executor.execute("conv-1", "Research and email")
+
+        # Check that action_log was called with mismatch info
+        log_calls = [c for c in db.execute.call_args_list if "action_log" in str(c)]
+        mismatch_calls = [c for c in log_calls if "skill_mismatch" in str(c)]
+        assert len(mismatch_calls) >= 1
+
+    @pytest.mark.asyncio
+    async def test_active_skill_tagged_in_action_log(self, mock_provider, mock_assembler, skill_registry):
+        """Tool calls during active skill include skill name in action_log."""
+        activate_tool = ActivateSkillTool(skill_registry=skill_registry)
+        mock_search = AsyncMock(spec=BaseTool)
+        mock_search.name = "web_search"
+        mock_search.description = "Search"
+        mock_search.parameters_schema = {"type": "object", "properties": {}}
+        mock_search.execute.return_value = ToolResult(success=True, data="Results")
+
+        registry = ToolRegistry()
+        registry.register(activate_tool)
+        registry.register(mock_search)
+
+        mock_provider.complete.side_effect = [
+            LLMResponse(
+                content="", model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="activate_skill", arguments={"name": "research"})],
+            ),
+            LLMResponse(
+                content="", model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_2", name="web_search", arguments={"query": "test"})],
+            ),
+            LLMResponse(
+                content="Found it.", model="test",
+                tokens_in=20, tokens_out=10, cost_usd=0.002,
+            ),
+        ]
+
+        from odigos.db import Database
+
+        db = AsyncMock(spec=Database)
+        db.execute = AsyncMock()
+
+        executor = Executor(
+            provider=mock_provider,
+            context_assembler=mock_assembler,
+            tool_registry=registry,
+            skill_registry=skill_registry,
+            db=db,
+        )
+        await executor.execute("conv-1", "Search something")
+
+        # Check web_search action_log includes active_skill
+        log_calls = [c for c in db.execute.call_args_list if "action_log" in str(c)]
+        search_logs = [c for c in log_calls if "web_search" in str(c)]
+        assert len(search_logs) >= 1
+        assert "research" in str(search_logs[0])  # skill name in details
