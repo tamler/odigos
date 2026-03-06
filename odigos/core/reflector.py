@@ -46,7 +46,7 @@ class Reflector:
         response: LLMResponse,
         user_message: str | None = None,
         scrape_metadata: dict | None = None,
-    ) -> None:
+    ) -> str:
         # Parse and strip entity block
         content = response.content
         entities = []
@@ -115,6 +115,8 @@ class Reflector:
                 "INSERT INTO scraped_pages (id, url, title, summary) VALUES (?, ?, ?, ?)",
                 (str(uuid.uuid4()), url, title, summary),
             )
+
+        return content
 
     async def _backfill_cost(self, message_id: str, generation_id: str) -> None:
         try:

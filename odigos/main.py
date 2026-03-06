@@ -15,6 +15,7 @@ from odigos.memory.graph import EntityGraph
 from odigos.memory.manager import MemoryManager
 from odigos.memory.resolver import EntityResolver
 from odigos.memory.summarizer import ConversationSummarizer
+from odigos.memory.corrections import CorrectionsManager
 from odigos.memory.vectors import VectorMemory
 from odigos.providers.embeddings import EmbeddingProvider
 from odigos.providers.openrouter import OpenRouterProvider
@@ -104,8 +105,6 @@ async def lifespan(app: FastAPI):
     logger.info("Memory system initialized")
 
     # Initialize corrections manager
-    from odigos.memory.corrections import CorrectionsManager
-
     corrections_manager = CorrectionsManager(db=_db, vector_memory=vector_memory)
     logger.info("Corrections manager initialized")
 

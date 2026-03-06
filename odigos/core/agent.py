@@ -112,7 +112,7 @@ class Agent:
             logger.warning("Run timed out after %ds for %s", self._run_timeout, conversation_id)
             return "I ran out of time working on that. Try breaking it into smaller pieces."
 
-        await self.reflector.reflect(
+        clean_content = await self.reflector.reflect(
             conversation_id,
             result.response,
             user_message=message.content,
@@ -124,7 +124,7 @@ class Agent:
             (conversation_id,),
         )
 
-        return result.response.content
+        return clean_content
 
     def _get_session_lock(self, conversation_id: str) -> asyncio.Lock:
         """Get or create a session lock, evicting stale entries."""

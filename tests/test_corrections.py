@@ -30,6 +30,7 @@ async def _seed_conversation(db: Database, conversation_id: str) -> None:
 class TestCorrectionsMigration:
     async def test_corrections_table_exists_and_stores_rows(self, db):
         """The corrections table is created by migration and can store/retrieve rows."""
+        await _seed_conversation(db, "conv-1")
         correction_id = str(uuid.uuid4())
         await db.execute(
             "INSERT INTO corrections (id, conversation_id, original_response, correction, context, category) "
@@ -50,6 +51,7 @@ class TestCorrectionsMigration:
 class TestCorrectionsManager:
     async def test_store_inserts_row_and_embeds(self, db):
         """store() inserts a DB row and calls VectorMemory.store()."""
+        await _seed_conversation(db, "conv-1")
         mock_vector = MagicMock()
         mock_vector.store = AsyncMock(return_value="vec-123")
         manager = CorrectionsManager(db, mock_vector)
@@ -76,12 +78,13 @@ class TestCorrectionsManager:
 
     async def test_store_includes_correction_in_embedding_text(self, db):
         """The embedded text contains both context and correction."""
+        await _seed_conversation(db, "conv-2")
         mock_vector = MagicMock()
         mock_vector.store = AsyncMock(return_value="vec-123")
         manager = CorrectionsManager(db, mock_vector)
 
         await manager.store(
-            conversation_id="conv-1",
+            conversation_id="conv-2",
             original_response="I said X",
             correction="Actually Y",
             context="during scheduling",
@@ -94,7 +97,7 @@ class TestCorrectionsManager:
 
     async def test_relevant_returns_formatted_corrections(self, db):
         """relevant() returns formatted output when matching corrections found."""
-        # Insert a correction row directly
+        await _seed_conversation(db, "conv-1")
         correction_id = str(uuid.uuid4())
         await db.execute(
             "INSERT INTO corrections (id, conversation_id, original_response, correction, context, category) "
@@ -251,6 +254,7 @@ class TestReflectorCorrectionParsing:
 class TestCorrectionsEndToEnd:
     async def test_correction_stored_and_retrieved_in_context(self, db):
         """Full flow: store a correction, then verify it appears in relevant() output."""
+        await _seed_conversation(db, "conv-1")
         mock_vector = MagicMock()
         mock_vector.store = AsyncMock(return_value="vec-1")
 
