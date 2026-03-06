@@ -38,12 +38,13 @@ _searxng = None
 _scraper = None
 _router: ModelRouter | None = None
 _heartbeat: Heartbeat | None = None
+_mcp_servers: list = []
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
-    global _db, _provider, _embedder, _telegram, _searxng, _scraper, _router, _heartbeat
+    global _db, _provider, _embedder, _telegram, _searxng, _scraper, _router, _heartbeat, _mcp_servers
 
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     settings = load_settings(config_path)
@@ -173,6 +174,35 @@ async def lifespan(app: FastAPI):
         tool_registry.register(activate_skill_tool)
         logger.info("Skill activation tool registered")
 
+    # Connect MCP servers and register bridged tools
+    if settings.mcp.servers:
+        from odigos.tools.mcp_bridge import MCPServer, MCPToolBridge, StdioTransport
+
+        for server_name, server_cfg in settings.mcp.servers.items():
+            transport = StdioTransport(
+                command=server_cfg.command,
+                args=server_cfg.args,
+                env=server_cfg.env,
+            )
+            server = MCPServer(name=server_name, transport=transport)
+            try:
+                await server.connect()
+                mcp_tools = await server.list_tools()
+                for mcp_tool in mcp_tools:
+                    bridge = MCPToolBridge(
+                        server=server, server_name=server_name, mcp_tool=mcp_tool
+                    )
+                    tool_registry.register(bridge)
+                    logger.info("Registered MCP tool: %s", bridge.name)
+                _mcp_servers.append(server)
+                logger.info(
+                    "MCP server '%s' connected (%d tools)",
+                    server_name,
+                    len(mcp_tools),
+                )
+            except Exception:
+                logger.exception("Failed to connect MCP server: %s", server_name)
+
     # Create delayed cost fetcher for async backfill
     async def _delayed_cost_fetcher(generation_id: str) -> float | None:
         await asyncio.sleep(2)
@@ -236,6 +266,12 @@ async def lifespan(app: FastAPI):
         await _heartbeat.stop()
     if _telegram:
         await _telegram.stop()
+    for server in _mcp_servers:
+        try:
+            await server.disconnect()
+        except Exception:
+            logger.exception("Error disconnecting MCP server: %s", server.name)
+    _mcp_servers.clear()
     if _scraper:
         await _scraper.close()
     if _searxng:
