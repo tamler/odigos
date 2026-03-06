@@ -8,6 +8,7 @@ from odigos.personality.loader import load_personality
 from odigos.personality.prompt_builder import build_system_prompt
 
 if TYPE_CHECKING:
+    from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
     from odigos.memory.summarizer import ConversationSummarizer
     from odigos.skills.registry import SkillRegistry
@@ -32,6 +33,7 @@ class ContextAssembler:
         personality_path: str = "data/personality.yaml",
         summarizer: ConversationSummarizer | None = None,
         skill_registry: SkillRegistry | None = None,
+        corrections_manager: CorrectionsManager | None = None,
     ) -> None:
         self.db = db
         self.agent_name = agent_name
@@ -40,6 +42,7 @@ class ContextAssembler:
         self.personality_path = personality_path
         self.summarizer = summarizer
         self.skill_registry = skill_registry
+        self.corrections_manager = corrections_manager
 
     async def build(
         self,
@@ -72,12 +75,18 @@ class ContextAssembler:
                     lines.append(f"- **{s.name}**: {s.description}")
                 skill_catalog = "\n".join(lines)
 
+        # Get corrections context if available
+        corrections_context = ""
+        if self.corrections_manager:
+            corrections_context = await self.corrections_manager.relevant(current_message)
+
         # Build system prompt via structured prompt builder
         system_prompt = build_system_prompt(
             personality=personality,
             memory_context=memory_context,
             tool_context=tool_context,
             skill_catalog=skill_catalog,
+            corrections_context=corrections_context,
         )
 
         messages.append({"role": "system", "content": system_prompt})

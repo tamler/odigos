@@ -7,12 +7,25 @@ ENTITY_EXTRACTION_INSTRUCTION = """After your response, on a new line, include e
 Only include entities if the conversation mentions specific people, projects, preferences, or important concepts.
 If none are relevant, omit the block entirely."""
 
+CORRECTION_DETECTION_INSTRUCTION = """If the user's message is correcting or disagreeing with your previous response, include a correction block after your response in this exact format:
+<!--correction
+{"original": "brief summary of what you said wrong", "correction": "what the user wants instead", "category": "tone|accuracy|preference|behavior|tool_choice", "context": "brief description of the situation"}
+-->
+Only include this block when the user is explicitly correcting you. Categories:
+- tone: communication style (too formal, too casual, etc.)
+- accuracy: factual errors
+- preference: user preferences (scheduling, formatting, etc.)
+- behavior: action/decision patterns
+- tool_choice: wrong tool or approach used
+If the user is not correcting you, omit the block entirely."""
+
 
 def build_system_prompt(
     personality: Personality,
     memory_context: str = "",
     tool_context: str = "",
     skill_catalog: str = "",
+    corrections_context: str = "",
 ) -> str:
     """Compose the system prompt from structured sections.
 
@@ -22,7 +35,9 @@ def build_system_prompt(
     3. Memory context -- relevant memories (if any)
     4. Tool context -- results from tool execution (if any)
     5. Skill catalog -- available skills (if any)
-    6. Entity extraction -- always appended
+    6. Learned corrections (optional)
+    7. Correction detection (always)
+    8. Entity extraction -- always appended
     """
     sections = []
 
@@ -44,7 +59,14 @@ def build_system_prompt(
     if skill_catalog:
         sections.append(skill_catalog)
 
-    # 6. Entity extraction (always)
+    # 6. Learned corrections (optional)
+    if corrections_context:
+        sections.append(corrections_context)
+
+    # 7. Correction detection (always)
+    sections.append(CORRECTION_DETECTION_INSTRUCTION)
+
+    # 8. Entity extraction (always)
     sections.append(ENTITY_EXTRACTION_INSTRUCTION)
 
     return "\n\n".join(sections)
