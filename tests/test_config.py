@@ -6,6 +6,8 @@ import yaml
 from odigos.config import (
     BudgetConfig,
     ContextConfig,
+    MCPConfig,
+    MCPServerConfig,
     RouterConfig,
     Settings,
     SkillsConfig,
@@ -109,3 +111,28 @@ class TestNewConfigSections:
         assert settings.router.free_pool is not None
         assert settings.context.max_tokens == 12000
         assert settings.skills.path == "skills"
+
+
+class TestMCPConfig:
+    def test_mcp_config_defaults(self):
+        """MCPConfig defaults to empty servers dict."""
+        cfg = MCPConfig()
+        assert cfg.servers == {}
+
+    def test_mcp_server_config_parsing(self):
+        """MCPServerConfig parses command, args, env."""
+        cfg = MCPServerConfig(command="npx", args=["-y", "server"], env={"TOKEN": "abc"})
+        assert cfg.command == "npx"
+        assert cfg.args == ["-y", "server"]
+        assert cfg.env == {"TOKEN": "abc"}
+
+    def test_mcp_server_config_defaults(self):
+        """MCPServerConfig has sensible defaults for args and env."""
+        cfg = MCPServerConfig(command="python")
+        assert cfg.args == []
+        assert cfg.env == {}
+
+    def test_settings_includes_mcp(self):
+        """Settings has mcp field with MCPConfig default."""
+        fields = Settings.model_fields
+        assert "mcp" in fields

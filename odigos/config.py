@@ -70,6 +70,16 @@ class SandboxConfig(BaseModel):
     allow_network: bool = False
 
 
+class MCPServerConfig(BaseModel):
+    command: str
+    args: list[str] = []
+    env: dict[str, str] = {}
+
+
+class MCPConfig(BaseModel):
+    servers: dict[str, MCPServerConfig] = {}
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str
     openrouter_api_key: str
@@ -89,6 +99,7 @@ class Settings(BaseSettings):
     skills: SkillsConfig = SkillsConfig()
     heartbeat: HeartbeatConfig = HeartbeatConfig()
     sandbox: SandboxConfig = SandboxConfig()
+    mcp: MCPConfig = MCPConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
