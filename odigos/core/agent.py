@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from odigos.core.budget import BudgetTracker
+    from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
     from odigos.memory.summarizer import ConversationSummarizer
     from odigos.skills.registry import SkillRegistry
@@ -42,6 +43,7 @@ class Agent:
         max_tool_turns: int = 25,
         run_timeout: int = 300,
         summarizer: ConversationSummarizer | None = None,
+        corrections_manager: CorrectionsManager | None = None,
     ) -> None:
         self.db = db
         self.budget_tracker = budget_tracker
@@ -58,6 +60,7 @@ class Agent:
             personality_path=personality_path,
             summarizer=summarizer,
             skill_registry=skill_registry,
+            corrections_manager=corrections_manager,
         )
         self.executor = Executor(
             provider,
@@ -68,7 +71,12 @@ class Agent:
             max_tool_turns=max_tool_turns,
             budget_tracker=budget_tracker,
         )
-        self.reflector = Reflector(db, memory_manager=memory_manager, cost_fetcher=cost_fetcher)
+        self.reflector = Reflector(
+            db,
+            memory_manager=memory_manager,
+            cost_fetcher=cost_fetcher,
+            corrections_manager=corrections_manager,
+        )
 
     async def handle_message(self, message: UniversalMessage) -> str:
         """Process an incoming message through the ReAct loop."""

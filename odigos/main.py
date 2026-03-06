@@ -103,6 +103,12 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Memory system initialized")
 
+    # Initialize corrections manager
+    from odigos.memory.corrections import CorrectionsManager
+
+    corrections_manager = CorrectionsManager(db=_db, vector_memory=vector_memory)
+    logger.info("Corrections manager initialized")
+
     # Initialize tool registry and tools
     from odigos.providers.scraper import ScraperProvider
     from odigos.tools.registry import ToolRegistry
@@ -228,6 +234,7 @@ async def lifespan(app: FastAPI):
         max_tool_turns=settings.agent.max_tool_turns,
         run_timeout=settings.agent.run_timeout_seconds,
         summarizer=summarizer,
+        corrections_manager=corrections_manager,
     )
 
     # Initialize Telegram channel (before heartbeat so we can pass it)
