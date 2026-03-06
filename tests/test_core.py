@@ -11,6 +11,7 @@ from odigos.core.executor import Executor
 from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
+from odigos.skills.registry import SkillRegistry, Skill
 from odigos.tools.base import ToolResult
 from odigos.tools.registry import ToolRegistry
 
@@ -859,3 +860,73 @@ class TestAgentBudgetEnforcement:
         response = await agent.handle_message(message)
         assert response == "Hello!"
         assert mock_provider.complete.call_count == 1
+
+
+class TestSkillCatalogInContext:
+    async def test_skill_catalog_in_system_prompt(self, db: Database):
+        """Skill catalog appears in system prompt when skills are loaded."""
+        skill_registry = SkillRegistry()
+        skill_registry._skills = {
+            "research": Skill(
+                name="research",
+                description="In-depth web research",
+                tools=["web_search"],
+                complexity="standard",
+                system_prompt="Do research.",
+            ),
+            "chat": Skill(
+                name="chat",
+                description="General conversation",
+                tools=[],
+                complexity="light",
+                system_prompt="Chat naturally.",
+            ),
+        }
+
+        assembler = ContextAssembler(
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
+            personality_path="/nonexistent",
+            skill_registry=skill_registry,
+        )
+
+        messages = await assembler.build("conv-1", "Hello")
+
+        system_content = messages[0]["content"]
+        assert "Available skills" in system_content
+        assert "research" in system_content
+        assert "In-depth web research" in system_content
+        assert "chat" in system_content
+        assert "General conversation" in system_content
+        # Full body should NOT be in catalog
+        assert "Do research." not in system_content
+
+    async def test_no_skill_registry_still_works(self, db: Database):
+        """Without skill_registry, context assembler works as before."""
+        assembler = ContextAssembler(
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
+            personality_path="/nonexistent",
+        )
+
+        messages = await assembler.build("conv-1", "Hello")
+        system_content = messages[0]["content"]
+        assert "Available skills" not in system_content
+
+    async def test_empty_skill_registry_no_catalog(self, db: Database):
+        """Empty skill registry doesn't add catalog section."""
+        skill_registry = SkillRegistry()
+
+        assembler = ContextAssembler(
+            db=db,
+            agent_name="TestBot",
+            history_limit=20,
+            personality_path="/nonexistent",
+            skill_registry=skill_registry,
+        )
+
+        messages = await assembler.build("conv-1", "Hello")
+        system_content = messages[0]["content"]
+        assert "Available skills" not in system_content

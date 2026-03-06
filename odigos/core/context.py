@@ -10,6 +10,7 @@ from odigos.personality.prompt_builder import build_system_prompt
 if TYPE_CHECKING:
     from odigos.memory.manager import MemoryManager
     from odigos.memory.summarizer import ConversationSummarizer
+    from odigos.skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class ContextAssembler:
         memory_manager: MemoryManager | None = None,
         personality_path: str = "data/personality.yaml",
         summarizer: ConversationSummarizer | None = None,
+        skill_registry: SkillRegistry | None = None,
     ) -> None:
         self.db = db
         self.agent_name = agent_name
@@ -37,6 +39,7 @@ class ContextAssembler:
         self.memory_manager = memory_manager
         self.personality_path = personality_path
         self.summarizer = summarizer
+        self.skill_registry = skill_registry
 
     async def build(
         self,
@@ -56,11 +59,25 @@ class ContextAssembler:
         if self.memory_manager:
             memory_context = await self.memory_manager.recall(current_message)
 
+        # Build skill catalog if available
+        skill_catalog = ""
+        if self.skill_registry:
+            skills = self.skill_registry.list()
+            if skills:
+                lines = [
+                    "## Available skills",
+                    "Use activate_skill to load a skill's full instructions before starting the task.",
+                ]
+                for s in skills:
+                    lines.append(f"- **{s.name}**: {s.description}")
+                skill_catalog = "\n".join(lines)
+
         # Build system prompt via structured prompt builder
         system_prompt = build_system_prompt(
             personality=personality,
             memory_context=memory_context,
             tool_context=tool_context,
+            skill_catalog=skill_catalog,
         )
 
         messages.append({"role": "system", "content": system_prompt})
