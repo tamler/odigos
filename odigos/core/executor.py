@@ -101,10 +101,21 @@ class Executor:
                 status = await self.budget_tracker.check_budget(extra_cost=run_estimated_cost)
                 if not status.within_budget:
                     logger.warning("Budget exceeded mid-run at turn %d", turn)
+                    budget_msg = "\n\n---\nI've hit my spending limit mid-task. Stopping here."
                     if last_response is None:
                         last_response = LLMResponse(
-                            content="I've hit my spending limit mid-task. Here's what I have so far.",
+                            content="I've hit my spending limit mid-task.",
                             model="system", tokens_in=0, tokens_out=0, cost_usd=0.0,
+                        )
+                    else:
+                        last_response = LLMResponse(
+                            content=(last_response.content or "") + budget_msg,
+                            model=last_response.model,
+                            tokens_in=last_response.tokens_in,
+                            tokens_out=last_response.tokens_out,
+                            cost_usd=last_response.cost_usd,
+                            generation_id=last_response.generation_id,
+                            tool_calls=None,
                         )
                     break
                 if status.warning:
@@ -155,7 +166,7 @@ class Executor:
             logger.warning("Hit max tool turns (%d) for conversation %s", self._max_tool_turns, conversation_id)
 
         # Append budget warning to response if triggered
-        if budget_warning and last_response and last_response.content:
+        if budget_warning and last_response and last_response.content and not last_response.tool_calls:
             pct = max(
                 budget_warning.daily_spend / budget_warning.daily_limit * 100 if budget_warning.daily_limit > 0 else 0,
                 budget_warning.monthly_spend / budget_warning.monthly_limit * 100 if budget_warning.monthly_limit > 0 else 0,
