@@ -10,7 +10,7 @@ from odigos.channels.base import UniversalMessage
 from odigos.core.agent import Agent
 from odigos.core.context import ContextAssembler
 from odigos.core.budget import BudgetStatus
-from odigos.core.executor import Executor, ExecuteResult
+from odigos.core.executor import Executor, ExecuteResult, _estimate_cost
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
 from odigos.skills.registry import SkillRegistry, Skill
@@ -630,3 +630,24 @@ class TestBudgetEnforcement:
 
         assert result.response.content == "Hello!"
         assert mock_provider.complete.call_count == 1
+
+
+class TestEstimateCost:
+    def test_zero_tokens(self):
+        assert _estimate_cost(0, 0) == 0.0
+
+    def test_input_only(self):
+        # 1M input tokens at $3/M = $3.00
+        cost = _estimate_cost(1_000_000, 0)
+        assert abs(cost - 3.0) < 1e-9
+
+    def test_output_only(self):
+        # 1M output tokens at $15/M = $15.00
+        cost = _estimate_cost(0, 1_000_000)
+        assert abs(cost - 15.0) < 1e-9
+
+    def test_typical_call(self):
+        # 1000 input + 500 output
+        # (1000 * 3 + 500 * 15) / 1M = (3000 + 7500) / 1M = 0.0105
+        cost = _estimate_cost(1000, 500)
+        assert abs(cost - 0.0105) < 1e-9
