@@ -1,11 +1,14 @@
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.memory.corrections import CorrectionsManager
 from odigos.memory.vectors import MemoryResult
+from odigos.providers.base import LLMResponse
 
 
 @pytest.fixture
@@ -147,3 +150,99 @@ class TestCorrectionsManager:
         result = await manager.relevant("some query")
 
         assert result == ""
+
+
+class TestReflectorCorrectionParsing:
+    def _make_response(self, content: str) -> LLMResponse:
+        return LLMResponse(
+            content=content,
+            model="test/model",
+            tokens_in=10,
+            tokens_out=20,
+            cost_usd=0.0,
+        )
+
+    async def test_correction_block_parsed_and_stored(self, db):
+        """Reflector parses correction block and calls corrections_manager.store()."""
+        await _seed_conversation(db, "conv-1")
+
+        correction_data = {
+            "original": "I said meetings are at 9am",
+            "correction": "Meetings are at 10am",
+            "category": "accuracy",
+            "context": "weekly team meetings",
+        }
+        content = f"Sure, I'll update that.\n<!--correction\n{json.dumps(correction_data)}\n-->"
+
+        mock_corrections = MagicMock()
+        mock_corrections.store = AsyncMock(return_value="corr-123")
+        reflector = Reflector(db, corrections_manager=mock_corrections)
+
+        await reflector.reflect("conv-1", self._make_response(content))
+
+        mock_corrections.store.assert_called_once_with(
+            conversation_id="conv-1",
+            original_response="I said meetings are at 9am",
+            correction="Meetings are at 10am",
+            context="weekly team meetings",
+            category="accuracy",
+        )
+
+    async def test_correction_block_stripped_from_stored_content(self, db):
+        """The correction block is removed from the message stored in the DB."""
+        await _seed_conversation(db, "conv-1")
+
+        correction_data = {
+            "original": "wrong thing",
+            "correction": "right thing",
+            "category": "accuracy",
+            "context": "some context",
+        }
+        content = f"Here is my response.\n<!--correction\n{json.dumps(correction_data)}\n-->"
+
+        mock_corrections = MagicMock()
+        mock_corrections.store = AsyncMock(return_value="corr-123")
+        reflector = Reflector(db, corrections_manager=mock_corrections)
+
+        await reflector.reflect("conv-1", self._make_response(content))
+
+        row = await db.fetch_one(
+            "SELECT content FROM messages WHERE conversation_id = ? AND role = 'assistant'",
+            ("conv-1",),
+        )
+        assert row is not None
+        assert "<!--correction" not in row["content"]
+        assert "Here is my response." in row["content"]
+
+    async def test_no_correction_block_no_store_call(self, db):
+        """Normal response without correction block does not call store()."""
+        await _seed_conversation(db, "conv-1")
+
+        mock_corrections = MagicMock()
+        mock_corrections.store = AsyncMock()
+        reflector = Reflector(db, corrections_manager=mock_corrections)
+
+        await reflector.reflect("conv-1", self._make_response("Just a normal response."))
+
+        mock_corrections.store.assert_not_called()
+
+    async def test_malformed_correction_json_handled_gracefully(self, db):
+        """Bad JSON in correction block does not crash; message is still stored."""
+        await _seed_conversation(db, "conv-1")
+
+        content = "Here is my response.\n<!--correction\n{bad json!!!\n-->"
+
+        mock_corrections = MagicMock()
+        mock_corrections.store = AsyncMock()
+        reflector = Reflector(db, corrections_manager=mock_corrections)
+
+        await reflector.reflect("conv-1", self._make_response(content))
+
+        mock_corrections.store.assert_not_called()
+
+        row = await db.fetch_one(
+            "SELECT content FROM messages WHERE conversation_id = ? AND role = 'assistant'",
+            ("conv-1",),
+        )
+        assert row is not None
+        assert "Here is my response." in row["content"]

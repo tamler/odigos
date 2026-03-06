@@ -12,11 +12,13 @@ from odigos.db import Database
 from odigos.providers.base import LLMResponse
 
 if TYPE_CHECKING:
+    from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 
 ENTITY_PATTERN = re.compile(r"<!--entities\s*\n(.*?)\n-->", re.DOTALL)
+CORRECTION_PATTERN = re.compile(r"<!--correction\s*\n(.*?)\n-->", re.DOTALL)
 
 
 class Reflector:
@@ -31,10 +33,12 @@ class Reflector:
         db: Database,
         memory_manager: MemoryManager | None = None,
         cost_fetcher: Callable | None = None,
+        corrections_manager: CorrectionsManager | None = None,
     ) -> None:
         self.db = db
         self.memory_manager = memory_manager
         self._cost_fetcher = cost_fetcher
+        self.corrections_manager = corrections_manager
 
     async def reflect(
         self,
@@ -53,6 +57,23 @@ class Reflector:
             except (json.JSONDecodeError, IndexError):
                 logger.warning("Failed to parse entity block from response")
             content = ENTITY_PATTERN.sub("", content).rstrip()
+
+        # Parse and strip correction block
+        correction_match = CORRECTION_PATTERN.search(content)
+        if correction_match:
+            try:
+                correction_data = json.loads(correction_match.group(1))
+                if self.corrections_manager:
+                    await self.corrections_manager.store(
+                        conversation_id=conversation_id,
+                        original_response=correction_data["original"],
+                        correction=correction_data["correction"],
+                        context=correction_data.get("context", ""),
+                        category=correction_data.get("category", "behavior"),
+                    )
+            except (json.JSONDecodeError, KeyError):
+                logger.warning("Failed to parse correction block from response")
+            content = CORRECTION_PATTERN.sub("", content).rstrip()
 
         # Store the clean assistant message
         msg_id = str(uuid.uuid4())
