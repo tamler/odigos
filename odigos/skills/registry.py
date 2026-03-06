@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -56,6 +57,12 @@ class SkillRegistry:
         if not skills_dir:
             raise ValueError("skills_dir is required to write skill files")
 
+        if not re.match(r"^[a-z0-9][a-z0-9_-]*$", name):
+            raise ValueError(
+                f"Invalid skill name: {name!r}. "
+                "Use lowercase alphanumeric, hyphens, and underscores only."
+            )
+
         meta = {
             "name": name,
             "description": description,
@@ -65,6 +72,8 @@ class SkillRegistry:
         content = f"---\n{yaml.dump(meta, default_flow_style=False)}---\n{system_prompt}\n"
 
         path = Path(skills_dir) / f"{name}.md"
+        if not path.resolve().is_relative_to(Path(skills_dir).resolve()):
+            raise ValueError("Skill path escapes skills directory")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
 

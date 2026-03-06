@@ -165,13 +165,17 @@ class Executor:
                 {"success": result.success, "error": result.error},
             )
 
-            # Detect skill activation
+            # Detect skill activation from structured payload
             if tool_call.name == "activate_skill" and result.success:
-                activate_tool = self.tool_registry.get("activate_skill")
-                if activate_tool and hasattr(activate_tool, "last_activated_name"):
-                    self._active_skill_name = activate_tool.last_activated_name
-                    self._active_skill_tools = set(activate_tool.last_activated_tools or [])
-                    self._pending_skill_prompt = activate_tool.last_activated_prompt
+                try:
+                    payload = json.loads(result.data)
+                    if payload.get("__skill_activation__"):
+                        self._active_skill_name = payload["skill_name"]
+                        self._active_skill_tools = set(payload.get("skill_tools", []))
+                        self._pending_skill_prompt = payload["skill_prompt"]
+                        return payload.get("message", result.data)
+                except (json.JSONDecodeError, KeyError):
+                    pass
 
             if result.success:
                 return result.data
@@ -188,10 +192,10 @@ class Executor:
     async def _log_action(
         self, conversation_id: str, action_type: str, action_name: str, details: dict,
     ) -> None:
-        # Add active skill info
-        if self._active_skill_name:
+        # Add active skill info (exclude activate_skill itself from tagging)
+        if self._active_skill_name and action_name != "activate_skill":
             details["active_skill"] = self._active_skill_name
-            if action_name != "activate_skill" and action_name not in self._active_skill_tools:
+            if action_name not in self._active_skill_tools:
                 details["skill_mismatch"] = True
                 details["expected_tools"] = sorted(self._active_skill_tools)
                 logger.info(

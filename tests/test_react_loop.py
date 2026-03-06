@@ -405,6 +405,12 @@ class TestSkillActivation:
         assert len(system_msgs) == 1
         assert "thorough research assistant" in system_msgs[0]["content"]
 
+        # Verify tool result is the human-readable message, not raw JSON
+        tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+        assert len(tool_msgs) == 1
+        assert "activated" in tool_msgs[0]["content"].lower()
+        assert "__skill_activation__" not in tool_msgs[0]["content"]
+
     @pytest.mark.asyncio
     async def test_tool_mismatch_logged(self, mock_provider, mock_assembler, skill_registry):
         """Using a tool not in the skill's tools list logs a mismatch."""
