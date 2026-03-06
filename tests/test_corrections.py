@@ -246,3 +246,41 @@ class TestReflectorCorrectionParsing:
         )
         assert row is not None
         assert "Here is my response." in row["content"]
+
+
+class TestCorrectionsEndToEnd:
+    async def test_correction_stored_and_retrieved_in_context(self, db):
+        """Full flow: store a correction, then verify it appears in relevant() output."""
+        mock_vector = MagicMock()
+        mock_vector.store = AsyncMock(return_value="vec-1")
+
+        manager = CorrectionsManager(db, mock_vector)
+
+        # Store a correction
+        correction_id = await manager.store(
+            conversation_id="conv-1",
+            original_response="I scheduled for 8am",
+            correction="Never schedule before 10am",
+            context="morning scheduling",
+            category="preference",
+        )
+
+        # Simulate vector search returning this correction
+        mock_vector.search = AsyncMock(
+            return_value=[
+                MemoryResult(
+                    content_preview="morning scheduling: Never schedule before 10am",
+                    source_type="correction",
+                    source_id=correction_id,
+                    distance=0.1,
+                ),
+            ]
+        )
+
+        # Retrieve relevant corrections
+        result = await manager.relevant("schedule meeting at 9am")
+
+        assert "## Learned corrections" in result
+        assert "Never schedule before 10am" in result
+        assert "preference" in result
+        assert "morning scheduling" in result
