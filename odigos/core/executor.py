@@ -12,12 +12,21 @@ from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 if TYPE_CHECKING:
+    from odigos.core.budget import BudgetStatus, BudgetTracker
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_TURNS = 25
+
+_INPUT_RATE_PER_M = 3.0
+_OUTPUT_RATE_PER_M = 15.0
+
+
+def _estimate_cost(tokens_in: int, tokens_out: int) -> float:
+    """Conservative token-based cost estimate for budget safety checks."""
+    return (tokens_in * _INPUT_RATE_PER_M + tokens_out * _OUTPUT_RATE_PER_M) / 1_000_000
 
 
 @dataclass
@@ -42,6 +51,7 @@ class Executor:
         skill_registry: SkillRegistry | None = None,
         db: Database | None = None,
         max_tool_turns: int = MAX_TOOL_TURNS,
+        budget_tracker: BudgetTracker | None = None,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
@@ -49,6 +59,7 @@ class Executor:
         self.skill_registry = skill_registry
         self.db = db
         self._max_tool_turns = max_tool_turns
+        self.budget_tracker = budget_tracker
 
     async def execute(
         self,
@@ -76,6 +87,8 @@ class Executor:
         total_tokens_out = 0
         total_cost = 0.0
         last_response: LLMResponse | None = None
+        run_estimated_cost = 0.0
+        budget_warning: BudgetStatus | None = None
 
         for turn in range(self._max_tool_turns):
             # Check abort flag
@@ -83,12 +96,27 @@ class Executor:
                 logger.info("Run aborted at turn %d", turn)
                 break
 
+            # Budget check with running estimate
+            if self.budget_tracker:
+                status = await self.budget_tracker.check_budget(extra_cost=run_estimated_cost)
+                if not status.within_budget:
+                    logger.warning("Budget exceeded mid-run at turn %d", turn)
+                    if last_response is None:
+                        last_response = LLMResponse(
+                            content="I've hit my spending limit mid-task. Here's what I have so far.",
+                            model="system", tokens_in=0, tokens_out=0, cost_usd=0.0,
+                        )
+                    break
+                if status.warning:
+                    budget_warning = status
+
             # Call LLM
             response = await self.provider.complete(messages, tools=tools)
             total_tokens_in += response.tokens_in
             total_tokens_out += response.tokens_out
             total_cost += response.cost_usd
             last_response = response
+            run_estimated_cost += _estimate_cost(response.tokens_in, response.tokens_out)
 
             # If no tool calls, we're done
             if not response.tool_calls:
@@ -125,6 +153,26 @@ class Executor:
                 self._pending_skill_prompt = None
         else:
             logger.warning("Hit max tool turns (%d) for conversation %s", self._max_tool_turns, conversation_id)
+
+        # Append budget warning to response if triggered
+        if budget_warning and last_response and last_response.content:
+            pct = max(
+                budget_warning.daily_spend / budget_warning.daily_limit * 100 if budget_warning.daily_limit > 0 else 0,
+                budget_warning.monthly_spend / budget_warning.monthly_limit * 100 if budget_warning.monthly_limit > 0 else 0,
+            )
+            last_response = LLMResponse(
+                content=(
+                    f"{last_response.content}\n\n---\n"
+                    f"Note: I've used {pct:.0f}% of my budget for this period "
+                    f"(${budget_warning.daily_spend:.2f}/${budget_warning.daily_limit:.2f} daily)."
+                ),
+                model=last_response.model,
+                tokens_in=last_response.tokens_in,
+                tokens_out=last_response.tokens_out,
+                cost_usd=last_response.cost_usd,
+                generation_id=last_response.generation_id,
+                tool_calls=last_response.tool_calls,
+            )
 
         # Build aggregated response
         if last_response is None:

@@ -9,6 +9,7 @@ import pytest_asyncio
 from odigos.channels.base import UniversalMessage
 from odigos.core.agent import Agent
 from odigos.core.context import ContextAssembler
+from odigos.core.budget import BudgetStatus
 from odigos.core.executor import Executor, ExecuteResult
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
@@ -507,3 +508,125 @@ class TestSkillActivation:
         search_logs = [c for c in log_calls if "web_search" in str(c)]
         assert len(search_logs) >= 1
         assert "research" in str(search_logs[0])  # skill name in details
+
+
+class TestBudgetEnforcement:
+    async def test_executor_breaks_on_budget_exceeded(self, mock_provider, mock_assembler):
+        """Budget exceeded mid-run stops the loop and returns a spending limit message."""
+        mock_tool = AsyncMock(spec=BaseTool)
+        mock_tool.name = "web_search"
+        mock_tool.description = "Search"
+        mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.execute.return_value = ToolResult(success=True, data="result")
+
+        registry = ToolRegistry()
+        registry.register(mock_tool)
+
+        # First check: within budget with warning. LLM responds with tool call.
+        # Second check: budget exceeded. Loop breaks before second LLM call.
+        budget_tracker = AsyncMock()
+        budget_tracker.check_budget = AsyncMock(side_effect=[
+            BudgetStatus(within_budget=True, warning=True,
+                         daily_spend=0.85, monthly_spend=17.0,
+                         daily_limit=1.00, monthly_limit=20.00),
+            BudgetStatus(within_budget=False, warning=False,
+                         daily_spend=1.10, monthly_spend=21.0,
+                         daily_limit=1.00, monthly_limit=20.00),
+        ])
+
+        mock_provider.complete.side_effect = [
+            LLMResponse(content="Searching for results", model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
+                tool_calls=[ToolCall(id="call_1", name="web_search", arguments={"query": "test"})]),
+            LLMResponse(content="Final answer", model="test",
+                tokens_in=20, tokens_out=10, cost_usd=0.002),
+        ]
+
+        executor = Executor(
+            provider=mock_provider, context_assembler=mock_assembler,
+            tool_registry=registry, budget_tracker=budget_tracker,
+        )
+        result = await executor.execute("conv-1", "search")
+
+        # LLM called only once (second budget check fails, preventing second LLM call)
+        assert mock_provider.complete.call_count == 1
+        content_lower = result.response.content.lower()
+        assert "budget" in content_lower or "spending" in content_lower
+
+    async def test_executor_accumulates_cost_estimate(self, mock_provider, mock_assembler):
+        """Running cost estimate grows with each LLM call."""
+        mock_tool = AsyncMock(spec=BaseTool)
+        mock_tool.name = "web_search"
+        mock_tool.description = "Search"
+        mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.execute.return_value = ToolResult(success=True, data="result")
+
+        registry = ToolRegistry()
+        registry.register(mock_tool)
+
+        budget_tracker = AsyncMock()
+        budget_tracker.check_budget = AsyncMock(return_value=BudgetStatus(
+            within_budget=True, warning=False,
+            daily_spend=0.10, monthly_spend=1.0,
+            daily_limit=1.00, monthly_limit=20.00,
+        ))
+
+        mock_provider.complete.side_effect = [
+            LLMResponse(content="", model="test", tokens_in=1000, tokens_out=500, cost_usd=0.01,
+                tool_calls=[ToolCall(id="call_1", name="web_search", arguments={"query": "test"})]),
+            LLMResponse(content="Done!", model="test",
+                tokens_in=2000, tokens_out=1000, cost_usd=0.02),
+        ]
+
+        executor = Executor(
+            provider=mock_provider, context_assembler=mock_assembler,
+            tool_registry=registry, budget_tracker=budget_tracker,
+        )
+        await executor.execute("conv-1", "search")
+
+        # check_budget called twice (once per turn)
+        assert budget_tracker.check_budget.call_count == 2
+
+        # First call: extra_cost=0.0
+        first_call_kwargs = budget_tracker.check_budget.call_args_list[0]
+        assert first_call_kwargs == ((), {"extra_cost": 0.0})
+
+        # Second call: extra_cost > 0 (accumulated from first LLM response)
+        second_call_kwargs = budget_tracker.check_budget.call_args_list[1]
+        assert second_call_kwargs[1]["extra_cost"] > 0
+
+    async def test_budget_warning_appended_to_response(self, mock_provider, mock_assembler):
+        """When warning threshold is hit, response includes budget note."""
+        budget_tracker = AsyncMock()
+        budget_tracker.check_budget = AsyncMock(return_value=BudgetStatus(
+            within_budget=True, warning=True,
+            daily_spend=0.85, monthly_spend=17.0,
+            daily_limit=1.00, monthly_limit=20.00,
+        ))
+
+        mock_provider.complete.return_value = LLMResponse(
+            content="Here is your answer.", model="test",
+            tokens_in=10, tokens_out=5, cost_usd=0.001,
+        )
+
+        executor = Executor(
+            provider=mock_provider, context_assembler=mock_assembler,
+            budget_tracker=budget_tracker,
+        )
+        result = await executor.execute("conv-1", "hello")
+
+        assert "budget" in result.response.content.lower()
+        assert "85%" in result.response.content
+
+    async def test_no_budget_tracker_skips_check(self, mock_provider, mock_assembler):
+        """Without a budget_tracker, executor runs normally."""
+        mock_provider.complete.return_value = LLMResponse(
+            content="Hello!", model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
+        )
+
+        executor = Executor(
+            provider=mock_provider, context_assembler=mock_assembler,
+        )
+        result = await executor.execute("conv-1", "Hello")
+
+        assert result.response.content == "Hello!"
+        assert mock_provider.complete.call_count == 1
