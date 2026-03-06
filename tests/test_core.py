@@ -737,6 +737,79 @@ class TestExecutorCodeAction:
         assert result.response.content == "The answer is 42."
 
 
+class TestContextCompaction:
+    async def test_summaries_injected_into_context(self, db: Database):
+        """Existing conversation summaries appear between system prompt and history."""
+        mock_summarizer = AsyncMock()
+        mock_summarizer.summarize_if_needed = AsyncMock()
+
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20,
+            personality_path="/nonexistent", summarizer=mock_summarizer,
+        )
+
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            ("conv-compact", "test"),
+        )
+        await db.execute(
+            "INSERT INTO conversation_summaries (id, conversation_id, start_message_idx, end_message_idx, summary) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("sum-1", "conv-compact", 0, 10, "User discussed Python projects."),
+        )
+        await db.execute(
+            "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
+            ("msg-1", "conv-compact", "user", "Recent message"),
+        )
+
+        messages = await assembler.build("conv-compact", "Hello")
+
+        assert len(messages) == 4
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "system"
+        assert "Python projects" in messages[1]["content"]
+        assert messages[2]["content"] == "Recent message"
+        assert messages[3]["content"] == "Hello"
+        mock_summarizer.summarize_if_needed.assert_called_once_with("conv-compact")
+
+    async def test_no_summarizer_still_works(self, db: Database):
+        """Without summarizer, context assembler works as before."""
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20,
+            personality_path="/nonexistent",
+        )
+        messages = await assembler.build("conv-1", "Hello")
+        assert messages[0]["role"] == "system"
+        assert messages[-1]["content"] == "Hello"
+
+    async def test_summary_trimmed_before_history(self, db: Database):
+        """When over token budget, summaries are trimmed before history."""
+        assembler = ContextAssembler(
+            db=db, agent_name="TestBot", history_limit=20,
+            personality_path="/nonexistent",
+        )
+
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            ("conv-trim", "test"),
+        )
+        await db.execute(
+            "INSERT INTO conversation_summaries (id, conversation_id, start_message_idx, end_message_idx, summary) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("sum-1", "conv-trim", 0, 10, "x" * 8000),
+        )
+        await db.execute(
+            "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
+            ("msg-1", "conv-trim", "user", "Keep me"),
+        )
+
+        messages = await assembler.build("conv-trim", "Hello", max_tokens=500)
+
+        contents = [m["content"] for m in messages]
+        assert any("Keep me" in c for c in contents)
+        assert not any("x" * 100 in c for c in contents)
+
+
 class TestAgentBudgetEnforcement:
     async def test_over_budget_returns_low_cost_response(self, db: Database):
         """When budget is exceeded, agent returns canned response without LLM call."""

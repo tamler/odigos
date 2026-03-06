@@ -9,6 +9,7 @@ from odigos.personality.prompt_builder import build_system_prompt
 
 if TYPE_CHECKING:
     from odigos.memory.manager import MemoryManager
+    from odigos.memory.summarizer import ConversationSummarizer
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +29,14 @@ class ContextAssembler:
         history_limit: int = 20,
         memory_manager: MemoryManager | None = None,
         personality_path: str = "data/personality.yaml",
+        summarizer: ConversationSummarizer | None = None,
     ) -> None:
         self.db = db
         self.agent_name = agent_name
         self.history_limit = history_limit
         self.memory_manager = memory_manager
         self.personality_path = personality_path
+        self.summarizer = summarizer
 
     async def build(
         self,
@@ -62,6 +65,26 @@ class ContextAssembler:
 
         messages.append({"role": "system", "content": system_prompt})
 
+        # Trigger summarization if needed
+        if self.summarizer:
+            try:
+                await self.summarizer.summarize_if_needed(conversation_id)
+            except Exception:
+                logger.debug("Summarization failed for %s", conversation_id, exc_info=True)
+
+        # Inject conversation summaries
+        summaries = await self.db.fetch_all(
+            "SELECT summary FROM conversation_summaries "
+            "WHERE conversation_id = ? ORDER BY start_message_idx ASC",
+            (conversation_id,),
+        )
+        if summaries:
+            combined = "\n\n".join(row["summary"] for row in summaries)
+            messages.append({
+                "role": "system",
+                "content": f"[Previous conversation summary]:\n\n{combined}",
+            })
+
         # Conversation history
         history = await self.db.fetch_all(
             "SELECT role, content FROM messages "
@@ -82,13 +105,23 @@ class ContextAssembler:
         return messages
 
     def _trim_to_budget(self, messages: list[dict], max_tokens: int) -> list[dict]:
-        """Trim history messages (oldest first) to fit within token budget."""
+        """Trim summary messages first, then history (oldest first) to fit within token budget."""
         total = sum(estimate_tokens(m["content"]) for m in messages)
 
         if total <= max_tokens:
             return messages
 
-        # messages[0] = system, messages[-1] = current, middle = history
+        # Phase 1: Remove summary messages first
+        i = 1
+        while total > max_tokens and i < len(messages) - 1:
+            if messages[i]["content"].startswith("[Previous conversation summary]"):
+                removed = messages.pop(i)
+                total -= estimate_tokens(removed["content"])
+                logger.debug("Trimmed summary message to fit context budget")
+            else:
+                i += 1
+
+        # Phase 2: Remove oldest history messages (existing behavior)
         while total > max_tokens and len(messages) > 2:
             removed = messages.pop(1)
             total -= estimate_tokens(removed["content"])
