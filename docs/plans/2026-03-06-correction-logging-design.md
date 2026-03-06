@@ -8,7 +8,7 @@ Detect when users correct the agent, store corrections with semantic embeddings,
 
 - No correction detection or storage exists
 - DB schema defined in ARCHITECTURE.md but not migrated
-- Reflector parses `[ENTITY]` blocks from LLM responses — same pattern extends to corrections
+- Reflector parses `<!--entities -->` blocks from LLM responses — same pattern extends to corrections
 - VectorMemory (sqlite-vec) operational for semantic similarity search
 - ContextAssembler + prompt_builder ready for new context sections
 
@@ -46,20 +46,20 @@ No `rule_extracted` column (deferred to self-skill-building phase). No `improvem
 
 Add to `build_system_prompt()`:
 
-1. **Detection instructions** — tell the LLM to output a `[CORRECTION]` block when the user's message corrects a previous response
+1. **Detection instructions** — tell the LLM to output a `<!--correction -->` block when the user's message corrects a previous response
 2. **Learned corrections section** — inject relevant past corrections retrieved via vector search
 
-Block format (LLM outputs when detecting correction):
+Block format (LLM outputs when detecting correction, matches `<!--entities -->` convention):
 
 ```
-[CORRECTION]
+<!--correction
 {"original": "summary of what was wrong", "correction": "what user wants instead", "category": "preference", "context": "brief situation description"}
-[/CORRECTION]
+-->
 ```
 
 ### 4. Reflector extension
 
-Add second regex parse (after `[ENTITY]` extraction) for `[CORRECTION]` blocks. On match, call `CorrectionsManager.store()`.
+Add second regex parse (after `<!--entities -->` extraction) for `<!--correction -->` blocks. On match, call `CorrectionsManager.store()`.
 
 ## Data Flow
 
@@ -69,9 +69,9 @@ User sends follow-up message
       -> CorrectionsManager.relevant(message)     [NEW]
       -> build_system_prompt(corrections=...)      [EXTENDED]
   -> Executor runs LLM
-      -> LLM detects correction, outputs [CORRECTION] block
+      -> LLM detects correction, outputs <!--correction --> block
   -> Reflector.reflect()
-      -> Parse [CORRECTION] block                  [NEW]
+      -> Parse <!--correction --> block                  [NEW]
       -> CorrectionsManager.store()                [NEW]
       -> VectorMemory.store() for future retrieval [NEW]
 ```
@@ -88,7 +88,7 @@ User sends follow-up message
 
 - CorrectionsManager.store() persists to DB and embeds via VectorMemory
 - CorrectionsManager.relevant() returns semantically similar corrections
-- Reflector parses [CORRECTION] blocks and calls store()
+- Reflector parses <!--correction --> blocks and calls store()
 - System prompt includes learned corrections section when corrections exist
 - System prompt includes detection instructions
 - End-to-end: correction detected -> stored -> injected in next context
