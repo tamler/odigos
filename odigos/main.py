@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI):
         db=_db,
         daily_limit=settings.budget.daily_limit_usd,
         monthly_limit=settings.budget.monthly_limit_usd,
+        warn_threshold=settings.budget.warn_threshold,
     )
     logger.info("Budget tracker initialized")
 

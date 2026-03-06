@@ -39,6 +39,7 @@ class ServerConfig(BaseModel):
 class BudgetConfig(BaseModel):
     daily_limit_usd: float = 1.00
     monthly_limit_usd: float = 20.00
+    warn_threshold: float = 0.80
 
 
 class RouterConfig(BaseModel):

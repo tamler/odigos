@@ -66,6 +66,7 @@ class Agent:
             skill_registry=skill_registry,
             db=db,
             max_tool_turns=max_tool_turns,
+            budget_tracker=budget_tracker,
         )
         self.reflector = Reflector(db, memory_manager=memory_manager, cost_fetcher=cost_fetcher)
 
