@@ -81,3 +81,26 @@ class TestBudgetTracker:
         await _insert_message(db, 0.10)  # 100% of monthly
         status = await tracker.check_budget()
         assert status.within_budget is False
+
+
+class TestBudgetExtraCost:
+    async def test_extra_cost_added_to_daily(self, db: Database):
+        tracker = BudgetTracker(db=db, daily_limit=0.10, monthly_limit=20.00)
+        await _insert_message(db, 0.05)  # DB has $0.05
+        status = await tracker.check_budget(extra_cost=0.06)  # total $0.11 > $0.10
+        assert status.within_budget is False
+        assert abs(status.daily_spend - 0.11) < 1e-9
+
+    async def test_extra_cost_zero_default(self, db: Database):
+        tracker = BudgetTracker(db=db, daily_limit=1.00, monthly_limit=20.00)
+        await _insert_message(db, 0.05)
+        status = await tracker.check_budget()  # default extra_cost=0.0
+        assert status.within_budget is True
+        assert abs(status.daily_spend - 0.05) < 1e-9
+
+    async def test_extra_cost_triggers_warning(self, db: Database):
+        tracker = BudgetTracker(db=db, daily_limit=1.00, monthly_limit=20.00)
+        # extra_cost alone pushes daily to $0.85 = 85% of $1.00 limit
+        status = await tracker.check_budget(extra_cost=0.85)
+        assert status.within_budget is True
+        assert status.warning is True

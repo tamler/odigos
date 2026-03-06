@@ -47,9 +47,9 @@ class BudgetTracker:
         )
         return row["total"] if row else 0.0
 
-    async def check_budget(self) -> BudgetStatus:
-        daily = await self.get_daily_spend()
-        monthly = await self.get_monthly_spend()
+    async def check_budget(self, extra_cost: float = 0.0) -> BudgetStatus:
+        daily = await self.get_daily_spend() + extra_cost
+        monthly = await self.get_monthly_spend() + extra_cost
 
         over_daily = self.daily_limit > 0 and daily >= self.daily_limit
         over_monthly = self.monthly_limit > 0 and monthly >= self.monthly_limit
