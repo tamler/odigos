@@ -2,6 +2,7 @@ from odigos.personality.loader import Personality
 from odigos.personality.prompt_builder import (
     CORRECTION_DETECTION_INSTRUCTION,
     ENTITY_EXTRACTION_INSTRUCTION,
+    SKILL_CREATION_INSTRUCTION,
     build_system_prompt,
 )
 
@@ -47,3 +48,20 @@ class TestCorrectionsInPrompt:
 
         assert corrections_pos < detection_pos
         assert detection_pos < entity_pos
+
+
+class TestSkillCreationInstruction:
+    def test_skill_creation_instruction_present(self):
+        personality = Personality()
+        prompt = build_system_prompt(personality)
+        assert "create_skill" in prompt
+
+    def test_skill_creation_after_catalog(self):
+        personality = Personality()
+        prompt = build_system_prompt(
+            personality,
+            skill_catalog="## Available skills\n- **research**: Deep research",
+        )
+        catalog_pos = prompt.find("Available skills")
+        creation_pos = prompt.find("create_skill")
+        assert catalog_pos < creation_pos

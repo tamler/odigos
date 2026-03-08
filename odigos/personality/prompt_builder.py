@@ -19,6 +19,8 @@ Only include this block when the user is explicitly correcting you. Categories:
 - tool_choice: wrong tool or approach used
 If the user is not correcting you, omit the block entirely."""
 
+SKILL_CREATION_INSTRUCTION = """You can create reusable skills for task types you encounter repeatedly using the create_skill tool. A skill is a set of instructions that guide your behavior for a specific kind of task. Create a skill when you notice you've handled the same type of request multiple times with similar steps. Use update_skill to refine a skill you created when you receive corrections or learn better approaches. When you create or update a skill, mention it briefly in your response so the user is aware."""
+
 
 def build_system_prompt(
     personality: Personality,
@@ -35,9 +37,10 @@ def build_system_prompt(
     3. Memory context -- relevant memories (if any)
     4. Tool context -- results from tool execution (if any)
     5. Skill catalog -- available skills (if any)
-    6. Learned corrections (optional)
-    7. Correction detection (always)
-    8. Entity extraction -- always appended
+    6. Skill creation guidance (always)
+    7. Learned corrections (optional)
+    8. Correction detection (always)
+    9. Entity extraction -- always appended
     """
     sections = []
 
@@ -59,14 +62,17 @@ def build_system_prompt(
     if skill_catalog:
         sections.append(skill_catalog)
 
-    # 6. Learned corrections (optional)
+    # 6. Skill creation guidance (always)
+    sections.append(SKILL_CREATION_INSTRUCTION)
+
+    # 7. Learned corrections (optional)
     if corrections_context:
         sections.append(corrections_context)
 
-    # 7. Correction detection (always)
+    # 8. Correction detection (always)
     sections.append(CORRECTION_DETECTION_INSTRUCTION)
 
-    # 8. Entity extraction (always)
+    # 9. Entity extraction (always)
     sections.append(ENTITY_EXTRACTION_INSTRUCTION)
 
     return "\n\n".join(sections)
