@@ -172,13 +172,20 @@ async def lifespan(app: FastAPI):
     skill_registry.load_all(settings.skills.path)
     logger.info("Loaded %d skills", len(skill_registry.list()))
 
-    # Register skill activation tool
-    if skill_registry.list():
-        from odigos.tools.skill_tool import ActivateSkillTool
+    # Register skill tools (activation, creation, update)
+    from odigos.tools.skill_tool import ActivateSkillTool
+    from odigos.tools.skill_manage import CreateSkillTool, UpdateSkillTool
 
-        activate_skill_tool = ActivateSkillTool(skill_registry=skill_registry)
-        tool_registry.register(activate_skill_tool)
-        logger.info("Skill activation tool registered")
+    activate_skill_tool = ActivateSkillTool(skill_registry=skill_registry)
+    tool_registry.register(activate_skill_tool)
+
+    create_skill_tool = CreateSkillTool(skill_registry=skill_registry)
+    tool_registry.register(create_skill_tool)
+
+    update_skill_tool = UpdateSkillTool(skill_registry=skill_registry)
+    tool_registry.register(update_skill_tool)
+
+    logger.info("Skill tools registered (activate, create, update)")
 
     # Connect MCP servers and register bridged tools
     if settings.mcp.servers:

@@ -121,6 +121,8 @@ class SkillRegistry:
 
         # Rewrite file on disk
         target_dir = getattr(self, "skills_dir", None)
+        if not target_dir:
+            raise ValueError("skills_dir is required to persist skill updates")
         if target_dir:
             meta = {
                 "name": skill.name,
