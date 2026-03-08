@@ -121,3 +121,95 @@ class TestSkillRegistry:
                 description="test",
                 system_prompt="test",
             )
+
+
+class TestSkillBuiltinFlag:
+    def test_loaded_skills_are_builtin(self, skills_dir):
+        registry = SkillRegistry()
+        registry.load_all(str(skills_dir))
+        for skill in registry.list():
+            assert skill.builtin is True
+
+    def test_created_skills_are_not_builtin(self, tmp_path):
+        registry = SkillRegistry()
+        skill = registry.create(
+            name="my-skill",
+            description="Test",
+            system_prompt="Be helpful.",
+            skills_dir=str(tmp_path),
+        )
+        assert skill.builtin is False
+
+    def test_load_all_stores_skills_dir(self, skills_dir):
+        registry = SkillRegistry()
+        registry.load_all(str(skills_dir))
+        assert registry.skills_dir == str(skills_dir)
+
+
+class TestSkillRegistryUpdate:
+    def test_update_description(self, tmp_path):
+        registry = SkillRegistry()
+        registry.create(
+            name="my-skill",
+            description="Original",
+            system_prompt="Be helpful.",
+            skills_dir=str(tmp_path),
+        )
+        updated = registry.update(name="my-skill", description="Updated description")
+        assert updated.description == "Updated description"
+        assert registry.get("my-skill").description == "Updated description"
+
+    def test_update_instructions(self, tmp_path):
+        registry = SkillRegistry()
+        registry.create(
+            name="my-skill",
+            description="Test",
+            system_prompt="Be helpful.",
+            skills_dir=str(tmp_path),
+        )
+        updated = registry.update(name="my-skill", instructions="New instructions here.")
+        assert updated.system_prompt == "New instructions here."
+
+    def test_update_persists_to_disk(self, tmp_path):
+        registry = SkillRegistry()
+        registry.create(
+            name="my-skill",
+            description="Test",
+            system_prompt="Be helpful.",
+            skills_dir=str(tmp_path),
+        )
+        registry.update(name="my-skill", instructions="Updated on disk.")
+
+        # Reload from disk
+        registry2 = SkillRegistry()
+        registry2.load_all(str(tmp_path))
+        skill = registry2.get("my-skill")
+        assert skill.system_prompt == "Updated on disk."
+
+    def test_update_rejects_builtin(self, skills_dir):
+        registry = SkillRegistry()
+        registry.load_all(str(skills_dir))
+        with pytest.raises(ValueError, match="built-in"):
+            registry.update(name="research-deep-dive", description="Hacked")
+
+    def test_update_rejects_nonexistent(self, tmp_path):
+        registry = SkillRegistry()
+        registry.skills_dir = str(tmp_path)
+        with pytest.raises(ValueError, match="not found"):
+            registry.update(name="nonexistent", description="Nope")
+
+    def test_update_partial_preserves_other_fields(self, tmp_path):
+        registry = SkillRegistry()
+        registry.create(
+            name="my-skill",
+            description="Original desc",
+            system_prompt="Original prompt.",
+            tools=["web_search"],
+            complexity="standard",
+            skills_dir=str(tmp_path),
+        )
+        updated = registry.update(name="my-skill", description="New desc")
+        assert updated.description == "New desc"
+        assert updated.system_prompt == "Original prompt."
+        assert updated.tools == ["web_search"]
+        assert updated.complexity == "standard"
