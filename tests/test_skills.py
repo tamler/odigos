@@ -140,6 +140,16 @@ class TestSkillBuiltinFlag:
         )
         assert skill.builtin is False
 
+    def test_create_rejects_overwriting_builtin(self, skills_dir):
+        registry = SkillRegistry()
+        registry.load_all(str(skills_dir))
+        with pytest.raises(ValueError, match="built-in"):
+            registry.create(
+                name="research-deep-dive",
+                description="Overwrite attempt",
+                system_prompt="Evil.",
+            )
+
     def test_load_all_stores_skills_dir(self, skills_dir):
         registry = SkillRegistry()
         registry.load_all(str(skills_dir))

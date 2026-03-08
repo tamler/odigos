@@ -69,6 +69,10 @@ class SkillRegistry:
                 "Use lowercase alphanumeric, hyphens, and underscores only."
             )
 
+        existing = self._skills.get(name)
+        if existing and existing.builtin:
+            raise ValueError(f"Cannot overwrite built-in skill '{name}'")
+
         meta = {
             "name": name,
             "description": description,
@@ -123,16 +127,18 @@ class SkillRegistry:
         target_dir = getattr(self, "skills_dir", None)
         if not target_dir:
             raise ValueError("skills_dir is required to persist skill updates")
-        if target_dir:
-            meta = {
-                "name": skill.name,
-                "description": skill.description,
-                "tools": skill.tools,
-                "complexity": skill.complexity,
-            }
-            content = f"---\n{yaml.dump(meta, default_flow_style=False)}---\n{skill.system_prompt}\n"
-            path = Path(target_dir) / f"{name}.md"
-            path.write_text(content)
+
+        meta = {
+            "name": skill.name,
+            "description": skill.description,
+            "tools": skill.tools,
+            "complexity": skill.complexity,
+        }
+        content = f"---\n{yaml.dump(meta, default_flow_style=False)}---\n{skill.system_prompt}\n"
+        path = Path(target_dir) / f"{name}.md"
+        if not path.resolve().is_relative_to(Path(target_dir).resolve()):
+            raise ValueError("Skill path escapes skills directory")
+        path.write_text(content)
 
         logger.info("Updated skill: %s", name)
         return skill
