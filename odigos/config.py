@@ -81,6 +81,11 @@ class MCPConfig(BaseModel):
     servers: dict[str, MCPServerConfig] = {}
 
 
+class GWSConfig(BaseModel):
+    enabled: bool = False
+    timeout: int = 30
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str
     openrouter_api_key: str
@@ -101,6 +106,7 @@ class Settings(BaseSettings):
     heartbeat: HeartbeatConfig = HeartbeatConfig()
     sandbox: SandboxConfig = SandboxConfig()
     mcp: MCPConfig = MCPConfig()
+    gws: GWSConfig = GWSConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
