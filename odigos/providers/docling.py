@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class ConvertedDocument:
     source: str
     content: str
+    dl_doc: object = None
 
 
 class DoclingProvider:
@@ -28,9 +29,10 @@ class DoclingProvider:
     def convert(self, source: str) -> ConvertedDocument:
         """Convert a file path or URL to markdown."""
         result = self._converter.convert(source)
-        content = result.document.export_to_markdown()
+        dl_doc = result.document
+        content = dl_doc.export_to_markdown()
 
         if len(content) > self.max_content_chars:
             content = content[: self.max_content_chars] + "\n\n[truncated]"
 
-        return ConvertedDocument(source=source, content=content)
+        return ConvertedDocument(source=source, content=content, dl_doc=dl_doc)
