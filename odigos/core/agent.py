@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from odigos.core.budget import BudgetTracker
+    from odigos.core.trace import Tracer
     from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
     from odigos.memory.summarizer import ConversationSummarizer
@@ -44,9 +45,11 @@ class Agent:
         run_timeout: int = 300,
         summarizer: ConversationSummarizer | None = None,
         corrections_manager: CorrectionsManager | None = None,
+        tracer: Tracer | None = None,
     ) -> None:
         self.db = db
         self.budget_tracker = budget_tracker
+        self.tracer = tracer
         self._max_tool_turns = max_tool_turns
         self._run_timeout = run_timeout
         self._session_locks: dict[str, asyncio.Lock] = {}
@@ -70,12 +73,14 @@ class Agent:
             db=db,
             max_tool_turns=max_tool_turns,
             budget_tracker=budget_tracker,
+            tracer=tracer,
         )
         self.reflector = Reflector(
             db,
             memory_manager=memory_manager,
             cost_fetcher=cost_fetcher,
             corrections_manager=corrections_manager,
+            tracer=tracer,
         )
 
     async def handle_message(self, message: UniversalMessage) -> str:
@@ -94,11 +99,16 @@ class Agent:
             (message.id, conversation_id, "user", message.content),
         )
 
+        if self.tracer:
+            await self.tracer.emit("step_start", conversation_id, {"message_preview": message.content[:200]})
+
         # Budget check
         if self.budget_tracker:
             status = await self.budget_tracker.check_budget()
             if not status.within_budget:
                 logger.warning("Budget exceeded, returning low-cost response")
+                if self.tracer:
+                    await self.tracer.emit("budget_exceeded", conversation_id, {})
                 return (
                     "I've hit my spending limit for this period. "
                     "I can still help with simple tasks that don't need an LLM call. "
@@ -110,6 +120,8 @@ class Agent:
                 result = await self.executor.execute(conversation_id, message.content)
         except asyncio.TimeoutError:
             logger.warning("Run timed out after %ds for %s", self._run_timeout, conversation_id)
+            if self.tracer:
+                await self.tracer.emit("timeout", conversation_id, {"timeout_seconds": self._run_timeout})
             return "I ran out of time working on that. Try breaking it into smaller pieces."
 
         clean_content = await self.reflector.reflect(
@@ -117,6 +129,14 @@ class Agent:
             result.response,
             user_message=message.content,
         )
+
+        if self.tracer:
+            await self.tracer.emit("response", conversation_id, {
+                "model": result.response.model,
+                "tokens_in": result.response.tokens_in,
+                "tokens_out": result.response.tokens_out,
+                "cost_usd": result.response.cost_usd,
+            })
 
         await self.db.execute(
             "UPDATE conversations SET last_message_at = datetime('now'), "
