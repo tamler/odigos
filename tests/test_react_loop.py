@@ -414,7 +414,7 @@ class TestSkillActivation:
 
     @pytest.mark.asyncio
     async def test_tool_mismatch_logged(self, mock_provider, mock_assembler, skill_registry):
-        """Using a tool not in the skill's tools list logs a mismatch."""
+        """Using a tool not in the skill's tools list emits a mismatch trace."""
         activate_tool = ActivateSkillTool(skill_registry=skill_registry)
         mock_other_tool = AsyncMock(spec=BaseTool)
         mock_other_tool.name = "send_email"
@@ -441,28 +441,26 @@ class TestSkillActivation:
             ),
         ]
 
-        from odigos.db import Database
-
-        db = AsyncMock(spec=Database)
-        db.execute = AsyncMock()
+        mock_tracer = AsyncMock()
+        mock_tracer.emit = AsyncMock(return_value="trace-id")
 
         executor = Executor(
             provider=mock_provider,
             context_assembler=mock_assembler,
             tool_registry=registry,
             skill_registry=skill_registry,
-            db=db,
+            tracer=mock_tracer,
         )
         await executor.execute("conv-1", "Research and email")
 
-        # Check that action_log was called with mismatch info
-        log_calls = [c for c in db.execute.call_args_list if "action_log" in str(c)]
-        mismatch_calls = [c for c in log_calls if "skill_mismatch" in str(c)]
+        # Check that tracer.emit was called with mismatch info
+        emit_calls = mock_tracer.emit.call_args_list
+        mismatch_calls = [c for c in emit_calls if "skill_mismatch" in str(c)]
         assert len(mismatch_calls) >= 1
 
     @pytest.mark.asyncio
-    async def test_active_skill_tagged_in_action_log(self, mock_provider, mock_assembler, skill_registry):
-        """Tool calls during active skill include skill name in action_log."""
+    async def test_active_skill_tagged_in_trace(self, mock_provider, mock_assembler, skill_registry):
+        """Tool calls during active skill include skill name in trace."""
         activate_tool = ActivateSkillTool(skill_registry=skill_registry)
         mock_search = AsyncMock(spec=BaseTool)
         mock_search.name = "web_search"
@@ -489,25 +487,23 @@ class TestSkillActivation:
             ),
         ]
 
-        from odigos.db import Database
-
-        db = AsyncMock(spec=Database)
-        db.execute = AsyncMock()
+        mock_tracer = AsyncMock()
+        mock_tracer.emit = AsyncMock(return_value="trace-id")
 
         executor = Executor(
             provider=mock_provider,
             context_assembler=mock_assembler,
             tool_registry=registry,
             skill_registry=skill_registry,
-            db=db,
+            tracer=mock_tracer,
         )
         await executor.execute("conv-1", "Search something")
 
-        # Check web_search action_log includes active_skill
-        log_calls = [c for c in db.execute.call_args_list if "action_log" in str(c)]
-        search_logs = [c for c in log_calls if "web_search" in str(c)]
-        assert len(search_logs) >= 1
-        assert "research" in str(search_logs[0])  # skill name in details
+        # Check tracer.emit was called with active_skill for web_search
+        emit_calls = mock_tracer.emit.call_args_list
+        search_traces = [c for c in emit_calls if "web_search" in str(c)]
+        assert len(search_traces) >= 1
+        assert "research" in str(search_traces[0])  # skill name in data
 
 
 class TestBudgetEnforcement:

@@ -13,6 +13,7 @@ from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 if TYPE_CHECKING:
     from odigos.core.budget import BudgetStatus, BudgetTracker
+    from odigos.core.trace import Tracer
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
@@ -52,6 +53,7 @@ class Executor:
         db: Database | None = None,
         max_tool_turns: int = MAX_TOOL_TURNS,
         budget_tracker: BudgetTracker | None = None,
+        tracer: Tracer | None = None,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
@@ -60,6 +62,7 @@ class Executor:
         self.db = db
         self._max_tool_turns = max_tool_turns
         self.budget_tracker = budget_tracker
+        self.tracer = tracer
 
     async def execute(
         self,
@@ -213,15 +216,15 @@ class Executor:
         if not tool:
             error = f"Error: Unknown tool '{tool_call.name}'"
             logger.warning(error)
-            await self._log_action(conversation_id, "tool", tool_call.name, {"success": False, "error": "unknown tool"})
+            await self._emit_trace(conversation_id, "tool_result", {"tool": tool_call.name, "success": False, "error": "unknown tool"})
             return error
 
         try:
             args = {**tool_call.arguments, "_conversation_id": conversation_id}
             result = await tool.execute(args)
-            await self._log_action(
-                conversation_id, "tool", tool_call.name,
-                {"success": result.success, "error": result.error},
+            await self._emit_trace(
+                conversation_id, "tool_result",
+                {"tool": tool_call.name, "success": result.success, "error": result.error},
             )
 
             # Detect skill activation from structured payload
@@ -242,33 +245,26 @@ class Executor:
                 return f"Error: {result.error}"
         except Exception as e:
             logger.exception("Tool %s raised an exception", tool_call.name)
-            await self._log_action(
-                conversation_id, "tool", tool_call.name,
-                {"success": False, "error": str(e)},
+            await self._emit_trace(
+                conversation_id, "tool_result",
+                {"tool": tool_call.name, "success": False, "error": str(e)},
             )
             return f"Error: Tool execution failed: {e}"
 
-    async def _log_action(
-        self, conversation_id: str, action_type: str, action_name: str, details: dict,
+    async def _emit_trace(
+        self, conversation_id: str, event_type: str, data: dict,
     ) -> None:
-        # Add active skill info (exclude activate_skill itself from tagging)
-        if self._active_skill_name and action_name != "activate_skill":
-            details["active_skill"] = self._active_skill_name
-            if action_name not in self._active_skill_tools:
-                details["skill_mismatch"] = True
-                details["expected_tools"] = sorted(self._active_skill_tools)
+        """Emit a trace event with skill context."""
+        if self._active_skill_name and data.get("tool") != "activate_skill":
+            data["active_skill"] = self._active_skill_name
+            tool_name = data.get("tool", "")
+            if tool_name and tool_name not in self._active_skill_tools:
+                data["skill_mismatch"] = True
+                data["expected_tools"] = sorted(self._active_skill_tools)
                 logger.info(
                     "Tool mismatch: %s called during skill '%s' (expected: %s)",
-                    action_name, self._active_skill_name, self._active_skill_tools,
+                    tool_name, self._active_skill_name, self._active_skill_tools,
                 )
 
-        if not self.db:
-            return
-        try:
-            await self.db.execute(
-                "INSERT INTO action_log (id, conversation_id, action_type, action_name, details_json) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (str(uuid.uuid4()), conversation_id, action_type, action_name, json.dumps(details)),
-            )
-        except Exception:
-            logger.debug("Failed to log action", exc_info=True)
+        if self.tracer:
+            await self.tracer.emit(event_type, conversation_id, data)
