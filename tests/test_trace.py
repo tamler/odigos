@@ -11,7 +11,7 @@ from odigos.core.agent import Agent
 from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor
 from odigos.core.reflector import Reflector
-from odigos.core.trace import Tracer
+from odigos.core.trace import HOOK_TIMEOUT, Tracer
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
 from odigos.tools.base import BaseTool, ToolResult
@@ -436,3 +436,100 @@ class TestTracerInReflector:
         assert len(rows) == 1
         data = json.loads(rows[0]["data_json"])
         assert data["count"] == 1
+
+
+class TestTracerSubscribers:
+    async def test_subscribe_receives_event(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+        received = []
+
+        async def callback(event_type, conversation_id, data):
+            received.append((event_type, conversation_id, data))
+
+        tracer.subscribe("step_start", callback)
+        await tracer.emit("step_start", "conv-1", {"key": "value"})
+
+        assert len(received) == 1
+        assert received[0] == ("step_start", "conv-1", {"key": "value"})
+
+    async def test_subscribe_only_matching_events(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+        received = []
+
+        async def callback(event_type, conversation_id, data):
+            received.append(event_type)
+
+        tracer.subscribe("tool_call", callback)
+        await tracer.emit("step_start", "conv-1", {})
+        await tracer.emit("tool_call", "conv-1", {})
+
+        assert received == ["tool_call"]
+
+    async def test_multiple_subscribers(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+        received_a = []
+        received_b = []
+
+        async def callback_a(event_type, conversation_id, data):
+            received_a.append(event_type)
+
+        async def callback_b(event_type, conversation_id, data):
+            received_b.append(event_type)
+
+        tracer.subscribe("step_start", callback_a)
+        tracer.subscribe("step_start", callback_b)
+        await tracer.emit("step_start", "conv-1", {})
+
+        assert len(received_a) == 1
+        assert len(received_b) == 1
+
+    async def test_subscriber_timeout(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+
+        async def slow_callback(event_type, conversation_id, data):
+            await asyncio.sleep(10)
+
+        tracer.subscribe("step_start", slow_callback)
+
+        start = asyncio.get_event_loop().time()
+        trace_id = await tracer.emit("step_start", "conv-1", {"msg": "hi"})
+        elapsed = asyncio.get_event_loop().time() - start
+
+        assert elapsed < 7
+        row = await db.fetch_one("SELECT * FROM traces WHERE id = ?", (trace_id,))
+        assert row is not None
+
+    async def test_subscriber_exception_continues(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+        received = []
+
+        async def bad_callback(event_type, conversation_id, data):
+            raise RuntimeError("boom")
+
+        async def good_callback(event_type, conversation_id, data):
+            received.append(event_type)
+
+        tracer.subscribe("step_start", bad_callback)
+        tracer.subscribe("step_start", good_callback)
+        await tracer.emit("step_start", "conv-1", {})
+
+        assert len(received) == 1
+
+    async def test_clear_subscribers(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+        received = []
+
+        async def callback(event_type, conversation_id, data):
+            received.append(event_type)
+
+        tracer.subscribe("step_start", callback)
+        tracer.clear_subscribers()
+        await tracer.emit("step_start", "conv-1", {})
+
+        assert len(received) == 0
