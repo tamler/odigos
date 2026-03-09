@@ -23,6 +23,7 @@ from odigos.providers.sandbox import SandboxProvider
 from odigos.core.budget import BudgetTracker
 from odigos.core.router import ModelRouter
 from odigos.core.plugins import PluginManager
+from odigos.core.subagent import SubagentManager
 from odigos.core.trace import Tracer
 from odigos.skills.registry import SkillRegistry
 
@@ -198,6 +199,23 @@ async def lifespan(app: FastAPI):
 
     logger.info("Skill tools registered (activate, create, update)")
 
+    # Initialize subagent manager
+    subagent_manager = SubagentManager(
+        db=_db,
+        provider=_router,
+        tool_registry=tool_registry,
+        tracer=tracer,
+        memory_manager=memory_manager,
+    )
+    logger.info("Subagent manager initialized")
+
+    # Register subagent tool
+    from odigos.tools.subagent_tool import SpawnSubagentTool
+
+    spawn_tool = SpawnSubagentTool(subagent_manager=subagent_manager)
+    tool_registry.register(spawn_tool)
+    logger.info("Subagent tool registered")
+
     # Connect MCP servers and register bridged tools
     if settings.mcp.servers:
         from odigos.tools.mcp_bridge import MCPServer, MCPToolBridge, StdioTransport
@@ -276,6 +294,7 @@ async def lifespan(app: FastAPI):
         max_todos_per_tick=settings.heartbeat.max_todos_per_tick,
         idle_think_interval=settings.heartbeat.idle_think_interval,
         tracer=tracer,
+        subagent_manager=subagent_manager,
     )
 
     # Pass heartbeat to telegram for /stop and /start commands
