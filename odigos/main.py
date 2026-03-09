@@ -22,6 +22,7 @@ from odigos.providers.openrouter import OpenRouterProvider
 from odigos.providers.sandbox import SandboxProvider
 from odigos.core.budget import BudgetTracker
 from odigos.core.router import ModelRouter
+from odigos.core.plugins import PluginManager
 from odigos.core.trace import Tracer
 from odigos.skills.registry import SkillRegistry
 
@@ -61,6 +62,11 @@ async def lifespan(app: FastAPI):
     # Initialize tracer
     tracer = Tracer(db=_db)
     logger.info("Tracer initialized")
+
+    # Load plugins
+    plugin_manager = PluginManager(tracer=tracer)
+    plugin_manager.load_all("data/plugins")
+    logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
 
     # Initialize LLM provider
     _provider = OpenRouterProvider(
