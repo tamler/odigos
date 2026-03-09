@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from odigos.channels.telegram import TelegramChannel
     from odigos.core.agent import Agent
     from odigos.core.goal_store import GoalStore
+    from odigos.core.trace import Tracer
     from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class Heartbeat:
         interval: float = 30,
         max_todos_per_tick: int = 3,
         idle_think_interval: int = 900,
+        tracer: Tracer | None = None,
     ) -> None:
         self.db = db
         self.agent = agent
@@ -44,6 +46,7 @@ class Heartbeat:
         self._max_todos_per_tick = max_todos_per_tick
         self._idle_think_interval = idle_think_interval
         self._task: asyncio.Task | None = None
+        self.tracer = tracer
         self._last_idle: float = 0
         self.paused: bool = False
 
@@ -85,6 +88,11 @@ class Heartbeat:
         # Phase 3: Idle thoughts (only if nothing ran above)
         if not did_work:
             await self._idle_think()
+
+        if self.tracer:
+            await self.tracer.emit("heartbeat_tick", None, {
+                "did_work": did_work,
+            })
 
     async def _fire_reminders(self) -> bool:
         now = datetime.now(timezone.utc).isoformat()
