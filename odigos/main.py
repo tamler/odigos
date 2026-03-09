@@ -22,6 +22,7 @@ from odigos.providers.openrouter import OpenRouterProvider
 from odigos.providers.sandbox import SandboxProvider
 from odigos.core.budget import BudgetTracker
 from odigos.core.router import ModelRouter
+from odigos.core.trace import Tracer
 from odigos.skills.registry import SkillRegistry
 
 logging.basicConfig(
@@ -56,6 +57,10 @@ async def lifespan(app: FastAPI):
     _db = Database(settings.database.path)
     await _db.initialize()
     logger.info("Database initialized at %s", settings.database.path)
+
+    # Initialize tracer
+    tracer = Tracer(db=_db)
+    logger.info("Tracer initialized")
 
     # Initialize LLM provider
     _provider = OpenRouterProvider(
@@ -241,6 +246,7 @@ async def lifespan(app: FastAPI):
         run_timeout=settings.agent.run_timeout_seconds,
         summarizer=summarizer,
         corrections_manager=corrections_manager,
+        tracer=tracer,
     )
 
     # Initialize Telegram channel (before heartbeat so we can pass it)
@@ -263,6 +269,7 @@ async def lifespan(app: FastAPI):
         interval=settings.heartbeat.interval_seconds,
         max_todos_per_tick=settings.heartbeat.max_todos_per_tick,
         idle_think_interval=settings.heartbeat.idle_think_interval,
+        tracer=tracer,
     )
 
     # Pass heartbeat to telegram for /stop and /start commands
