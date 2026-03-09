@@ -21,6 +21,10 @@ class PluginManager:
 
     def load_all(self, plugins_dir: str) -> None:
         """Scan plugins_dir for *.py files and register their hooks."""
+        for module_name in self._module_names:
+            sys.modules.pop(module_name, None)
+        self._module_names.clear()
+        self.loaded_plugins = []
         self._plugins_dir = plugins_dir
         plugins_path = Path(plugins_dir)
         plugins_path.mkdir(parents=True, exist_ok=True)
@@ -33,10 +37,6 @@ class PluginManager:
     def reload(self) -> None:
         """Clear all subscribers, remove cached modules, and reload plugins."""
         self.tracer.clear_subscribers()
-        for module_name in self._module_names:
-            sys.modules.pop(module_name, None)
-        self._module_names.clear()
-        self.loaded_plugins.clear()
         if self._plugins_dir is not None:
             self.load_all(self._plugins_dir)
 
