@@ -288,6 +288,22 @@ async def lifespan(app: FastAPI):
         await asyncio.sleep(2)
         return await _provider.fetch_generation_cost(generation_id)
 
+    # Initialize approval gate if enabled
+    approval_gate = None
+    if settings.approval.enabled and settings.approval.tools:
+        from odigos.core.approval import ApprovalGate
+
+        approval_gate = ApprovalGate(
+            db=_db,
+            tools_requiring_approval=settings.approval.tools,
+            timeout=settings.approval.timeout,
+        )
+        logger.info(
+            "Approval gate enabled for %d tools: %s",
+            len(settings.approval.tools),
+            ", ".join(settings.approval.tools),
+        )
+
     # Initialize agent
     agent = Agent(
         db=_db,
@@ -304,6 +320,7 @@ async def lifespan(app: FastAPI):
         summarizer=summarizer,
         corrections_manager=corrections_manager,
         tracer=tracer,
+        approval_gate=approval_gate,
     )
 
     # Initialize Telegram channel (before heartbeat so we can pass it)
@@ -314,7 +331,12 @@ async def lifespan(app: FastAPI):
         webhook_url=settings.telegram.webhook_url,
         goal_store=goal_store,
         budget_tracker=budget_tracker,
+        approval_gate=approval_gate,
     )
+
+    # Wire approval gate notifications through Telegram
+    if approval_gate:
+        approval_gate._notify_fn = _telegram.send_approval_request
 
     # Initialize heartbeat
     _heartbeat = Heartbeat(

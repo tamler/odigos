@@ -91,6 +91,12 @@ class BrowserConfig(BaseModel):
     timeout: int = 120
 
 
+class ApprovalConfig(BaseModel):
+    enabled: bool = False
+    tools: list[str] = []
+    timeout: int = 300
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str
     openrouter_api_key: str
@@ -113,6 +119,7 @@ class Settings(BaseSettings):
     mcp: MCPConfig = MCPConfig()
     gws: GWSConfig = GWSConfig()
     browser: BrowserConfig = BrowserConfig()
+    approval: ApprovalConfig = ApprovalConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

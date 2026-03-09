@@ -13,6 +13,7 @@ from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 if TYPE_CHECKING:
+    from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetStatus, BudgetTracker
     from odigos.core.trace import Tracer
     from odigos.skills.registry import SkillRegistry
@@ -55,6 +56,7 @@ class Executor:
         max_tool_turns: int = MAX_TOOL_TURNS,
         budget_tracker: BudgetTracker | None = None,
         tracer: Tracer | None = None,
+        approval_gate: ApprovalGate | None = None,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
@@ -64,6 +66,7 @@ class Executor:
         self._max_tool_turns = max_tool_turns
         self.budget_tracker = budget_tracker
         self.tracer = tracer
+        self.approval_gate = approval_gate
 
     async def execute(
         self,
@@ -225,6 +228,23 @@ class Executor:
             "arguments": tool_call.arguments,
         })
 
+        # Approval gate check
+        if self.approval_gate and self.approval_gate.requires_approval(tool_call.name):
+            chat_id = self._extract_chat_id(conversation_id)
+            decision = await self.approval_gate.request(
+                tool_name=tool_call.name,
+                arguments=tool_call.arguments,
+                conversation_id=conversation_id,
+                chat_id=chat_id,
+            )
+            if decision != "approved":
+                msg = f"Action not approved ({decision}). The user declined: {tool_call.name}"
+                await self._emit_trace(
+                    conversation_id, "tool_result",
+                    {"tool": tool_call.name, "success": False, "error": f"approval_{decision}"},
+                )
+                return msg
+
         t0 = time.monotonic()
         try:
             args = {**tool_call.arguments, "_conversation_id": conversation_id}
@@ -259,6 +279,17 @@ class Executor:
                 {"tool": tool_call.name, "success": False, "error": str(e), "duration_ms": round(duration * 1000)},
             )
             return f"Error: Tool execution failed: {e}"
+
+    @staticmethod
+    def _extract_chat_id(conversation_id: str) -> int | None:
+        """Extract Telegram chat_id from conversation_id like 'telegram:12345'."""
+        parts = conversation_id.split(":", 1)
+        if len(parts) == 2 and parts[0] == "telegram":
+            try:
+                return int(parts[1])
+            except ValueError:
+                return None
+        return None
 
     async def _emit_trace(
         self, conversation_id: str, event_type: str, data: dict,

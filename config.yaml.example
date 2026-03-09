@@ -25,3 +25,8 @@ gws:
 browser:
   enabled: false
   timeout: 120
+
+approval:
+  enabled: false
+  timeout: 300  # seconds to wait for user response
+  tools: []     # e.g. ["run_gws", "run_browser"]

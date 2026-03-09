@@ -3,9 +3,9 @@ import os
 import tempfile
 from datetime import datetime, timezone
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
-from telegram.ext import Application, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, MessageHandler, filters
 
 from odigos.channels.base import Channel, UniversalMessage
 from odigos.core.agent import Agent
@@ -27,6 +27,7 @@ class TelegramChannel(Channel):
         goal_store=None,
         heartbeat=None,
         budget_tracker=None,
+        approval_gate=None,
     ) -> None:
         self.token = token
         self.agent = agent
@@ -36,6 +37,7 @@ class TelegramChannel(Channel):
         self.goal_store = goal_store
         self.heartbeat = heartbeat
         self.budget_tracker = budget_tracker
+        self.approval_gate = approval_gate
 
     async def start(self) -> None:
         """Build and start the Telegram bot."""
@@ -50,6 +52,7 @@ class TelegramChannel(Channel):
         self._app.add_handler(CommandHandler("start", self._handle_start_command))
         self._app.add_handler(CommandHandler("status", self._handle_status_command))
 
+        self._app.add_handler(CallbackQueryHandler(self._handle_approval_callback, pattern=r"^approve:"))
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         self._app.add_handler(MessageHandler(filters.Document.ALL, self._handle_document))
 
@@ -252,6 +255,67 @@ class TelegramChannel(Channel):
             await update.effective_message.reply_text("Heartbeat resumed.")
         else:
             await update.effective_message.reply_text("Heartbeat not available.")
+
+    async def send_approval_request(
+        self, approval_id: str, tool_name: str, conversation_id: str, arguments: dict,
+    ) -> None:
+        """Send an inline keyboard asking the user to approve or deny a tool call."""
+        if not self._app:
+            return
+
+        # Extract chat_id from conversation_id
+        parts = conversation_id.split(":", 1)
+        if len(parts) != 2 or parts[0] != "telegram":
+            return
+        try:
+            chat_id = int(parts[1])
+        except ValueError:
+            return
+
+        # Build a readable summary of what the agent wants to do
+        import json
+        args_summary = json.dumps(arguments, indent=2)
+        if len(args_summary) > 500:
+            args_summary = args_summary[:500] + "\n..."
+
+        text = (
+            f"Approval needed: {tool_name}\n\n"
+            f"{args_summary}\n\n"
+            "Allow this action?"
+        )
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("Approve", callback_data=f"approve:{approval_id}:approved"),
+                InlineKeyboardButton("Deny", callback_data=f"approve:{approval_id}:denied"),
+            ]
+        ])
+
+        await self._app.bot.send_message(
+            chat_id=chat_id, text=text, reply_markup=keyboard,
+        )
+
+    async def _handle_approval_callback(self, update: Update, context) -> None:
+        """Handle inline keyboard button presses for approval requests."""
+        query = update.callback_query
+        if not query or not query.data:
+            return
+
+        await query.answer()
+
+        parts = query.data.split(":")
+        if len(parts) != 3:
+            return
+
+        _, approval_id, decision = parts
+        if decision not in ("approved", "denied"):
+            return
+
+        if self.approval_gate and self.approval_gate.resolve(approval_id, decision):
+            status = "Approved" if decision == "approved" else "Denied"
+            await query.edit_message_text(f"{status}.")
+        else:
+            await query.edit_message_text("This approval request has expired.")
 
     async def _handle_status_command(self, update: Update, context) -> None:
         """Show agent status: budget, tasks, heartbeat."""

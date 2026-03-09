@@ -17,6 +17,7 @@ from odigos.providers.base import LLMProvider
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetTracker
     from odigos.core.trace import Tracer
     from odigos.memory.corrections import CorrectionsManager
@@ -46,6 +47,7 @@ class Agent:
         summarizer: ConversationSummarizer | None = None,
         corrections_manager: CorrectionsManager | None = None,
         tracer: Tracer | None = None,
+        approval_gate: ApprovalGate | None = None,
     ) -> None:
         self.db = db
         self.budget_tracker = budget_tracker
@@ -74,6 +76,7 @@ class Agent:
             max_tool_turns=max_tool_turns,
             budget_tracker=budget_tracker,
             tracer=tracer,
+            approval_gate=approval_gate,
         )
         self.reflector = Reflector(
             db,
