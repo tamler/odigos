@@ -1,11 +1,16 @@
+import asyncio
 import json
 import uuid
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
 
+from odigos.channels.base import UniversalMessage
+from odigos.core.agent import Agent
 from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor
+from odigos.core.reflector import Reflector
 from odigos.core.trace import Tracer
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
@@ -261,3 +266,173 @@ class TestTracerInExecutor:
         )
         data = json.loads(rows[0]["data_json"])
         assert data["active_skill"] == "research"
+
+
+def _make_message(conversation_id: str, content: str) -> UniversalMessage:
+    chat_id = conversation_id.split(":", 1)[-1] if ":" in conversation_id else conversation_id
+    return UniversalMessage(
+        id=str(uuid.uuid4()),
+        channel="test",
+        sender="user",
+        content=content,
+        timestamp=datetime.now(timezone.utc),
+        metadata={"chat_id": chat_id},
+    )
+
+
+class TestTracerInAgent:
+    async def test_step_start_traced(self, db):
+        await _seed_conversation(db, "test:conv-1")
+        tracer = Tracer(db)
+
+        mock_provider = AsyncMock()
+        mock_provider.complete = AsyncMock(
+            return_value=LLMResponse(
+                content="Hello!", model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
+            )
+        )
+
+        agent = Agent(db=db, provider=mock_provider, tracer=tracer)
+
+        msg = _make_message("test:conv-1", "hi there")
+        await agent.handle_message(msg)
+
+        rows = await db.fetch_all(
+            "SELECT * FROM traces WHERE event_type = 'step_start'"
+        )
+        assert len(rows) == 1
+        data = json.loads(rows[0]["data_json"])
+        assert "hi there" in data["message_preview"]
+
+    async def test_response_traced(self, db):
+        await _seed_conversation(db, "test:conv-1")
+        tracer = Tracer(db)
+
+        mock_provider = AsyncMock()
+        mock_provider.complete = AsyncMock(
+            return_value=LLMResponse(
+                content="Hello!", model="test-model", tokens_in=10, tokens_out=5, cost_usd=0.001,
+            )
+        )
+
+        agent = Agent(db=db, provider=mock_provider, tracer=tracer)
+
+        msg = _make_message("test:conv-1", "hi")
+        await agent.handle_message(msg)
+
+        rows = await db.fetch_all(
+            "SELECT * FROM traces WHERE event_type = 'response'"
+        )
+        assert len(rows) == 1
+        data = json.loads(rows[0]["data_json"])
+        assert data["model"] == "test-model"
+        assert data["tokens_in"] == 10
+        assert data["cost_usd"] == 0.001
+
+    async def test_timeout_traced(self, db):
+        await _seed_conversation(db, "test:conv-1")
+        tracer = Tracer(db)
+
+        mock_provider = AsyncMock()
+
+        async def slow_complete(*args, **kwargs):
+            await asyncio.sleep(10)
+            return LLMResponse(content="late", model="test", tokens_in=0, tokens_out=0, cost_usd=0)
+
+        mock_provider.complete = slow_complete
+
+        agent = Agent(db=db, provider=mock_provider, tracer=tracer, run_timeout=1)
+
+        msg = _make_message("test:conv-1", "hi")
+        await agent.handle_message(msg)
+
+        rows = await db.fetch_all(
+            "SELECT * FROM traces WHERE event_type = 'timeout'"
+        )
+        assert len(rows) == 1
+
+    async def test_budget_exceeded_traced(self, db):
+        await _seed_conversation(db, "test:conv-1")
+        tracer = Tracer(db)
+
+        mock_provider = AsyncMock()
+        mock_budget = AsyncMock()
+        mock_budget.check_budget = AsyncMock(
+            return_value=AsyncMock(within_budget=False)
+        )
+
+        agent = Agent(
+            db=db, provider=mock_provider, tracer=tracer,
+            budget_tracker=mock_budget,
+        )
+
+        msg = _make_message("test:conv-1", "hi")
+        await agent.handle_message(msg)
+
+        rows = await db.fetch_all(
+            "SELECT * FROM traces WHERE event_type = 'budget_exceeded'"
+        )
+        assert len(rows) == 1
+
+
+class TestTracerInReflector:
+    async def test_reflection_traced(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+        reflector = Reflector(db, tracer=tracer)
+
+        response = LLMResponse(
+            content="Here is my answer.",
+            model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
+        )
+        await reflector.reflect("conv-1", response)
+
+        rows = await db.fetch_all(
+            "SELECT * FROM traces WHERE event_type = 'reflection'"
+        )
+        assert len(rows) == 1
+
+    async def test_correction_detected_traced(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+        mock_corrections = AsyncMock()
+        mock_corrections.store = AsyncMock(return_value="corr-1")
+        reflector = Reflector(db, corrections_manager=mock_corrections, tracer=tracer)
+
+        correction_data = {
+            "original": "wrong",
+            "correction": "right",
+            "category": "accuracy",
+            "context": "test",
+        }
+        content = f"Response.\n<!--correction\n{json.dumps(correction_data)}\n-->"
+        response = LLMResponse(
+            content=content, model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
+        )
+        await reflector.reflect("conv-1", response)
+
+        rows = await db.fetch_all(
+            "SELECT * FROM traces WHERE event_type = 'correction_detected'"
+        )
+        assert len(rows) == 1
+        data = json.loads(rows[0]["data_json"])
+        assert data["category"] == "accuracy"
+
+    async def test_entity_extracted_traced(self, db):
+        await _seed_conversation(db, "conv-1")
+        tracer = Tracer(db)
+        reflector = Reflector(db, tracer=tracer)
+
+        entities = [{"name": "Alice", "type": "person", "relationship": "friend", "detail": ""}]
+        content = f"Response.\n<!--entities\n{json.dumps(entities)}\n-->"
+        response = LLMResponse(
+            content=content, model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
+        )
+        await reflector.reflect("conv-1", response)
+
+        rows = await db.fetch_all(
+            "SELECT * FROM traces WHERE event_type = 'entity_extracted'"
+        )
+        assert len(rows) == 1
+        data = json.loads(rows[0]["data_json"])
+        assert data["count"] == 1

@@ -12,6 +12,7 @@ from odigos.db import Database
 from odigos.providers.base import LLMResponse
 
 if TYPE_CHECKING:
+    from odigos.core.trace import Tracer
     from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
 
@@ -34,11 +35,13 @@ class Reflector:
         memory_manager: MemoryManager | None = None,
         cost_fetcher: Callable | None = None,
         corrections_manager: CorrectionsManager | None = None,
+        tracer: Tracer | None = None,
     ) -> None:
         self.db = db
         self.memory_manager = memory_manager
         self._cost_fetcher = cost_fetcher
         self.corrections_manager = corrections_manager
+        self.tracer = tracer
 
     async def reflect(
         self,
@@ -58,6 +61,11 @@ class Reflector:
                 logger.warning("Failed to parse entity block from response")
             content = ENTITY_PATTERN.sub("", content).rstrip()
 
+            if entities and self.tracer:
+                await self.tracer.emit("entity_extracted", conversation_id, {
+                    "count": len(entities),
+                })
+
         # Parse and strip correction block
         correction_match = CORRECTION_PATTERN.search(content)
         if correction_match:
@@ -71,6 +79,10 @@ class Reflector:
                         context=correction_data.get("context", ""),
                         category=correction_data.get("category", "behavior"),
                     )
+                    if self.tracer:
+                        await self.tracer.emit("correction_detected", conversation_id, {
+                            "category": correction_data.get("category", "behavior"),
+                        })
             except (json.JSONDecodeError, KeyError):
                 logger.warning("Failed to parse correction block from response")
             content = CORRECTION_PATTERN.sub("", content).rstrip()
@@ -115,6 +127,9 @@ class Reflector:
                 "INSERT INTO scraped_pages (id, url, title, summary) VALUES (?, ?, ?, ?)",
                 (str(uuid.uuid4()), url, title, summary),
             )
+
+        if self.tracer:
+            await self.tracer.emit("reflection", conversation_id, {})
 
         return content
 
