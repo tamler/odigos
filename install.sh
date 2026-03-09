@@ -57,7 +57,7 @@ for entry in "${CLI_TOOLS[@]}"; do
         skip "$cmd installed"
     else
         info "Installing $cmd..."
-        eval "$install_cmd"
+        $install_cmd
         if command -v "$cmd" >/dev/null 2>&1; then
             info "$cmd installed"
         else
@@ -80,12 +80,24 @@ else
 
     read -rp "  Enter TELEGRAM_BOT_TOKEN (or press Enter to skip): " telegram_token
     if [ -n "$telegram_token" ]; then
-        sed -i.bak "s|^TELEGRAM_BOT_TOKEN=.*|TELEGRAM_BOT_TOKEN=$telegram_token|" .env && rm -f .env.bak
+        python3 -c "
+import re, sys
+key, val = sys.argv[1], sys.argv[2]
+with open('.env', 'r') as f: content = f.read()
+content = re.sub(rf'^{re.escape(key)}=.*', f'{key}={val}', content, flags=re.MULTILINE)
+with open('.env', 'w') as f: f.write(content)
+" TELEGRAM_BOT_TOKEN "$telegram_token"
     fi
 
     read -rp "  Enter OPENROUTER_API_KEY (or press Enter to skip): " openrouter_key
     if [ -n "$openrouter_key" ]; then
-        sed -i.bak "s|^OPENROUTER_API_KEY=.*|OPENROUTER_API_KEY=$openrouter_key|" .env && rm -f .env.bak
+        python3 -c "
+import re, sys
+key, val = sys.argv[1], sys.argv[2]
+with open('.env', 'r') as f: content = f.read()
+content = re.sub(rf'^{re.escape(key)}=.*', f'{key}={val}', content, flags=re.MULTILINE)
+with open('.env', 'w') as f: f.write(content)
+" OPENROUTER_API_KEY "$openrouter_key"
     fi
 
     if [ -z "$telegram_token" ] || [ -z "$openrouter_key" ]; then
@@ -135,7 +147,7 @@ for entry in "${CLI_TOOLS[@]}"; do
         echo "  If running on a headless server, copy the URL below into your browser."
         echo ""
         # Run auth, pipe through tee so user sees output, capture for URL extraction
-        AUTH_OUTPUT=$($auth_cmd 2>&1 | tee /dev/tty) || true
+        AUTH_OUTPUT=$($auth_cmd < /dev/tty 2>&1 | tee /dev/tty) || true
         # Try to extract and highlight any OAuth URL
         AUTH_URL=$(echo "$AUTH_OUTPUT" | grep -oE 'https://[^ ]+' | head -1) || true
         if [ -n "$AUTH_URL" ]; then
