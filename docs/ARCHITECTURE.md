@@ -2040,7 +2040,7 @@ Don't create these until you actually need them: `free_pool.py`, `local_llm.py`,
 - [x] Context assembly with token budget trimming
 - **Milestone:** Agent remembers conversations, resolves entities, has personality
 
-### Phase 2: Tools & Skills (current)
+### Phase 2: Tools & Skills ✅
 - [x] Tool registry + web search (SearXNG) + web scraping (Scrapling)
 - [x] Session serialization — lane queue (§4.1)
 - [x] Run timeout + abort handling (§4.1)
@@ -2053,29 +2053,31 @@ Don't create these until you actually need them: `free_pool.py`, `local_llm.py`,
 - [x] Basic Telegram commands: /status, /tasks, /stop
 - **Milestone:** Agent can search, scrape, run skills, execute background tasks, and connect to MCP servers
 
-### Phase 3: Learning & Growth
-- [ ] Subagent spawning — depth-limited delegation (§4.15)
-- [ ] Correction logging and replay
-- [ ] Budget enforcement (daily/weekly caps)
-- [ ] Self-skill-building (agent drafts new skill .md files)
-- [ ] Hook/plugin lifecycle system (§4.16)
-- [ ] Observability: /explain, /audit commands
+### Phase 3: Learning & Growth ✅
+- [x] Subagent spawning — depth-limited delegation (§4.15)
+- [x] Correction logging and replay
+- [x] Budget enforcement (daily/weekly caps)
+- [x] Self-skill-building — agent has create_skill/update_skill tools, corrections feed the loop
+- [x] Hook/plugin lifecycle system (§4.16)
+- [x] Observability — tracer captures all events, agent can self-query
 - **Milestone:** Agent learns from corrections, delegates work, manages costs, creates its own skills
 
-### Phase 4: Google Integration
-- [ ] OAuth2 for dedicated Google account
-- [ ] Gmail read/send/search
-- [ ] Google Drive file access
-- [ ] Google Calendar read/create
-- [ ] Email triage skill
+### Phase 4: Google Integration ✅
+- [x] Google Workspace via gws CLI (Gmail, Calendar, Drive, Sheets)
+- [x] Single `run_gws` tool wrapping all GW APIs
+- [x] google-workspace skill with command patterns
+- [x] Config-driven enablement (`gws.enabled`)
 - **Milestone:** Agent manages email and calendar
 
-### Phase 5: Polish & Extras
+### Phase 5: Knowledge & Capabilities (current)
+- [x] Install flow (`install.sh`, README, auto-setup)
+- [x] RAG document ingestion — auto-ingest via DocTool, semantic chunking, vector retrieval
+- [ ] Agent Browser — headless browser CLI (`@vercel-labs/agent-browser`) for full web interaction (click, type, navigate, not just scrape)
+- [ ] Context compression — reduce token usage from tool outputs in agent context (inspired by Context Mode)
 - [ ] Litestream backup setup
 - [ ] Voice (STT/TTS) — when needed
 - [ ] Interactive approvals (Telegram inline keyboards) — when needed
-- [ ] Additional tools as needed
-- **Milestone:** Production-ready personal agent
+- **Milestone:** Agent can ingest documents, browse the web interactively, and operate efficiently within token budgets
 
 ### Phase 6: Multi-Tenancy (when ready for testers) — see §13
 
