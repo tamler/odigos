@@ -27,7 +27,6 @@ class TelegramChannel(Channel):
         mode: str = "polling",
         webhook_url: str = "",
         goal_store=None,
-        heartbeat=None,
         budget_tracker=None,
         approval_gate=None,
     ) -> None:
@@ -37,7 +36,6 @@ class TelegramChannel(Channel):
         self.webhook_url = webhook_url
         self._app: Application | None = None
         self.goal_store = goal_store
-        self.heartbeat = heartbeat
         self.budget_tracker = budget_tracker
         self.approval_gate = approval_gate
 
@@ -261,16 +259,16 @@ class TelegramChannel(Channel):
 
     async def _handle_stop_command(self, update: Update, context) -> None:
         """Pause the heartbeat."""
-        if self.heartbeat:
-            self.heartbeat.paused = True
+        if self.agent.heartbeat:
+            self.agent.heartbeat.paused = True
             await update.effective_message.reply_text("Heartbeat paused.")
         else:
             await update.effective_message.reply_text("Heartbeat not available.")
 
     async def _handle_start_command(self, update: Update, context) -> None:
         """Resume the heartbeat."""
-        if self.heartbeat:
-            self.heartbeat.paused = False
+        if self.agent.heartbeat:
+            self.agent.heartbeat.paused = False
             await update.effective_message.reply_text("Heartbeat resumed.")
         else:
             await update.effective_message.reply_text("Heartbeat not available.")
@@ -361,8 +359,8 @@ class TelegramChannel(Channel):
             lines.append("\nGoal store: not configured")
 
         # Heartbeat
-        if self.heartbeat:
-            hb_status = "paused" if self.heartbeat.paused else "running"
+        if self.agent.heartbeat:
+            hb_status = "paused" if self.agent.heartbeat.paused else "running"
             lines.append(f"Heartbeat: {hb_status}")
         else:
             lines.append("Heartbeat: not configured")

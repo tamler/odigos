@@ -52,6 +52,7 @@ class Agent:
         self.db = db
         self.budget_tracker = budget_tracker
         self.tracer = tracer
+        self.heartbeat = None  # set after construction to avoid circular init
         self._max_tool_turns = max_tool_turns
         self._run_timeout = run_timeout
         self._session_locks: dict[str, asyncio.Lock] = {}

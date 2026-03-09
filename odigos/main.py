@@ -354,8 +354,8 @@ async def lifespan(app: FastAPI):
         subagent_manager=subagent_manager,
     )
 
-    # Pass heartbeat to telegram for /stop and /start commands
-    _telegram.heartbeat = _heartbeat
+    # Set heartbeat on agent so any channel can access it
+    agent.heartbeat = _heartbeat
 
     await _telegram.start()
     logger.info("Telegram channel started in %s mode", settings.telegram.mode)
