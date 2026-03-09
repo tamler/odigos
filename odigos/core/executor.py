@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -219,12 +220,19 @@ class Executor:
             await self._emit_trace(conversation_id, "tool_result", {"tool": tool_call.name, "success": False, "error": "unknown tool"})
             return error
 
+        await self._emit_trace(conversation_id, "tool_call", {
+            "tool": tool_call.name,
+            "arguments": tool_call.arguments,
+        })
+
+        t0 = time.monotonic()
         try:
             args = {**tool_call.arguments, "_conversation_id": conversation_id}
             result = await tool.execute(args)
+            duration = time.monotonic() - t0
             await self._emit_trace(
                 conversation_id, "tool_result",
-                {"tool": tool_call.name, "success": result.success, "error": result.error},
+                {"tool": tool_call.name, "success": result.success, "error": result.error, "duration_ms": round(duration * 1000)},
             )
 
             # Detect skill activation from structured payload
@@ -244,10 +252,11 @@ class Executor:
             else:
                 return f"Error: {result.error}"
         except Exception as e:
+            duration = time.monotonic() - t0
             logger.exception("Tool %s raised an exception", tool_call.name)
             await self._emit_trace(
                 conversation_id, "tool_result",
-                {"tool": tool_call.name, "success": False, "error": str(e)},
+                {"tool": tool_call.name, "success": False, "error": str(e), "duration_ms": round(duration * 1000)},
             )
             return f"Error: Tool execution failed: {e}"
 

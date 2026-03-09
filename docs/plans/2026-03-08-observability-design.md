@@ -29,7 +29,9 @@ class Tracer:
 
 `emit()` inserts a row into the `traces` table and returns the trace ID. `data` is a freeform dict serialized as JSON.
 
-Event types: `step_start`, `step_end`, `tool_call`, `tool_result`, `planner_decision`, `response`, `timeout`, `budget_exceeded`, `reflection`, `correction_detected`, `entity_extracted`, `heartbeat_tick`, `goal_processed`, `warning`.
+Implemented event types: `step_start`, `tool_call`, `tool_result`, `response`, `timeout`, `budget_exceeded`, `reflection`, `correction_detected`, `entity_extracted`, `heartbeat_tick`.
+
+Deferred event types (no clear emission point yet): `step_end` (redundant with `response`), `planner_decision` (no separate planner exists), `goal_processed` (heartbeat tracks at tick level), `warning`.
 
 ### 2. Database migration
 
