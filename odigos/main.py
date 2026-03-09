@@ -151,7 +151,10 @@ async def lifespan(app: FastAPI):
     from odigos.tools.document import DocTool
 
     docling_provider = DoclingProvider()
-    doc_tool = DocTool(provider=docling_provider)
+    from odigos.memory.ingester import DocumentIngester
+
+    doc_ingester = DocumentIngester(db=_db, vector_memory=vector_memory)
+    doc_tool = DocTool(provider=docling_provider, ingester=doc_ingester)
     tool_registry.register(doc_tool)
     logger.info("Document tool initialized (docling)")
 
