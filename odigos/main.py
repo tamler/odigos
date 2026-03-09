@@ -99,8 +99,8 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Budget tracker initialized")
 
-    # Initialize embedding provider
-    _embedder = EmbeddingProvider(api_key=settings.openrouter_api_key)
+    # Initialize local embedding provider
+    _embedder = EmbeddingProvider()
 
     # Initialize memory stack
     vector_memory = VectorMemory(db=_db, embedder=_embedder)

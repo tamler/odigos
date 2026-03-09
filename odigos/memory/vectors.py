@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 import struct
 import uuid
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from odigos.db import Database
-from odigos.providers.embeddings import EmbeddingProvider
 
-VECTOR_DIMENSIONS = 1536
+if TYPE_CHECKING:
+    from odigos.providers.embeddings import EmbeddingProvider
+
+VECTOR_DIMENSIONS = 768
 
 
 @dataclass
@@ -54,7 +59,7 @@ class VectorMemory:
 
     async def search(self, query: str, limit: int = 5) -> list[MemoryResult]:
         """Embed query and find nearest neighbors."""
-        vector = await self.embedder.embed(query)
+        vector = await self.embedder.embed_query(query)
 
         cursor = await self.db.conn.execute(
             """
