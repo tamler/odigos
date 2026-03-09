@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from odigos.core.heartbeat import Heartbeat
 from odigos.core.subagent import MAX_CONCURRENT_PER_CONVERSATION, SubagentManager
 from odigos.db import Database
 from odigos.providers.base import LLMResponse
@@ -314,3 +315,52 @@ class TestSpawnSubagentTool:
         for task in manager._tasks.values():
             task.cancel()
         await asyncio.gather(*manager._tasks.values(), return_exceptions=True)
+
+
+class TestSubagentInHeartbeat:
+    async def test_heartbeat_delivers_completed_results(self, db):
+        await _seed_conversation(db, "telegram:123")
+        provider = _make_mock_provider("Background result")
+        registry = _make_tool_registry()
+
+        subagent_manager = SubagentManager(db=db, provider=provider, tool_registry=registry)
+        sub_id = await subagent_manager.spawn("Do research", "telegram:123")
+        await subagent_manager._tasks[sub_id]  # wait for completion
+
+        mock_agent = AsyncMock()
+        mock_telegram = AsyncMock()
+        mock_goal_store = AsyncMock()
+        mock_goal_store.list_goals = AsyncMock(return_value=[])
+
+        heartbeat = Heartbeat(
+            db=db, agent=mock_agent, telegram_channel=mock_telegram,
+            goal_store=mock_goal_store, provider=provider,
+            subagent_manager=subagent_manager,
+        )
+
+        await heartbeat._tick()
+
+        # Result delivered
+        results = await subagent_manager.get_completed_all()
+        assert len(results) == 0
+
+        # Notification sent (telegram:123 -> chat_id=123)
+        mock_telegram.send_message.assert_called_once()
+        call_text = mock_telegram.send_message.call_args[0][1]
+        assert "Subagent result" in call_text
+
+    async def test_heartbeat_no_subagent_results(self, db):
+        mock_agent = AsyncMock()
+        mock_telegram = AsyncMock()
+        mock_goal_store = AsyncMock()
+        mock_goal_store.list_goals = AsyncMock(return_value=[])
+        provider = _make_mock_provider()
+        registry = _make_tool_registry()
+        subagent_manager = SubagentManager(db=db, provider=provider, tool_registry=registry)
+
+        heartbeat = Heartbeat(
+            db=db, agent=mock_agent, telegram_channel=mock_telegram,
+            goal_store=mock_goal_store, provider=provider,
+            subagent_manager=subagent_manager,
+        )
+        await heartbeat._tick()  # should not raise

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from odigos.channels.telegram import TelegramChannel
     from odigos.core.agent import Agent
     from odigos.core.goal_store import GoalStore
+    from odigos.core.subagent import SubagentManager
     from odigos.core.trace import Tracer
     from odigos.providers.base import LLMProvider
 
@@ -36,6 +37,7 @@ class Heartbeat:
         max_todos_per_tick: int = 3,
         idle_think_interval: int = 900,
         tracer: Tracer | None = None,
+        subagent_manager: SubagentManager | None = None,
     ) -> None:
         self.db = db
         self.agent = agent
@@ -47,6 +49,7 @@ class Heartbeat:
         self._idle_think_interval = idle_think_interval
         self._task: asyncio.Task | None = None
         self.tracer = tracer
+        self.subagent_manager = subagent_manager
         self._last_idle: float = 0
         self.paused: bool = False
 
@@ -85,7 +88,10 @@ class Heartbeat:
         # Phase 2: Work on pending todos
         did_work |= await self._work_todos()
 
-        # Phase 3: Idle thoughts (only if nothing ran above)
+        # Phase 3: Deliver subagent results
+        did_work |= await self._deliver_subagent_results()
+
+        # Phase 4: Idle thoughts (only if nothing ran above)
         if not did_work:
             await self._idle_think()
 
@@ -235,6 +241,25 @@ class Heartbeat:
                     )
                     logger.info("Idle-think updated goal %s", g["id"][:8])
                     break
+
+    async def _deliver_subagent_results(self) -> bool:
+        """Deliver completed subagent results to their parent conversations."""
+        if not self.subagent_manager:
+            return False
+        results = await self.subagent_manager.get_completed_all()
+        if not results:
+            return False
+        for r in results:
+            summary = (
+                f"[Subagent result] Task: {r['instruction'][:200]}\n\n"
+                f"Status: {r['status']}\n"
+                f"Result: {r['result']}"
+            )
+            conv_id = r["parent_conversation_id"]
+            await self._send_notification(conv_id, summary[:4000])
+            await self.subagent_manager.mark_delivered(r["id"])
+            logger.info("Delivered subagent result %s to %s", r["id"], conv_id)
+        return True
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:
         try:
