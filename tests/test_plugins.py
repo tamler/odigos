@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import logging
 import sys
 import textwrap
 from pathlib import Path
@@ -216,10 +217,15 @@ class TestPluginManagerIntegration:
         assert module.collected[0]["data"] == {"msg": "hello"}
 
 
+_SAMPLE_PLUGIN_PATH = str(
+    Path(__file__).resolve().parent.parent / "data" / "plugins" / "log_tools.py"
+)
+
+
 class TestSamplePlugin:
     def test_hooks_dict_exists(self):
         spec = importlib.util.spec_from_file_location(
-            "log_tools_test", "data/plugins/log_tools.py"
+            "log_tools_test", _SAMPLE_PLUGIN_PATH
         )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -230,12 +236,16 @@ class TestSamplePlugin:
         assert callable(module.hooks["tool_call"])
         assert callable(module.hooks["tool_result"])
 
-    async def test_callbacks_run_without_error(self):
+    async def test_callbacks_run_without_error(self, caplog):
         spec = importlib.util.spec_from_file_location(
-            "log_tools_test2", "data/plugins/log_tools.py"
+            "log_tools_test2", _SAMPLE_PLUGIN_PATH
         )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        await module.hooks["tool_call"]("tool_call", "conv-1", {"tool": "search", "arguments": {"q": "test"}})
-        await module.hooks["tool_result"]("tool_result", "conv-1", {"tool": "search", "success": True, "duration_ms": 150})
+        with caplog.at_level(logging.INFO, logger="plugin.log_tools"):
+            await module.hooks["tool_call"]("tool_call", "conv-1", {"tool": "search", "arguments": {"q": "test"}})
+            await module.hooks["tool_result"]("tool_result", "conv-1", {"tool": "search", "success": True, "duration_ms": 150})
+
+        assert "Tool called: search" in caplog.text
+        assert "Tool result: search" in caplog.text
