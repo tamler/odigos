@@ -4,9 +4,12 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Any, Callable, Awaitable
+from typing import TYPE_CHECKING
 
 from odigos.db import Database
+
+if TYPE_CHECKING:
+    from odigos.channels.base import ChannelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +27,13 @@ class ApprovalGate:
         self,
         db: Database,
         tools_requiring_approval: list[str],
-        notify_fn: Callable[[str, str, str, dict], Awaitable[None]] | None = None,
+        channel_registry: ChannelRegistry | None = None,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         self.db = db
         self._gated_tools: set[str] = set(tools_requiring_approval)
         self._pending: dict[str, asyncio.Future] = {}
-        self._notify_fn = notify_fn
+        self.channel_registry = channel_registry
         self._timeout = timeout
 
     def requires_approval(self, tool_name: str) -> bool:
@@ -56,12 +59,16 @@ class ApprovalGate:
             (approval_id, conversation_id, tool_name, json.dumps(arguments), chat_id),
         )
 
-        # Notify user (Telegram inline keyboard, etc.)
-        if self._notify_fn:
-            try:
-                await self._notify_fn(approval_id, tool_name, conversation_id or "", arguments)
-            except Exception:
-                logger.exception("Failed to send approval notification for %s", approval_id)
+        # Route notification to the originating channel
+        if self.channel_registry and conversation_id:
+            channel = self.channel_registry.for_conversation(conversation_id)
+            if channel:
+                try:
+                    await channel.send_approval_request(
+                        approval_id, tool_name, conversation_id, arguments,
+                    )
+                except Exception:
+                    logger.exception("Failed to send approval notification for %s", approval_id)
 
         # Wait for resolution or timeout
         try:

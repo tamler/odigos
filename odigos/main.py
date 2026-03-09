@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from odigos.channels.base import ChannelRegistry
 from odigos.channels.telegram import TelegramChannel
 from odigos.config import load_settings
 from odigos.core.agent import Agent
@@ -288,6 +289,9 @@ async def lifespan(app: FastAPI):
         await asyncio.sleep(2)
         return await _provider.fetch_generation_cost(generation_id)
 
+    # Initialize channel registry
+    channel_registry = ChannelRegistry()
+
     # Initialize approval gate if enabled
     approval_gate = None
     if settings.approval.enabled and settings.approval.tools:
@@ -296,6 +300,7 @@ async def lifespan(app: FastAPI):
         approval_gate = ApprovalGate(
             db=_db,
             tools_requiring_approval=settings.approval.tools,
+            channel_registry=channel_registry,
             timeout=settings.approval.timeout,
         )
         logger.info(
@@ -333,10 +338,7 @@ async def lifespan(app: FastAPI):
         budget_tracker=budget_tracker,
         approval_gate=approval_gate,
     )
-
-    # Wire approval gate notifications through Telegram
-    if approval_gate:
-        approval_gate._notify_fn = _telegram.send_approval_request
+    channel_registry.register("telegram", _telegram)
 
     # Initialize heartbeat
     _heartbeat = Heartbeat(
