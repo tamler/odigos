@@ -40,11 +40,21 @@ class DocumentIngester:
     ) -> str:
         doc_id = str(uuid.uuid4())
 
+        # Use HybridChunker on the full DoclingDocument for better structural
+        # chunks. This intentionally bypasses DoclingProvider's max_content_chars
+        # truncation -- RAG benefits from indexing the complete document.
         if dl_doc is not None and HybridChunker is not None:
             chunker = HybridChunker()
             chunks = [c.text for c in chunker.chunk(dl_doc) if c.text.strip()]
         else:
             chunks = _split_paragraphs(text)
+
+        # Insert document record first so partial failures are recoverable
+        await self.db.execute(
+            "INSERT INTO documents (id, filename, source_url, chunk_count) "
+            "VALUES (?, ?, ?, ?)",
+            (doc_id, filename, source_url, 0),
+        )
 
         for chunk_text in chunks:
             await self.vector_memory.store(
@@ -53,10 +63,10 @@ class DocumentIngester:
                 source_id=doc_id,
             )
 
+        # Update with final chunk count
         await self.db.execute(
-            "INSERT INTO documents (id, filename, source_url, chunk_count) "
-            "VALUES (?, ?, ?, ?)",
-            (doc_id, filename, source_url, len(chunks)),
+            "UPDATE documents SET chunk_count = ? WHERE id = ?",
+            (len(chunks), doc_id),
         )
 
         logger.info(
@@ -66,20 +76,23 @@ class DocumentIngester:
         return doc_id
 
     async def delete(self, document_id: str) -> None:
-        rows = await self.db.fetch_all(
-            "SELECT id FROM memory_vectors WHERE source_type = 'document_chunk' AND source_id = ?",
+        """Delete a document and all its chunks from vector memory."""
+        # Count for logging before deletion
+        row = await self.db.fetch_one(
+            "SELECT chunk_count FROM documents WHERE id = ?",
             (document_id,),
         )
+        chunk_count = row["chunk_count"] if row else 0
 
-        for row in rows:
-            await self.db.execute(
-                "DELETE FROM memory_vectors WHERE id = ?",
-                (row["id"],),
-            )
+        # Single query to delete all chunks
+        await self.db.execute(
+            "DELETE FROM memory_vectors WHERE source_type = 'document_chunk' AND source_id = ?",
+            (document_id,),
+        )
 
         await self.db.execute(
             "DELETE FROM documents WHERE id = ?",
             (document_id,),
         )
 
-        logger.info("Deleted document %s (%d chunks)", document_id, len(rows))
+        logger.info("Deleted document %s (%d chunks)", document_id, chunk_count)

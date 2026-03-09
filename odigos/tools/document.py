@@ -36,9 +36,13 @@ class DocTool(BaseTool):
 
         try:
             result = await asyncio.to_thread(self.provider.convert, source)
+        except Exception as e:
+            logger.warning("Document conversion failed for %s: %s", source, e, exc_info=True)
+            return ToolResult(success=False, data="", error=str(e))
 
-            # Ingest for future retrieval
-            if self.ingester:
+        # Ingest for future retrieval (non-blocking -- conversion success is returned regardless)
+        if self.ingester:
+            try:
                 filename = source.rsplit("/", 1)[-1] if "/" in source else source
                 source_url = source if source.startswith(("http://", "https://")) else None
                 await self.ingester.ingest(
@@ -47,8 +51,7 @@ class DocTool(BaseTool):
                     source_url=source_url,
                     dl_doc=result.dl_doc,
                 )
+            except Exception as e:
+                logger.warning("Document ingestion failed for %s: %s", source, e, exc_info=True)
 
-            return ToolResult(success=True, data=result.content)
-        except Exception as e:
-            logger.warning("Document conversion failed for %s: %s", source, e, exc_info=True)
-            return ToolResult(success=False, data="", error=str(e))
+        return ToolResult(success=True, data=result.content)
