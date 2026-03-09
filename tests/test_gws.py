@@ -77,11 +77,19 @@ class TestGWSTool:
         assert "npm install -g @googleworkspace/cli" in result.error
 
     @pytest.mark.asyncio
+    async def test_malformed_quotes(self):
+        tool = GWSTool()
+        result = await tool.execute({"command": "drive files list --params '{\"bad"})
+        assert result.success is False
+        assert "Invalid command syntax" in result.error
+
+    @pytest.mark.asyncio
     @patch("odigos.tools.gws.asyncio.create_subprocess_exec")
     async def test_timeout(self, mock_exec):
         proc = AsyncMock()
         proc.communicate.side_effect = asyncio.TimeoutError()
         proc.kill = MagicMock()
+        proc.wait = AsyncMock()
         mock_exec.return_value = proc
 
         tool = GWSTool(timeout=5)
@@ -90,6 +98,7 @@ class TestGWSTool:
         assert result.success is False
         assert "timed out after 5s" in result.error
         proc.kill.assert_called_once()
+        proc.wait.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("odigos.tools.gws.asyncio.create_subprocess_exec")

@@ -42,7 +42,13 @@ class GWSTool(BaseTool):
                 error="Missing required parameter: command",
             )
 
-        args = shlex.split(command)
+        try:
+            args = shlex.split(command)
+        except ValueError as exc:
+            return ToolResult(
+                success=False, data="",
+                error=f"Invalid command syntax: {exc}",
+            )
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -60,6 +66,7 @@ class GWSTool(BaseTool):
             )
         except asyncio.TimeoutError:
             proc.kill()
+            await proc.wait()
             return ToolResult(
                 success=False, data="",
                 error=f"Command timed out after {self._timeout}s",
