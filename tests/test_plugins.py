@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import sys
 import textwrap
@@ -213,3 +214,28 @@ class TestPluginManagerIntegration:
         assert module.collected[0]["event_type"] == "step_start"
         assert module.collected[0]["conversation_id"] == "conv-1"
         assert module.collected[0]["data"] == {"msg": "hello"}
+
+
+class TestSamplePlugin:
+    def test_hooks_dict_exists(self):
+        spec = importlib.util.spec_from_file_location(
+            "log_tools_test", "data/plugins/log_tools.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        assert isinstance(module.hooks, dict)
+        assert "tool_call" in module.hooks
+        assert "tool_result" in module.hooks
+        assert callable(module.hooks["tool_call"])
+        assert callable(module.hooks["tool_result"])
+
+    async def test_callbacks_run_without_error(self):
+        spec = importlib.util.spec_from_file_location(
+            "log_tools_test2", "data/plugins/log_tools.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        await module.hooks["tool_call"]("tool_call", "conv-1", {"tool": "search", "arguments": {"q": "test"}})
+        await module.hooks["tool_result"]("tool_result", "conv-1", {"tool": "search", "success": True, "duration_ms": 150})

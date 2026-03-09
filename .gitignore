@@ -12,6 +12,8 @@ dist/
 data/
 !data/.gitkeep
 !data/personality.yaml
+!data/plugins/
+!data/plugins/**
 
 # IDE
 .idea/
