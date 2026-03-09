@@ -48,7 +48,7 @@ async def test_approved(gate):
             gate.resolve(aid, "approved")
 
     asyncio.create_task(approve_soon())
-    decision = await gate.request("run_gws", {"command": "test"}, "telegram:123", 123)
+    decision = await gate.request("run_gws", {"command": "test"}, "telegram:123")
     assert decision == "approved"
 
 
@@ -60,14 +60,14 @@ async def test_denied(gate):
             gate.resolve(aid, "denied")
 
     asyncio.create_task(deny_soon())
-    decision = await gate.request("run_gws", {"command": "test"}, "telegram:123", 123)
+    decision = await gate.request("run_gws", {"command": "test"}, "telegram:123")
     assert decision == "denied"
 
 
 @pytest.mark.asyncio
 async def test_timeout(gate):
     gate._timeout = 0.1
-    decision = await gate.request("run_gws", {"command": "test"}, "telegram:123", 123)
+    decision = await gate.request("run_gws", {"command": "test"}, "telegram:123")
     assert decision == "timeout"
 
 
@@ -103,7 +103,7 @@ async def test_channel_registry_routes_notification(mock_db):
         channel_registry=registry,
         timeout=0.1,
     )
-    await gate.request("run_gws", {"command": "test"}, "telegram:123", 123)
+    await gate.request("run_gws", {"command": "test"}, "telegram:123")
     mock_channel.send_approval_request.assert_awaited_once()
     call_args = mock_channel.send_approval_request.call_args
     assert call_args[0][1] == "run_gws"
@@ -158,7 +158,7 @@ async def test_no_conversation_id(mock_db):
 @pytest.mark.asyncio
 async def test_db_records_created(mock_db, gate):
     gate._timeout = 0.1
-    await gate.request("run_gws", {"command": "test"}, "conv1", 123)
+    await gate.request("run_gws", {"command": "test"}, "conv1")
     assert mock_db.execute.call_count == 2
     insert_call = mock_db.execute.call_args_list[0]
     assert "INSERT INTO approvals" in insert_call[0][0]

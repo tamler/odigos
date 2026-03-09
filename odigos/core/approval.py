@@ -44,7 +44,6 @@ class ApprovalGate:
         tool_name: str,
         arguments: dict,
         conversation_id: str | None = None,
-        chat_id: int | None = None,
     ) -> str:
         """Request approval. Returns 'approved', 'denied', or 'timeout'."""
         approval_id = str(uuid.uuid4())
@@ -54,9 +53,9 @@ class ApprovalGate:
 
         # Log to DB
         await self.db.execute(
-            "INSERT INTO approvals (id, conversation_id, tool_name, arguments_json, decision, chat_id) "
-            "VALUES (?, ?, ?, ?, 'pending', ?)",
-            (approval_id, conversation_id, tool_name, json.dumps(arguments), chat_id),
+            "INSERT INTO approvals (id, conversation_id, tool_name, arguments_json, decision) "
+            "VALUES (?, ?, ?, ?, 'pending')",
+            (approval_id, conversation_id, tool_name, json.dumps(arguments)),
         )
 
         # Route notification to the originating channel

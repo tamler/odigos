@@ -5,7 +5,6 @@ CREATE TABLE IF NOT EXISTS approvals (
     tool_name TEXT NOT NULL,
     arguments_json TEXT,
     decision TEXT NOT NULL DEFAULT 'pending',  -- pending, approved, denied, timeout
-    chat_id INTEGER,
     requested_at TEXT DEFAULT (datetime('now')),
     resolved_at TEXT
 );

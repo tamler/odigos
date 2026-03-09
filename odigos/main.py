@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 _db: Database | None = None
 _provider: OpenRouterProvider | None = None
 _embedder: EmbeddingProvider | None = None
-_telegram: TelegramChannel | None = None
+_channel_registry: ChannelRegistry | None = None
 _searxng = None
 _scraper = None
 _router: ModelRouter | None = None
@@ -49,7 +49,7 @@ _mcp_servers: list = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
-    global _db, _provider, _embedder, _telegram, _searxng, _scraper, _router, _heartbeat, _mcp_servers
+    global _db, _provider, _embedder, _channel_registry, _searxng, _scraper, _router, _heartbeat, _mcp_servers
 
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     settings = load_settings(config_path)
@@ -329,7 +329,7 @@ async def lifespan(app: FastAPI):
     )
 
     # Initialize Telegram channel (before heartbeat so we can pass it)
-    _telegram = TelegramChannel(
+    telegram_channel = TelegramChannel(
         token=settings.telegram_bot_token,
         agent=agent,
         mode=settings.telegram.mode,
@@ -338,7 +338,8 @@ async def lifespan(app: FastAPI):
         budget_tracker=budget_tracker,
         approval_gate=approval_gate,
     )
-    channel_registry.register("telegram", _telegram)
+    channel_registry.register("telegram", telegram_channel)
+    _channel_registry = channel_registry
 
     # Initialize heartbeat
     _heartbeat = Heartbeat(
@@ -357,8 +358,10 @@ async def lifespan(app: FastAPI):
     # Set heartbeat on agent so any channel can access it
     agent.heartbeat = _heartbeat
 
-    await _telegram.start()
-    logger.info("Telegram channel started in %s mode", settings.telegram.mode)
+    # Start all registered channels
+    for ch in channel_registry.all():
+        await ch.start()
+        logger.info("Channel '%s' started", ch.channel_name)
 
     # Start heartbeat loop
     await _heartbeat.start()
@@ -372,8 +375,11 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Odigos...")
     if _heartbeat:
         await _heartbeat.stop()
-    if _telegram:
-        await _telegram.stop()
+    for ch in channel_registry.all():
+        try:
+            await ch.stop()
+        except Exception:
+            logger.exception("Error stopping channel: %s", ch.channel_name)
     for server in _mcp_servers:
         try:
             await server.disconnect()

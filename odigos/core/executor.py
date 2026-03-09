@@ -230,12 +230,10 @@ class Executor:
 
         # Approval gate check
         if self.approval_gate and self.approval_gate.requires_approval(tool_call.name):
-            chat_id = self._extract_chat_id(conversation_id)
             decision = await self.approval_gate.request(
                 tool_name=tool_call.name,
                 arguments=tool_call.arguments,
                 conversation_id=conversation_id,
-                chat_id=chat_id,
             )
             if decision != "approved":
                 msg = f"Action not approved ({decision}). The user declined: {tool_call.name}"
@@ -279,17 +277,6 @@ class Executor:
                 {"tool": tool_call.name, "success": False, "error": str(e), "duration_ms": round(duration * 1000)},
             )
             return f"Error: Tool execution failed: {e}"
-
-    @staticmethod
-    def _extract_chat_id(conversation_id: str) -> int | None:
-        """Extract Telegram chat_id from conversation_id like 'telegram:12345'."""
-        parts = conversation_id.split(":", 1)
-        if len(parts) == 2 and parts[0] == "telegram":
-            try:
-                return int(parts[1])
-            except ValueError:
-                return None
-        return None
 
     async def _emit_trace(
         self, conversation_id: str, event_type: str, data: dict,
