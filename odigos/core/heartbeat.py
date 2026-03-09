@@ -250,15 +250,18 @@ class Heartbeat:
         if not results:
             return False
         for r in results:
-            summary = (
-                f"[Subagent result] Task: {r['instruction'][:200]}\n\n"
-                f"Status: {r['status']}\n"
-                f"Result: {r['result']}"
-            )
-            conv_id = r["parent_conversation_id"]
-            await self._send_notification(conv_id, summary[:4000])
-            await self.subagent_manager.mark_delivered(r["id"])
-            logger.info("Delivered subagent result %s to %s", r["id"], conv_id)
+            try:
+                summary = (
+                    f"[Subagent result] Task: {r['instruction'][:200]}\n\n"
+                    f"Status: {r['status']}\n"
+                    f"Result: {r['result']}"
+                )
+                conv_id = r["parent_conversation_id"]
+                await self._send_notification(conv_id, summary[:4000])
+                await self.subagent_manager.mark_delivered(r["id"])
+                logger.info("Delivered subagent result %s to %s", r["id"], conv_id)
+            except Exception:
+                logger.exception("Failed to deliver subagent result %s", r["id"])
         return True
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:

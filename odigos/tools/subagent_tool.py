@@ -45,6 +45,8 @@ class SpawnSubagentTool(BaseTool):
             return ToolResult(success=False, data="", error="No conversation context available")
 
         timeout = params.get("timeout", 600)
+        if not isinstance(timeout, int) or timeout < 1:
+            timeout = 600
 
         try:
             subagent_id = await self._manager.spawn(
