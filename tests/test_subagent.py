@@ -145,7 +145,7 @@ class TestSubagentExecution:
         mgr = SubagentManager(db=db, provider=provider, tool_registry=registry)
 
         sid = await mgr.spawn("Research topic X", "conv-1")
-        await asyncio.sleep(0.5)
+        await mgr._tasks[sid]
 
         row = await db.fetch_one("SELECT * FROM subagent_tasks WHERE id = ?", (sid,))
         assert row["status"] == "completed"
@@ -167,7 +167,7 @@ class TestSubagentExecution:
         mgr = SubagentManager(db=db, provider=provider, tool_registry=registry)
 
         sid = await mgr.spawn("Slow task", "conv-1", timeout=1)
-        await asyncio.sleep(2)
+        await mgr._tasks[sid]
 
         row = await db.fetch_one("SELECT * FROM subagent_tasks WHERE id = ?", (sid,))
         assert row["status"] == "failed"
@@ -181,7 +181,7 @@ class TestSubagentExecution:
         mgr = SubagentManager(db=db, provider=provider, tool_registry=registry)
 
         sid = await mgr.spawn("Doomed task", "conv-1")
-        await asyncio.sleep(0.5)
+        await mgr._tasks[sid]
 
         row = await db.fetch_one("SELECT * FROM subagent_tasks WHERE id = ?", (sid,))
         assert row["status"] == "failed"
@@ -196,7 +196,7 @@ class TestSubagentDelivery:
         mgr = SubagentManager(db=db, provider=provider, tool_registry=registry)
 
         sid = await mgr.spawn("Quick task", "conv-1")
-        await asyncio.sleep(0.5)
+        await mgr._tasks[sid]
 
         completed = await mgr.get_completed_all()
         assert len(completed) == 1
@@ -209,7 +209,7 @@ class TestSubagentDelivery:
         mgr = SubagentManager(db=db, provider=provider, tool_registry=registry)
 
         sid = await mgr.spawn("Quick task", "conv-1")
-        await asyncio.sleep(0.5)
+        await mgr._tasks[sid]
 
         await mgr.mark_delivered(sid)
 

@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from odigos.core.executor import Executor
 from odigos.db import Database
 from odigos.providers.base import LLMProvider
 from odigos.tools.registry import ToolRegistry
@@ -18,6 +19,25 @@ logger = logging.getLogger(__name__)
 
 MAX_CONCURRENT_PER_CONVERSATION = 3
 DEFAULT_TIMEOUT = 600
+
+
+class _SubagentContext:
+    """Minimal context assembler for subagents.
+
+    Returns pre-built messages instead of assembling from conversation history.
+    """
+
+    def __init__(self, messages: list[dict]) -> None:
+        self._messages = messages
+
+    async def build(
+        self,
+        conversation_id: str,
+        current_message: str,
+        tool_context: str = "",
+        max_tokens: int = 0,
+    ) -> list[dict]:
+        return list(self._messages)
 
 
 class SubagentManager:
@@ -45,23 +65,28 @@ class SubagentManager:
         timeout: int = DEFAULT_TIMEOUT,
     ) -> str:
         """Spawn a new subagent task. Returns the subagent ID."""
-        running = await self.db.fetch_one(
-            "SELECT COUNT(*) AS cnt FROM subagent_tasks "
-            "WHERE parent_conversation_id = ? AND status = 'running'",
-            (parent_conversation_id,),
+        subagent_id = str(uuid.uuid4())
+
+        # Atomic insert: only succeeds if fewer than MAX_CONCURRENT running
+        await self.db.conn.execute(
+            "INSERT INTO subagent_tasks (id, parent_conversation_id, instruction, status) "
+            "SELECT ?, ?, ?, 'running' "
+            "WHERE (SELECT COUNT(*) FROM subagent_tasks "
+            "       WHERE parent_conversation_id = ? AND status = 'running') < ?",
+            (subagent_id, parent_conversation_id, instruction,
+             parent_conversation_id, MAX_CONCURRENT_PER_CONVERSATION),
         )
-        if running and running["cnt"] >= MAX_CONCURRENT_PER_CONVERSATION:
+        await self.db.conn.commit()
+
+        # Verify the row was actually inserted
+        row = await self.db.fetch_one(
+            "SELECT id FROM subagent_tasks WHERE id = ?", (subagent_id,)
+        )
+        if row is None:
             raise ValueError(
                 f"Max concurrent subagents ({MAX_CONCURRENT_PER_CONVERSATION}) "
                 f"reached for conversation {parent_conversation_id}"
             )
-
-        subagent_id = str(uuid.uuid4())
-        await self.db.execute(
-            "INSERT INTO subagent_tasks (id, parent_conversation_id, instruction, status) "
-            "VALUES (?, ?, ?, 'running')",
-            (subagent_id, parent_conversation_id, instruction),
-        )
 
         task = asyncio.create_task(
             self._run_subagent(subagent_id, instruction, parent_conversation_id, timeout)
@@ -78,7 +103,7 @@ class SubagentManager:
     ) -> None:
         """Execute a subagent task in the background."""
         try:
-            messages = [
+            messages: list[dict] = [
                 {
                     "role": "system",
                     "content": (
@@ -101,16 +126,24 @@ class SubagentManager:
             messages.append({"role": "user", "content": instruction})
 
             restricted_registry = self._build_restricted_registry()
-            async with asyncio.timeout(timeout):
-                response = await self.provider.complete(
-                    messages, tools=restricted_registry.tool_definitions()
-                )
+            context = _SubagentContext(messages)
+            executor = Executor(
+                provider=self.provider,
+                context_assembler=context,
+                tool_registry=restricted_registry,
+                db=self.db,
+                tracer=self.tracer,
+            )
 
+            async with asyncio.timeout(timeout):
+                result = await executor.execute(f"subagent:{subagent_id}", instruction)
+
+            result_content = result.response.content or "Subagent completed with no output."
             now = datetime.now(timezone.utc).isoformat()
             await self.db.execute(
                 "UPDATE subagent_tasks SET status = 'completed', result = ?, completed_at = ? "
                 "WHERE id = ?",
-                (response.content, now, subagent_id),
+                (result_content, now, subagent_id),
             )
         except TimeoutError:
             now = datetime.now(timezone.utc).isoformat()
@@ -124,7 +157,7 @@ class SubagentManager:
             await self.db.execute(
                 "UPDATE subagent_tasks SET status = 'failed', result = ?, completed_at = ? "
                 "WHERE id = ?",
-                (f"Error: {e}", now, subagent_id),
+                (f"Error: {str(e)[:500]}", now, subagent_id),
             )
         finally:
             if self.tracer:

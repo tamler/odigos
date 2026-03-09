@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS subagent_tasks (
     id TEXT PRIMARY KEY,
-    parent_conversation_id TEXT NOT NULL,
+    parent_conversation_id TEXT NOT NULL REFERENCES conversations(id),
     instruction TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'running',
     result TEXT,
