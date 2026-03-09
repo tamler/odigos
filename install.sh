@@ -5,6 +5,7 @@ set -euo pipefail
 # Format: command_name|install_command|auth_command (auth optional)
 CLI_TOOLS=(
     "gws|npm install -g @googleworkspace/cli|gws auth login"
+    "agent-browser|npm install -g @anthropic-ai/agent-browser|"
 )
 
 # ── Colors ───────────────────────────────────────────────────────────

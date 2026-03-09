@@ -21,3 +21,7 @@ server:
 gws:
   enabled: false
   timeout: 30
+
+browser:
+  enabled: false
+  timeout: 120

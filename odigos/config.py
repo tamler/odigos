@@ -86,6 +86,11 @@ class GWSConfig(BaseModel):
     timeout: int = 30
 
 
+class BrowserConfig(BaseModel):
+    enabled: bool = False
+    timeout: int = 120
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str
     openrouter_api_key: str
@@ -107,6 +112,7 @@ class Settings(BaseSettings):
     sandbox: SandboxConfig = SandboxConfig()
     mcp: MCPConfig = MCPConfig()
     gws: GWSConfig = GWSConfig()
+    browser: BrowserConfig = BrowserConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

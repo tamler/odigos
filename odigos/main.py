@@ -185,6 +185,21 @@ async def lifespan(app: FastAPI):
                 "Install: npm install -g @googleworkspace/cli"
             )
 
+    # Register Agent Browser tool if enabled
+    if settings.browser.enabled:
+        import shutil
+        from odigos.tools.browser import BrowserTool
+
+        if shutil.which("agent-browser"):
+            browser_tool = BrowserTool(timeout=settings.browser.timeout)
+            tool_registry.register(browser_tool)
+            logger.info("Agent Browser tool initialized")
+        else:
+            logger.warning(
+                "Browser enabled but agent-browser CLI not found. "
+                "Install: npm install -g @anthropic-ai/agent-browser"
+            )
+
     # Initialize goal store
     goal_store = GoalStore(db=_db)
     logger.info("Goal store initialized")

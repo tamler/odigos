@@ -2072,8 +2072,8 @@ Don't create these until you actually need them: `free_pool.py`, `local_llm.py`,
 ### Phase 5: Knowledge & Capabilities (current)
 - [x] Install flow (`install.sh`, README, auto-setup)
 - [x] RAG document ingestion — auto-ingest via DocTool, semantic chunking, vector retrieval
-- [ ] Agent Browser — headless browser CLI (`@vercel-labs/agent-browser`) for full web interaction (click, type, navigate, not just scrape)
-- [ ] Context compression — reduce token usage from tool outputs in agent context (inspired by Context Mode)
+- [x] Agent Browser — headless browser CLI (`@anthropic-ai/agent-browser`) for full web interaction (click, type, navigate, not just scrape)
+- [ ] Context compression — reduce token usage from tool outputs in agent context (deferred: early optimization, revisit when tool output size becomes a bottleneck)
 - [ ] Litestream backup setup
 - [ ] Voice (STT/TTS) — when needed
 - [ ] Interactive approvals (Telegram inline keyboards) — when needed
