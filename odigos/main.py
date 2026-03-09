@@ -344,7 +344,7 @@ async def lifespan(app: FastAPI):
     _heartbeat = Heartbeat(
         db=_db,
         agent=agent,
-        telegram_channel=_telegram,
+        channel_registry=channel_registry,
         goal_store=goal_store,
         provider=_router,
         interval=settings.heartbeat.interval_seconds,

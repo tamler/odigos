@@ -13,7 +13,7 @@ from odigos.channels.base import UniversalMessage
 from odigos.db import Database
 
 if TYPE_CHECKING:
-    from odigos.channels.telegram import TelegramChannel
+    from odigos.channels.base import ChannelRegistry
     from odigos.core.agent import Agent
     from odigos.core.goal_store import GoalStore
     from odigos.core.subagent import SubagentManager
@@ -30,7 +30,7 @@ class Heartbeat:
         self,
         db: Database,
         agent: Agent,
-        telegram_channel: TelegramChannel,
+        channel_registry: ChannelRegistry,
         goal_store: GoalStore,
         provider: LLMProvider,
         interval: float = 30,
@@ -41,7 +41,7 @@ class Heartbeat:
     ) -> None:
         self.db = db
         self.agent = agent
-        self.telegram_channel = telegram_channel
+        self.channel_registry = channel_registry
         self.goal_store = goal_store
         self.provider = provider
         self._interval = interval
@@ -266,10 +266,9 @@ class Heartbeat:
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:
         try:
-            parts = conversation_id.split(":", 1)
-            if len(parts) == 2 and parts[0] == "telegram":
-                chat_id = int(parts[1])
-                await self.telegram_channel.send_message(chat_id, text[:4000])
+            channel = self.channel_registry.for_conversation(conversation_id)
+            if channel:
+                await channel.send_message(conversation_id, text[:4000])
         except Exception:
             logger.exception("Failed to send notification")
 

@@ -18,6 +18,8 @@ DOCUMENT_DIR = os.path.join(tempfile.gettempdir(), "odigos")
 class TelegramChannel(Channel):
     """Telegram bot channel using python-telegram-bot v21+."""
 
+    channel_name = "telegram"
+
     def __init__(
         self,
         token: str,
@@ -75,10 +77,27 @@ class TelegramChannel(Channel):
                 await self._app.stop()
             await self._app.shutdown()
 
-    async def send_message(self, chat_id: int, text: str) -> None:
-        """Send a message to a specific chat."""
-        if self._app:
-            await self._app.bot.send_message(chat_id=chat_id, text=text)
+    async def send_message(self, chat_id_or_conv: int | str, text: str) -> None:
+        """Send a message. Accepts chat_id (int) or conversation_id (str like 'telegram:123')."""
+        if not self._app:
+            return
+        if isinstance(chat_id_or_conv, str):
+            chat_id = self._parse_chat_id(chat_id_or_conv)
+            if chat_id is None:
+                return
+        else:
+            chat_id = chat_id_or_conv
+        await self._app.bot.send_message(chat_id=chat_id, text=text)
+
+    @staticmethod
+    def _parse_chat_id(conversation_id: str) -> int | None:
+        parts = conversation_id.split(":", 1)
+        if len(parts) == 2 and parts[0] == "telegram":
+            try:
+                return int(parts[1])
+            except ValueError:
+                return None
+        return None
 
     async def _handle_text(self, update: Update, context) -> None:
         """Handle incoming text messages."""
@@ -263,16 +282,10 @@ class TelegramChannel(Channel):
         if not self._app:
             return
 
-        # Extract chat_id from conversation_id
-        parts = conversation_id.split(":", 1)
-        if len(parts) != 2 or parts[0] != "telegram":
-            return
-        try:
-            chat_id = int(parts[1])
-        except ValueError:
+        chat_id = self._parse_chat_id(conversation_id)
+        if chat_id is None:
             return
 
-        # Build a readable summary of what the agent wants to do
         import json
         args_summary = json.dumps(arguments, indent=2)
         if len(args_summary) > 500:
