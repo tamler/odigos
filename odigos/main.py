@@ -167,6 +167,21 @@ async def lifespan(app: FastAPI):
     tool_registry.register(code_tool)
     logger.info("Code tool initialized (sandbox)")
 
+    # Register Google Workspace tool if enabled
+    if settings.gws.enabled:
+        import shutil
+        from odigos.tools.gws import GWSTool
+
+        if shutil.which("gws"):
+            gws_tool = GWSTool(timeout=settings.gws.timeout)
+            tool_registry.register(gws_tool)
+            logger.info("Google Workspace tool initialized (gws CLI)")
+        else:
+            logger.warning(
+                "GWS enabled but gws CLI not found. "
+                "Install: npm install -g @googleworkspace/cli"
+            )
+
     # Initialize goal store
     goal_store = GoalStore(db=_db)
     logger.info("Goal store initialized")
