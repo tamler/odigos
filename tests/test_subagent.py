@@ -8,6 +8,7 @@ from odigos.db import Database
 from odigos.providers.base import LLMResponse
 from odigos.tools.base import BaseTool, ToolResult
 from odigos.tools.registry import ToolRegistry
+from odigos.tools.subagent_tool import SpawnSubagentTool
 
 
 @pytest.fixture
@@ -252,3 +253,64 @@ class TestSubagentToolExclusion:
         tool_names = [t.name for t in restricted.list()]
         assert "spawn_subagent" not in tool_names
         assert "web_search" in tool_names
+
+
+class TestSpawnSubagentTool:
+    async def test_tool_metadata(self):
+        manager = AsyncMock()
+        tool = SpawnSubagentTool(subagent_manager=manager)
+        assert tool.name == "spawn_subagent"
+        assert "instruction" in tool.parameters_schema["properties"]
+        assert "instruction" in tool.parameters_schema["required"]
+
+    async def test_spawn_success(self, db):
+        await _seed_conversation(db, "test:conv-1")
+        provider = _make_mock_provider("Done")
+        registry = _make_tool_registry()
+        manager = SubagentManager(db=db, provider=provider, tool_registry=registry)
+
+        tool = SpawnSubagentTool(subagent_manager=manager)
+        result = await tool.execute({
+            "instruction": "Research AI safety",
+            "_conversation_id": "test:conv-1",
+        })
+        assert result.success is True
+        assert "sub-" in result.data.lower() or "subagent" in result.data.lower()
+
+    async def test_spawn_missing_instruction(self):
+        manager = AsyncMock()
+        tool = SpawnSubagentTool(subagent_manager=manager)
+        result = await tool.execute({"_conversation_id": "test:conv-1"})
+        assert result.success is False
+        assert "instruction" in result.error.lower()
+
+    async def test_spawn_missing_conversation(self):
+        manager = AsyncMock()
+        tool = SpawnSubagentTool(subagent_manager=manager)
+        result = await tool.execute({"instruction": "Do stuff"})
+        assert result.success is False
+
+    async def test_spawn_max_concurrent_error(self, db):
+        await _seed_conversation(db, "test:conv-1")
+        provider = AsyncMock()
+
+        async def slow(*args, **kwargs):
+            await asyncio.sleep(60)
+            return LLMResponse(content="done", model="test", tokens_in=0, tokens_out=0, cost_usd=0)
+
+        provider.complete = slow
+        registry = _make_tool_registry()
+        manager = SubagentManager(db=db, provider=provider, tool_registry=registry)
+
+        tool = SpawnSubagentTool(subagent_manager=manager)
+        for i in range(MAX_CONCURRENT_PER_CONVERSATION):
+            await tool.execute({"instruction": f"Task {i}", "_conversation_id": "test:conv-1"})
+
+        result = await tool.execute({"instruction": "Task overflow", "_conversation_id": "test:conv-1"})
+        assert result.success is False
+        assert "concurrent" in result.error.lower()
+
+        # Clean up background tasks
+        for task in manager._tasks.values():
+            task.cancel()
+        await asyncio.gather(*manager._tasks.values(), return_exceptions=True)
