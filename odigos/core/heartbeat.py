@@ -135,7 +135,7 @@ class Heartbeat:
             return False
 
         for t in todos:
-            await self._execute_todo(t)
+            asyncio.create_task(self._execute_todo(t))
         return True
 
     async def _execute_todo(self, todo: dict) -> None:

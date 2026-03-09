@@ -153,11 +153,23 @@ class ContextAssembler:
             total -= estimate_tokens(removed["content"])
             logger.debug("Trimmed history message to fit context budget")
 
-        if total > max_tokens:
-            logger.warning(
-                "Context still over budget after trimming all history (%d > %d tokens)",
-                total,
-                max_tokens,
-            )
+        # Phase 3: If still over budget, truncate the current user message
+        if total > max_tokens and len(messages) >= 2:
+            last_msg = messages[-1]
+            excess = total - max_tokens
+            excess_chars = excess * 4  # reverse the ~4 chars/token estimate
+            content = last_msg["content"]
+            if excess_chars < len(content):
+                last_msg["content"] = content[: len(content) - excess_chars] + "\n\n[message truncated to fit context window]"
+                logger.warning(
+                    "Truncated user message by ~%d tokens to fit context budget",
+                    excess,
+                )
+            else:
+                logger.warning(
+                    "Context still over budget after trimming all history (%d > %d tokens)",
+                    total,
+                    max_tokens,
+                )
 
         return messages

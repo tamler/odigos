@@ -37,14 +37,17 @@ class StdioTransport:
         self.env = env or {}
         self._cm: Any | None = None
 
+    # Only these environment variables are passed to MCP server subprocesses.
+    # This prevents leaking secrets (API keys, tokens) to third-party servers.
+    SAFE_ENV_KEYS = {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "SHELL", "TMPDIR"}
+
     async def connect(self) -> tuple[Any, Any]:
+        # Build a minimal environment -- only safe system vars + explicit overrides
+        safe_env = {k: v for k, v in os.environ.items() if k in self.SAFE_ENV_KEYS}
         if self.env:
-            # Merge specified env vars on top of inherited environment
-            # so the subprocess retains PATH, HOME, etc.
             expanded = {k: os.path.expandvars(v) for k, v in self.env.items()}
-            merged_env = {**os.environ, **expanded}
-        else:
-            merged_env = None  # inherit parent env as-is
+            safe_env.update(expanded)
+        merged_env = safe_env
         params = StdioServerParameters(
             command=self.command,
             args=self.args,

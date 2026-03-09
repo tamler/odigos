@@ -85,3 +85,14 @@ class Database:
         cursor = await self.conn.execute(sql, params)
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+    async def execute_in_transaction(self, statements: list[tuple[str, tuple]]) -> None:
+        """Execute multiple statements atomically in a single transaction."""
+        await self.conn.execute("BEGIN")
+        try:
+            for sql, params in statements:
+                await self.conn.execute(sql, params)
+            await self.conn.commit()
+        except Exception:
+            await self.conn.rollback()
+            raise

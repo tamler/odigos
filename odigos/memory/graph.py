@@ -179,17 +179,23 @@ class EntityGraph:
         keep_aliases = json.loads(keep["aliases_json"]) if keep["aliases_json"] else []
         remove_aliases = json.loads(remove["aliases_json"]) if remove["aliases_json"] else []
         combined = list(set(keep_aliases + remove_aliases + [remove["name"]]))
-        await self.update_entity(keep_id, aliases=combined)
 
-        # Reassign edges
-        await self.db.execute(
-            "UPDATE edges SET source_id = ? WHERE source_id = ?",
-            (keep_id, remove_id),
-        )
-        await self.db.execute(
-            "UPDATE edges SET target_id = ? WHERE target_id = ?",
-            (keep_id, remove_id),
-        )
-
-        # Delete the removed entity
-        await self.db.execute("DELETE FROM entities WHERE id = ?", (remove_id,))
+        # Execute all mutations atomically
+        await self.db.execute_in_transaction([
+            (
+                "UPDATE entities SET aliases_json = ?, updated_at = datetime('now') WHERE id = ?",
+                (json.dumps(combined), keep_id),
+            ),
+            (
+                "UPDATE edges SET source_id = ? WHERE source_id = ?",
+                (keep_id, remove_id),
+            ),
+            (
+                "UPDATE edges SET target_id = ? WHERE target_id = ?",
+                (keep_id, remove_id),
+            ),
+            (
+                "DELETE FROM entities WHERE id = ?",
+                (remove_id,),
+            ),
+        ])
