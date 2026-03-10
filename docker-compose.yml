@@ -1,0 +1,39 @@
+services:
+  odigos:
+    build: .
+    image: odigos:latest
+    container_name: odigos
+    restart: unless-stopped
+    ports:
+      - "${ODIGOS_PORT:-8000}:8000"
+    volumes:
+      - odigos-data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+      - ./skills:/app/skills:ro
+      - ./data/plugins:/app/data/plugins:ro
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Optional: local search engine
+  # Uncomment to enable SearXNG
+  # searxng:
+  #   image: searxng/searxng:latest
+  #   container_name: odigos-searxng
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8888:8080"
+  #   volumes:
+  #     - searxng-data:/etc/searxng
+  #   environment:
+  #     - SEARXNG_SECRET=change-me
+
+volumes:
+  odigos-data:
+  # searxng-data:

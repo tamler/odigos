@@ -1,0 +1,17 @@
+.venv
+.git
+.github
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+tests
+docs
+data/*.db
+data/chroma
+*.egg-info
+.worktrees
+worktrees
+.claude
+node_modules

@@ -1,32 +1,86 @@
+# Odigos Configuration
+# Copy this to config.yaml and fill in your values.
+
+# API key for authenticating dashboard and API requests.
+# If not set, a random key is generated on each startup and logged.
+# api_key: "your-secret-api-key-here"
+
 agent:
   name: "Odigos"
+  max_tool_turns: 10
+  run_timeout_seconds: 120
 
 database:
   path: "data/odigos.db"
 
+# LLM provider (OpenRouter)
 openrouter:
   default_model: "anthropic/claude-sonnet-4"
   fallback_model: "google/gemini-2.0-flash-001"
   max_tokens: 4096
   temperature: 0.7
 
+# Budget limits (USD)
+budget:
+  daily_limit_usd: 5.0
+  monthly_limit_usd: 50.0
+  warn_threshold: 0.8
+
+# Telegram bot
 telegram:
   mode: "polling"
   webhook_url: ""
 
+# Web server
 server:
-  host: "127.0.0.1"
+  host: "0.0.0.0"
   port: 8000
 
+# Heartbeat (autonomous loop)
+heartbeat:
+  interval_seconds: 300
+  max_todos_per_tick: 3
+  idle_think_interval: 0
+
+# Peer agents (agent-to-agent messaging)
+# peers:
+#   - name: "researcher"
+#     url: "http://researcher:8000"
+#     api_key: "peer-secret"
+
+# SearXNG search (optional)
+# searxng_url: "http://searxng:8080"
+# searxng_username: ""
+# searxng_password: ""
+
+# Google Workspace CLI (optional)
 gws:
   enabled: false
   timeout: 30
 
+# Agent Browser CLI (optional)
 browser:
   enabled: false
   timeout: 120
 
+# Tool approval gate (optional)
 approval:
   enabled: false
-  timeout: 300  # seconds to wait for user response
-  tools: []     # e.g. ["run_gws", "run_browser"]
+  timeout: 300
+  tools: []
+
+# MCP servers (optional)
+# mcp:
+#   servers:
+#     myserver:
+#       command: "npx"
+#       args: ["-y", "@my/mcp-server"]
+
+# Skills directory
+skills:
+  path: "skills"
+
+# Model router free pool (optional, for cost savings)
+# router:
+#   free_pool: ["google/gemini-2.0-flash-001"]
+#   rate_limit_rpm: 10
