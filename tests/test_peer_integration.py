@@ -10,13 +10,17 @@ class TestPeerEndpointMounted:
 
         app.state.agent = MagicMock()
         app.state.agent.handle_message = AsyncMock(return_value="ok")
-        app.state.settings = type("S", (), {"api_key": ""})()
+        app.state.settings = type("S", (), {"api_key": "test-key"})()
         mock_db = MagicMock()
         mock_db.fetch_one = AsyncMock(return_value=None)
         mock_db.execute = AsyncMock()
         app.state.db = mock_db
 
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            headers={"Authorization": "Bearer test-key"},
+        ) as c:
             resp = await c.post("/api/agent/message", json={
                 "from_agent": "test-peer",
                 "message_type": "message",

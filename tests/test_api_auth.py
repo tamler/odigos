@@ -62,12 +62,11 @@ async def test_wrong_key_returns_403():
 
 
 @pytest.mark.asyncio
-async def test_empty_api_key_allows_all():
-    """Dev mode: when api_key is empty, all requests pass without auth."""
+async def test_empty_api_key_returns_403():
+    """When api_key is not configured, requests are denied."""
     app = _make_app("")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get("/protected")
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    assert resp.status_code == 403

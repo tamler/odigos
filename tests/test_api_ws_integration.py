@@ -8,7 +8,7 @@ class TestWebSocketMounted:
         from odigos.main import app
         from odigos.channels.web import WebChannel
 
-        app.state.settings = type("S", (), {"api_key": ""})()
+        app.state.settings = type("S", (), {"api_key": "test-key"})()
         app.state.agent = MagicMock()
         app.state.agent.handle_message = AsyncMock(return_value="ok")
         app.state.tracer = MagicMock()
@@ -16,7 +16,7 @@ class TestWebSocketMounted:
         app.state.web_channel = WebChannel()
 
         client = TestClient(app)
-        with client.websocket_connect("/api/ws") as ws:
+        with client.websocket_connect("/api/ws?token=test-key") as ws:
             data = ws.receive_json()
             assert data["type"] == "connected"
             assert "session_id" in data

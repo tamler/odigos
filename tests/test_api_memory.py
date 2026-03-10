@@ -19,7 +19,7 @@ def _make_app(db: Database, vector_memory=None) -> FastAPI:
     app.include_router(router)
     app.state.db = db
     app.state.vector_memory = vector_memory
-    app.state.settings = SimpleNamespace(api_key="")  # dev mode, no auth
+    app.state.settings = SimpleNamespace(api_key="test-key")
     return app
 
 
@@ -35,7 +35,11 @@ async def db(tmp_db_path: str) -> Database:
 async def client(db: Database) -> AsyncClient:
     app = _make_app(db)
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as c:
         yield c
 
 
@@ -101,7 +105,11 @@ async def test_search_returns_results(db: Database):
 
     app = _make_app(db, vector_memory=mock_vm)
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as c:
         resp = await c.get("/api/memory/search", params={"q": "Alice", "limit": 5})
 
     assert resp.status_code == 200
@@ -121,7 +129,11 @@ async def test_search_empty_results(db: Database):
 
     app = _make_app(db, vector_memory=mock_vm)
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as c:
         resp = await c.get("/api/memory/search", params={"q": "nonexistent"})
 
     assert resp.status_code == 200

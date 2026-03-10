@@ -18,7 +18,7 @@ def _make_app(db: Database, store: GoalStore) -> FastAPI:
     app.include_router(router)
     app.state.db = db
     app.state.goal_store = store
-    app.state.settings = SimpleNamespace(api_key="")  # dev mode, no auth
+    app.state.settings = SimpleNamespace(api_key="test-key")
     return app
 
 
@@ -39,7 +39,11 @@ async def store(db: Database) -> GoalStore:
 async def client(db: Database, store: GoalStore) -> AsyncClient:
     app = _make_app(db, store)
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as c:
         yield c
 
 

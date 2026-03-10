@@ -68,6 +68,21 @@ async def lifespan(app: FastAPI):
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     settings = load_settings(config_path)
 
+    # Auto-generate API key if not configured
+    if not settings.api_key:
+        import secrets
+
+        settings.api_key = secrets.token_urlsafe(32)
+        logger.warning(
+            "No api_key configured — generated a random key for this session: %s",
+            settings.api_key,
+        )
+        logger.warning(
+            "Set 'api_key' in your config.yaml to use a persistent key."
+        )
+
+    app.state.settings = settings
+
     logger.info("Starting Odigos agent: %s", settings.agent.name)
 
     # Initialize database

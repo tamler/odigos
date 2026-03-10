@@ -13,7 +13,7 @@ def _make_app(plugin_manager) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     app.state.plugin_manager = plugin_manager
-    app.state.settings = type("S", (), {"api_key": ""})()
+    app.state.settings = type("S", (), {"api_key": "test-key"})()
     return app
 
 
@@ -27,7 +27,11 @@ async def test_list_plugins():
 
     app = _make_app(pm)
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as client:
         resp = await client.get("/api/plugins")
 
     assert resp.status_code == 200

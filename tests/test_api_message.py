@@ -17,7 +17,7 @@ def _make_app(agent: MagicMock) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     app.state.agent = agent
-    app.state.settings = SimpleNamespace(api_key="")  # dev mode, no auth
+    app.state.settings = SimpleNamespace(api_key="test-key")
     return app
 
 
@@ -32,7 +32,11 @@ def agent() -> MagicMock:
 async def client(agent: MagicMock) -> AsyncClient:
     app = _make_app(agent)
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as c:
         yield c
 
 

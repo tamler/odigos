@@ -16,12 +16,14 @@ async def websocket_endpoint(websocket: WebSocket):
     settings = websocket.app.state.settings
     configured_key = settings.api_key
 
-    # Auth: if api_key configured, check ?token= query param
-    if configured_key:
-        token = websocket.query_params.get("token")
-        if not token or token != configured_key:
-            await websocket.close(code=4003, reason="Invalid or missing token")
-            return
+    # Auth: always require token
+    token = websocket.query_params.get("token")
+    if not configured_key:
+        await websocket.close(code=4003, reason="API key not configured")
+        return
+    if not token or token != configured_key:
+        await websocket.close(code=4003, reason="Invalid or missing token")
+        return
 
     await websocket.accept()
 

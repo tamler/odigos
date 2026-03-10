@@ -39,7 +39,7 @@ def _mock_app_state():
     plugin_manager = MagicMock()
     plugin_manager.loaded_plugins = []
 
-    settings = type("S", (), {"api_key": ""})()
+    settings = type("S", (), {"api_key": "test-key"})()
 
     app.state.db = db
     app.state.goal_store = goal_store
@@ -63,7 +63,11 @@ def _mock_app_state():
 @pytest.fixture
 def client():
     transport = ASGITransport(app=app)
-    return AsyncClient(transport=transport, base_url="http://test")
+    return AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    )
 
 
 @pytest.mark.asyncio

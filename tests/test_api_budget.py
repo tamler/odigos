@@ -17,7 +17,7 @@ def _make_app(budget_tracker) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     app.state.budget_tracker = budget_tracker
-    app.state.settings = type("S", (), {"api_key": ""})()
+    app.state.settings = type("S", (), {"api_key": "test-key"})()
     return app
 
 
@@ -36,7 +36,11 @@ async def test_get_budget_status():
 
     app = _make_app(tracker)
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as client:
         resp = await client.get("/api/budget")
 
     assert resp.status_code == 200

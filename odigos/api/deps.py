@@ -6,16 +6,18 @@ from fastapi import HTTPException, Request
 async def require_api_key(request: Request):
     """Validate Bearer token against the configured API key.
 
-    If api_key is empty (dev mode), all requests are allowed.
+    If api_key is not configured, raises 403.
     Missing Authorization header raises 401.
     Wrong key raises 403.
     """
     settings = request.app.state.settings
     configured_key = settings.api_key
 
-    # Dev mode: empty key allows all requests
     if not configured_key:
-        return
+        raise HTTPException(
+            status_code=403,
+            detail="API key not configured. Set 'api_key' in config.yaml.",
+        )
 
     auth_header = request.headers.get("Authorization")
     if not auth_header:
