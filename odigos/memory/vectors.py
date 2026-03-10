@@ -128,3 +128,8 @@ class VectorMemory:
                 )
 
         return memory_results
+
+    async def count(self) -> int:
+        """Return total number of vectors stored."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._collection.count)

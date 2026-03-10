@@ -82,6 +82,13 @@ class MemoryManager:
         except Exception:
             logger.warning("Memory storage failed, skipping this turn", exc_info=True)
 
+    async def _is_duplicate(self, text: str, threshold: float = 0.15) -> bool:
+        """Check if a near-duplicate memory already exists."""
+        results = await self.vector_memory.search(text, limit=1)
+        if results and results[0].distance < threshold:
+            return True
+        return False
+
     async def _store_impl(
         self,
         conversation_id: str,
@@ -111,15 +118,16 @@ class MemoryManager:
                     target_id=target_result.entity_id,
                 )
 
-        # 2. Chunk and embed the user message for semantic search
+        # 2. Chunk and embed the user message (with dedup)
         chunks = self.chunking.chunk(user_message, content_type="message")
         for chunk in chunks:
-            await self.vector_memory.store(
-                text=chunk,
-                source_type="user_message",
-                source_id=conversation_id,
-                memory_type="personal",
-            )
+            if not await self._is_duplicate(chunk):
+                await self.vector_memory.store(
+                    text=chunk,
+                    source_type="user_message",
+                    source_id=conversation_id,
+                    memory_type="personal",
+                )
 
         # 3. Check if summarization is needed
         await self.summarizer.summarize_if_needed(conversation_id)

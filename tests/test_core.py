@@ -1068,6 +1068,7 @@ class TestChunkingIntegration:
 
         vector_memory = AsyncMock()
         vector_memory.store.return_value = "vec-id"
+        vector_memory.search.return_value = []
         graph = AsyncMock()
         resolver = AsyncMock()
         summarizer = AsyncMock()
