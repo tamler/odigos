@@ -100,6 +100,7 @@ class ApprovalConfig(BaseModel):
 class Settings(BaseSettings):
     telegram_bot_token: str
     openrouter_api_key: str
+    api_key: str = ""
     searxng_url: str = ""
     searxng_username: str = ""
     searxng_password: str = ""
