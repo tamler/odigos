@@ -483,6 +483,9 @@ app.include_router(ws_router)
 async def health():
     return {"status": "ok", "agent": "odigos"}
 
+from odigos.dashboard import mount_dashboard
+mount_dashboard(app)
+
 
 def main():
     import uvicorn
