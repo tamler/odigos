@@ -23,6 +23,7 @@ from odigos.providers.openrouter import OpenRouterProvider
 from odigos.providers.sandbox import SandboxProvider
 from odigos.core.budget import BudgetTracker
 from odigos.core.router import ModelRouter
+from odigos.core.plugin_context import PluginContext
 from odigos.core.plugins import PluginManager
 from odigos.core.subagent import SubagentManager
 from odigos.core.trace import Tracer
@@ -64,11 +65,6 @@ async def lifespan(app: FastAPI):
     # Initialize tracer
     tracer = Tracer(db=_db)
     logger.info("Tracer initialized")
-
-    # Load plugins
-    plugin_manager = PluginManager(tracer=tracer)
-    plugin_manager.load_all("data/plugins")
-    logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
 
     # Initialize LLM provider
     _provider = OpenRouterProvider(
@@ -311,6 +307,29 @@ async def lifespan(app: FastAPI):
 
     # Initialize channel registry
     channel_registry = ChannelRegistry()
+
+    # Create plugin context with all registries
+    plugin_context = PluginContext(
+        tool_registry=tool_registry,
+        channel_registry=channel_registry,
+        tracer=tracer,
+        config={},  # Will come from settings.plugins when config schema is updated
+    )
+
+    # Load plugins — new register(ctx) pattern + legacy hooks
+    plugin_manager = PluginManager(plugin_context=plugin_context)
+    plugin_manager.load_all("plugins")
+
+    # Also load legacy event-hook plugins from data/plugins
+    plugin_manager.load_all("data/plugins")
+    logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
+
+    # Check if docling plugin registered a provider
+    docling_from_plugin = plugin_context.get_provider("docling")
+    if docling_from_plugin:
+        # Update the doc tool with the plugin-provided docling
+        doc_tool.docling = docling_from_plugin
+        logger.info("Docling provider loaded from plugin")
 
     # Initialize approval gate if enabled
     approval_gate = None
