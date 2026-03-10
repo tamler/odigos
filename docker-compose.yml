@@ -1,9 +1,11 @@
 services:
   odigos:
     build: .
-    image: odigos:latest
+    image: ghcr.io/tamler/odigos:latest
     container_name: odigos
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${ODIGOS_PORT:-8000}:8000"
     volumes:
@@ -20,20 +22,4 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
-
-  # Optional: local search engine
-  # Uncomment to enable SearXNG
-  # searxng:
-  #   image: searxng/searxng:latest
-  #   container_name: odigos-searxng
-  #   restart: unless-stopped
-  #   ports:
-  #     - "8888:8080"
-  #   volumes:
-  #     - searxng-data:/etc/searxng
-  #   environment:
-  #     - SEARXNG_SECRET=change-me
-
-volumes: {}
-  # searxng-data:
+      start_period: 30s
