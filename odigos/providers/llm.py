@@ -7,21 +7,24 @@ from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 logger = logging.getLogger(__name__)
 
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
 
+class LLMClient(LLMProvider):
+    """OpenAI-compatible LLM provider with fallback support.
 
-class OpenRouterProvider(LLMProvider):
-    """OpenRouter LLM provider with fallback support."""
+    Works with any OpenAI-compatible API: OpenRouter, Ollama, LM Studio,
+    vLLM, OpenAI, and others.
+    """
 
     def __init__(
         self,
+        base_url: str,
         api_key: str,
         default_model: str,
         fallback_model: str,
         max_tokens: int = 4096,
         temperature: float = 0.7,
     ) -> None:
+        self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.default_model = default_model
         self.fallback_model = fallback_model
@@ -31,8 +34,6 @@ class OpenRouterProvider(LLMProvider):
             timeout=httpx.Timeout(60.0, connect=10.0),
             headers={
                 "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "https://odigos.one",
-                "X-Title": "Odigos Personal AI Agent",
                 "Content-Type": "application/json",
             },
         )
@@ -55,7 +56,7 @@ class OpenRouterProvider(LLMProvider):
         raise RuntimeError(f"All LLM providers failed. Last error: {last_error}")
 
     async def _call(self, messages: list[dict], model: str, **kwargs) -> LLMResponse:
-        """Make a single API call to OpenRouter."""
+        """Make a single API call to the OpenAI-compatible endpoint."""
         payload = {
             "model": model,
             "messages": messages,
@@ -66,10 +67,11 @@ class OpenRouterProvider(LLMProvider):
         if tools:
             payload["tools"] = tools
 
-        response = await self._client.post(OPENROUTER_API_URL, json=payload)
+        url = f"{self.base_url}/chat/completions"
+        response = await self._client.post(url, json=payload)
 
         if response.status_code != 200:
-            raise RuntimeError(f"OpenRouter API error {response.status_code}: {response.text}")
+            raise RuntimeError(f"LLM API error {response.status_code}: {response.text}")
 
         data = response.json()
         usage = data.get("usage", {})
@@ -98,24 +100,6 @@ class OpenRouterProvider(LLMProvider):
             generation_id=data.get("id"),
             tool_calls=tool_calls,
         )
-
-    async def fetch_generation_cost(self, generation_id: str) -> float | None:
-        """Fetch the total cost for a generation from OpenRouter."""
-        try:
-            response = await self._client.get(
-                OPENROUTER_GENERATION_URL,
-                params={"id": generation_id},
-            )
-            if response.status_code != 200:
-                return None
-            data = response.json().get("data", {})
-            cost = data.get("total_cost")
-            if cost is not None:
-                return float(cost)
-            return None
-        except Exception:
-            logger.debug("Failed to fetch generation cost for %s", generation_id, exc_info=True)
-            return None
 
     async def close(self) -> None:
         await self._client.aclose()

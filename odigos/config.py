@@ -15,7 +15,8 @@ class DatabaseConfig(BaseModel):
     path: str = "data/odigos.db"
 
 
-class OpenRouterConfig(BaseModel):
+class LLMConfig(BaseModel):
+    base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "anthropic/claude-sonnet-4"
     fallback_model: str = "google/gemini-2.0-flash-001"
     max_tokens: int = 4096
@@ -106,7 +107,7 @@ class PeerConfig(BaseModel):
 
 class Settings(BaseSettings):
     telegram_bot_token: str = ""
-    openrouter_api_key: str
+    llm_api_key: str
     api_key: str = ""
     searxng_url: str = ""
     searxng_username: str = ""
@@ -114,7 +115,7 @@ class Settings(BaseSettings):
 
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()
-    openrouter: OpenRouterConfig = OpenRouterConfig()
+    llm: LLMConfig = LLMConfig()
     personality: PersonalityConfig = PersonalityConfig()
     telegram: TelegramConfig = TelegramConfig()
     server: ServerConfig = ServerConfig()

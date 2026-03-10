@@ -12,7 +12,7 @@ services:
       - ./skills:/app/skills:ro
       - ./plugins:/app/plugins:ro
     environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LLM_API_KEY=${LLM_API_KEY}
       # Optional: uncomment to enable Telegram channel
       # - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
     healthcheck:

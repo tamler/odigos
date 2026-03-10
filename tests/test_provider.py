@@ -3,7 +3,7 @@ import httpx
 from unittest.mock import AsyncMock, patch
 
 from odigos.providers.base import LLMResponse, ToolCall
-from odigos.providers.openrouter import OpenRouterProvider
+from odigos.providers.llm import LLMClient
 from odigos.tools.base import BaseTool, ToolResult
 from odigos.tools.goals import CreateReminderTool, CreateTodoTool, CreateGoalTool
 from odigos.tools.registry import ToolRegistry
@@ -126,7 +126,7 @@ class TestGoalTools:
             assert "description" in tool.parameters_schema["properties"]
 
 
-class TestOpenRouterToolCalling:
+class TestLLMClientToolCalling:
     @pytest.mark.asyncio
     async def test_sends_tools_in_payload(self):
         tools = [{"type": "function", "function": {"name": "web_search", "description": "Search", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}}}]
@@ -135,7 +135,7 @@ class TestOpenRouterToolCalling:
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
             "model": "test/model", "id": "gen-123",
         })
-        provider = OpenRouterProvider(api_key="test-key", default_model="test/model", fallback_model="test/fallback")
+        provider = LLMClient(base_url="https://api.example.com/v1", api_key="test-key", default_model="test/model", fallback_model="test/fallback")
         with patch.object(provider._client, "post", new_callable=AsyncMock, return_value=mock_response) as mock_post:
             await provider.complete([{"role": "user", "content": "Hello"}], tools=tools)
             call_payload = mock_post.call_args.kwargs["json"]
@@ -150,7 +150,7 @@ class TestOpenRouterToolCalling:
             "usage": {"prompt_tokens": 10, "completion_tokens": 15},
             "model": "test/model", "id": "gen-456",
         })
-        provider = OpenRouterProvider(api_key="test-key", default_model="test/model", fallback_model="test/fallback")
+        provider = LLMClient(base_url="https://api.example.com/v1", api_key="test-key", default_model="test/model", fallback_model="test/fallback")
         with patch.object(provider._client, "post", new_callable=AsyncMock, return_value=mock_response):
             result = await provider.complete(
                 [{"role": "user", "content": "Search"}],
@@ -169,7 +169,7 @@ class TestOpenRouterToolCalling:
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
             "model": "test/model", "id": "gen-789",
         })
-        provider = OpenRouterProvider(api_key="test-key", default_model="test/model", fallback_model="test/fallback")
+        provider = LLMClient(base_url="https://api.example.com/v1", api_key="test-key", default_model="test/model", fallback_model="test/fallback")
         with patch.object(provider._client, "post", new_callable=AsyncMock, return_value=mock_response):
             result = await provider.complete([{"role": "user", "content": "Hello"}])
             assert result.tool_calls is None

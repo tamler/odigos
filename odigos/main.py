@@ -19,7 +19,7 @@ from odigos.memory.summarizer import ConversationSummarizer
 from odigos.memory.corrections import CorrectionsManager
 from odigos.memory.vectors import VectorMemory
 from odigos.providers.embeddings import EmbeddingProvider
-from odigos.providers.openrouter import OpenRouterProvider
+from odigos.providers.llm import LLMClient
 from odigos.providers.sandbox import SandboxProvider
 from odigos.core.budget import BudgetTracker
 from odigos.core.router import ModelRouter
@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 # Module-level references for cleanup
 _db: Database | None = None
-_provider: OpenRouterProvider | None = None
+_provider: LLMClient | None = None
 _embedder: EmbeddingProvider | None = None
 _channel_registry: ChannelRegistry | None = None
 _searxng = None
@@ -97,13 +97,14 @@ async def lifespan(app: FastAPI):
     tracer = Tracer(db=_db)
     logger.info("Tracer initialized")
 
-    # Initialize LLM provider
-    _provider = OpenRouterProvider(
-        api_key=settings.openrouter_api_key,
-        default_model=settings.openrouter.default_model,
-        fallback_model=settings.openrouter.fallback_model,
-        max_tokens=settings.openrouter.max_tokens,
-        temperature=settings.openrouter.temperature,
+    # Initialize LLM provider (OpenAI-compatible)
+    _provider = LLMClient(
+        base_url=settings.llm.base_url,
+        api_key=settings.llm_api_key,
+        default_model=settings.llm.default_model,
+        fallback_model=settings.llm.fallback_model,
+        max_tokens=settings.llm.max_tokens,
+        temperature=settings.llm.temperature,
     )
 
     # Initialize model router (wraps provider for free model pool)
@@ -336,11 +337,6 @@ async def lifespan(app: FastAPI):
             except Exception:
                 logger.exception("Failed to connect MCP server: %s", server_name)
 
-    # Create delayed cost fetcher for async backfill
-    async def _delayed_cost_fetcher(generation_id: str) -> float | None:
-        await asyncio.sleep(2)
-        return await _provider.fetch_generation_cost(generation_id)
-
     # Initialize channel registry
     channel_registry = ChannelRegistry()
 
@@ -393,7 +389,7 @@ async def lifespan(app: FastAPI):
         personality_path=settings.personality.path,
         tool_registry=tool_registry,
         skill_registry=skill_registry,
-        cost_fetcher=_delayed_cost_fetcher,
+        cost_fetcher=None,
         budget_tracker=budget_tracker,
         max_tool_turns=settings.agent.max_tool_turns,
         run_timeout=settings.agent.run_timeout_seconds,

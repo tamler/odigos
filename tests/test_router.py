@@ -60,7 +60,7 @@ class TestModelRouter:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                raise RuntimeError("OpenRouter API error 429: Rate limited")
+                raise RuntimeError("LLM API error 429: Rate limited")
             return _make_response(kwargs.get("model", "model-b:free"))
 
         mock_provider.complete.side_effect = side_effect

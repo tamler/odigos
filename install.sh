@@ -23,7 +23,7 @@ if [ ! -f .env ]; then
     cp .env.example .env
     echo "Created .env from example."
     echo ""
-    echo "  IMPORTANT: Edit .env and set your OPENROUTER_API_KEY before starting."
+    echo "  IMPORTANT: Edit .env and set your LLM_API_KEY before starting."
 else
     echo ".env already exists."
 fi
@@ -34,7 +34,7 @@ mkdir -p data data/plugins
 echo ""
 echo "Setup complete. Next steps:"
 echo ""
-echo "  1. Edit .env — set your OPENROUTER_API_KEY (required)"
+echo "  1. Edit .env — set your LLM_API_KEY (required)"
 echo "     Optional: set TELEGRAM_BOT_TOKEN to enable Telegram"
 echo "  2. Edit config.yaml — customize agent name, budget limits, etc."
 echo "  3. Build and start:"

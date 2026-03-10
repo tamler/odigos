@@ -4,12 +4,13 @@ import httpx
 import pytest
 
 from odigos.providers.base import LLMResponse
-from odigos.providers.openrouter import OpenRouterProvider
+from odigos.providers.llm import LLMClient
 
 
 @pytest.fixture
-def provider() -> OpenRouterProvider:
-    return OpenRouterProvider(
+def provider() -> LLMClient:
+    return LLMClient(
+        base_url="https://api.example.com/v1",
         api_key="test-key",
         default_model="test/model",
         fallback_model="test/fallback",
@@ -26,7 +27,7 @@ def _mock_response(content: str = "Hello!", model: str = "test/model") -> dict:
     }
 
 
-async def test_complete_success(provider: OpenRouterProvider):
+async def test_complete_success(provider: LLMClient):
     """Successful completion returns LLMResponse."""
     mock_resp = httpx.Response(200, json=_mock_response())
 
@@ -40,7 +41,7 @@ async def test_complete_success(provider: OpenRouterProvider):
     assert result.tokens_out == 5
 
 
-async def test_complete_falls_back_on_error(provider: OpenRouterProvider):
+async def test_complete_falls_back_on_error(provider: LLMClient):
     """Falls back to fallback model on primary model failure."""
     error_resp = httpx.Response(500, json={"error": "internal"})
     success_resp = httpx.Response(200, json=_mock_response("Fallback!", "test/fallback"))
@@ -61,7 +62,7 @@ async def test_complete_falls_back_on_error(provider: OpenRouterProvider):
     assert result.model == "test/fallback"
 
 
-async def test_complete_raises_on_total_failure(provider: OpenRouterProvider):
+async def test_complete_raises_on_total_failure(provider: LLMClient):
     """Raises when both primary and fallback fail."""
     error_resp = httpx.Response(500, json={"error": "internal"})
 
