@@ -1,9 +1,31 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from pathlib import Path
 
 import aiosqlite
 import sqlite_vec
+
+logger = logging.getLogger(__name__)
+
+_MAX_RETRIES = 3
+_RETRY_DELAYS = (0.1, 0.2, 0.4)  # seconds
+
+
+async def _retry_on_busy(coro_factory, max_retries=_MAX_RETRIES):
+    """Retry a coroutine factory on SQLITE_BUSY with exponential backoff."""
+    for attempt in range(max_retries + 1):
+        try:
+            return await coro_factory()
+        except aiosqlite.OperationalError as e:
+            if "locked" not in str(e).lower() and "busy" not in str(e).lower():
+                raise
+            if attempt >= max_retries:
+                raise
+            delay = _RETRY_DELAYS[attempt] if attempt < len(_RETRY_DELAYS) else _RETRY_DELAYS[-1]
+            logger.warning("DB busy, retrying in %.1fs (attempt %d/%d)", delay, attempt + 1, max_retries)
+            await asyncio.sleep(delay)
 
 
 class Database:
@@ -69,28 +91,43 @@ class Database:
 
     async def execute(self, sql: str, params: tuple = ()) -> None:
         """Execute a single SQL statement."""
-        await self.conn.execute(sql, params)
-        await self.conn.commit()
+        async def _do():
+            await self.conn.execute(sql, params)
+            await self.conn.commit()
+        await _retry_on_busy(_do)
 
     async def execute_returning_lastrowid(self, sql: str, params: tuple = ()) -> int:
         """Execute a single SQL statement and return lastrowid (for INSERT)."""
-        cursor = await self.conn.execute(sql, params)
-        await self.conn.commit()
-        return cursor.lastrowid
+        result = None
+        async def _do():
+            nonlocal result
+            cursor = await self.conn.execute(sql, params)
+            await self.conn.commit()
+            result = cursor.lastrowid
+        await _retry_on_busy(_do)
+        return result
 
     async def fetch_one(self, sql: str, params: tuple = ()) -> dict | None:
         """Fetch a single row as a dict, or None."""
-        cursor = await self.conn.execute(sql, params)
-        row = await cursor.fetchone()
-        if row is None:
-            return None
-        return dict(row)
+        result = None
+        async def _do():
+            nonlocal result
+            cursor = await self.conn.execute(sql, params)
+            row = await cursor.fetchone()
+            result = dict(row) if row else None
+        await _retry_on_busy(_do)
+        return result
 
     async def fetch_all(self, sql: str, params: tuple = ()) -> list[dict]:
         """Fetch all rows as a list of dicts."""
-        cursor = await self.conn.execute(sql, params)
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
+        result = []
+        async def _do():
+            nonlocal result
+            cursor = await self.conn.execute(sql, params)
+            rows = await cursor.fetchall()
+            result = [dict(row) for row in rows]
+        await _retry_on_busy(_do)
+        return result
 
     async def execute_in_transaction(self, statements: list[tuple[str, tuple]]) -> None:
         """Execute multiple statements atomically in a single transaction."""

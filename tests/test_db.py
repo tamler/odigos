@@ -1,4 +1,5 @@
 import pytest
+import aiosqlite
 
 from odigos.db import Database
 
@@ -107,3 +108,36 @@ async def test_sqlite_vec_extension_loaded(tmp_db_path: str):
         assert row["v"]  # non-empty version string
     finally:
         await db.close()
+
+
+class TestDatabaseRetry:
+    async def test_execute_retries_on_busy(self, db):
+        """Database.execute() retries on SQLITE_BUSY and succeeds."""
+        from unittest.mock import AsyncMock, patch
+
+        call_count = 0
+        original_execute = db.conn.execute
+
+        async def flaky_execute(sql, params=()):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise aiosqlite.OperationalError("database is locked")
+            return await original_execute(sql, params)
+
+        with patch.object(db.conn, "execute", side_effect=flaky_execute):
+            with patch.object(db.conn, "commit", new_callable=AsyncMock):
+                await db.execute("SELECT 1")
+
+        assert call_count == 2  # First try failed, second succeeded
+
+    async def test_execute_raises_after_max_retries(self, db):
+        """Database.execute() raises after exhausting retries."""
+        from unittest.mock import patch
+
+        async def always_locked(sql, params=()):
+            raise aiosqlite.OperationalError("database is locked")
+
+        with patch.object(db.conn, "execute", side_effect=always_locked):
+            with pytest.raises(aiosqlite.OperationalError):
+                await db.execute("SELECT 1")
