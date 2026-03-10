@@ -7,10 +7,30 @@ from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
-SUMMARIZE_PROMPT = (
-    "Summarize this conversation segment in 2-3 sentences. "
-    "Focus on key facts, decisions, and entities mentioned."
-)
+STRUCTURED_COMPACTION_PROMPT = """\
+Summarize this conversation segment using the following structured format.
+Include ONLY sections that have relevant content. Be concise.
+
+## Goal
+What is the user trying to accomplish? (1 sentence)
+
+## Progress
+- Done: What has been completed
+- In Progress: What is currently being worked on
+- Blocked: Any blockers or issues
+
+## Decisions
+Key decisions made during this conversation (bulleted list)
+
+## Next Steps
+What should happen next (bulleted list)
+
+## Key Facts
+Important facts, preferences, or context worth remembering (bulleted list)\
+"""
+
+# Backward-compatible alias
+SUMMARIZE_PROMPT = STRUCTURED_COMPACTION_PROMPT
 
 
 class ConversationSummarizer:
@@ -75,7 +95,7 @@ class ConversationSummarizer:
         # Call LLM to summarize
         summary_response = await self.llm_provider.complete(
             messages=[
-                {"role": "system", "content": SUMMARIZE_PROMPT},
+                {"role": "system", "content": STRUCTURED_COMPACTION_PROMPT},
                 {"role": "user", "content": conversation_text},
             ]
         )
@@ -97,6 +117,7 @@ class ConversationSummarizer:
             source_type="conversation_summary",
             source_id=summary_id,
             memory_type="summary",
+            when_to_use=f"when recalling context from conversation {conversation_id}",
         )
 
         logger.info(
