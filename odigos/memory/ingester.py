@@ -56,22 +56,31 @@ class DocumentIngester:
             (doc_id, filename, source_url, 0),
         )
 
+        stored_count = 0
         for chunk_text in chunks:
-            await self.vector_memory.store(
-                text=chunk_text,
-                source_type="document_chunk",
-                source_id=doc_id,
-            )
+            try:
+                await self.vector_memory.store(
+                    text=chunk_text,
+                    source_type="document_chunk",
+                    source_id=doc_id,
+                )
+                stored_count += 1
+            except Exception:
+                logger.warning(
+                    "Failed to store chunk %d/%d for document %s",
+                    stored_count + 1, len(chunks), doc_id, exc_info=True,
+                )
+                break
 
-        # Update with final chunk count
+        # Update with actual stored chunk count
         await self.db.execute(
             "UPDATE documents SET chunk_count = ? WHERE id = ?",
-            (len(chunks), doc_id),
+            (stored_count, doc_id),
         )
 
         logger.info(
-            "Ingested document '%s' (%d chunks) as %s",
-            filename, len(chunks), doc_id,
+            "Ingested document '%s' (%d/%d chunks) as %s",
+            filename, stored_count, len(chunks), doc_id,
         )
         return doc_id
 

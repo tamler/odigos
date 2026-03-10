@@ -1021,3 +1021,31 @@ class TestEmbeddingFailureResilience:
         # Should NOT raise, should return clean content
         result = await reflector.reflect("c1", response, user_message="hi")
         assert result == "Hello there!"
+
+
+class TestTransactionSafety:
+    async def test_ingester_records_partial_chunk_count(self, db: Database):
+        """DocumentIngester records chunks that were successfully stored before failure."""
+        from unittest.mock import AsyncMock
+        from odigos.memory.ingester import DocumentIngester
+
+        vector_memory = AsyncMock()
+        store_count = 0
+        async def store_then_fail(**kwargs):
+            nonlocal store_count
+            store_count += 1
+            if store_count >= 3:
+                raise RuntimeError("Embedding failed")
+            return "vec-id"
+        vector_memory.store.side_effect = store_then_fail
+
+        ingester = DocumentIngester(db=db, vector_memory=vector_memory)
+        text = "Para one.\n\nPara two.\n\nPara three.\n\nPara four."
+
+        # Should not raise, should record partial progress
+        doc_id = await ingester.ingest(text, "test.txt")
+
+        doc = await db.fetch_one("SELECT * FROM documents WHERE id = ?", (doc_id,))
+        assert doc is not None
+        # chunk_count should reflect what was actually stored (2 of 4)
+        assert doc["chunk_count"] == 2
