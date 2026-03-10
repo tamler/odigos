@@ -4,23 +4,31 @@ import importlib.util
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from odigos.core.trace import Tracer
+if TYPE_CHECKING:
+    from odigos.core.plugin_context import PluginContext
 
 logger = logging.getLogger(__name__)
 
 
 class PluginManager:
-    """Discovers and loads plugins from a directory, wiring hooks into Tracer."""
+    """Discovers and loads plugins from a directory.
 
-    def __init__(self, tracer: Tracer) -> None:
-        self.tracer = tracer
+    Supports two plugin patterns:
+    1. New: register(ctx) function -- receives PluginContext for registering tools/channels/providers
+    2. Legacy: hooks dict -- event type -> callback, wired into Tracer
+    """
+
+    def __init__(self, plugin_context: PluginContext | None = None, tracer=None) -> None:
+        self._ctx = plugin_context
+        self._tracer = tracer or (plugin_context.tracer if plugin_context else None)
         self.loaded_plugins: list[dict] = []
         self._plugins_dir: str | None = None
         self._module_names: list[str] = []
 
     def load_all(self, plugins_dir: str) -> None:
-        """Scan plugins_dir for *.py files and register their hooks."""
+        """Scan plugins_dir for plugin files/directories and load them."""
         for module_name in self._module_names:
             sys.modules.pop(module_name, None)
         self._module_names.clear()
@@ -29,20 +37,40 @@ class PluginManager:
         plugins_path = Path(plugins_dir)
         plugins_path.mkdir(parents=True, exist_ok=True)
 
+        # Load .py files directly
         for py_file in sorted(plugins_path.glob("*.py")):
             if py_file.name.startswith("__"):
                 continue
             self._load_plugin(py_file)
 
+        # Load directories with __init__.py
+        for subdir in sorted(plugins_path.iterdir()):
+            if subdir.is_dir() and not subdir.name.startswith("__"):
+                init = subdir / "__init__.py"
+                if init.exists():
+                    self._load_plugin(init, name_override=subdir.name)
+
+        # Recurse into category subdirectories (providers/, tools/, channels/)
+        for category_dir in sorted(plugins_path.iterdir()):
+            if category_dir.is_dir() and category_dir.name in ("providers", "tools", "channels"):
+                for subdir in sorted(category_dir.iterdir()):
+                    if subdir.is_dir() and not subdir.name.startswith("__"):
+                        init = subdir / "__init__.py"
+                        if init.exists():
+                            self._load_plugin(init, name_override=subdir.name)
+                    elif subdir.suffix == ".py" and not subdir.name.startswith("__"):
+                        self._load_plugin(subdir)
+
     def reload(self) -> None:
-        """Clear all subscribers, remove cached modules, and reload plugins."""
-        self.tracer.clear_subscribers()
+        """Clear and reload all plugins."""
+        if self._tracer:
+            self._tracer.clear_subscribers()
         if self._plugins_dir is not None:
             self.load_all(self._plugins_dir)
 
-    def _load_plugin(self, py_file: Path) -> None:
-        """Import a single plugin file and register its hooks."""
-        stem = py_file.stem
+    def _load_plugin(self, py_file: Path, name_override: str | None = None) -> None:
+        """Import a plugin and register via register(ctx) or legacy hooks."""
+        stem = name_override or py_file.stem
         module_name = f"odigos_plugin_{stem}"
 
         try:
@@ -59,29 +87,26 @@ class PluginManager:
 
         self._module_names.append(module_name)
 
+        # Try new pattern: register(ctx)
+        register_fn = getattr(module, "register", None)
+        if register_fn is not None and callable(register_fn) and self._ctx is not None:
+            try:
+                register_fn(self._ctx)
+                self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "register"})
+                return
+            except Exception:
+                logger.warning("Plugin %s register() failed", py_file, exc_info=True)
+                return
+
+        # Fall back to legacy pattern: hooks dict
         hooks = getattr(module, "hooks", None)
-        if hooks is None:
-            logger.warning("Plugin %s has no 'hooks' attribute, skipping", py_file)
+        if hooks and isinstance(hooks, dict) and self._tracer:
+            hook_count = 0
+            for event_type, callback in hooks.items():
+                if callable(callback):
+                    self._tracer.subscribe(event_type, callback)
+                    hook_count += 1
+            self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "hooks", "hook_count": hook_count})
             return
 
-        if not isinstance(hooks, dict):
-            logger.warning("Plugin %s 'hooks' is not a dict, skipping", py_file)
-            return
-
-        hook_count = 0
-        for event_type, callback in hooks.items():
-            if not callable(callback):
-                logger.warning(
-                    "Plugin %s hook '%s' is not callable, skipping",
-                    py_file,
-                    event_type,
-                )
-                continue
-            self.tracer.subscribe(event_type, callback)
-            hook_count += 1
-
-        self.loaded_plugins.append({
-            "name": stem,
-            "file": str(py_file),
-            "hook_count": hook_count,
-        })
+        logger.warning("Plugin %s has no register() or hooks, skipping", py_file)

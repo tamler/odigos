@@ -4,6 +4,7 @@ import logging
 import sys
 import textwrap
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -30,7 +31,7 @@ async def _seed_conversation(db: Database, conversation_id: str) -> None:
 class TestPluginManager:
     async def test_load_plugin_registers_hooks(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         plugin_file = tmp_path / "my_plugin.py"
         plugin_file.write_text(textwrap.dedent("""\
@@ -46,7 +47,7 @@ class TestPluginManager:
 
     async def test_load_multiple_plugins(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         for name in ("alpha", "beta"):
             (tmp_path / f"{name}.py").write_text(textwrap.dedent("""\
@@ -63,7 +64,7 @@ class TestPluginManager:
 
     async def test_skip_file_without_hooks(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         (tmp_path / "no_hooks.py").write_text("x = 1\n")
         pm.load_all(str(tmp_path))
@@ -72,7 +73,7 @@ class TestPluginManager:
 
     async def test_skip_file_with_import_error(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         (tmp_path / "bad.py").write_text("import nonexistent_module_xyz\n")
         pm.load_all(str(tmp_path))
@@ -81,7 +82,7 @@ class TestPluginManager:
 
     async def test_skip_non_dict_hooks(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         (tmp_path / "bad_hooks.py").write_text("hooks = [1, 2, 3]\n")
         pm.load_all(str(tmp_path))
@@ -90,7 +91,7 @@ class TestPluginManager:
 
     async def test_skip_non_callable_hook(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         (tmp_path / "non_callable.py").write_text(textwrap.dedent("""\
             hooks = {"step_start": "not_a_function"}
@@ -103,7 +104,7 @@ class TestPluginManager:
 
     async def test_empty_directory(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir()
@@ -113,7 +114,7 @@ class TestPluginManager:
 
     async def test_creates_directory_if_missing(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         plugins_dir = tmp_path / "new_plugins_dir"
         assert not plugins_dir.exists()
@@ -125,7 +126,7 @@ class TestPluginManager:
 
     async def test_skips_dunder_files(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         (tmp_path / "__init__.py").write_text(textwrap.dedent("""\
             async def on_event(event_type, conversation_id, data):
@@ -139,7 +140,7 @@ class TestPluginManager:
 
     async def test_reload_clears_and_reloads(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         plugin_file = tmp_path / "reloadable.py"
         plugin_file.write_text(textwrap.dedent("""\
@@ -168,7 +169,7 @@ class TestPluginManager:
 
     async def test_loaded_plugins_metadata(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         plugin_file = tmp_path / "meta_plugin.py"
         plugin_file.write_text(textwrap.dedent("""\
@@ -194,7 +195,7 @@ class TestPluginManagerIntegration:
     async def test_plugin_receives_trace_event(self, db, tmp_path):
         await _seed_conversation(db, "conv-1")
         tracer = Tracer(db)
-        pm = PluginManager(tracer)
+        pm = PluginManager(tracer=tracer)
 
         plugin_file = tmp_path / "collector.py"
         plugin_file.write_text(textwrap.dedent("""\
@@ -249,3 +250,183 @@ class TestSamplePlugin:
 
         assert "Tool called: search" in caplog.text
         assert "Tool result: search" in caplog.text
+
+
+class TestPluginContext:
+    def test_register_tool(self):
+        """PluginContext.register_tool() adds tool to the registry."""
+        from odigos.core.plugin_context import PluginContext
+        from odigos.tools.registry import ToolRegistry
+        from odigos.tools.base import BaseTool, ToolResult
+
+        class DummyTool(BaseTool):
+            name = "dummy"
+            description = "test"
+            parameters_schema = {}
+            async def execute(self, params): return ToolResult(success=True, data="ok")
+
+        tool_registry = ToolRegistry()
+        ctx = PluginContext(tool_registry=tool_registry)
+        ctx.register_tool(DummyTool())
+
+        assert tool_registry.get("dummy") is not None
+
+    def test_register_provider(self):
+        """PluginContext.register_provider() stores provider by name."""
+        from odigos.core.plugin_context import PluginContext
+
+        ctx = PluginContext()
+        ctx.register_provider("my_llm", object())
+        assert ctx.get_provider("my_llm") is not None
+
+    def test_register_channel(self):
+        """PluginContext.register_channel() adds to channel registry."""
+        from odigos.channels.base import ChannelRegistry
+        from odigos.core.plugin_context import PluginContext
+
+        channel_registry = ChannelRegistry()
+        ctx = PluginContext(channel_registry=channel_registry)
+
+        mock_channel = MagicMock()
+        ctx.register_channel("discord", mock_channel)
+        assert channel_registry.for_conversation("discord:123") is not None
+
+    def test_register_tool_no_registry_warns(self, caplog):
+        """PluginContext.register_tool() warns when no registry is set."""
+        from odigos.core.plugin_context import PluginContext
+        from odigos.tools.base import BaseTool, ToolResult
+
+        class DummyTool(BaseTool):
+            name = "dummy"
+            description = "test"
+            parameters_schema = {}
+            async def execute(self, params): return ToolResult(success=True, data="ok")
+
+        ctx = PluginContext()
+        with caplog.at_level(logging.WARNING):
+            ctx.register_tool(DummyTool())
+        assert "no tool registry" in caplog.text
+
+    def test_register_channel_no_registry_warns(self, caplog):
+        """PluginContext.register_channel() warns when no registry is set."""
+        from odigos.core.plugin_context import PluginContext
+
+        ctx = PluginContext()
+        with caplog.at_level(logging.WARNING):
+            ctx.register_channel("discord", MagicMock())
+        assert "no channel registry" in caplog.text
+
+    def test_get_provider_returns_none_for_missing(self):
+        """PluginContext.get_provider() returns None for unregistered name."""
+        from odigos.core.plugin_context import PluginContext
+
+        ctx = PluginContext()
+        assert ctx.get_provider("nonexistent") is None
+
+
+class TestPluginLoader:
+    def test_loads_register_function_plugins(self, tmp_path):
+        """PluginManager loads plugins with register(ctx) pattern."""
+        from odigos.core.plugin_context import PluginContext
+        from odigos.tools.registry import ToolRegistry
+
+        # Create a test plugin
+        plugin_file = tmp_path / "test_plugin.py"
+        plugin_file.write_text(textwrap.dedent("""\
+            from odigos.tools.base import BaseTool, ToolResult
+
+            class TestTool(BaseTool):
+                name = "test_plugin_tool"
+                description = "from plugin"
+                parameters_schema = {}
+                async def execute(self, params): return ToolResult(success=True, data="ok")
+
+            def register(ctx):
+                ctx.register_tool(TestTool())
+        """))
+
+        tool_registry = ToolRegistry()
+        ctx = PluginContext(tool_registry=tool_registry)
+        manager = PluginManager(plugin_context=ctx)
+        manager.load_all(str(tmp_path))
+
+        assert tool_registry.get("test_plugin_tool") is not None
+        assert len(manager.loaded_plugins) == 1
+        assert manager.loaded_plugins[0]["pattern"] == "register"
+
+    def test_loads_subdirectory_plugins(self, tmp_path):
+        """PluginManager loads plugins from providers/tools/channels subdirs."""
+        from odigos.core.plugin_context import PluginContext
+
+        providers_dir = tmp_path / "providers" / "my_provider"
+        providers_dir.mkdir(parents=True)
+        (providers_dir / "__init__.py").write_text(textwrap.dedent("""\
+            def register(ctx):
+                ctx.register_provider("my_provider", {"loaded": True})
+        """))
+
+        ctx = PluginContext()
+        manager = PluginManager(plugin_context=ctx)
+        manager.load_all(str(tmp_path))
+
+        assert ctx.get_provider("my_provider") is not None
+        assert len(manager.loaded_plugins) == 1
+
+    def test_loads_package_plugins(self, tmp_path):
+        """PluginManager loads plugins from directories with __init__.py."""
+        from odigos.core.plugin_context import PluginContext
+
+        pkg_dir = tmp_path / "my_package"
+        pkg_dir.mkdir()
+        (pkg_dir / "__init__.py").write_text(textwrap.dedent("""\
+            def register(ctx):
+                ctx.register_provider("pkg_provider", {"loaded": True})
+        """))
+
+        ctx = PluginContext()
+        manager = PluginManager(plugin_context=ctx)
+        manager.load_all(str(tmp_path))
+
+        assert ctx.get_provider("pkg_provider") is not None
+
+    def test_loads_legacy_hooks_plugins(self, tmp_path, db):
+        """PluginManager still supports legacy hooks-based plugins."""
+        from odigos.core.plugin_context import PluginContext
+
+        plugin_file = tmp_path / "legacy_plugin.py"
+        plugin_file.write_text(textwrap.dedent("""\
+            async def on_tool_call(event_type, conversation_id, data):
+                pass
+
+            hooks = {"tool_call": on_tool_call}
+        """))
+
+        tracer = Tracer(db=db)
+        ctx = PluginContext(tracer=tracer)
+        manager = PluginManager(plugin_context=ctx)
+        manager.load_all(str(tmp_path))
+
+        assert len(manager.loaded_plugins) == 1
+        assert manager.loaded_plugins[0]["pattern"] == "hooks"
+
+    def test_register_pattern_preferred_over_hooks(self, tmp_path):
+        """When a plugin has both register() and hooks, register() wins."""
+        from odigos.core.plugin_context import PluginContext
+
+        plugin_file = tmp_path / "dual_plugin.py"
+        plugin_file.write_text(textwrap.dedent("""\
+            async def on_step(event_type, conversation_id, data):
+                pass
+
+            hooks = {"step_start": on_step}
+
+            def register(ctx):
+                ctx.register_provider("dual", {"loaded": True})
+        """))
+
+        ctx = PluginContext()
+        manager = PluginManager(plugin_context=ctx)
+        manager.load_all(str(tmp_path))
+
+        assert ctx.get_provider("dual") is not None
+        assert manager.loaded_plugins[0]["pattern"] == "register"

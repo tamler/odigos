@@ -933,3 +933,154 @@ class TestSkillCatalogInContext:
         messages = await assembler.build("conv-1", "Hello")
         system_content = messages[0]["content"]
         assert "Available skills" not in system_content
+
+
+class TestExecutorErrorRecovery:
+    async def test_llm_failure_returns_graceful_message(self, db: Database):
+        """Executor returns a user-friendly message when all LLM models fail."""
+        provider = AsyncMock()
+        provider.complete.side_effect = RuntimeError("All LLM providers failed")
+
+        context = AsyncMock()
+        context.build.return_value = [
+            {"role": "system", "content": "test"},
+            {"role": "user", "content": "hello"},
+        ]
+
+        executor = Executor(provider=provider, context_assembler=context, db=db)
+        result = await executor.execute("test-conv", "hello")
+
+        assert result.response.content is not None
+        assert "trouble" in result.response.content.lower() or "couldn't" in result.response.content.lower()
+        assert result.response.model == "system"
+
+    async def test_llm_failure_does_not_crash(self, db: Database):
+        """Agent.handle_message doesn't propagate LLM exceptions to the caller."""
+        provider = AsyncMock()
+        provider.complete.side_effect = RuntimeError("Connection refused")
+
+        agent = Agent(db=db, provider=provider)
+        msg = UniversalMessage(
+            id="test-1", content="hello", sender="user1",
+            channel="test", metadata={"chat_id": "1"},
+            timestamp=datetime.now(timezone.utc),
+        )
+        # Should NOT raise
+        response = await agent.handle_message(msg)
+        assert isinstance(response, str)
+        assert len(response) > 0
+
+
+class TestEmbeddingFailureResilience:
+    async def test_memory_store_survives_embedding_failure(self, db: Database):
+        """MemoryManager.store() logs warning but doesn't raise when embedding fails."""
+        from unittest.mock import AsyncMock
+        from odigos.memory.manager import MemoryManager
+
+        vector_memory = AsyncMock()
+        vector_memory.store.side_effect = RuntimeError("Embedding model crashed")
+        graph = AsyncMock()
+        resolver = AsyncMock()
+        resolver.resolve.return_value = AsyncMock(entity_id="e1")
+        summarizer = AsyncMock()
+
+        mm = MemoryManager(
+            vector_memory=vector_memory, graph=graph,
+            resolver=resolver, summarizer=summarizer,
+        )
+
+        # Should NOT raise
+        await mm.store(
+            conversation_id="c1",
+            user_message="hello",
+            assistant_response="hi",
+            extracted_entities=[],
+        )
+
+    async def test_reflector_survives_memory_failure(self, db: Database):
+        """Reflector.reflect() returns clean content even if memory storage fails."""
+        from unittest.mock import AsyncMock
+        from odigos.core.reflector import Reflector
+        from odigos.providers.base import LLMResponse
+
+        memory_manager = AsyncMock()
+        memory_manager.store.side_effect = RuntimeError("Memory system down")
+
+        reflector = Reflector(db=db, memory_manager=memory_manager)
+        response = LLMResponse(
+            content="Hello there!", model="test",
+            tokens_in=10, tokens_out=5, cost_usd=0.001,
+        )
+
+        # Create conversation for FK constraint
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            ("c1", "test"),
+        )
+
+        # Should NOT raise, should return clean content
+        result = await reflector.reflect("c1", response, user_message="hi")
+        assert result == "Hello there!"
+
+
+class TestTransactionSafety:
+    async def test_ingester_records_partial_chunk_count(self, db: Database):
+        """DocumentIngester records chunks that were successfully stored before failure."""
+        from unittest.mock import AsyncMock
+        from odigos.memory.ingester import DocumentIngester
+
+        vector_memory = AsyncMock()
+        store_count = 0
+        async def store_then_fail(**kwargs):
+            nonlocal store_count
+            store_count += 1
+            if store_count >= 3:
+                raise RuntimeError("Embedding failed")
+            return "vec-id"
+        vector_memory.store.side_effect = store_then_fail
+
+        from odigos.memory.chunking import ChunkingService
+
+        chunking = ChunkingService()
+        ingester = DocumentIngester(db=db, vector_memory=vector_memory, chunking_service=chunking)
+        # Build a text long enough to produce multiple chunks (over 500 tokens)
+        text = ("Paragraph about topic A. " * 80 + "\n\n") * 5
+
+        # Pre-check: chunking produces multiple chunks
+        chunks = chunking.chunk(text, content_type="document")
+        assert len(chunks) >= 3, f"Expected at least 3 chunks, got {len(chunks)}"
+
+        # Should not raise, should record partial progress
+        doc_id = await ingester.ingest(text, "test.txt")
+
+        doc = await db.fetch_one("SELECT * FROM documents WHERE id = ?", (doc_id,))
+        assert doc is not None
+        # chunk_count should reflect what was actually stored (2 of N)
+        assert doc["chunk_count"] == 2
+
+
+class TestChunkingIntegration:
+    async def test_long_message_is_chunked_before_storage(self, db: Database):
+        """Long user messages are chunked before vector storage."""
+        from unittest.mock import AsyncMock, call
+        from odigos.memory.chunking import ChunkingService
+        from odigos.memory.manager import MemoryManager
+
+        vector_memory = AsyncMock()
+        vector_memory.store.return_value = "vec-id"
+        graph = AsyncMock()
+        resolver = AsyncMock()
+        summarizer = AsyncMock()
+        chunking = ChunkingService()
+
+        mm = MemoryManager(
+            vector_memory=vector_memory, graph=graph,
+            resolver=resolver, summarizer=summarizer,
+            chunking_service=chunking,
+        )
+
+        long_msg = "This is a detailed message about cats. " * 200
+        await mm.store("c1", long_msg, "response", [])
+
+        # Should have been called multiple times (once per chunk)
+        assert vector_memory.store.call_count > 1

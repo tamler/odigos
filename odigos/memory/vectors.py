@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-import struct
+import asyncio
+import logging
 import uuid
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING
 
-from odigos.db import Database
+import chromadb
 
 if TYPE_CHECKING:
     from odigos.providers.embeddings import EmbeddingProvider
 
-VECTOR_DIMENSIONS = 768
+logger = logging.getLogger(__name__)
+
+COLLECTION_NAME = "memory_vectors"
 
 
 @dataclass
@@ -22,71 +26,89 @@ class MemoryResult:
 
 
 class VectorMemory:
-    """sqlite-vec backed vector store for semantic memory search."""
+    """ChromaDB-backed vector store for semantic memory search."""
 
-    def __init__(self, db: Database, embedder: EmbeddingProvider) -> None:
-        self.db = db
+    def __init__(self, embedder: EmbeddingProvider, persist_dir: str = "data/chroma") -> None:
         self.embedder = embedder
+        self._persist_dir = persist_dir
+        self._client: chromadb.ClientAPI | None = None
+        self._collection: chromadb.Collection | None = None
 
     async def initialize(self) -> None:
-        """Create the vec0 virtual table if it doesn't exist."""
-        await self.db.execute(
-            f"CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0("
-            f"id TEXT PRIMARY KEY, "
-            f"embedding FLOAT[{VECTOR_DIMENSIONS}], "
-            f"+source_type TEXT, "
-            f"+source_id TEXT, "
-            f"+content_preview TEXT, "
-            f"+created_at TEXT"
-            f")"
+        """Create or open the ChromaDB persistent client and collection."""
+        loop = asyncio.get_running_loop()
+        self._client = await loop.run_in_executor(
+            None,
+            partial(chromadb.PersistentClient, path=self._persist_dir),
+        )
+        self._collection = await loop.run_in_executor(
+            None,
+            partial(
+                self._client.get_or_create_collection,
+                name=COLLECTION_NAME,
+                metadata={"hnsw:space": "cosine"},
+            ),
         )
 
     async def store(self, text: str, source_type: str, source_id: str) -> str:
-        """Embed text and store in vector table. Returns the vector ID."""
+        """Embed text and store in ChromaDB. Returns the vector ID."""
         vector = await self.embedder.embed(text)
         vec_id = str(uuid.uuid4())
 
-        await self.db.execute(
-            "INSERT INTO memory_vectors (id, embedding, source_type, source_id, "
-            "content_preview, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
-            (vec_id, _serialize_vector(vector), source_type, source_id, text[:500]),
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            partial(
+                self._collection.add,
+                ids=[vec_id],
+                embeddings=[vector],
+                metadatas=[{
+                    "source_type": source_type,
+                    "source_id": source_id,
+                    "content_preview": text[:500],
+                }],
+                documents=[text[:500]],
+            ),
         )
         return vec_id
 
-    async def search(self, query: str, limit: int = 5) -> list[MemoryResult]:
-        """Embed query and find nearest neighbors.
+    async def search(
+        self, query: str, limit: int = 5, source_type: str | None = None,
+    ) -> list[MemoryResult]:
+        """Embed query and find nearest neighbors."""
+        loop = asyncio.get_running_loop()
+        count = await loop.run_in_executor(None, self._collection.count)
+        if count == 0:
+            return []
 
-        Note: sqlite-vec virtual tables return raw tuples (not dicts),
-        so we use positional indexing on the results.
-        """
         vector = await self.embedder.embed_query(query)
 
-        # sqlite-vec MATCH queries return raw tuples, so we go through
-        # db.conn directly here — fetch_all's Row factory doesn't apply
-        # to vec0 virtual table results.
-        cursor = await self.db.conn.execute(
-            """
-            SELECT id, distance, source_type, source_id, content_preview
-            FROM memory_vectors
-            WHERE embedding MATCH ?
-            ORDER BY distance
-            LIMIT ?
-            """,
-            (_serialize_vector(vector), limit),
+        where_filter = None
+        if source_type:
+            where_filter = {"source_type": source_type}
+
+        results = await loop.run_in_executor(
+            None,
+            partial(
+                self._collection.query,
+                query_embeddings=[vector],
+                n_results=min(limit, count),
+                where=where_filter,
+            ),
         )
-        rows = await cursor.fetchall()
 
-        return [
-            MemoryResult(
-                content_preview=row[4],
-                source_type=row[2],
-                source_id=row[3],
-                distance=row[1],
-            )
-            for row in rows
-        ]
+        memory_results = []
+        if results and results["ids"] and results["ids"][0]:
+            for i, _id in enumerate(results["ids"][0]):
+                meta = results["metadatas"][0][i]
+                dist = results["distances"][0][i] if results.get("distances") else 0.0
+                memory_results.append(
+                    MemoryResult(
+                        content_preview=meta.get("content_preview", ""),
+                        source_type=meta.get("source_type", ""),
+                        source_id=meta.get("source_id", ""),
+                        distance=dist,
+                    )
+                )
 
-
-def _serialize_vector(vector: list[float]) -> bytes:
-    """Serialize a float vector to bytes for sqlite-vec."""
-    return struct.pack(f"{len(vector)}f", *vector)
+        return memory_results

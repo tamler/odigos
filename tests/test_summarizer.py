@@ -20,13 +20,14 @@ async def db(tmp_db_path: str) -> Database:
 @pytest.fixture
 def mock_embedder():
     embedder = AsyncMock()
-    embedder.embed.return_value = [0.1] * 1536
+    embedder.embed.return_value = [0.1] * 768
+    embedder.embed_query.return_value = [0.1] * 768
     return embedder
 
 
 @pytest.fixture
-async def vector_memory(db: Database, mock_embedder) -> VectorMemory:
-    vm = VectorMemory(db=db, embedder=mock_embedder)
+async def vector_memory(tmp_path, mock_embedder) -> VectorMemory:
+    vm = VectorMemory(embedder=mock_embedder, persist_dir=str(tmp_path / "chroma"))
     await vm.initialize()
     return vm
 

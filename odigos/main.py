@@ -23,6 +23,7 @@ from odigos.providers.openrouter import OpenRouterProvider
 from odigos.providers.sandbox import SandboxProvider
 from odigos.core.budget import BudgetTracker
 from odigos.core.router import ModelRouter
+from odigos.core.plugin_context import PluginContext
 from odigos.core.plugins import PluginManager
 from odigos.core.subagent import SubagentManager
 from odigos.core.trace import Tracer
@@ -65,11 +66,6 @@ async def lifespan(app: FastAPI):
     tracer = Tracer(db=_db)
     logger.info("Tracer initialized")
 
-    # Load plugins
-    plugin_manager = PluginManager(tracer=tracer)
-    plugin_manager.load_all("data/plugins")
-    logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
-
     # Initialize LLM provider
     _provider = OpenRouterProvider(
         api_key=settings.openrouter_api_key,
@@ -103,8 +99,13 @@ async def lifespan(app: FastAPI):
     _embedder = EmbeddingProvider()
 
     # Initialize memory stack
-    vector_memory = VectorMemory(db=_db, embedder=_embedder)
+    from pathlib import Path
+    vector_memory = VectorMemory(embedder=_embedder, persist_dir=str(Path(settings.database.path).parent / "chroma"))
     await vector_memory.initialize()
+
+    from odigos.memory.chunking import ChunkingService
+
+    chunking_service = ChunkingService()
 
     graph = EntityGraph(db=_db)
     resolver = EntityResolver(graph=graph, vector_memory=vector_memory)
@@ -114,6 +115,7 @@ async def lifespan(app: FastAPI):
         graph=graph,
         resolver=resolver,
         summarizer=summarizer,
+        chunking_service=chunking_service,
     )
     logger.info("Memory system initialized")
 
@@ -155,16 +157,23 @@ async def lifespan(app: FastAPI):
     logger.info("Feed tool initialized (feedparser)")
 
     # Initialize document processing
-    from odigos.providers.docling import DoclingProvider
+    from odigos.providers.markitdown import MarkItDownProvider
     from odigos.tools.document import DocTool
 
-    docling_provider = DoclingProvider()
+    markitdown_provider = MarkItDownProvider()
+
+    docling_provider = None  # Loaded via plugin if available
+
     from odigos.memory.ingester import DocumentIngester
 
-    doc_ingester = DocumentIngester(db=_db, vector_memory=vector_memory)
-    doc_tool = DocTool(provider=docling_provider, ingester=doc_ingester)
+    doc_ingester = DocumentIngester(db=_db, vector_memory=vector_memory, chunking_service=chunking_service)
+    doc_tool = DocTool(
+        markitdown_provider=markitdown_provider,
+        ingester=doc_ingester,
+        docling_provider=docling_provider,
+    )
     tool_registry.register(doc_tool)
-    logger.info("Document tool initialized (docling)")
+    logger.info("Document tool initialized (MarkItDown default, Docling %s)", "available" if docling_provider else "not installed")
 
     # Initialize code execution sandbox
     from odigos.tools.code import CodeTool
@@ -298,6 +307,29 @@ async def lifespan(app: FastAPI):
 
     # Initialize channel registry
     channel_registry = ChannelRegistry()
+
+    # Create plugin context with all registries
+    plugin_context = PluginContext(
+        tool_registry=tool_registry,
+        channel_registry=channel_registry,
+        tracer=tracer,
+        config={},  # Will come from settings.plugins when config schema is updated
+    )
+
+    # Load plugins — new register(ctx) pattern + legacy hooks
+    plugin_manager = PluginManager(plugin_context=plugin_context)
+    plugin_manager.load_all("plugins")
+
+    # Also load legacy event-hook plugins from data/plugins
+    plugin_manager.load_all("data/plugins")
+    logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
+
+    # Check if docling plugin registered a provider
+    docling_from_plugin = plugin_context.get_provider("docling")
+    if docling_from_plugin:
+        # Update the doc tool with the plugin-provided docling
+        doc_tool.docling = docling_from_plugin
+        logger.info("Docling provider loaded from plugin")
 
     # Initialize approval gate if enabled
     approval_gate = None

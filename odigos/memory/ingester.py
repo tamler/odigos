@@ -5,12 +5,8 @@ import uuid
 from typing import TYPE_CHECKING
 
 from odigos.db import Database
+from odigos.memory.chunking import ChunkingService
 from odigos.memory.vectors import VectorMemory
-
-try:
-    from docling.chunking import HybridChunker
-except ImportError:
-    HybridChunker = None  # type: ignore[assignment,misc]
 
 if TYPE_CHECKING:
     pass
@@ -18,18 +14,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _split_paragraphs(text: str) -> list[str]:
-    """Simple fallback chunker: split on double newlines, skip empties."""
-    chunks = [p.strip() for p in text.split("\n\n") if p.strip()]
-    return chunks if chunks else [text] if text.strip() else []
-
-
 class DocumentIngester:
     """Chunks and embeds documents into VectorMemory for RAG retrieval."""
 
-    def __init__(self, db: Database, vector_memory: VectorMemory) -> None:
+    def __init__(
+        self, db: Database, vector_memory: VectorMemory,
+        chunking_service: ChunkingService | None = None,
+    ) -> None:
         self.db = db
         self.vector_memory = vector_memory
+        self.chunking = chunking_service or ChunkingService()
 
     async def ingest(
         self,
@@ -40,14 +34,12 @@ class DocumentIngester:
     ) -> str:
         doc_id = str(uuid.uuid4())
 
-        # Use HybridChunker on the full DoclingDocument for better structural
-        # chunks. This intentionally bypasses DoclingProvider's max_content_chars
-        # truncation -- RAG benefits from indexing the complete document.
-        if dl_doc is not None and HybridChunker is not None:
-            chunker = HybridChunker()
-            chunks = [c.text for c in chunker.chunk(dl_doc) if c.text.strip()]
-        else:
-            chunks = _split_paragraphs(text)
+        # Detect content type from filename
+        content_type = "document"
+        if filename.endswith((".py", ".js", ".ts", ".go", ".rs", ".java", ".c", ".cpp")):
+            content_type = "code"
+
+        chunks = self.chunking.chunk(text, content_type=content_type)
 
         # Insert document record first so partial failures are recoverable
         await self.db.execute(
@@ -56,22 +48,31 @@ class DocumentIngester:
             (doc_id, filename, source_url, 0),
         )
 
+        stored_count = 0
         for chunk_text in chunks:
-            await self.vector_memory.store(
-                text=chunk_text,
-                source_type="document_chunk",
-                source_id=doc_id,
-            )
+            try:
+                await self.vector_memory.store(
+                    text=chunk_text,
+                    source_type="document_chunk",
+                    source_id=doc_id,
+                )
+                stored_count += 1
+            except Exception:
+                logger.warning(
+                    "Failed to store chunk %d/%d for document %s",
+                    stored_count + 1, len(chunks), doc_id, exc_info=True,
+                )
+                break
 
-        # Update with final chunk count
+        # Update with actual stored chunk count
         await self.db.execute(
             "UPDATE documents SET chunk_count = ? WHERE id = ?",
-            (len(chunks), doc_id),
+            (stored_count, doc_id),
         )
 
         logger.info(
-            "Ingested document '%s' (%d chunks) as %s",
-            filename, len(chunks), doc_id,
+            "Ingested document '%s' (%d/%d chunks) as %s",
+            filename, stored_count, len(chunks), doc_id,
         )
         return doc_id
 

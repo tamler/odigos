@@ -108,25 +108,31 @@ class Reflector:
         if response.generation_id and self._cost_fetcher:
             asyncio.create_task(self._backfill_cost(msg_id, response.generation_id))
 
-        # Pass to memory manager if available
+        # Pass to memory manager if available (best-effort)
         if self.memory_manager and user_message is not None:
-            await self.memory_manager.store(
-                conversation_id=conversation_id,
-                user_message=user_message,
-                assistant_response=content,
-                extracted_entities=entities,
-            )
+            try:
+                await self.memory_manager.store(
+                    conversation_id=conversation_id,
+                    user_message=user_message,
+                    assistant_response=content,
+                    extracted_entities=entities,
+                )
+            except Exception:
+                logger.warning("Memory storage failed during reflection", exc_info=True)
 
-        # Log scrape if metadata provided
+        # Log scrape if metadata provided (best-effort)
         if scrape_metadata:
-            url = scrape_metadata.get("url", "")
-            title = scrape_metadata.get("title", "")
-            content_text = scrape_metadata.get("content", "")
-            summary = content_text[:200] if content_text else ""
-            await self.db.execute(
-                "INSERT INTO scraped_pages (id, url, title, summary) VALUES (?, ?, ?, ?)",
-                (str(uuid.uuid4()), url, title, summary),
-            )
+            try:
+                url = scrape_metadata.get("url", "")
+                title = scrape_metadata.get("title", "")
+                content_text = scrape_metadata.get("content", "")
+                summary = content_text[:200] if content_text else ""
+                await self.db.execute(
+                    "INSERT INTO scraped_pages (id, url, title, summary) VALUES (?, ?, ?, ?)",
+                    (str(uuid.uuid4()), url, title, summary),
+                )
+            except Exception:
+                logger.warning("Failed to log scrape metadata", exc_info=True)
 
         if self.tracer:
             await self.tracer.emit("reflection", conversation_id, {})

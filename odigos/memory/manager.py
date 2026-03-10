@@ -1,5 +1,6 @@
 import logging
 
+from odigos.memory.chunking import ChunkingService
 from odigos.memory.graph import EntityGraph
 from odigos.memory.resolver import EntityResolver
 from odigos.memory.summarizer import ConversationSummarizer
@@ -17,11 +18,13 @@ class MemoryManager:
         graph: EntityGraph,
         resolver: EntityResolver,
         summarizer: ConversationSummarizer,
+        chunking_service: ChunkingService | None = None,
     ) -> None:
         self.vector_memory = vector_memory
         self.graph = graph
         self.resolver = resolver
         self.summarizer = summarizer
+        self.chunking = chunking_service or ChunkingService()
 
     async def recall(self, query: str, limit: int = 5) -> str:
         """Recall relevant memories for the given query.
@@ -70,7 +73,22 @@ class MemoryManager:
         assistant_response: str,
         extracted_entities: list[dict],
     ) -> None:
-        """Process and store memories from a conversation turn."""
+        """Process and store memories from a conversation turn.
+
+        Best-effort: failures are logged but don't crash the agent.
+        """
+        try:
+            await self._store_impl(conversation_id, user_message, assistant_response, extracted_entities)
+        except Exception:
+            logger.warning("Memory storage failed, skipping this turn", exc_info=True)
+
+    async def _store_impl(
+        self,
+        conversation_id: str,
+        user_message: str,
+        assistant_response: str,
+        extracted_entities: list[dict],
+    ) -> None:
         # 1. Resolve and store entities
         for entity_data in extracted_entities:
             result = await self.resolver.resolve(
@@ -93,12 +111,14 @@ class MemoryManager:
                     target_id=target_result.entity_id,
                 )
 
-        # 2. Embed the user message for semantic search
-        await self.vector_memory.store(
-            text=user_message,
-            source_type="user_message",
-            source_id=conversation_id,
-        )
+        # 2. Chunk and embed the user message for semantic search
+        chunks = self.chunking.chunk(user_message, content_type="message")
+        for chunk in chunks:
+            await self.vector_memory.store(
+                text=chunk,
+                source_type="user_message",
+                source_id=conversation_id,
+            )
 
         # 3. Check if summarization is needed
         await self.summarizer.summarize_if_needed(conversation_id)
