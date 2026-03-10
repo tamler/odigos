@@ -68,6 +68,52 @@ def manager(vector_memory, graph, resolver, summarizer):
     )
 
 
+class TestWhenToUseGeneration:
+    async def test_preference_gets_when_to_use(self, manager, vector_memory, mock_embedder):
+        """User preferences generate appropriate when_to_use."""
+        await manager.store(
+            conversation_id="conv-1",
+            user_message="I prefer dark mode in all applications",
+            assistant_response="Noted!",
+            extracted_entities=[],
+        )
+        embed_calls = mock_embedder.embed.call_args_list
+        any_preference = any("preferences" in str(c).lower() for c in embed_calls)
+        assert any_preference
+
+    async def test_fact_gets_when_to_use(self, manager, vector_memory, mock_embedder):
+        """Facts about people generate appropriate when_to_use."""
+        await manager.store(
+            conversation_id="conv-2",
+            user_message="Alice is a software engineer at Google",
+            assistant_response="Got it!",
+            extracted_entities=[],
+        )
+        embed_calls = mock_embedder.embed.call_args_list
+        any_facts = any("facts" in str(c).lower() or "people" in str(c).lower() for c in embed_calls)
+        assert any_facts
+
+    def test_generate_when_to_use_preferences(self):
+        """Heuristic detects preference keywords."""
+        result = MemoryManager._generate_when_to_use("I prefer Python", "user_message")
+        assert "preferences" in result
+
+    def test_generate_when_to_use_facts(self):
+        """Heuristic detects fact keywords."""
+        result = MemoryManager._generate_when_to_use("Alice is a doctor", "user_message")
+        assert "facts" in result
+
+    def test_generate_when_to_use_general(self):
+        """General messages get a generic when_to_use."""
+        result = MemoryManager._generate_when_to_use("Hello how are you", "user_message")
+        assert "discussed" in result
+
+    def test_generate_when_to_use_document(self):
+        """Document chunks get document-specific when_to_use."""
+        result = MemoryManager._generate_when_to_use("Chapter 1 content", "document_chunk")
+        assert "documents" in result
+
+
 class TestMemoryManager:
     async def test_recall_empty(self, manager):
         """Recall with no stored data returns empty string."""

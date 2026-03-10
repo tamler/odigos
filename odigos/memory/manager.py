@@ -82,9 +82,24 @@ class MemoryManager:
         except Exception:
             logger.warning("Memory storage failed, skipping this turn", exc_info=True)
 
-    async def _is_duplicate(self, text: str, threshold: float = 0.15) -> bool:
+    @staticmethod
+    def _generate_when_to_use(text: str, source_type: str) -> str:
+        """Generate a when_to_use description from content heuristics."""
+        text_lower = text.lower()
+        if source_type == "user_message":
+            if any(w in text_lower for w in ("prefer", "like", "want", "always", "never")):
+                return f"when recalling user preferences about: {text[:100]}"
+            if any(w in text_lower for w in ("is a", "works at", "lives in", "born")):
+                return f"when recalling facts about people or places mentioned in: {text[:100]}"
+            return f"when the user previously discussed: {text[:100]}"
+        if source_type == "document_chunk":
+            return f"when referencing ingested documents about: {text[:100]}"
+        return ""
+
+    async def _is_duplicate(self, text: str, threshold: float = 0.15, search_text: str | None = None) -> bool:
         """Check if a near-duplicate memory already exists."""
-        results = await self.vector_memory.search(text, limit=1)
+        query = search_text if search_text else text
+        results = await self.vector_memory.search(query, limit=1)
         if results and results[0].distance < threshold:
             return True
         return False
@@ -121,12 +136,14 @@ class MemoryManager:
         # 2. Chunk and embed the user message (with dedup)
         chunks = self.chunking.chunk(user_message, content_type="message")
         for chunk in chunks:
-            if not await self._is_duplicate(chunk):
+            when_to_use = self._generate_when_to_use(chunk, "user_message")
+            if not await self._is_duplicate(chunk, search_text=when_to_use or None):
                 await self.vector_memory.store(
                     text=chunk,
                     source_type="user_message",
                     source_id=conversation_id,
                     memory_type="personal",
+                    when_to_use=when_to_use,
                 )
 
         # 3. Check if summarization is needed
