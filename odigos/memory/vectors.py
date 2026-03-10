@@ -30,37 +30,40 @@ class VectorMemory:
 
     async def initialize(self) -> None:
         """Create the vec0 virtual table if it doesn't exist."""
-        await self.db.conn.execute(
-            f"""
-            CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0(
-                id TEXT PRIMARY KEY,
-                embedding FLOAT[{VECTOR_DIMENSIONS}],
-                +source_type TEXT,
-                +source_id TEXT,
-                +content_preview TEXT,
-                +created_at TEXT
-            )
-            """
+        await self.db.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0("
+            f"id TEXT PRIMARY KEY, "
+            f"embedding FLOAT[{VECTOR_DIMENSIONS}], "
+            f"+source_type TEXT, "
+            f"+source_id TEXT, "
+            f"+content_preview TEXT, "
+            f"+created_at TEXT"
+            f")"
         )
-        await self.db.conn.commit()
 
     async def store(self, text: str, source_type: str, source_id: str) -> str:
         """Embed text and store in vector table. Returns the vector ID."""
         vector = await self.embedder.embed(text)
         vec_id = str(uuid.uuid4())
 
-        await self.db.conn.execute(
+        await self.db.execute(
             "INSERT INTO memory_vectors (id, embedding, source_type, source_id, "
             "content_preview, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
             (vec_id, _serialize_vector(vector), source_type, source_id, text[:500]),
         )
-        await self.db.conn.commit()
         return vec_id
 
     async def search(self, query: str, limit: int = 5) -> list[MemoryResult]:
-        """Embed query and find nearest neighbors."""
+        """Embed query and find nearest neighbors.
+
+        Note: sqlite-vec virtual tables return raw tuples (not dicts),
+        so we use positional indexing on the results.
+        """
         vector = await self.embedder.embed_query(query)
 
+        # sqlite-vec MATCH queries return raw tuples, so we go through
+        # db.conn directly here — fetch_all's Row factory doesn't apply
+        # to vec0 virtual table results.
         cursor = await self.db.conn.execute(
             """
             SELECT id, distance, source_type, source_id, content_preview

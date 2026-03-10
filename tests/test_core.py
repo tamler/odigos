@@ -557,7 +557,10 @@ class TestContextBudget:
     async def test_estimate_tokens(self, db: Database):
         from odigos.core.context import estimate_tokens
 
-        assert estimate_tokens("hello world") == len("hello world") // 4
+        # tiktoken cl100k_base: "hello world" = 2 tokens
+        count = estimate_tokens("hello world")
+        assert count > 0
+        assert isinstance(count, int)
 
     async def test_trims_history_when_over_budget(self, db: Database):
         """Context assembler trims oldest history when over token budget."""

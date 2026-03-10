@@ -16,7 +16,7 @@ class CreateReminderTool(BaseTool):
         "properties": {
             "description": {"type": "string", "description": "What to be reminded about"},
             "due_seconds": {"type": "integer", "description": "Seconds from now until the reminder fires. 0 = immediately."},
-            "recurrence": {"type": "string", "description": "Optional: 'daily', 'weekly', 'hourly', or 'every Ns' for custom intervals. Omit for one-shot."},
+            "recurrence": {"type": "string", "description": "Optional: 'daily', 'weekly', 'hourly', 'every Ns' for raw seconds, or natural language like 'every 2 hours', 'every 30 minutes', 'every 3 days'. Omit for one-shot."},
         },
         "required": ["description", "due_seconds"],
     }

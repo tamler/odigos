@@ -147,6 +147,13 @@ async def lifespan(app: FastAPI):
         tool_registry.register(search_tool)
         logger.info("Search tool initialized (SearXNG: %s)", settings.searxng_url)
 
+    # Initialize RSS feed tool
+    from odigos.tools.feed import FeedTool
+
+    feed_tool = FeedTool()
+    tool_registry.register(feed_tool)
+    logger.info("Feed tool initialized (feedparser)")
+
     # Initialize document processing
     from odigos.providers.docling import DoclingProvider
     from odigos.tools.document import DocTool

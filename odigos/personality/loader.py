@@ -31,12 +31,22 @@ class Personality:
     identity: IdentityConfig = field(default_factory=IdentityConfig)
 
 
+_cache: dict[str, tuple[float, Personality]] = {}
+
+
 def load_personality(path: str) -> Personality:
-    """Load personality from a YAML file. Returns defaults if file is missing."""
+    """Load personality from a YAML file. Caches until file mtime changes.
+
+    Returns defaults if file is missing.
+    """
     filepath = Path(path)
     if not filepath.exists():
-        logger.info("Personality file not found at %s, using defaults", path)
         return Personality()
+
+    mtime = filepath.stat().st_mtime
+    cached = _cache.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
 
     with open(filepath) as f:
         data = yaml.safe_load(f) or {}
@@ -44,7 +54,7 @@ def load_personality(path: str) -> Personality:
     voice_data = data.get("voice", {})
     identity_data = data.get("identity", {})
 
-    return Personality(
+    personality = Personality(
         name=data.get("name", "Odigos"),
         voice=VoiceConfig(
             **{k: v for k, v in voice_data.items() if k in VoiceConfig.__dataclass_fields__}
@@ -53,3 +63,5 @@ def load_personality(path: str) -> Personality:
             **{k: v for k, v in identity_data.items() if k in IdentityConfig.__dataclass_fields__}
         ),
     )
+    _cache[path] = (mtime, personality)
+    return personality

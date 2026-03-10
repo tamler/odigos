@@ -72,6 +72,12 @@ class Database:
         await self.conn.execute(sql, params)
         await self.conn.commit()
 
+    async def execute_returning_lastrowid(self, sql: str, params: tuple = ()) -> int:
+        """Execute a single SQL statement and return lastrowid (for INSERT)."""
+        cursor = await self.conn.execute(sql, params)
+        await self.conn.commit()
+        return cursor.lastrowid
+
     async def fetch_one(self, sql: str, params: tuple = ()) -> dict | None:
         """Fetch a single row as a dict, or None."""
         cursor = await self.conn.execute(sql, params)

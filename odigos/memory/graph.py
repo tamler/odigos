@@ -107,7 +107,7 @@ class EntityGraph:
         strength: float = 1.0,
     ) -> int:
         """Create an edge between two entities. Returns the edge ID."""
-        cursor = await self.db.conn.execute(
+        return await self.db.execute_returning_lastrowid(
             "INSERT INTO edges (source_id, relationship, target_id, strength, "
             "metadata_json, last_confirmed) VALUES (?, ?, ?, ?, ?, datetime('now'))",
             (
@@ -118,8 +118,6 @@ class EntityGraph:
                 json.dumps(metadata) if metadata else None,
             ),
         )
-        await self.db.conn.commit()
-        return cursor.lastrowid
 
     async def get_related(self, entity_id: str) -> list[dict]:
         """Get all entities one hop away from the given entity."""

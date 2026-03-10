@@ -68,7 +68,7 @@ class SubagentManager:
         subagent_id = str(uuid.uuid4())
 
         # Atomic insert: only succeeds if fewer than MAX_CONCURRENT running
-        await self.db.conn.execute(
+        await self.db.execute(
             "INSERT INTO subagent_tasks (id, parent_conversation_id, instruction, status) "
             "SELECT ?, ?, ?, 'running' "
             "WHERE (SELECT COUNT(*) FROM subagent_tasks "
@@ -76,7 +76,6 @@ class SubagentManager:
             (subagent_id, parent_conversation_id, instruction,
              parent_conversation_id, MAX_CONCURRENT_PER_CONVERSATION),
         )
-        await self.db.conn.commit()
 
         # Verify the row was actually inserted
         row = await self.db.fetch_one(

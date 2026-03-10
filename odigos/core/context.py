@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import tiktoken
+
 from odigos.db import Database
 from odigos.personality.loader import load_personality
 from odigos.personality.prompt_builder import build_system_prompt
@@ -15,10 +17,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_tokenizer = tiktoken.get_encoding("cl100k_base")
+
 
 def estimate_tokens(text: str) -> int:
-    """Estimate token count from text. Rough: ~4 chars per token."""
-    return len(text) // 4
+    """Count tokens using tiktoken (cl100k_base, used by Claude/GPT-4)."""
+    return len(_tokenizer.encode(text, disallowed_special=()))
 
 
 class ContextAssembler:
@@ -157,10 +161,11 @@ class ContextAssembler:
         if total > max_tokens and len(messages) >= 2:
             last_msg = messages[-1]
             excess = total - max_tokens
-            excess_chars = excess * 4  # reverse the ~4 chars/token estimate
             content = last_msg["content"]
-            if excess_chars < len(content):
-                last_msg["content"] = content[: len(content) - excess_chars] + "\n\n[message truncated to fit context window]"
+            tokens = _tokenizer.encode(content, disallowed_special=())
+            keep = len(tokens) - excess
+            if keep > 0:
+                last_msg["content"] = _tokenizer.decode(tokens[:keep]) + "\n\n[message truncated to fit context window]"
                 logger.warning(
                     "Truncated user message by ~%d tokens to fit context budget",
                     excess,
