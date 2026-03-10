@@ -65,3 +65,44 @@ class TestWhenToUse:
         results = await vector_memory.search("meeting time")
         assert len(results) >= 1
         assert results[0].when_to_use == ""
+
+
+class TestMemoryType:
+    async def test_store_with_memory_type(self, vector_memory):
+        """Memories can be stored with a type classification."""
+        await vector_memory.store(
+            text="User prefers Python",
+            source_type="user_message",
+            source_id="conv-1",
+            memory_type="personal",
+        )
+        results = await vector_memory.search("preferences")
+        assert results[0].memory_type == "personal"
+
+    async def test_filter_by_memory_type(self, vector_memory):
+        """Search can filter by memory_type."""
+        await vector_memory.store(
+            text="Deploy with docker compose up",
+            source_type="user_message",
+            source_id="conv-1",
+            memory_type="procedural",
+        )
+        await vector_memory.store(
+            text="User likes dark mode",
+            source_type="user_message",
+            source_id="conv-2",
+            memory_type="personal",
+        )
+        results = await vector_memory.search("user settings", memory_type="personal")
+        for r in results:
+            assert r.memory_type == "personal"
+
+    async def test_default_memory_type_is_general(self, vector_memory):
+        """Default memory_type is 'general'."""
+        await vector_memory.store(
+            text="Random fact",
+            source_type="user_message",
+            source_id="conv-1",
+        )
+        results = await vector_memory.search("fact")
+        assert results[0].memory_type == "general"

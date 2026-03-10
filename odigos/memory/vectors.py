@@ -24,6 +24,7 @@ class MemoryResult:
     source_id: str
     distance: float
     when_to_use: str = ""
+    memory_type: str = "general"
 
 
 class VectorMemory:
@@ -51,7 +52,7 @@ class VectorMemory:
             ),
         )
 
-    async def store(self, text: str, source_type: str, source_id: str, when_to_use: str = "") -> str:
+    async def store(self, text: str, source_type: str, source_id: str, when_to_use: str = "", memory_type: str = "general") -> str:
         """Embed text and store in ChromaDB. Returns the vector ID."""
         embed_input = when_to_use if when_to_use else text
         vector = await self.embedder.embed(embed_input)
@@ -69,6 +70,7 @@ class VectorMemory:
                     "source_id": source_id,
                     "content_preview": text[:500],
                     "when_to_use": when_to_use,
+                    "memory_type": memory_type,
                 }],
                 documents=[text[:500]],
             ),
@@ -77,6 +79,7 @@ class VectorMemory:
 
     async def search(
         self, query: str, limit: int = 5, source_type: str | None = None,
+        memory_type: str | None = None,
     ) -> list[MemoryResult]:
         """Embed query and find nearest neighbors."""
         loop = asyncio.get_running_loop()
@@ -86,9 +89,17 @@ class VectorMemory:
 
         vector = await self.embedder.embed_query(query)
 
-        where_filter = None
+        conditions = []
         if source_type:
-            where_filter = {"source_type": source_type}
+            conditions.append({"source_type": source_type})
+        if memory_type:
+            conditions.append({"memory_type": memory_type})
+        if len(conditions) == 1:
+            where_filter = conditions[0]
+        elif len(conditions) > 1:
+            where_filter = {"$and": conditions}
+        else:
+            where_filter = None
 
         results = await loop.run_in_executor(
             None,
@@ -112,6 +123,7 @@ class VectorMemory:
                         source_id=meta.get("source_id", ""),
                         distance=dist,
                         when_to_use=meta.get("when_to_use", ""),
+                        memory_type=meta.get("memory_type", "general"),
                     )
                 )
 

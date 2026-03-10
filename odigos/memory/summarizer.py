@@ -96,6 +96,7 @@ class ConversationSummarizer:
             text=summary_text,
             source_type="conversation_summary",
             source_id=summary_id,
+            memory_type="summary",
         )
 
         logger.info(

@@ -118,6 +118,7 @@ class MemoryManager:
                 text=chunk,
                 source_type="user_message",
                 source_id=conversation_id,
+                memory_type="personal",
             )
 
         # 3. Check if summarization is needed
