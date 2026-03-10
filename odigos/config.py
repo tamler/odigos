@@ -97,6 +97,13 @@ class ApprovalConfig(BaseModel):
     timeout: int = 300
 
 
+class PeerConfig(BaseModel):
+    """Configuration for a trusted peer agent."""
+    name: str
+    url: str
+    api_key: str = ""
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str
     openrouter_api_key: str
@@ -121,6 +128,7 @@ class Settings(BaseSettings):
     gws: GWSConfig = GWSConfig()
     browser: BrowserConfig = BrowserConfig()
     approval: ApprovalConfig = ApprovalConfig()
+    peers: list[PeerConfig] = []
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
