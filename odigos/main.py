@@ -36,6 +36,8 @@ from odigos.api.budget import router as budget_router
 from odigos.api.metrics import router as metrics_router
 from odigos.api.plugins import router as plugins_router
 from odigos.api.message import router as message_router
+from odigos.api.ws import router as ws_router
+from odigos.channels.web import WebChannel
 
 logging.basicConfig(
     level=logging.INFO,
@@ -386,6 +388,13 @@ async def lifespan(app: FastAPI):
         approval_gate=approval_gate,
     )
     channel_registry.register("telegram", telegram_channel)
+
+    # Initialize WebChannel for WebSocket-based web dashboard
+    web_channel = WebChannel()
+    channel_registry.register("web", web_channel)
+    web_channel.setup_tracer_forwarding(tracer)
+    app.state.web_channel = web_channel
+
     _channel_registry = channel_registry
 
     # Initialize heartbeat
@@ -455,6 +464,7 @@ app.include_router(budget_router)
 app.include_router(metrics_router)
 app.include_router(plugins_router)
 app.include_router(message_router)
+app.include_router(ws_router)
 
 
 @app.get("/health")
