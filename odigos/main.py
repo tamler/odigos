@@ -166,14 +166,7 @@ async def lifespan(app: FastAPI):
 
     markitdown_provider = MarkItDownProvider()
 
-    # Try to load Docling (optional heavy dependency)
-    docling_provider = None
-    try:
-        from odigos.providers.docling import DoclingProvider
-        docling_provider = DoclingProvider()
-        logger.info("Docling provider loaded (deep document extraction available)")
-    except ImportError:
-        logger.info("Docling not installed — using MarkItDown for all document processing")
+    docling_provider = None  # Loaded via plugin if available
 
     from odigos.memory.ingester import DocumentIngester
 
