@@ -69,16 +69,15 @@ async def test_send_message(client):
         result = await client.send("sarah", "hello there")
 
     assert result == {"status": "ok", "reply": "got it"}
-    mock_client_instance.post.assert_called_once_with(
-        "http://sarah.local:8000/api/agent/message",
-        json={
-            "from_agent": "odigos",
-            "message_type": "message",
-            "content": "hello there",
-            "metadata": {},
-        },
-        headers={"Authorization": "Bearer sarah-key"},
-    )
+    mock_client_instance.post.assert_called_once()
+    call_kwargs = mock_client_instance.post.call_args
+    assert call_kwargs[0][0] == "http://sarah.local:8000/api/agent/message"
+    payload = call_kwargs[1]["json"]
+    assert payload["from_agent"] == "odigos"
+    assert payload["message_type"] == "message"
+    assert payload["content"] == "hello there"
+    assert "message_id" in payload["metadata"]
+    assert call_kwargs[1]["headers"] == {"Authorization": "Bearer sarah-key"}
 
 
 @pytest.mark.asyncio

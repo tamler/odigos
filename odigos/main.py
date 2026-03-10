@@ -70,13 +70,13 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting Odigos agent: %s", settings.agent.name)
 
-    # Initialize peer client
-    peer_client = PeerClient(peers=settings.peers, agent_name="odigos")
-
     # Initialize database
     _db = Database(settings.database.path)
     await _db.initialize()
     logger.info("Database initialized at %s", settings.database.path)
+
+    # Initialize peer client (after db so we can track messages)
+    peer_client = PeerClient(peers=settings.peers, agent_name="odigos", db=_db)
 
     # Initialize tracer
     tracer = Tracer(db=_db)
@@ -404,6 +404,7 @@ async def lifespan(app: FastAPI):
     web_channel = WebChannel()
     channel_registry.register("web", web_channel)
     web_channel.setup_tracer_forwarding(tracer)
+    app.state.db = _db
     app.state.web_channel = web_channel
 
     _channel_registry = channel_registry

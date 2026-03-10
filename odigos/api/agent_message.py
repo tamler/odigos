@@ -3,7 +3,9 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+import uuid as uuid_mod
+
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from odigos.api.deps import get_agent, require_api_key
@@ -26,8 +28,27 @@ class PeerMessageRequest(BaseModel):
 @router.post("/message")
 async def receive_peer_message(
     body: PeerMessageRequest,
+    request: Request,
     agent: Agent = Depends(get_agent),
 ):
+    message_id = body.metadata.get("message_id", str(uuid_mod.uuid4()))
+    db = request.app.state.db
+
+    # Check for duplicate
+    existing = await db.fetch_one(
+        "SELECT 1 FROM peer_messages WHERE message_id = ?", (message_id,)
+    )
+    if existing:
+        return {"status": "duplicate", "message": "Message already processed"}
+
+    # Record inbound
+    await db.execute(
+        "INSERT INTO peer_messages "
+        "(message_id, direction, peer_name, message_type, content, status) "
+        "VALUES (?, 'inbound', ?, ?, ?, 'received')",
+        (message_id, body.from_agent, body.message_type, body.content),
+    )
+
     formatted_content = f"[{body.message_type} from {body.from_agent}]: {body.content}"
 
     msg = UniversalMessage(
