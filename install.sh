@@ -14,9 +14,18 @@ fi
 if [ ! -f config.yaml ]; then
     cp config.yaml.example config.yaml
     echo "Created config.yaml from example."
-    echo "Edit config.yaml with your API keys before starting."
 else
     echo "config.yaml already exists."
+fi
+
+# Create .env from example if missing
+if [ ! -f .env ]; then
+    cp .env.example .env
+    echo "Created .env from example."
+    echo ""
+    echo "  IMPORTANT: Edit .env and set your OPENROUTER_API_KEY before starting."
+else
+    echo ".env already exists."
 fi
 
 # Create data directories
@@ -25,12 +34,11 @@ mkdir -p data data/plugins
 echo ""
 echo "Setup complete. Next steps:"
 echo ""
-echo "  1. Edit config.yaml — set your TELEGRAM_BOT_TOKEN and OPENROUTER_API_KEY"
-echo "  2. Export env vars:"
-echo "       export TELEGRAM_BOT_TOKEN=your-token"
-echo "       export OPENROUTER_API_KEY=your-key"
-echo "  3. Start Odigos:"
-echo "       docker compose up -d"
+echo "  1. Edit .env — set your OPENROUTER_API_KEY (required)"
+echo "     Optional: set TELEGRAM_BOT_TOKEN to enable Telegram"
+echo "  2. Edit config.yaml — customize agent name, budget limits, etc."
+echo "  3. Build and start:"
+echo "       docker compose up -d --build"
 echo "  4. View logs:"
 echo "       docker compose logs -f odigos"
 echo "  5. Open dashboard:"

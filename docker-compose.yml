@@ -7,10 +7,10 @@ services:
     ports:
       - "${ODIGOS_PORT:-8000}:8000"
     volumes:
-      - odigos-data:/app/data
+      - ./data:/app/data
       - ./config.yaml:/app/config.yaml:ro
       - ./skills:/app/skills:ro
-      - ./data/plugins:/app/data/plugins:ro
+      - ./plugins:/app/plugins:ro
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       # Optional: uncomment to enable Telegram channel
@@ -35,6 +35,5 @@ services:
   #   environment:
   #     - SEARXNG_SECRET=change-me
 
-volumes:
-  odigos-data:
+volumes: {}
   # searxng-data:
