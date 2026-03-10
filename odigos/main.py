@@ -29,6 +29,7 @@ from odigos.core.subagent import SubagentManager
 from odigos.core.trace import Tracer
 from odigos.skills.registry import SkillRegistry
 
+from odigos.api.agent_message import router as agent_message_router
 from odigos.api.conversations import router as conversations_router
 from odigos.api.goals import router as goals_router
 from odigos.api.memory import router as memory_router
@@ -38,6 +39,8 @@ from odigos.api.plugins import router as plugins_router
 from odigos.api.message import router as message_router
 from odigos.api.ws import router as ws_router
 from odigos.channels.web import WebChannel
+from odigos.core.peers import PeerClient
+from odigos.tools.peer import MessagePeerTool
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,6 +69,9 @@ async def lifespan(app: FastAPI):
     settings = load_settings(config_path)
 
     logger.info("Starting Odigos agent: %s", settings.agent.name)
+
+    # Initialize peer client
+    peer_client = PeerClient(peers=settings.peers, agent_name="odigos")
 
     # Initialize database
     _db = Database(settings.database.path)
@@ -276,6 +282,11 @@ async def lifespan(app: FastAPI):
     tool_registry.register(spawn_tool)
     logger.info("Subagent tool registered")
 
+    # Register peer messaging tool if peers are configured
+    if peer_client.list_peer_names():
+        tool_registry.register(MessagePeerTool(peer_client=peer_client))
+        logger.info("Peer messaging tool registered for peers: %s", ", ".join(peer_client.list_peer_names()))
+
     # Connect MCP servers and register bridged tools
     if settings.mcp.servers:
         from odigos.tools.mcp_bridge import MCPServer, MCPToolBridge, StdioTransport
@@ -457,6 +468,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Odigos", lifespan=lifespan)
 
+app.include_router(agent_message_router)
 app.include_router(conversations_router)
 app.include_router(goals_router)
 app.include_router(memory_router)
