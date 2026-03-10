@@ -933,3 +933,39 @@ class TestSkillCatalogInContext:
         messages = await assembler.build("conv-1", "Hello")
         system_content = messages[0]["content"]
         assert "Available skills" not in system_content
+
+
+class TestExecutorErrorRecovery:
+    async def test_llm_failure_returns_graceful_message(self, db: Database):
+        """Executor returns a user-friendly message when all LLM models fail."""
+        provider = AsyncMock()
+        provider.complete.side_effect = RuntimeError("All LLM providers failed")
+
+        context = AsyncMock()
+        context.build.return_value = [
+            {"role": "system", "content": "test"},
+            {"role": "user", "content": "hello"},
+        ]
+
+        executor = Executor(provider=provider, context_assembler=context, db=db)
+        result = await executor.execute("test-conv", "hello")
+
+        assert result.response.content is not None
+        assert "trouble" in result.response.content.lower() or "couldn't" in result.response.content.lower()
+        assert result.response.model == "system"
+
+    async def test_llm_failure_does_not_crash(self, db: Database):
+        """Agent.handle_message doesn't propagate LLM exceptions to the caller."""
+        provider = AsyncMock()
+        provider.complete.side_effect = RuntimeError("Connection refused")
+
+        agent = Agent(db=db, provider=provider)
+        msg = UniversalMessage(
+            id="test-1", content="hello", sender="user1",
+            channel="test", metadata={"chat_id": "1"},
+            timestamp=datetime.now(timezone.utc),
+        )
+        # Should NOT raise
+        response = await agent.handle_message(msg)
+        assert isinstance(response, str)
+        assert len(response) > 0

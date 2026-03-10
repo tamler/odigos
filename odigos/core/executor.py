@@ -129,7 +129,22 @@ class Executor:
                     budget_warning = status
 
             # Call LLM
-            response = await self.provider.complete(messages, tools=tools)
+            try:
+                response = await self.provider.complete(messages, tools=tools)
+            except Exception as e:
+                logger.error("LLM call failed at turn %d: %s", turn, e)
+                if last_response is not None:
+                    # We have a partial result from earlier turns, return it
+                    break
+                # No response at all -- return a graceful system message
+                last_response = LLMResponse(
+                    content="I'm having trouble reaching my language model right now. Please try again in a moment.",
+                    model="system",
+                    tokens_in=0,
+                    tokens_out=0,
+                    cost_usd=0.0,
+                )
+                break
             total_tokens_in += response.tokens_in
             total_tokens_out += response.tokens_out
             total_cost += response.cost_usd

@@ -127,6 +127,11 @@ class Agent:
             if self.tracer:
                 await self.tracer.emit("timeout", conversation_id, {"timeout_seconds": self._run_timeout})
             return "I ran out of time working on that. Try breaking it into smaller pieces."
+        except Exception as e:
+            logger.exception("Agent run failed for %s", conversation_id)
+            if self.tracer:
+                await self.tracer.emit("error", conversation_id, {"error": str(e)[:500]})
+            return "Something went wrong while processing your message. Please try again."
 
         clean_content = await self.reflector.reflect(
             conversation_id,
