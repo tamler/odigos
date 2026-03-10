@@ -61,6 +61,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     "conversation_id": conversation_id,
                 })
 
+            elif msg_type == "peer_connect":
+                # Peer agent identifying itself
+                peer_name = data.get("agent_name", "")
+                if peer_name:
+                    # Re-register under peer conversation_id
+                    web_channel.unregister_connection(conversation_id, websocket)
+                    conversation_id = f"peer:{peer_name}"
+                    web_channel.register_connection(conversation_id, websocket)
+                    await websocket.send_json({
+                        "type": "peer_connected",
+                        "conversation_id": conversation_id,
+                        "agent_name": peer_name,
+                    })
+
             elif msg_type == "subscribe":
                 channels = data.get("channels", [])
                 for channel_name in channels:

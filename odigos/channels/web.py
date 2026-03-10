@@ -39,6 +39,14 @@ class WebChannel(Channel):
     def add_subscription(self, conversation_id: str, channel: str) -> None:
         self._subscriptions[conversation_id].add(channel)
 
+    def connected_peers(self) -> list[str]:
+        """List conversation_ids of connected peer agents."""
+        return [cid for cid in self._connections if cid.startswith("peer:")]
+
+    def is_peer_connected(self, peer_name: str) -> bool:
+        """Check if a peer agent is connected via WebSocket."""
+        return f"peer:{peer_name}" in self._connections
+
     async def send_message(self, conversation_id: str, text: str) -> None:
         payload = {
             "type": "chat",
