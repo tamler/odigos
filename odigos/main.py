@@ -103,7 +103,8 @@ async def lifespan(app: FastAPI):
     _embedder = EmbeddingProvider()
 
     # Initialize memory stack
-    vector_memory = VectorMemory(db=_db, embedder=_embedder)
+    from pathlib import Path
+    vector_memory = VectorMemory(embedder=_embedder, persist_dir=str(Path(settings.database.path).parent / "chroma"))
     await vector_memory.initialize()
 
     graph = EntityGraph(db=_db)

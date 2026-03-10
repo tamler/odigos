@@ -97,18 +97,6 @@ async def test_memory_tables_created(tmp_db_path: str):
         await db.close()
 
 
-async def test_sqlite_vec_extension_loaded(tmp_db_path: str):
-    """Verify sqlite-vec extension is loaded and vec0 is available."""
-    db = Database(tmp_db_path, migrations_dir="migrations")
-    await db.initialize()
-    try:
-        # sqlite-vec registers a vec_version() function
-        row = await db.fetch_one("SELECT vec_version() AS v")
-        assert row is not None
-        assert row["v"]  # non-empty version string
-    finally:
-        await db.close()
-
 
 class TestDatabaseRetry:
     async def test_execute_retries_on_busy(self, db):

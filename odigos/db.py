@@ -5,7 +5,6 @@ import logging
 from pathlib import Path
 
 import aiosqlite
-import sqlite_vec
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +39,6 @@ class Database:
         """Open connection and run migrations."""
         self._conn = await aiosqlite.connect(self.db_path)
         self._conn.row_factory = aiosqlite.Row
-        # Load sqlite-vec extension
-        await self._conn.enable_load_extension(True)
-        await self._conn.load_extension(sqlite_vec.loadable_path())
-        await self._conn.enable_load_extension(False)
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
         await self.run_migrations()
