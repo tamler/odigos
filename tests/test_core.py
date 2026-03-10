@@ -1039,13 +1039,48 @@ class TestTransactionSafety:
             return "vec-id"
         vector_memory.store.side_effect = store_then_fail
 
-        ingester = DocumentIngester(db=db, vector_memory=vector_memory)
-        text = "Para one.\n\nPara two.\n\nPara three.\n\nPara four."
+        from odigos.memory.chunking import ChunkingService
+
+        chunking = ChunkingService()
+        ingester = DocumentIngester(db=db, vector_memory=vector_memory, chunking_service=chunking)
+        # Build a text long enough to produce multiple chunks (over 500 tokens)
+        text = ("Paragraph about topic A. " * 80 + "\n\n") * 5
+
+        # Pre-check: chunking produces multiple chunks
+        chunks = chunking.chunk(text, content_type="document")
+        assert len(chunks) >= 3, f"Expected at least 3 chunks, got {len(chunks)}"
 
         # Should not raise, should record partial progress
         doc_id = await ingester.ingest(text, "test.txt")
 
         doc = await db.fetch_one("SELECT * FROM documents WHERE id = ?", (doc_id,))
         assert doc is not None
-        # chunk_count should reflect what was actually stored (2 of 4)
+        # chunk_count should reflect what was actually stored (2 of N)
         assert doc["chunk_count"] == 2
+
+
+class TestChunkingIntegration:
+    async def test_long_message_is_chunked_before_storage(self, db: Database):
+        """Long user messages are chunked before vector storage."""
+        from unittest.mock import AsyncMock, call
+        from odigos.memory.chunking import ChunkingService
+        from odigos.memory.manager import MemoryManager
+
+        vector_memory = AsyncMock()
+        vector_memory.store.return_value = "vec-id"
+        graph = AsyncMock()
+        resolver = AsyncMock()
+        summarizer = AsyncMock()
+        chunking = ChunkingService()
+
+        mm = MemoryManager(
+            vector_memory=vector_memory, graph=graph,
+            resolver=resolver, summarizer=summarizer,
+            chunking_service=chunking,
+        )
+
+        long_msg = "This is a detailed message about cats. " * 200
+        await mm.store("c1", long_msg, "response", [])
+
+        # Should have been called multiple times (once per chunk)
+        assert vector_memory.store.call_count > 1

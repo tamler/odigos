@@ -107,6 +107,10 @@ async def lifespan(app: FastAPI):
     vector_memory = VectorMemory(embedder=_embedder, persist_dir=str(Path(settings.database.path).parent / "chroma"))
     await vector_memory.initialize()
 
+    from odigos.memory.chunking import ChunkingService
+
+    chunking_service = ChunkingService()
+
     graph = EntityGraph(db=_db)
     resolver = EntityResolver(graph=graph, vector_memory=vector_memory)
     summarizer = ConversationSummarizer(db=_db, vector_memory=vector_memory, llm_provider=_provider)
@@ -115,6 +119,7 @@ async def lifespan(app: FastAPI):
         graph=graph,
         resolver=resolver,
         summarizer=summarizer,
+        chunking_service=chunking_service,
     )
     logger.info("Memory system initialized")
 
@@ -162,7 +167,7 @@ async def lifespan(app: FastAPI):
     docling_provider = DoclingProvider()
     from odigos.memory.ingester import DocumentIngester
 
-    doc_ingester = DocumentIngester(db=_db, vector_memory=vector_memory)
+    doc_ingester = DocumentIngester(db=_db, vector_memory=vector_memory, chunking_service=chunking_service)
     doc_tool = DocTool(provider=docling_provider, ingester=doc_ingester)
     tool_registry.register(doc_tool)
     logger.info("Document tool initialized (docling)")
