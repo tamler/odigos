@@ -23,6 +23,7 @@ class MemoryResult:
     source_type: str
     source_id: str
     distance: float
+    when_to_use: str = ""
 
 
 class VectorMemory:
@@ -50,9 +51,10 @@ class VectorMemory:
             ),
         )
 
-    async def store(self, text: str, source_type: str, source_id: str) -> str:
+    async def store(self, text: str, source_type: str, source_id: str, when_to_use: str = "") -> str:
         """Embed text and store in ChromaDB. Returns the vector ID."""
-        vector = await self.embedder.embed(text)
+        embed_input = when_to_use if when_to_use else text
+        vector = await self.embedder.embed(embed_input)
         vec_id = str(uuid.uuid4())
 
         loop = asyncio.get_running_loop()
@@ -66,6 +68,7 @@ class VectorMemory:
                     "source_type": source_type,
                     "source_id": source_id,
                     "content_preview": text[:500],
+                    "when_to_use": when_to_use,
                 }],
                 documents=[text[:500]],
             ),
@@ -108,6 +111,7 @@ class VectorMemory:
                         source_type=meta.get("source_type", ""),
                         source_id=meta.get("source_id", ""),
                         distance=dist,
+                        when_to_use=meta.get("when_to_use", ""),
                     )
                 )
 
