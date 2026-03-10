@@ -70,7 +70,22 @@ class MemoryManager:
         assistant_response: str,
         extracted_entities: list[dict],
     ) -> None:
-        """Process and store memories from a conversation turn."""
+        """Process and store memories from a conversation turn.
+
+        Best-effort: failures are logged but don't crash the agent.
+        """
+        try:
+            await self._store_impl(conversation_id, user_message, assistant_response, extracted_entities)
+        except Exception:
+            logger.warning("Memory storage failed, skipping this turn", exc_info=True)
+
+    async def _store_impl(
+        self,
+        conversation_id: str,
+        user_message: str,
+        assistant_response: str,
+        extracted_entities: list[dict],
+    ) -> None:
         # 1. Resolve and store entities
         for entity_data in extracted_entities:
             result = await self.resolver.resolve(

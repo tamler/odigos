@@ -969,3 +969,55 @@ class TestExecutorErrorRecovery:
         response = await agent.handle_message(msg)
         assert isinstance(response, str)
         assert len(response) > 0
+
+
+class TestEmbeddingFailureResilience:
+    async def test_memory_store_survives_embedding_failure(self, db: Database):
+        """MemoryManager.store() logs warning but doesn't raise when embedding fails."""
+        from unittest.mock import AsyncMock
+        from odigos.memory.manager import MemoryManager
+
+        vector_memory = AsyncMock()
+        vector_memory.store.side_effect = RuntimeError("Embedding model crashed")
+        graph = AsyncMock()
+        resolver = AsyncMock()
+        resolver.resolve.return_value = AsyncMock(entity_id="e1")
+        summarizer = AsyncMock()
+
+        mm = MemoryManager(
+            vector_memory=vector_memory, graph=graph,
+            resolver=resolver, summarizer=summarizer,
+        )
+
+        # Should NOT raise
+        await mm.store(
+            conversation_id="c1",
+            user_message="hello",
+            assistant_response="hi",
+            extracted_entities=[],
+        )
+
+    async def test_reflector_survives_memory_failure(self, db: Database):
+        """Reflector.reflect() returns clean content even if memory storage fails."""
+        from unittest.mock import AsyncMock
+        from odigos.core.reflector import Reflector
+        from odigos.providers.base import LLMResponse
+
+        memory_manager = AsyncMock()
+        memory_manager.store.side_effect = RuntimeError("Memory system down")
+
+        reflector = Reflector(db=db, memory_manager=memory_manager)
+        response = LLMResponse(
+            content="Hello there!", model="test",
+            tokens_in=10, tokens_out=5, cost_usd=0.001,
+        )
+
+        # Create conversation for FK constraint
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            ("c1", "test"),
+        )
+
+        # Should NOT raise, should return clean content
+        result = await reflector.reflect("c1", response, user_message="hi")
+        assert result == "Hello there!"
