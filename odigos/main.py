@@ -403,17 +403,20 @@ async def lifespan(app: FastAPI):
         approval_gate=approval_gate,
     )
 
-    # Initialize Telegram channel (before heartbeat so we can pass it)
-    telegram_channel = TelegramChannel(
-        token=settings.telegram_bot_token,
-        agent=agent,
-        mode=settings.telegram.mode,
-        webhook_url=settings.telegram.webhook_url,
-        goal_store=goal_store,
-        budget_tracker=budget_tracker,
-        approval_gate=approval_gate,
-    )
-    channel_registry.register("telegram", telegram_channel)
+    # Initialize Telegram channel (optional — skipped if no token)
+    if settings.telegram_bot_token:
+        telegram_channel = TelegramChannel(
+            token=settings.telegram_bot_token,
+            agent=agent,
+            mode=settings.telegram.mode,
+            webhook_url=settings.telegram.webhook_url,
+            goal_store=goal_store,
+            budget_tracker=budget_tracker,
+            approval_gate=approval_gate,
+        )
+        channel_registry.register("telegram", telegram_channel)
+    else:
+        logger.warning("No TELEGRAM_BOT_TOKEN set — Telegram channel disabled")
 
     # Initialize WebChannel for WebSocket-based web dashboard
     web_channel = WebChannel()

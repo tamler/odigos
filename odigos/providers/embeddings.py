@@ -24,9 +24,8 @@ class EmbeddingProvider:
         logger.info("Loading embedding model: %s (%d-d)", model_name, dimensions)
         self._model = SentenceTransformer(
             model_name,
-            backend="onnx",
-            model_kwargs={"file_name": "onnx/model_quantized.onnx"},
             truncate_dim=dimensions,
+            trust_remote_code=True,
         )
         logger.info("Embedding model loaded")
 

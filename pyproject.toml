@@ -20,6 +20,7 @@ dependencies = [
     "mcp>=1.25.0",
     "chonkie[semantic]>=1.0.0",
     "markitdown[all]>=0.1.0",
+    "einops>=0.8.0",
 ]
 
 [project.optional-dependencies]

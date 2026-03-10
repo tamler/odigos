@@ -8,7 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
-RUN pip install --no-cache-dir --prefix=/install .
+COPY odigos/ odigos/
+RUN pip install --no-cache-dir --prefix=/install --timeout=300 .
 
 # --- Runtime stage ---
 FROM python:3.12-slim
@@ -33,6 +34,9 @@ COPY pyproject.toml .
 
 # Default data and config directories
 RUN mkdir -p /app/data /app/data/plugins /app/data/chroma
+
+# Pre-download the embedding model so the image is self-contained
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True)"
 
 # Config file mount point
 VOLUME ["/app/data"]

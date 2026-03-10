@@ -12,8 +12,9 @@ services:
       - ./skills:/app/skills:ro
       - ./data/plugins:/app/data/plugins:ro
     environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      # Optional: uncomment to enable Telegram channel
+      # - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
