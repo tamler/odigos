@@ -17,7 +17,7 @@ async def test_send_message():
     mock_app.bot = mock_bot
     channel._app = mock_app
 
-    await channel.send_message(chat_id=12345, text="Hello!")
+    await channel.send_message(12345, "Hello!")
     mock_bot.send_message.assert_called_once_with(chat_id=12345, text="Hello!")
 
 
@@ -204,8 +204,9 @@ async def test_stop_command_pauses_heartbeat():
     agent = MagicMock()
     heartbeat = MagicMock()
     heartbeat.paused = False
+    agent.heartbeat = heartbeat
 
-    channel = TelegramChannel(token="fake", agent=agent, heartbeat=heartbeat)
+    channel = TelegramChannel(token="fake", agent=agent)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -223,8 +224,9 @@ async def test_start_command_resumes_heartbeat():
     agent = MagicMock()
     heartbeat = MagicMock()
     heartbeat.paused = True
+    agent.heartbeat = heartbeat
 
-    channel = TelegramChannel(token="fake", agent=agent, heartbeat=heartbeat)
+    channel = TelegramChannel(token="fake", agent=agent)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -263,9 +265,11 @@ async def test_status_command():
     heartbeat = MagicMock()
     heartbeat.paused = False
 
+    agent.heartbeat = heartbeat
+
     channel = TelegramChannel(
         token="fake", agent=agent,
-        budget_tracker=budget_tracker, goal_store=goal_store, heartbeat=heartbeat,
+        budget_tracker=budget_tracker, goal_store=goal_store,
     )
 
     update = MagicMock()

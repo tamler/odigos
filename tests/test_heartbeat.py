@@ -52,11 +52,19 @@ async def mock_provider():
 
 
 @pytest_asyncio.fixture
-async def heartbeat(db, mock_agent, mock_telegram, store, mock_provider):
+async def channel_registry(mock_telegram):
+    from odigos.channels.base import ChannelRegistry
+    registry = ChannelRegistry()
+    registry.register("telegram", mock_telegram)
+    return registry
+
+
+@pytest_asyncio.fixture
+async def heartbeat(db, mock_agent, channel_registry, store, mock_provider):
     return Heartbeat(
         db=db,
         agent=mock_agent,
-        telegram_channel=mock_telegram,
+        channel_registry=channel_registry,
         goal_store=store,
         provider=mock_provider,
         interval=0.1,
@@ -76,7 +84,7 @@ async def test_fires_due_reminder(heartbeat, store, mock_telegram, db):
     await heartbeat._tick()
     mock_telegram.send_message.assert_called_once()
     call_args = mock_telegram.send_message.call_args
-    assert 42 == call_args[0][0]
+    assert "telegram:42" == call_args[0][0]
 
 
 @pytest.mark.asyncio
@@ -98,6 +106,7 @@ async def test_marks_reminder_fired(heartbeat, store, db):
 async def test_works_on_pending_todo(heartbeat, store, mock_agent, db):
     tid = await store.create_todo("Say hello")
     await heartbeat._tick()
+    await asyncio.sleep(0.1)  # wait for fire-and-forget todo tasks
     mock_agent.handle_message.assert_called_once()
     row = await db.fetch_one("SELECT * FROM todos WHERE id = ?", (tid,))
     assert row["status"] == "completed"
@@ -115,6 +124,7 @@ async def test_todo_failure_marks_failed(heartbeat, store, mock_agent, db):
     mock_agent.handle_message = AsyncMock(side_effect=RuntimeError("boom"))
     tid = await store.create_todo("Fail me")
     await heartbeat._tick()
+    await asyncio.sleep(0.1)  # wait for fire-and-forget todo tasks
     row = await db.fetch_one("SELECT * FROM todos WHERE id = ?", (tid,))
     assert row["status"] == "failed"
 
@@ -127,9 +137,10 @@ async def test_sends_todo_result_to_conversation(heartbeat, store, mock_telegram
     )
     await store.create_todo("Do something", conversation_id="telegram:42")
     await heartbeat._tick()
+    await asyncio.sleep(0.1)  # wait for fire-and-forget todo tasks
     mock_telegram.send_message.assert_called_once()
     call_args = mock_telegram.send_message.call_args
-    assert 42 == call_args[0][0]
+    assert "telegram:42" == call_args[0][0]
 
 
 @pytest.mark.asyncio
@@ -158,6 +169,7 @@ async def test_max_todos_per_tick(heartbeat, store, mock_agent):
     for i in range(5):
         await store.create_todo(f"Task {i}")
     await heartbeat._tick()
+    await asyncio.sleep(0.1)  # wait for fire-and-forget todo tasks
     assert mock_agent.handle_message.call_count == 2
 
 

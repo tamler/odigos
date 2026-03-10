@@ -175,7 +175,9 @@ class TestSubagentExecution:
         assert row["status"] == "failed"
         assert row["result"] == "Subagent timed out"
 
-    async def test_exception_produces_failed(self, db):
+    async def test_exception_produces_graceful_response(self, db):
+        """When LLM raises, executor catches it and returns a graceful message.
+        The subagent completes (not fails) with that graceful message."""
         await _seed_conversation(db, "conv-1")
         provider = AsyncMock()
         provider.complete = AsyncMock(side_effect=RuntimeError("LLM exploded"))
@@ -186,8 +188,8 @@ class TestSubagentExecution:
         await mgr._tasks[sid]
 
         row = await db.fetch_one("SELECT * FROM subagent_tasks WHERE id = ?", (sid,))
-        assert row["status"] == "failed"
-        assert "LLM exploded" in row["result"]
+        assert row["status"] == "completed"
+        assert "trouble" in row["result"].lower() or "try again" in row["result"].lower()
 
 
 class TestSubagentDelivery:
@@ -319,6 +321,8 @@ class TestSpawnSubagentTool:
 
 class TestSubagentInHeartbeat:
     async def test_heartbeat_delivers_completed_results(self, db):
+        from odigos.channels.base import ChannelRegistry
+
         await _seed_conversation(db, "telegram:123")
         provider = _make_mock_provider("Background result")
         registry = _make_tool_registry()
@@ -329,11 +333,13 @@ class TestSubagentInHeartbeat:
 
         mock_agent = AsyncMock()
         mock_telegram = AsyncMock()
+        channel_registry = ChannelRegistry()
+        channel_registry.register("telegram", mock_telegram)
         mock_goal_store = AsyncMock()
         mock_goal_store.list_goals = AsyncMock(return_value=[])
 
         heartbeat = Heartbeat(
-            db=db, agent=mock_agent, telegram_channel=mock_telegram,
+            db=db, agent=mock_agent, channel_registry=channel_registry,
             goal_store=mock_goal_store, provider=provider,
             subagent_manager=subagent_manager,
         )
@@ -344,14 +350,18 @@ class TestSubagentInHeartbeat:
         results = await subagent_manager.get_completed_all()
         assert len(results) == 0
 
-        # Notification sent (telegram:123 -> chat_id=123)
+        # Notification sent via channel_registry
         mock_telegram.send_message.assert_called_once()
         call_text = mock_telegram.send_message.call_args[0][1]
         assert "Subagent result" in call_text
 
     async def test_heartbeat_no_subagent_results(self, db):
+        from odigos.channels.base import ChannelRegistry
+
         mock_agent = AsyncMock()
         mock_telegram = AsyncMock()
+        channel_registry = ChannelRegistry()
+        channel_registry.register("telegram", mock_telegram)
         mock_goal_store = AsyncMock()
         mock_goal_store.list_goals = AsyncMock(return_value=[])
         provider = _make_mock_provider()
@@ -359,7 +369,7 @@ class TestSubagentInHeartbeat:
         subagent_manager = SubagentManager(db=db, provider=provider, tool_registry=registry)
 
         heartbeat = Heartbeat(
-            db=db, agent=mock_agent, telegram_channel=mock_telegram,
+            db=db, agent=mock_agent, channel_registry=channel_registry,
             goal_store=mock_goal_store, provider=provider,
             subagent_manager=subagent_manager,
         )

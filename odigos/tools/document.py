@@ -71,15 +71,14 @@ class DocTool(BaseTool):
         try:
             result = await asyncio.to_thread(self.docling.convert, source)
             content = result.content
-            dl_doc = result.dl_doc
         except Exception as e:
             logger.warning("Docling conversion failed for %s: %s", source, e, exc_info=True)
             return ToolResult(success=False, data="", error=str(e))
 
-        await self._ingest(source, content, dl_doc=dl_doc)
+        await self._ingest(source, content)
         return ToolResult(success=True, data=content)
 
-    async def _ingest(self, source: str, content: str, dl_doc=None) -> None:
+    async def _ingest(self, source: str, content: str) -> None:
         if not self.ingester:
             return
         try:
@@ -89,7 +88,6 @@ class DocTool(BaseTool):
                 text=content,
                 filename=filename,
                 source_url=source_url,
-                dl_doc=dl_doc,
             )
         except Exception as e:
             logger.warning("Document ingestion failed for %s: %s", source, e, exc_info=True)

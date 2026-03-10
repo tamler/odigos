@@ -2,14 +2,9 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING
-
 from odigos.db import Database
 from odigos.memory.chunking import ChunkingService
 from odigos.memory.vectors import VectorMemory
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +25,6 @@ class DocumentIngester:
         text: str,
         filename: str,
         source_url: str | None = None,
-        dl_doc=None,
     ) -> str:
         doc_id = str(uuid.uuid4())
 

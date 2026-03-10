@@ -1,63 +1,53 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock, patch
+from functools import partial
 
-import httpx
+import numpy as np
 import pytest
 
 from odigos.providers.embeddings import EmbeddingProvider
 
 
-@pytest.fixture
-def provider():
-    return EmbeddingProvider(api_key="test-key")
-
-
 class TestEmbeddingProvider:
-    async def test_embed_single_text(self, provider: EmbeddingProvider):
-        """Embeds a single text string and returns a 1536-d vector."""
-        mock_response = httpx.Response(
-            200,
-            json={
-                "data": [{"embedding": [0.1] * 1536}],
-                "usage": {"prompt_tokens": 5, "total_tokens": 5},
-            },
-        )
+    @pytest.fixture
+    def provider(self):
+        with patch("odigos.providers.embeddings.SentenceTransformer") as MockST:
+            mock_model = MagicMock()
+            MockST.return_value = mock_model
+            p = EmbeddingProvider(model_name="test-model", dimensions=768)
+            p._model = mock_model
+            return p
 
-        with patch.object(
-            provider._client, "post", new_callable=AsyncMock, return_value=mock_response
-        ):
-            result = await provider.embed("Hello world")
+    async def test_embed_single_text(self, provider):
+        """Embeds a single text string and returns a vector."""
+        provider._model.encode.return_value = np.array([[0.1] * 768])
 
-        assert len(result) == 1536
+        result = await provider.embed("Hello world")
+
+        assert len(result) == 768
         assert result[0] == pytest.approx(0.1)
+        provider._model.encode.assert_called_once()
+        call_args = provider._model.encode.call_args[0][0]
+        assert "search_document: Hello world" in call_args
 
-    async def test_embed_batch(self, provider: EmbeddingProvider):
+    async def test_embed_batch(self, provider):
         """Embeds a list of texts and returns a list of vectors."""
-        mock_response = httpx.Response(
-            200,
-            json={
-                "data": [
-                    {"embedding": [0.1] * 1536},
-                    {"embedding": [0.2] * 1536},
-                ],
-                "usage": {"prompt_tokens": 10, "total_tokens": 10},
-            },
-        )
+        provider._model.encode.return_value = np.array([
+            [0.1] * 768,
+            [0.2] * 768,
+        ])
 
-        with patch.object(
-            provider._client, "post", new_callable=AsyncMock, return_value=mock_response
-        ):
-            results = await provider.embed_batch(["Hello", "World"])
+        results = await provider.embed_batch(["Hello", "World"])
 
         assert len(results) == 2
-        assert len(results[0]) == 1536
-        assert len(results[1]) == 1536
+        assert len(results[0]) == 768
+        assert len(results[1]) == 768
 
-    async def test_embed_api_error_raises(self, provider: EmbeddingProvider):
-        """Non-200 response raises RuntimeError."""
-        mock_response = httpx.Response(500, text="Internal Server Error")
+    async def test_embed_query_uses_search_prefix(self, provider):
+        """embed_query uses search_query prefix instead of search_document."""
+        provider._model.encode.return_value = np.array([[0.3] * 768])
 
-        with patch.object(
-            provider._client, "post", new_callable=AsyncMock, return_value=mock_response
-        ):
-            with pytest.raises(RuntimeError, match="Embedding API error"):
-                await provider.embed("fail")
+        result = await provider.embed_query("find something")
+
+        assert len(result) == 768
+        call_args = provider._model.encode.call_args[0][0]
+        assert "search_query: find something" in call_args
