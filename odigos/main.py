@@ -29,6 +29,14 @@ from odigos.core.subagent import SubagentManager
 from odigos.core.trace import Tracer
 from odigos.skills.registry import SkillRegistry
 
+from odigos.api.conversations import router as conversations_router
+from odigos.api.goals import router as goals_router
+from odigos.api.memory import router as memory_router
+from odigos.api.budget import router as budget_router
+from odigos.api.metrics import router as metrics_router
+from odigos.api.plugins import router as plugins_router
+from odigos.api.message import router as message_router
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -439,6 +447,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Odigos", lifespan=lifespan)
+
+app.include_router(conversations_router)
+app.include_router(goals_router)
+app.include_router(memory_router)
+app.include_router(budget_router)
+app.include_router(metrics_router)
+app.include_router(plugins_router)
+app.include_router(message_router)
 
 
 @app.get("/health")
