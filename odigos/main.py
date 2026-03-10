@@ -161,16 +161,30 @@ async def lifespan(app: FastAPI):
     logger.info("Feed tool initialized (feedparser)")
 
     # Initialize document processing
-    from odigos.providers.docling import DoclingProvider
+    from odigos.providers.markitdown import MarkItDownProvider
     from odigos.tools.document import DocTool
 
-    docling_provider = DoclingProvider()
+    markitdown_provider = MarkItDownProvider()
+
+    # Try to load Docling (optional heavy dependency)
+    docling_provider = None
+    try:
+        from odigos.providers.docling import DoclingProvider
+        docling_provider = DoclingProvider()
+        logger.info("Docling provider loaded (deep document extraction available)")
+    except ImportError:
+        logger.info("Docling not installed — using MarkItDown for all document processing")
+
     from odigos.memory.ingester import DocumentIngester
 
     doc_ingester = DocumentIngester(db=_db, vector_memory=vector_memory, chunking_service=chunking_service)
-    doc_tool = DocTool(provider=docling_provider, ingester=doc_ingester)
+    doc_tool = DocTool(
+        markitdown_provider=markitdown_provider,
+        ingester=doc_ingester,
+        docling_provider=docling_provider,
+    )
     tool_registry.register(doc_tool)
-    logger.info("Document tool initialized (docling)")
+    logger.info("Document tool initialized (MarkItDown default, Docling %s)", "available" if docling_provider else "not installed")
 
     # Initialize code execution sandbox
     from odigos.tools.code import CodeTool
