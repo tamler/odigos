@@ -8,6 +8,8 @@ from odigos.channels.base import Channel
 
 logger = logging.getLogger(__name__)
 
+_FORWARDED_EVENTS = ("step_start", "response", "error", "timeout", "budget_exceeded")
+
 
 class WebChannel(Channel):
     """WebSocket-backed channel for real-time web dashboard communication."""
@@ -55,6 +57,23 @@ class WebChannel(Channel):
         if "status" not in self._subscriptions.get(conversation_id, set()):
             return
         await self._send_to_connections(conversation_id, status)
+
+    def setup_tracer_forwarding(self, tracer) -> None:
+        """Subscribe to tracer events and forward them to WebSocket clients."""
+        for event_type in _FORWARDED_EVENTS:
+            tracer.subscribe(event_type, self._make_event_handler(event_type))
+
+    def _make_event_handler(self, event_type: str):
+        async def handler(et: str, conversation_id: str | None, data: dict) -> None:
+            if not conversation_id or not conversation_id.startswith("web:"):
+                return
+            await self.broadcast_event(conversation_id, {
+                "type": "event",
+                "source": event_type,
+                "conversation_id": conversation_id,
+                "data": data,
+            })
+        return handler
 
     async def _send_to_connections(self, conversation_id: str, payload: dict) -> None:
         connections = list(self._connections.get(conversation_id, set()))

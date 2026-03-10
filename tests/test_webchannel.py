@@ -115,3 +115,69 @@ async def test_failed_send_removes_connection(channel, make_ws):
 
     # Connection should have been removed after failure
     assert ws not in channel._connections.get("conv1", set())
+
+
+class TestTracerForwarding:
+    """Tests for setup_tracer_forwarding and _make_event_handler."""
+
+    @pytest.mark.asyncio
+    async def test_tracer_events_forwarded_to_subscribed(self, channel, make_ws):
+        ws = make_ws()
+        channel.register_connection("web:conv1", ws)
+        channel.add_subscription("web:conv1", "events")
+
+        captured_callbacks: dict[str, object] = {}
+        tracer = type("MockTracer", (), {
+            "subscribe": lambda self, et, cb: captured_callbacks.update({et: cb}),
+        })()
+
+        channel.setup_tracer_forwarding(tracer)
+
+        assert "step_start" in captured_callbacks
+        assert "response" in captured_callbacks
+        assert "error" in captured_callbacks
+        assert "timeout" in captured_callbacks
+        assert "budget_exceeded" in captured_callbacks
+
+        await captured_callbacks["step_start"]("step_start", "web:conv1", {"step": 1})
+
+        ws.send_json.assert_awaited_once()
+        payload = ws.send_json.call_args[0][0]
+        assert payload["type"] == "event"
+        assert payload["source"] == "step_start"
+        assert payload["conversation_id"] == "web:conv1"
+        assert payload["data"] == {"step": 1}
+
+    @pytest.mark.asyncio
+    async def test_tracer_events_not_forwarded_to_unsubscribed(self, channel, make_ws):
+        ws = make_ws()
+        channel.register_connection("web:conv1", ws)
+        # No subscription to "events"
+
+        captured_callbacks: dict[str, object] = {}
+        tracer = type("MockTracer", (), {
+            "subscribe": lambda self, et, cb: captured_callbacks.update({et: cb}),
+        })()
+
+        channel.setup_tracer_forwarding(tracer)
+
+        await captured_callbacks["step_start"]("step_start", "web:conv1", {"step": 1})
+
+        ws.send_json.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_tracer_events_skip_non_web_conversations(self, channel, make_ws):
+        ws = make_ws()
+        channel.register_connection("web:conv1", ws)
+        channel.add_subscription("web:conv1", "events")
+
+        captured_callbacks: dict[str, object] = {}
+        tracer = type("MockTracer", (), {
+            "subscribe": lambda self, et, cb: captured_callbacks.update({et: cb}),
+        })()
+
+        channel.setup_tracer_forwarding(tracer)
+
+        await captured_callbacks["step_start"]("step_start", "telegram:42", {"step": 1})
+
+        ws.send_json.assert_not_awaited()
