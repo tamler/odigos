@@ -1,3 +1,5 @@
+"""Serve the SPA dashboard from the dashboard/dist directory."""
+
 from __future__ import annotations
 
 import os
@@ -6,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-DEFAULT_DASHBOARD_DIR = os.path.join(os.path.dirname(__file__), "..", "dashboard")
+DEFAULT_DASHBOARD_DIR = os.path.join(os.path.dirname(__file__), "..", "dashboard", "dist")
 
 
 def mount_dashboard(app: FastAPI, dashboard_dir: str | None = None) -> None:
@@ -16,11 +18,10 @@ def mount_dashboard(app: FastAPI, dashboard_dir: str | None = None) -> None:
     if not os.path.isfile(index_html):
         return
 
-    # Mount static subdirectories
-    for subdir in ("vendor", "css", "js", "lib", "components", "pages"):
-        subdir_path = os.path.join(dist, subdir)
-        if os.path.isdir(subdir_path):
-            app.mount(f"/dashboard/{subdir}", StaticFiles(directory=subdir_path), name=f"dashboard_{subdir}")
+    # Mount assets directory (Vite outputs hashed files here)
+    assets_dir = os.path.join(dist, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="dashboard_assets")
 
     # Catch-all: serve index.html for SPA routing
     @app.get("/{path:path}")
