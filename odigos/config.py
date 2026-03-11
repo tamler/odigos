@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 
 import yaml
 from pydantic import BaseModel
@@ -7,6 +8,10 @@ from pydantic_settings import BaseSettings
 
 class AgentConfig(BaseModel):
     name: str = "Odigos"
+    role: str = "personal_assistant"
+    description: str = ""
+    parent: Optional[str] = None
+    allow_external_evaluation: bool = False
     max_tool_turns: int = 25
     run_timeout_seconds: int = 300
 
@@ -101,7 +106,9 @@ class ApprovalConfig(BaseModel):
 class PeerConfig(BaseModel):
     """Configuration for a trusted peer agent."""
     name: str
-    url: str
+    url: str = ""
+    netbird_ip: str = ""
+    ws_port: int = 8001
     api_key: str = ""
 
 
