@@ -41,6 +41,7 @@ from odigos.api.message import router as message_router
 from odigos.api.ws import router as ws_router
 from odigos.api.setup import router as setup_router
 from odigos.api.evolution import router as evolution_router
+from odigos.api.agents import router as agents_router
 from odigos.api.upload import router as upload_router
 from odigos.channels.web import WebChannel
 from odigos.core.peers import PeerClient
@@ -542,6 +543,7 @@ app.include_router(settings_router)
 app.include_router(message_router)
 app.include_router(upload_router)
 app.include_router(evolution_router)
+app.include_router(agents_router)
 app.include_router(ws_router)
 
 

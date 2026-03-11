@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Activity } from 'lucide-react'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Activity, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -220,6 +220,22 @@ export default function AppLayout() {
                 </NavLink>
               </TooltipTrigger>
               {collapsed && <TooltipContent side="right">Evolution</TooltipContent>}
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger>
+                <NavLink
+                  to="/agents"
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                      isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                    }`
+                  }
+                >
+                  <Users className="h-4 w-4 shrink-0" />
+                  {!collapsed && 'Agents'}
+                </NavLink>
+              </TooltipTrigger>
+              {collapsed && <TooltipContent side="right">Agents</TooltipContent>}
             </Tooltip>
             <Tooltip>
               <TooltipTrigger>
