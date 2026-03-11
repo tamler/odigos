@@ -41,3 +41,48 @@ async def test_list_plugins():
     assert names == {"docling", "custom"}
     for p in data["plugins"]:
         assert p["status"] == "loaded"
+        assert p["capabilities"] == []
+
+
+@pytest.mark.asyncio
+async def test_plugins_with_capabilities():
+    pm = MagicMock()
+    pm.loaded_plugins = [
+        {"name": "moonshine-stt", "capabilities": ["stt"]},
+        {"name": "pocket-tts", "capabilities": ["tts"]},
+        {"name": "log-tools", "capabilities": []},
+    ]
+
+    app = _make_app(pm)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as client:
+        resp = await client.get("/api/plugins")
+
+    assert resp.status_code == 200
+    data = resp.json()["plugins"]
+    assert data[0]["capabilities"] == ["stt"]
+    assert data[1]["capabilities"] == ["tts"]
+    assert data[2]["capabilities"] == []
+
+
+@pytest.mark.asyncio
+async def test_plugins_without_capabilities():
+    """Legacy plugins without capabilities field return empty list."""
+    pm = MagicMock()
+    pm.loaded_plugins = [{"name": "legacy-plugin"}]
+
+    app = _make_app(pm)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as client:
+        resp = await client.get("/api/plugins")
+
+    data = resp.json()["plugins"]
+    assert data[0]["capabilities"] == []

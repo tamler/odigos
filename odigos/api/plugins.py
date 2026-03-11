@@ -14,9 +14,13 @@ router = APIRouter(
 async def list_plugins(
     plugin_manager=Depends(get_plugin_manager),
 ):
-    """Return list of loaded plugins."""
+    """Return list of loaded plugins with their capabilities."""
     plugins = [
-        {"name": p["name"], "status": "loaded"}
+        {
+            "name": p["name"],
+            "status": "loaded",
+            "capabilities": p.get("capabilities", []),
+        }
         for p in plugin_manager.loaded_plugins
     ]
     return {"plugins": plugins}
