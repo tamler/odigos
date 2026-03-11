@@ -38,6 +38,7 @@ from odigos.api.metrics import router as metrics_router
 from odigos.api.plugins import router as plugins_router
 from odigos.api.message import router as message_router
 from odigos.api.ws import router as ws_router
+from odigos.api.setup import router as setup_router
 from odigos.channels.web import WebChannel
 from odigos.core.peers import PeerClient
 from odigos.tools.peer import MessagePeerTool
@@ -483,6 +484,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Odigos", lifespan=lifespan)
 
+app.include_router(setup_router)
 app.include_router(agent_message_router)
 app.include_router(conversations_router)
 app.include_router(goals_router)
