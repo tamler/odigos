@@ -1,39 +1,42 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { ChatSocket } from '@/lib/ws'
-import { get } from '@/lib/api'
-import ChatMessage from '@/components/ChatMessage'
-import ChatInput from '@/components/ChatInput'
-import ConversationSidebar from '@/components/ConversationSidebar'
+import { toast } from 'sonner'
+import { ArrowUp } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  PromptInput,
+  PromptInputTextarea,
+  PromptInputActions,
+  PromptInputAction,
+} from '@/components/ui/prompt-input'
+import { Message, MessageContent } from '@/components/ui/message'
+import {
+  ChatContainerRoot,
+  ChatContainerContent,
+  ChatContainerScrollAnchor,
+} from '@/components/ui/chat-container'
+import { Markdown } from '@/components/ui/markdown'
+import { Loader } from '@/components/ui/loader'
 
-interface Message {
+interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: string
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [connected, setConnected] = useState(false)
   const [thinking, setThinking] = useState(false)
-  const [hasSTT, setHasSTT] = useState(false)
-  const [hasTTS, setHasTTS] = useState(false)
-  const [activeConversation, setActiveConversation] = useState<string | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const [inputValue, setInputValue] = useState('')
   const socketRef = useRef<ChatSocket | null>(null)
-
-  useEffect(() => {
-    get<{ plugins: { capabilities: string[] }[] }>('/api/plugins')
-      .then((data) => {
-        const caps = data.plugins.flatMap((p) => p.capabilities)
-        setHasSTT(caps.includes('stt'))
-        setHasTTS(caps.includes('tts'))
-      })
-      .catch(() => {})
-  }, [])
 
   useEffect(() => {
     const socket = new ChatSocket(
       (msg) => {
+        if (msg.type === 'connected') {
+          toast.success('Connected to Odigos', { duration: 2000 })
+        }
         if (msg.type === 'chat_response') {
           setThinking(false)
           setMessages((prev) => [...prev, {
@@ -43,74 +46,105 @@ export default function ChatPage() {
           }])
         }
       },
-      setConnected,
+      (isConnected) => {
+        setConnected(isConnected)
+        if (!isConnected) {
+          toast.error('Disconnected from server', { duration: 5000 })
+        }
+      },
     )
     socket.connect()
     socketRef.current = socket
     return () => socket.disconnect()
   }, [])
 
-  useEffect(() => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, thinking])
-
-  const handleSend = useCallback((content: string, attachments?: { id: string; filename: string }[]) => {
-    let displayContent = content
-    if (attachments?.length) {
-      const fileList = attachments.map((a) => a.filename).join(', ')
-      displayContent = content ? `${content}\n\n[Attached: ${fileList}]` : `[Attached: ${fileList}]`
-    }
-
+  const handleSend = useCallback(() => {
+    const content = inputValue.trim()
+    if (!content) return
     setMessages((prev) => [...prev, {
       role: 'user',
-      content: displayContent,
+      content,
       timestamp: new Date().toISOString(),
     }])
     setThinking(true)
-
-    const msgContent = attachments?.length
-      ? `${content}\n\n[Files: ${attachments.map((a) => `${a.filename} (${a.id})`).join(', ')}]`
-      : content
-    socketRef.current?.send('chat', { content: msgContent })
-  }, [])
+    socketRef.current?.send('chat', { content })
+    setInputValue('')
+  }, [inputValue])
 
   return (
-    <div className="flex-1 flex">
-      <ConversationSidebar activeId={activeConversation} onSelect={setActiveConversation} />
-      <div className="flex-1 flex flex-col">
-      <div className="border-b px-4 py-3 flex items-center justify-between">
-        <h2 className="font-semibold">Chat</h2>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span className={`h-2 w-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-          {connected ? 'Connected' : 'Disconnected'}
+    <div className="flex-1 flex flex-col">
+      {/* Header */}
+      <div className="px-6 py-4">
+        <h2 className="text-sm font-medium text-muted-foreground">New conversation</h2>
+      </div>
+
+      {/* Messages area */}
+      <ChatContainerRoot className="flex-1">
+        <ChatContainerContent className="py-4">
+          <div className="max-w-3xl mx-auto px-6 space-y-6">
+            {messages.length === 0 && !thinking && (
+              <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-sm">
+                What can I help you with?
+              </div>
+            )}
+            {messages.map((msg, i) => (
+              <Message
+                key={i}
+                className={msg.role === 'user' ? 'justify-end' : 'justify-start'}
+              >
+                <MessageContent
+                  className={
+                    msg.role === 'user'
+                      ? 'bg-primary text-primary-foreground max-w-[85%] rounded-2xl'
+                      : 'bg-muted max-w-[85%] rounded-2xl'
+                  }
+                >
+                  {msg.role === 'assistant' ? (
+                    <Markdown>{msg.content}</Markdown>
+                  ) : (
+                    msg.content
+                  )}
+                </MessageContent>
+              </Message>
+            ))}
+            {thinking && (
+              <Message className="justify-start">
+                <MessageContent className="bg-muted max-w-[85%] rounded-2xl">
+                  <Loader variant="typing" />
+                </MessageContent>
+              </Message>
+            )}
+          </div>
+          <ChatContainerScrollAnchor />
+        </ChatContainerContent>
+      </ChatContainerRoot>
+
+      {/* Input area */}
+      <div className="pb-6 px-6">
+        <div className="max-w-3xl mx-auto">
+          <PromptInput
+            value={inputValue}
+            onValueChange={setInputValue}
+            onSubmit={handleSend}
+            disabled={!connected}
+            className="border-border/40 bg-muted/50"
+          >
+            <PromptInputTextarea placeholder="Send a message..." />
+            <PromptInputActions className="justify-end px-2 pb-2">
+              <PromptInputAction tooltip="Send message">
+                <Button
+                  variant="default"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  disabled={!connected || !inputValue.trim()}
+                  onClick={handleSend}
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+              </PromptInputAction>
+            </PromptInputActions>
+          </PromptInput>
         </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && !thinking && (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm h-full">
-            Send a message to start chatting
-          </div>
-        )}
-        {messages.map((msg, i) => (
-          <ChatMessage key={i} role={msg.role} content={msg.content} timestamp={msg.timestamp} />
-        ))}
-        {thinking && (
-          <div className="flex justify-start">
-            <div className="bg-muted rounded-2xl px-4 py-3">
-              <span className="animate-pulse">Thinking...</span>
-            </div>
-          </div>
-        )}
-        <div ref={scrollRef} />
-      </div>
-
-      <ChatInput
-        onSend={handleSend}
-        disabled={!connected}
-        hasSTT={hasSTT}
-        hasTTS={hasTTS}
-      />
       </div>
     </div>
   )

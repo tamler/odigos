@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { Toaster } from '@/components/ui/sonner'
 import { get } from './lib/api'
 import { isAuthenticated } from './lib/auth'
 import AppLayout from './layouts/AppLayout'
@@ -18,21 +19,24 @@ export default function App() {
   }, [])
 
   if (setupDone === null) {
-    return <div className="flex items-center justify-center h-screen text-muted-foreground">Loading...</div>
-  }
-
-  if (setupDone && !authed) {
-    return <LoginPrompt onLogin={() => setAuthed(true)} />
+    return <div className="flex items-center justify-center h-screen text-muted-foreground text-sm">Loading...</div>
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={setupDone && authed ? <ChatPage /> : <Navigate to="/settings" />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <>
+      <Toaster position="top-right" richColors />
+      {setupDone && !authed ? (
+        <LoginPrompt onLogin={() => setAuthed(true)} />
+      ) : (
+        <BrowserRouter>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={setupDone ? <ChatPage /> : <Navigate to="/settings" />} />
+              <Route path="/settings" element={<SettingsPage needsSetup={!setupDone} />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      )}
+    </>
   )
 }

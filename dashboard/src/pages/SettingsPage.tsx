@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { get, post } from '@/lib/api'
-import SetupModal from '@/components/SetupModal'
+import { toast } from 'sonner'
+import { Sun, Moon, Monitor, AlertCircle } from 'lucide-react'
+
+const PROVIDERS = [
+  { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4', fallback: 'google/gemini-2.0-flash-001' },
+  { id: 'openai', name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o', fallback: 'gpt-4o-mini' },
+  { id: 'ollama', name: 'Ollama', url: 'http://host.docker.internal:11434/v1', model: 'llama3.2', fallback: 'llama3.2' },
+  { id: 'lmstudio', name: 'LM Studio', url: 'http://host.docker.internal:1234/v1', model: 'default', fallback: 'default' },
+  { id: 'custom', name: 'Custom', url: '', model: '', fallback: '' },
+]
 
 interface SettingsData {
   llm_api_key: string
@@ -16,25 +25,35 @@ interface SettingsData {
   sandbox: { timeout_seconds: number; max_memory_mb: number; allow_network: boolean }
 }
 
-export default function SettingsPage() {
+interface Props {
+  needsSetup?: boolean
+}
+
+export default function SettingsPage({ needsSetup }: Props) {
   const [settings, setSettings] = useState<SettingsData | null>(null)
-  const [showSetup, setShowSetup] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
+  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
-    get<{ configured: boolean }>('/api/setup-status').then((data) => {
-      if (!data.configured) setShowSetup(true)
-    })
     get<SettingsData>('/api/settings')
       .then(setSettings)
-      .catch(() => setShowSetup(true))
+      .catch(() => {})
   }, [])
+
+  function selectProvider(id: string) {
+    const p = PROVIDERS.find((p) => p.id === id)
+    if (!p || !settings) return
+    setSelectedProvider(id)
+    setSettings({
+      ...settings,
+      llm: { ...settings.llm, base_url: p.url, default_model: p.model, fallback_model: p.fallback },
+    })
+  }
 
   function update(section: string, field: string, value: string | number | boolean) {
     if (!settings) return
     setSettings({ ...settings, [section]: { ...(settings as any)[section], [field]: value } })
-    setSaved(false)
   }
 
   async function save() {
@@ -42,151 +61,165 @@ export default function SettingsPage() {
     setSaving(true)
     try {
       await post('/api/settings', settings)
-      setSaved(true)
+      toast.success('Settings saved')
+      if (needsSetup) {
+        window.location.href = '/'
+      }
+    } catch (e) {
+      toast.error('Failed to save settings')
     } finally {
       setSaving(false)
     }
   }
 
-  if (!settings && !showSetup) {
-    return <div className="flex-1 flex items-center justify-center text-muted-foreground">Loading...</div>
+  if (!settings) {
+    return <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Loading...</div>
   }
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <SetupModal open={showSetup} onComplete={() => { setShowSetup(false); window.location.reload() }} />
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
+      <div className="max-w-2xl mx-auto px-6 py-8 space-y-8">
+        {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Settings</h1>
-          <Button onClick={save} disabled={saving || saved}>
-            {saved ? 'Saved' : saving ? 'Saving...' : 'Save Changes'}
+          <h1 className="text-xl font-semibold">Settings</h1>
+          <Button onClick={save} disabled={saving} size="sm">
+            {saving ? 'Saving...' : needsSetup ? 'Save & Start' : 'Save'}
           </Button>
         </div>
-        <Tabs defaultValue="llm">
-          <TabsList>
-            <TabsTrigger value="llm">LLM</TabsTrigger>
-            <TabsTrigger value="agent">Agent</TabsTrigger>
-            <TabsTrigger value="budget">Budget</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced</TabsTrigger>
-          </TabsList>
 
-          <TabsContent value="llm" className="space-y-4 mt-4">
-            <Card>
-              <CardHeader><CardTitle>LLM Provider</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Base URL</Label>
-                  <Input value={settings?.llm.base_url || ''} onChange={(e) => update('llm', 'base_url', e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>API Key</Label>
-                  <Input type="password" placeholder="****" onChange={(e) => setSettings(s => s ? { ...s, llm_api_key: e.target.value } : s)} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Default Model</Label>
-                    <Input value={settings?.llm.default_model || ''} onChange={(e) => update('llm', 'default_model', e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Fallback Model</Label>
-                    <Input value={settings?.llm.fallback_model || ''} onChange={(e) => update('llm', 'fallback_model', e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Max Tokens</Label>
-                    <Input type="number" value={settings?.llm.max_tokens || 4096} onChange={(e) => update('llm', 'max_tokens', parseInt(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Temperature</Label>
-                    <Input type="number" step="0.1" value={settings?.llm.temperature || 0.7} onChange={(e) => update('llm', 'temperature', parseFloat(e.target.value))} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+        {needsSetup && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>Configure your LLM provider to get started.</AlertDescription>
+          </Alert>
+        )}
 
-          <TabsContent value="agent" className="space-y-4 mt-4">
-            <Card>
-              <CardHeader><CardTitle>Agent</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input value={settings?.agent.name || ''} onChange={(e) => update('agent', 'name', e.target.value)} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Max Tool Turns</Label>
-                    <Input type="number" value={settings?.agent.max_tool_turns || 25} onChange={(e) => update('agent', 'max_tool_turns', parseInt(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Run Timeout (seconds)</Label>
-                    <Input type="number" value={settings?.agent.run_timeout_seconds || 300} onChange={(e) => update('agent', 'run_timeout_seconds', parseInt(e.target.value))} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+        {/* Appearance */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Appearance</h2>
+          <div className="flex gap-2">
+            {[
+              { value: 'light', icon: Sun, label: 'Light' },
+              { value: 'dark', icon: Moon, label: 'Dark' },
+              { value: 'system', icon: Monitor, label: 'System' },
+            ].map(({ value, icon: Icon, label }) => (
+              <Button
+                key={value}
+                variant={theme === value ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTheme(value)}
+                className="gap-2"
+              >
+                <Icon className="h-4 w-4" /> {label}
+              </Button>
+            ))}
+          </div>
+        </section>
 
-          <TabsContent value="budget" className="space-y-4 mt-4">
-            <Card>
-              <CardHeader><CardTitle>Budget Limits</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Daily Limit (USD)</Label>
-                    <Input type="number" step="0.5" value={settings?.budget.daily_limit_usd || 1} onChange={(e) => update('budget', 'daily_limit_usd', parseFloat(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Monthly Limit (USD)</Label>
-                    <Input type="number" step="1" value={settings?.budget.monthly_limit_usd || 20} onChange={(e) => update('budget', 'monthly_limit_usd', parseFloat(e.target.value))} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Warning Threshold (0-1)</Label>
-                  <Input type="number" step="0.05" min="0" max="1" value={settings?.budget.warn_threshold || 0.8} onChange={(e) => update('budget', 'warn_threshold', parseFloat(e.target.value))} />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+        {/* LLM Provider */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">LLM Provider</h2>
+          <div className="flex flex-wrap gap-2">
+            {PROVIDERS.map((p) => (
+              <Button
+                key={p.id}
+                variant={selectedProvider === p.id ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => selectProvider(p.id)}
+              >
+                {p.name}
+              </Button>
+            ))}
+          </div>
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Base URL</Label>
+              <Input value={settings.llm.base_url} onChange={(e) => update('llm', 'base_url', e.target.value)} className="bg-muted/50 border-border/40" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">API Key</Label>
+              <Input type="password" placeholder="****" onChange={(e) => setSettings(s => s ? { ...s, llm_api_key: e.target.value } : s)} className="bg-muted/50 border-border/40" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Default Model</Label>
+                <Input value={settings.llm.default_model} onChange={(e) => update('llm', 'default_model', e.target.value)} className="bg-muted/50 border-border/40" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Fallback Model</Label>
+                <Input value={settings.llm.fallback_model} onChange={(e) => update('llm', 'fallback_model', e.target.value)} className="bg-muted/50 border-border/40" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Max Tokens</Label>
+                <Input type="number" value={settings.llm.max_tokens} onChange={(e) => update('llm', 'max_tokens', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Temperature</Label>
+                <Input type="number" step="0.1" value={settings.llm.temperature} onChange={(e) => update('llm', 'temperature', parseFloat(e.target.value))} className="bg-muted/50 border-border/40" />
+              </div>
+            </div>
+          </div>
+        </section>
 
-          <TabsContent value="advanced" className="space-y-4 mt-4">
-            <Card>
-              <CardHeader><CardTitle>Heartbeat</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label>Interval (s)</Label>
-                    <Input type="number" value={settings?.heartbeat.interval_seconds || 30} onChange={(e) => update('heartbeat', 'interval_seconds', parseInt(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Max Todos/Tick</Label>
-                    <Input type="number" value={settings?.heartbeat.max_todos_per_tick || 3} onChange={(e) => update('heartbeat', 'max_todos_per_tick', parseInt(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Idle Think (s)</Label>
-                    <Input type="number" value={settings?.heartbeat.idle_think_interval || 900} onChange={(e) => update('heartbeat', 'idle_think_interval', parseInt(e.target.value))} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle>Sandbox</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Timeout (s)</Label>
-                    <Input type="number" value={settings?.sandbox.timeout_seconds || 5} onChange={(e) => update('sandbox', 'timeout_seconds', parseInt(e.target.value))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Max Memory (MB)</Label>
-                    <Input type="number" value={settings?.sandbox.max_memory_mb || 512} onChange={(e) => update('sandbox', 'max_memory_mb', parseInt(e.target.value))} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {/* Agent */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Agent</h2>
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Name</Label>
+              <Input value={settings.agent.name} onChange={(e) => update('agent', 'name', e.target.value)} className="bg-muted/50 border-border/40" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Max Tool Turns</Label>
+                <Input type="number" value={settings.agent.max_tool_turns} onChange={(e) => update('agent', 'max_tool_turns', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Run Timeout (s)</Label>
+                <Input type="number" value={settings.agent.run_timeout_seconds} onChange={(e) => update('agent', 'run_timeout_seconds', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Budget */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Budget</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Daily Limit (USD)</Label>
+              <Input type="number" step="0.5" value={settings.budget.daily_limit_usd} onChange={(e) => update('budget', 'daily_limit_usd', parseFloat(e.target.value))} className="bg-muted/50 border-border/40" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Monthly Limit (USD)</Label>
+              <Input type="number" step="1" value={settings.budget.monthly_limit_usd} onChange={(e) => update('budget', 'monthly_limit_usd', parseFloat(e.target.value))} className="bg-muted/50 border-border/40" />
+            </div>
+          </div>
+        </section>
+
+        {/* Advanced */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Advanced</h2>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Heartbeat (s)</Label>
+              <Input type="number" value={settings.heartbeat.interval_seconds} onChange={(e) => update('heartbeat', 'interval_seconds', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Sandbox Timeout (s)</Label>
+              <Input type="number" value={settings.sandbox.timeout_seconds} onChange={(e) => update('sandbox', 'timeout_seconds', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Sandbox Memory (MB)</Label>
+              <Input type="number" value={settings.sandbox.max_memory_mb} onChange={(e) => update('sandbox', 'max_memory_mb', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
+            </div>
+          </div>
+        </section>
+
+        {/* Bottom spacing */}
+        <div className="h-8" />
       </div>
     </div>
   )
