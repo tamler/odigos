@@ -10,6 +10,7 @@ from odigos.personality.loader import load_personality
 from odigos.personality.prompt_builder import build_system_prompt
 
 if TYPE_CHECKING:
+    from odigos.core.checkpoint import CheckpointManager
     from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
     from odigos.memory.summarizer import ConversationSummarizer
@@ -38,6 +39,7 @@ class ContextAssembler:
         summarizer: ConversationSummarizer | None = None,
         skill_registry: SkillRegistry | None = None,
         corrections_manager: CorrectionsManager | None = None,
+        checkpoint_manager: CheckpointManager | None = None,
     ) -> None:
         self.db = db
         self.agent_name = agent_name
@@ -47,6 +49,7 @@ class ContextAssembler:
         self.summarizer = summarizer
         self.skill_registry = skill_registry
         self.corrections_manager = corrections_manager
+        self.checkpoint_manager = checkpoint_manager
 
     async def build(
         self,
@@ -84,6 +87,11 @@ class ContextAssembler:
         if self.corrections_manager:
             corrections_context = await self.corrections_manager.relevant(current_message)
 
+        # Load dynamic prompt sections if checkpoint manager available
+        sections = None
+        if self.checkpoint_manager:
+            sections = await self.checkpoint_manager.get_working_sections()
+
         # Build system prompt via structured prompt builder
         system_prompt = build_system_prompt(
             personality=personality,
@@ -91,6 +99,7 @@ class ContextAssembler:
             tool_context=tool_context,
             skill_catalog=skill_catalog,
             corrections_context=corrections_context,
+            sections=sections,
         )
 
         messages.append({"role": "system", "content": system_prompt})

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from odigos.personality.loader import Personality
 
 ENTITY_EXTRACTION_INSTRUCTION = """After your response, on a new line, include extracted entities in this exact format:
@@ -28,6 +30,7 @@ def build_system_prompt(
     tool_context: str = "",
     skill_catalog: str = "",
     corrections_context: str = "",
+    sections: list | None = None,
 ) -> str:
     """Compose the system prompt from structured sections.
 
@@ -42,40 +45,36 @@ def build_system_prompt(
     8. Correction detection (always)
     9. Entity extraction -- always appended
     """
-    sections = []
+    parts = []
 
-    # 1. Identity
-    sections.append(_build_identity_section(personality))
+    if sections:
+        # Dynamic mode: sections loaded from files + trial overrides
+        for section in sorted(sections, key=lambda s: s.priority):
+            if section.always_include:
+                content = section.content.replace("{name}", personality.name)
+                parts.append(content)
+    else:
+        # Legacy fallback: build from personality dataclass
+        parts.append(_build_identity_section(personality))
+        parts.append(_build_voice_section(personality))
 
-    # 2. Voice guidelines
-    sections.append(_build_voice_section(personality))
-
-    # 3. Memory context (optional)
+    # Always-included context sections
     if memory_context:
-        sections.append(memory_context)
-
-    # 4. Tool context (optional)
+        parts.append(memory_context)
     if tool_context:
-        sections.append(tool_context)
-
-    # 5. Skill catalog (optional)
+        parts.append(tool_context)
     if skill_catalog:
-        sections.append(skill_catalog)
+        parts.append(skill_catalog)
 
-    # 6. Skill creation guidance (always)
-    sections.append(SKILL_CREATION_INSTRUCTION)
+    parts.append(SKILL_CREATION_INSTRUCTION)
 
-    # 7. Learned corrections (optional)
     if corrections_context:
-        sections.append(corrections_context)
+        parts.append(corrections_context)
 
-    # 8. Correction detection (always)
-    sections.append(CORRECTION_DETECTION_INSTRUCTION)
+    parts.append(CORRECTION_DETECTION_INSTRUCTION)
+    parts.append(ENTITY_EXTRACTION_INSTRUCTION)
 
-    # 9. Entity extraction (always)
-    sections.append(ENTITY_EXTRACTION_INSTRUCTION)
-
-    return "\n\n".join(sections)
+    return "\n\n".join(parts)
 
 
 def _build_identity_section(personality: Personality) -> str:
