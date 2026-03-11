@@ -40,6 +40,7 @@ from odigos.api.settings import router as settings_router
 from odigos.api.message import router as message_router
 from odigos.api.ws import router as ws_router
 from odigos.api.setup import router as setup_router
+from odigos.api.evolution import router as evolution_router
 from odigos.api.upload import router as upload_router
 from odigos.channels.web import WebChannel
 from odigos.core.peers import PeerClient
@@ -448,6 +449,8 @@ async def lifespan(app: FastAPI):
         provider=_router,
     )
     agent.context_assembler.checkpoint_manager = checkpoint_manager
+    app.state.checkpoint_manager = checkpoint_manager
+    app.state.evolution_engine = evolution_engine
     logger.info("Evolution engine initialized")
 
     # Initialize strategist
@@ -538,6 +541,7 @@ app.include_router(plugins_router)
 app.include_router(settings_router)
 app.include_router(message_router)
 app.include_router(upload_router)
+app.include_router(evolution_router)
 app.include_router(ws_router)
 
 
