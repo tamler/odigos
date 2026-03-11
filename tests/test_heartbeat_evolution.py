@@ -1,0 +1,38 @@
+"""Test that heartbeat Phase 5 runs the evolution cycle."""
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_tick_runs_evolution_when_idle():
+    """Phase 5 should run when no other work was done."""
+    from odigos.core.heartbeat import Heartbeat
+
+    heartbeat = Heartbeat.__new__(Heartbeat)
+    heartbeat.db = AsyncMock()
+    heartbeat.agent = AsyncMock()
+    heartbeat.channel_registry = MagicMock()
+    heartbeat.goal_store = AsyncMock()
+    heartbeat.provider = AsyncMock()
+    heartbeat._interval = 30
+    heartbeat._max_todos_per_tick = 3
+    heartbeat._idle_think_interval = 900
+    heartbeat._task = None
+    heartbeat.tracer = None
+    heartbeat.subagent_manager = None
+    heartbeat._last_idle = 0
+    heartbeat.paused = False
+    heartbeat.evolution_engine = AsyncMock()
+    heartbeat.evolution_engine.score_past_actions = AsyncMock(return_value=2)
+    heartbeat.evolution_engine.check_active_trial = AsyncMock(return_value=None)
+
+    heartbeat._fire_reminders = AsyncMock(return_value=False)
+    heartbeat._work_todos = AsyncMock(return_value=False)
+    heartbeat._deliver_subagent_results = AsyncMock(return_value=False)
+    heartbeat._idle_think = AsyncMock()
+
+    await heartbeat._tick()
+
+    heartbeat.evolution_engine.score_past_actions.assert_called_once()
+    heartbeat.evolution_engine.check_active_trial.assert_called_once()

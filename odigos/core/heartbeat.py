@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from odigos.channels.base import ChannelRegistry
     from odigos.core.agent import Agent
     from odigos.core.goal_store import GoalStore
+    from odigos.core.evolution import EvolutionEngine
     from odigos.core.subagent import SubagentManager
     from odigos.core.trace import Tracer
     from odigos.providers.base import LLMProvider
@@ -38,6 +39,7 @@ class Heartbeat:
         idle_think_interval: int = 900,
         tracer: Tracer | None = None,
         subagent_manager: SubagentManager | None = None,
+        evolution_engine: EvolutionEngine | None = None,
     ) -> None:
         self.db = db
         self.agent = agent
@@ -50,6 +52,7 @@ class Heartbeat:
         self._task: asyncio.Task | None = None
         self.tracer = tracer
         self.subagent_manager = subagent_manager
+        self.evolution_engine = evolution_engine
         self._last_idle: float = 0
         self.paused: bool = False
 
@@ -94,6 +97,10 @@ class Heartbeat:
         # Phase 4: Idle thoughts (only if nothing ran above)
         if not did_work:
             await self._idle_think()
+
+        # Phase 5: Self-improvement cycle (runs when idle)
+        if not did_work and self.evolution_engine:
+            await self._run_evolution()
 
         if self.tracer:
             await self.tracer.emit("heartbeat_tick", None, {
@@ -263,6 +270,19 @@ class Heartbeat:
             except Exception:
                 logger.exception("Failed to deliver subagent result %s", r["id"])
         return True
+
+    async def _run_evolution(self) -> None:
+        """Phase 5: Score past actions and manage active trials."""
+        try:
+            scored = await self.evolution_engine.score_past_actions(limit=3)
+            if scored:
+                logger.debug("Evolution: scored %d past actions", scored)
+
+            result = await self.evolution_engine.check_active_trial()
+            if result and result != "continue":
+                logger.info("Evolution: trial %s", result)
+        except Exception:
+            logger.debug("Evolution cycle failed", exc_info=True)
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:
         try:

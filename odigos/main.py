@@ -429,6 +429,27 @@ async def lifespan(app: FastAPI):
 
     _channel_registry = channel_registry
 
+    # Initialize evolution engine
+    from odigos.core.checkpoint import CheckpointManager
+    from odigos.core.evaluator import Evaluator
+    from odigos.core.evolution import EvolutionEngine
+
+    checkpoint_manager = CheckpointManager(
+        db=_db,
+        sections_dir="data/prompt_sections",
+        personality_path=settings.personality.path,
+        skills_dir=settings.skills.path,
+    )
+    evaluator = Evaluator(db=_db, provider=_router)
+    evolution_engine = EvolutionEngine(
+        db=_db,
+        checkpoint_manager=checkpoint_manager,
+        evaluator=evaluator,
+        provider=_router,
+    )
+    agent.context_assembler.checkpoint_manager = checkpoint_manager
+    logger.info("Evolution engine initialized")
+
     # Initialize heartbeat
     _heartbeat = Heartbeat(
         db=_db,
@@ -441,6 +462,7 @@ async def lifespan(app: FastAPI):
         idle_think_interval=settings.heartbeat.idle_think_interval,
         tracer=tracer,
         subagent_manager=subagent_manager,
+        evolution_engine=evolution_engine,
     )
 
     # Set heartbeat on agent so any channel can access it
