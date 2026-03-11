@@ -2,7 +2,7 @@
 
 ## Goal
 
-Give Odigos the ability to evaluate its own performance, generate improvement hypotheses, test them as time-boxed trials, and revert changes that don't work — creating an autonomous feedback loop where the agent gets measurably better over time. The system should be lean enough that the agent can improve the improvement system itself.
+Give Odigos the ability to evaluate its own performance, generate improvement hypotheses, test them as time-boxed trials, and automatically revert changes that don't work — creating an autonomous feedback loop where the agent gets measurably better over time. The system should be lean enough that the agent can improve the improvement system itself.
 
 ## Architecture
 
@@ -15,33 +15,91 @@ Heartbeat Idle Phase
 Evaluator (C.1 + C.2)          Strategist (Direction)
   - Reviews past actions          - Summarizes evaluation trends
   - Generates rubric per action   - Proposes improvement hypotheses
-  - Scores against rubric         - Considers failed trials
+  - Scores against rubric         - Maintains direction log
     |                               |
     v                               v
 EvolutionEngine (Trial Manager)
   - Creates trials from hypotheses
-  - Applies changes via CheckpointManager
+  - Applies changes as ephemeral overrides
   - Monitors active trials
-  - Promotes or reverts based on scores
+  - Promotes or auto-reverts based on scores
     |
     v
-CheckpointManager (Versioning)
-  - Snapshots agent state
-  - Applies/reverts changes atomically
-  - Maintains known-good baseline
+CheckpointManager (Deadman Switch)
+  - Known-good state lives on disk (permanent)
+  - Trial changes live in DB only (ephemeral)
+  - Crash/timeout/expiry = automatic revert to disk state
+  - Promotion = write trial overrides to disk
 ```
 
-## Signal Sources (Type D — All Signals)
+## Core Safety Principle: Deadman Switch
 
-Every signal feeds the evaluation pipeline:
+Trial changes are **never written to disk**. They exist only as overrides in the database.
 
-| Signal | Source | Collection |
-|--------|--------|------------|
-| **User corrections** | Existing CorrectionsManager | Already stored per-conversation |
-| **Explicit feedback** | Thumbs up/down on messages | New: `message_feedback` table |
-| **Task completion** | Did tool calls succeed? Max turns hit? | New: track in `action_log` |
-| **Conversation health** | Abandoned? Redo requested? Length vs resolution? | Derived from existing message/conversation data |
-| **Self-evaluation** | C.1/C.2 rubric scoring | New: `evaluations` table |
+```
+On every prompt assembly:
+  1. Load known-good state from disk (personality, prompt sections, skills)
+  2. Query DB for active trial overrides
+  3. Merge: disk state + overrides = current working state
+  4. If no active trial, or trial expired, or DB unreachable:
+     → disk state is used as-is (known-good)
+
+Promotion (trial proved better):
+  → Write overrides to disk files
+  → Update known-good checkpoint record
+  → Delete trial overrides from DB
+
+Any failure mode (crash, hang, corrupt DB, timeout):
+  → Process restarts, loads from disk = known-good
+  → No explicit revert action needed
+```
+
+This means the agent **cannot permanently damage itself** through experimentation. The worst case is a bad trial runs until its time cap expires, then vanishes.
+
+## Signal Sources (Type D — All Signals, Implicit)
+
+Every signal feeds the evaluation pipeline. No explicit user action required — signals are inferred from behavior:
+
+### Implicit Feedback Inference
+
+| Behavior | Signal | Strength | Detection |
+|----------|--------|----------|-----------|
+| User sends follow-up building on response | Positive | Strong | Next message references or extends response content |
+| User says "thanks" / acknowledges | Positive | Medium | Sentiment/keyword detection on next message |
+| User corrects: "no, I meant..." | Negative | Strong | Existing correction detection in Reflector |
+| User rephrases same question | Negative | Medium | Semantic similarity between consecutive user messages |
+| Conversation abandoned (no message 30+ min after response) | Negative | Weak | Timestamp gap analysis |
+| User immediately starts new conversation | Negative | Weak | New conversation created within 2 min |
+| Task completed naturally (tool calls succeeded, clean ending) | Positive | Medium | No max-turn hit, last message is assistant |
+| Hit max tool turns without resolution | Negative | Strong | Executor reports max turns reached |
+
+### Signal Aggregation
+
+All signals for a message/response pair are collected into a composite score:
+
+```python
+def infer_feedback(message_id, conversation) -> float:
+    """Return -1.0 to 1.0 based on implicit behavioral signals."""
+    signals = []
+    # Check what happened after this response
+    next_msg = get_next_user_message(message_id, conversation)
+    if next_msg is None:
+        signals.append(("abandoned", -0.3))
+    elif is_correction(next_msg):
+        signals.append(("correction", -0.8))
+    elif is_rephrase(next_msg, original_user_message):
+        signals.append(("rephrase", -0.6))
+    elif is_acknowledgment(next_msg):
+        signals.append(("acknowledged", 0.5))
+    else:
+        signals.append(("continued", 0.3))
+    # Check task outcome
+    if hit_max_tool_turns:
+        signals.append(("max_turns", -0.9))
+    if all_tool_calls_succeeded:
+        signals.append(("tools_ok", 0.2))
+    return weighted_average(signals)
+```
 
 ## The Evaluation Pipeline (C.1 + C.2)
 
@@ -56,7 +114,7 @@ User: {message}
 My response: {response}
 Tools used: {tool_calls}
 Outcome: {success/failure/unknown}
-User signals: {corrections, feedback, or "none"}
+Implicit feedback: {inferred signal and strength}
 
 Generate a scoring rubric for this type of interaction.
 Return JSON:
@@ -97,123 +155,181 @@ Return JSON:
 - Rubric generation is amortized — once per task type, reused many times
 - Scoring runs on 1-3 past actions per idle cycle (adaptive — more when truly idle)
 
-## The Strategist (Direction Evaluation)
+## The Strategist (Direction + Future Potential)
 
-This is the forward-looking component. Periodically (less frequent than scoring — every ~6 hours or N evaluations), the strategist:
+The strategist is both backward-looking (what failed, what worked) and forward-looking (where should I be heading). It maintains a **direction log** — a persistent record of the agent's evolving understanding of where it should improve.
+
+### Direction Log
+
+```sql
+direction_log:
+  id TEXT PRIMARY KEY,
+  analysis TEXT,            -- narrative: where am I now?
+  direction TEXT,           -- where should I head?
+  opportunities TEXT,       -- JSON: potential areas for growth
+  hypotheses TEXT,          -- JSON: specific changes to try
+  confidence REAL,          -- how sure am I about this direction?
+  based_on_evaluations INTEGER,  -- how many evaluations informed this?
+  created_at TEXT DEFAULT (datetime('now'))
+```
+
+The direction log is append-only. The agent can look back and see how its understanding of itself evolved over time. New entries don't delete old ones — the history itself is valuable.
+
+### Strategist Prompt
+
+Runs periodically (every ~6 hours or after N new evaluations):
 
 ```
-Here is a summary of my recent self-evaluations:
+Here is my self-improvement history:
 
-Evaluation trends:
+Recent evaluation trends:
 {aggregated scores by task_type, criterion, time}
 
-Failed trials:
-{what was tried, why it failed, when}
+Previous direction assessments:
+{last 3 direction_log entries}
 
-Current improvement hypotheses in progress:
-{active trials}
+Failed trials (do not retry these):
+{failed-trial log entries}
 
-My current strengths and weaknesses appear to be:
-{derived from scores}
+Successful trials:
+{promoted trial records}
+
+Active trials:
+{current experiments in progress}
 
 Consider:
-1. What patterns do you see?
-2. What direction should I focus improvement efforts?
-3. What specific change would you hypothesize would help most?
-4. Are there capability gaps I should develop skills for?
+1. What patterns do you see in my evaluations?
+2. Is my current direction working, or should I pivot?
+3. What opportunities exist that I haven't explored?
+4. What specific change would have the highest expected impact?
+5. Are there capability gaps I should develop skills for?
+6. Where do I think I could be in 50 more evaluation cycles?
 
 Return JSON:
 {
-  "analysis": "narrative summary of where I am",
-  "direction": "where I should focus next",
+  "analysis": "narrative summary of where I am and how I got here",
+  "direction": "where I should focus next and why",
+  "opportunities": [
+    {"area": "description", "potential": "high|medium|low", "rationale": "why"}
+  ],
   "hypotheses": [
     {
       "description": "what to change",
-      "target": "personality|prompt_section|tool_preference|skill|correction",
+      "target": "personality|prompt_section|skill|correction",
       "rationale": "why this should help",
       "expected_impact": "what improvement looks like",
       "confidence": 0.0-1.0
     }
-  ]
+  ],
+  "trajectory_note": "where I think I'm heading long-term"
 }
 ```
 
-The strategist output feeds the EvolutionEngine as candidate trials.
+The strategist output feeds the EvolutionEngine as candidate trials AND is stored in the direction log for future reference.
 
-## Checkpoint & Reversion System
+## Checkpoint & Trial System
 
-### What Gets Checkpointed
+### What Gets Checkpointed (Known-Good on Disk)
 
-Agent state is composed of mutable layers:
+| Layer | Storage | Format |
+|-------|---------|--------|
+| **Personality** | `data/personality.yaml` | YAML |
+| **Prompt sections** | `data/prompt_sections/*.md` | Markdown with YAML frontmatter |
+| **Skills** | `skills/*.md` | Markdown with YAML frontmatter |
 
-| Layer | Storage | Versioning |
-|-------|---------|------------|
-| **Personality** | `data/personality.yaml` | Full file snapshot in DB |
-| **Prompt sections** | `data/prompt_sections/*.md` (new) | Per-file snapshots |
-| **Tool preferences** | `data/tool_preferences.json` (new) | Full file snapshot |
-| **Active corrections** | `corrections` table | Delta (corrections added/removed) |
-| **Skills** | `skills/*.md` files | Per-file checksums + content |
-
-### Checkpoint Structure
+### Trial Overrides (Ephemeral in DB)
 
 ```sql
--- A snapshot of agent state
-checkpoints:
+trial_overrides:
   id TEXT PRIMARY KEY,
-  parent_id TEXT REFERENCES checkpoints(id),  -- tree structure
-  label TEXT,                                  -- "known-good", "trial-xyz"
-  is_known_good INTEGER DEFAULT 0,
-  personality_snapshot TEXT,                    -- full YAML content
-  prompt_sections_snapshot TEXT,                -- JSON map of section_name → content
-  tool_preferences_snapshot TEXT,               -- full JSON content
-  corrections_delta TEXT,                       -- JSON: {added: [...], removed: [...]}
-  skills_snapshot TEXT,                         -- JSON: {name → {checksum, content}}
+  trial_id TEXT REFERENCES trials(id),
+  target_type TEXT,       -- "personality" | "prompt_section" | "skill"
+  target_name TEXT,       -- file name or section name
+  override_content TEXT,  -- full replacement content
   created_at TEXT DEFAULT (datetime('now'))
 ```
+
+### Checkpoint Record
+
+```sql
+checkpoints:
+  id TEXT PRIMARY KEY,
+  parent_id TEXT REFERENCES checkpoints(id),
+  label TEXT,
+  personality_snapshot TEXT,
+  prompt_sections_snapshot TEXT,    -- JSON: {name → content}
+  skills_snapshot TEXT,             -- JSON: {name → content}
+  created_at TEXT DEFAULT (datetime('now'))
+```
+
+A new checkpoint is created when a trial is promoted (overrides written to disk). The checkpoint stores the state *before* promotion, so we can walk back the tree if needed.
 
 ### Trial Lifecycle
 
 ```sql
 trials:
   id TEXT PRIMARY KEY,
-  checkpoint_id TEXT REFERENCES checkpoints(id),      -- state BEFORE trial
-  trial_checkpoint_id TEXT REFERENCES checkpoints(id), -- state WITH trial applied
-  hypothesis TEXT,                                      -- what we're testing
-  target TEXT,                                          -- personality|prompt_section|...
-  change_description TEXT,                              -- human-readable diff
-  status TEXT DEFAULT 'active',                         -- active|promoted|reverted|expired
+  checkpoint_id TEXT REFERENCES checkpoints(id),  -- state before trial
+  hypothesis TEXT,
+  target TEXT,                         -- personality|prompt_section|skill
+  change_description TEXT,
+  status TEXT DEFAULT 'active',        -- active|promoted|reverted|expired
   started_at TEXT DEFAULT (datetime('now')),
-  expires_at TEXT,                                      -- time cap
-  min_evaluations INTEGER DEFAULT 5,                    -- confidence gate
+  expires_at TEXT,                     -- deadman time cap
+  min_evaluations INTEGER DEFAULT 5,
   evaluation_count INTEGER DEFAULT 0,
   avg_score REAL,
-  baseline_avg_score REAL,                              -- score before trial
-  result_notes TEXT,                                    -- why promoted/reverted
+  baseline_avg_score REAL,
+  result_notes TEXT,
+  direction_log_id TEXT,               -- which direction assessment spawned this
   created_at TEXT DEFAULT (datetime('now'))
 ```
 
-### Reversion Flow
+### Trial Flow
 
 ```
-Trial expires or reaches min_evaluations
+Strategist generates hypothesis
     |
     v
-Compare avg_score vs baseline_avg_score
+EvolutionEngine creates trial:
+  1. Snapshot current disk state as checkpoint
+  2. Write override content to trial_overrides table
+  3. Set expires_at = now + time_cap (default 48h)
+  4. Status = 'active'
     |
-    ├── Better (>= +0.5 threshold) → Promote
-    │     - Trial checkpoint becomes new known-good
-    │     - Log success in trial record
-    │     - Strategist informed of what worked
+    v
+On every prompt assembly (while trial active):
+  CheckpointManager.get_working_state():
+    disk_state = load from files
+    overrides = query trial_overrides WHERE trial is active
+    return merge(disk_state, overrides)
+    |
+    v
+Evaluator scores interactions during trial:
+  evaluation_count++, update avg_score
+    |
+    v
+Trial resolution (checked each heartbeat):
+  IF evaluation_count >= min_evaluations:
+    IF avg_score >= baseline + 0.5 → PROMOTE
+    IF avg_score <= baseline - 0.3 → REVERT (early)
+  IF now >= expires_at → EXPIRE (revert)
+    |
+    ├── PROMOTE:
+    │   Write overrides to disk files
+    │   Delete trial_overrides rows
+    │   Update checkpoint as new known-good
+    │   Log success
     │
-    ├── Worse (<= -0.3 threshold) → Early revert
-    │     - Restore from parent checkpoint
-    │     - Log failure + scores
-    │     - Add to failed-trial log
-    │     - Strategist informed of what failed and why
+    ├── REVERT / EXPIRE:
+    │   Delete trial_overrides rows (disk unchanged)
+    │   Log to failed_trials_log
+    │   Status = 'reverted' or 'expired'
     │
-    └── Neutral (within thresholds) → Expire at time cap
-          - Revert (don't keep neutral changes — bias toward simplicity)
-          - Log as inconclusive
+    └── On crash/restart:
+        trial_overrides still in DB but trial may be expired
+        CheckpointManager checks expires_at before merging
+        Expired overrides are ignored → disk state (known-good)
 ```
 
 ### Anti-Loop: Failed Trial Log
@@ -225,9 +341,9 @@ failed_trials_log:
   hypothesis TEXT,
   target TEXT,
   change_description TEXT,
-  scores_summary TEXT,           -- JSON of aggregated scores
-  failure_reason TEXT,           -- "worse_than_baseline" | "inconclusive" | "expired"
-  lessons TEXT,                  -- LLM-generated: what to learn from this failure
+  scores_summary TEXT,
+  failure_reason TEXT,        -- "worse_than_baseline" | "inconclusive" | "expired"
+  lessons TEXT,               -- LLM-generated: what to learn from this failure
   created_at TEXT DEFAULT (datetime('now'))
 ```
 
@@ -235,36 +351,47 @@ The strategist receives the full failed-trial log when generating new hypotheses
 
 ## Dynamic Prompt Sections
 
-Currently the system prompt is built from a fixed template in `prompt_builder.py`. We replace the static sections with a dynamic section system:
+The static sections in `prompt_builder.py` are replaced with evolvable markdown files.
 
-### Section Registry
+### Section Files
 
 ```
 data/prompt_sections/
-  identity.md          -- who the agent is (evolved from personality)
+  identity.md          -- who the agent is
   voice.md             -- communication guidelines
-  tool_guidelines.md   -- tool selection preferences
   task_patterns.md     -- learned patterns for common task types
-  meta.md              -- self-improvement awareness
+  meta.md              -- self-improvement awareness and guidelines
 ```
 
-Each section is:
-- A markdown file with YAML frontmatter (priority, always_include, max_tokens)
-- Hot-loaded on every request (like personality today)
-- Individually versionable and evolvable
-- The agent can create new sections or modify existing ones through trials
+Each section file:
+
+```markdown
+---
+priority: 10
+always_include: true
+max_tokens: 500
+---
+
+# Identity
+
+You are {name}, a personal AI agent...
+```
+
+- Loaded from disk on every request (hot-reload via mtime cache, same as personality today)
+- Sorted by priority (lower = earlier in prompt)
+- `always_include: false` sections only included when contextually relevant
+- Individually versionable — a trial can modify one section without touching others
+- The agent can create new section files through trials
 
 ### Prompt Assembly (Updated)
 
 ```python
-def build_system_prompt(personality, sections, memory_context,
-                        tool_context, skill_catalog, corrections_context):
+def build_system_prompt(sections, memory_context, tool_context,
+                        skill_catalog, corrections_context):
     parts = []
-    # Load all prompt sections, sorted by priority
     for section in sorted(sections, key=lambda s: s.priority):
         if section.always_include or is_relevant(section, current_context):
             parts.append(section.content)
-    # Inject dynamic context
     parts.append(memory_context)
     parts.append(tool_context)
     parts.append(skill_catalog)
@@ -272,25 +399,7 @@ def build_system_prompt(personality, sections, memory_context,
     return "\n\n".join(filter(None, parts))
 ```
 
-## Tool Preferences
-
-A new JSON file the agent evolves:
-
-```json
-{
-  "preferences": [
-    {
-      "task_pattern": "user asks for current information",
-      "prefer": ["search", "scrape_web"],
-      "avoid": ["code"],
-      "reason": "web tools are better for current info than code execution"
-    }
-  ],
-  "pruned_for_specialists": {}
-}
-```
-
-Injected into the system prompt as a "Tool Guidelines" section. The agent can modify this through trials.
+Note: personality.yaml fields (name, voice config) are used to seed the initial prompt section files. After migration, the prompt sections become the source of truth and personality.yaml becomes a legacy fallback.
 
 ## Integration with Existing Systems
 
@@ -302,98 +411,116 @@ Phase 2: Execute todos            (existing)
 Phase 3: Deliver subagent results (existing)
 Phase 4: Idle-think goals         (existing)
 Phase 5: Self-improvement cycle   (NEW)
-  5a. Score unreviewed past actions (C.1 + C.2, 1-3 per cycle)
+  5a. Score unreviewed past actions (C.1 + C.2, adaptive 1-5 per cycle)
   5b. Check active trials (promote/revert if ready)
   5c. Run strategist (if enough new evaluations since last run)
-  5d. Create new trials from strategist hypotheses
+  5d. Create new trials from highest-confidence hypothesis
+```
+
+### Adaptive Scoring Cadence
+
+```python
+def actions_to_score_this_cycle(self) -> int:
+    pending_todos = count_pending_todos()
+    active_conversations = count_active_conversations()
+    if pending_todos == 0 and active_conversations == 0:
+        return 5  # fully idle, score aggressively
+    elif pending_todos <= 2:
+        return 2  # light load
+    else:
+        return 1  # busy, minimal scoring
 ```
 
 ### ContextAssembler (Updated)
 
 ```python
 def build(self, message, conversation_id):
-    # Existing
-    personality = self.personality_loader.load()
     memories = self.memory_manager.recall(message)
     corrections = self.corrections_manager.relevant(message)
     skills = self.skill_registry.list()
 
-    # New
-    prompt_sections = self.section_registry.load_all()
-    tool_prefs = self.tool_pref_manager.load()
+    # Load prompt sections with trial overrides applied
+    sections = self.checkpoint_manager.get_working_sections()
 
     return build_system_prompt(
-        personality=personality,
-        sections=prompt_sections,
+        sections=sections,
         memory_context=memories,
-        tool_context=format_tool_prefs(tool_prefs),
+        tool_context=self.tool_context,
         skill_catalog=skills,
         corrections_context=corrections,
     )
 ```
 
-### Message Feedback (New Signal)
+## Evaluations Storage
 
-Add to the WebSocket protocol:
-
-```json
-{"type": "feedback", "message_id": "...", "signal": "positive|negative"}
+```sql
+evaluations:
+  id TEXT PRIMARY KEY,
+  message_id TEXT,
+  conversation_id TEXT,
+  task_type TEXT,
+  rubric TEXT,                   -- JSON rubric used
+  scores TEXT,                   -- JSON scores array
+  overall_score REAL,
+  improvement_signal TEXT,
+  implicit_feedback REAL,        -- -1.0 to 1.0 from behavioral inference
+  trial_id TEXT,                 -- which trial was active (null if known-good)
+  created_at TEXT DEFAULT (datetime('now'))
 ```
 
-Frontend: Thumbs up/down on assistant messages (using existing `feedback-bar` prompt-kit component).
+## Phase 1 MVP Scope
 
-## Lean MVP Scope
+### Must Have
 
-The full system described above is the target. The **minimum viable version** that still enables self-improvement:
-
-### Must Have (Phase 1)
-
-1. **Evaluator** — C.1 rubric generation + C.2 scoring against past actions
-2. **Checkpoint table** — snapshot/restore agent state
-3. **Trial table** — track active experiments with time cap
-4. **Failed-trial log** — prevent loops
-5. **Heartbeat Phase 5** — score 1-3 actions per idle cycle, manage trials
-6. **Dynamic prompt sections** — replace static prompt_builder sections with evolvable files
-7. **Message feedback** — thumbs up/down in UI (simplest user signal)
+1. **Evaluator** (`evaluator.py`) — C.1 rubric generation + C.2 scoring + implicit feedback inference
+2. **CheckpointManager** (`checkpoint.py`) — deadman switch, disk = known-good, DB = ephemeral overrides
+3. **EvolutionEngine** (`evolution.py`) — trial lifecycle, promote/revert, failed-trial log, direction log
+4. **Dynamic prompt sections** (`section_registry.py`) — markdown files, hot-loaded, trial-overridable
+5. **Heartbeat Phase 5** — adaptive scoring + trial management
+6. **Migration** (`015_evolution.sql`) — all new tables
 
 ### Defer to Phase 2
 
-- Strategist (direction evaluation) — phase 1 uses simpler hypothesis generation from evaluation scores
-- Tool preferences file — agent can already express preferences via prompt sections
-- Rubric caching/library — regenerate each time initially
-- Specialist agent creation — this emerges from the improvement system
+- Strategist with full direction evaluation (Phase 1 uses simpler: "given these scores, suggest one change")
+- Tool preferences file (agent can express preferences via prompt sections)
+- Rubric library/caching (regenerate initially, cache once patterns stabilize)
+- Specialist agent spawning (emerges from the improvement system)
 - Cross-instance sharing of improvements
 
 ### Phase 1 Keeps It Lean By
 
 - Using existing `fallback_model` for all evaluation LLM calls
-- Scoring only 1-3 actions per idle cycle
+- Adaptive scoring (1-5 actions per idle cycle depending on load)
 - One active trial at a time (no parallel experiments)
-- Simple promote/revert thresholds (no statistical significance)
+- Simple promote/revert thresholds (no statistical significance testing)
 - Prompt sections as plain markdown files (no complex registry)
-- Building on existing heartbeat, goal_store, and corrections infrastructure
+- Implicit feedback only (no UI changes)
+- Building on existing heartbeat, goal_store, corrections, and personality infrastructure
+- Deadman switch eliminates complex rollback code
 
 ## File Structure
 
 ```
 odigos/core/
-  evaluator.py          -- C.1 rubric + C.2 scoring
-  evolution.py          -- EvolutionEngine (trial management)
-  checkpoint.py         -- CheckpointManager (snapshot/restore)
+  evaluator.py          -- C.1 rubric + C.2 scoring + implicit feedback
+  evolution.py          -- EvolutionEngine (trials + direction log)
+  checkpoint.py         -- CheckpointManager (deadman switch + overrides)
 
 odigos/personality/
-  prompt_builder.py     -- Updated: load dynamic sections
-  section_registry.py   -- Load/manage prompt section files
+  prompt_builder.py     -- Updated: load dynamic sections instead of static template
+  section_registry.py   -- Load prompt section files, merge trial overrides
 
 data/
-  personality.yaml      -- (existing, now versionable)
-  prompt_sections/      -- (new) evolvable prompt sections
+  personality.yaml      -- Legacy fallback, seeds initial prompt sections
+  prompt_sections/      -- Evolvable prompt sections (known-good on disk)
     identity.md
     voice.md
+    task_patterns.md
     meta.md
 
 migrations/
-  015_evolution.sql     -- checkpoints, trials, evaluations, failed_trials_log, message_feedback
+  015_evolution.sql     -- checkpoints, trials, trial_overrides, evaluations,
+                           failed_trials_log, direction_log
 ```
 
 ## How the Agent Reads This Document
@@ -401,7 +528,9 @@ migrations/
 This document lives in `docs/plans/` and can be referenced by the agent through its document tool. The agent should understand:
 
 1. It has an evolution system that versions its own state
-2. Changes to personality, prompt sections, and skills are experimental until promoted
-3. Failed experiments are logged and should inform future attempts
-4. The known-good checkpoint is the safe fallback
-5. Self-improvement is a first-class goal, not a side effect
+2. Changes are experimental by default — trial overrides live in DB, not on disk
+3. If anything goes wrong, disk state (known-good) is the automatic fallback
+4. Failed experiments are logged and must inform future attempts
+5. The direction log tracks where the agent thinks it should be heading
+6. Self-improvement is a first-class goal, not a side effect
+7. The improvement system itself can be improved through the same mechanism
