@@ -18,6 +18,7 @@ const PROVIDERS = [
 
 interface SettingsData {
   llm_api_key: string
+  api_key: string
   llm: { base_url: string; default_model: string; fallback_model: string; max_tokens: number; temperature: number }
   agent: { name: string; max_tool_turns: number; run_timeout_seconds: number }
   budget: { daily_limit_usd: number; monthly_limit_usd: number; warn_threshold: number }
@@ -195,6 +196,18 @@ export default function SettingsPage({ needsSetup }: Props) {
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">Monthly Limit (USD)</Label>
               <Input type="number" step="1" value={settings.budget.monthly_limit_usd} onChange={(e) => update('budget', 'monthly_limit_usd', parseFloat(e.target.value))} className="bg-muted/50 border-border/40" />
+            </div>
+          </div>
+        </section>
+
+        {/* Security */}
+        <section className="space-y-4">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Security</h2>
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Dashboard API Key</Label>
+              <Input type="password" placeholder="****" onChange={(e) => setSettings(s => s ? { ...s, api_key: e.target.value } : s)} className="bg-muted/50 border-border/40" />
+              <p className="text-xs text-muted-foreground">Used to authenticate browser sessions. Set a persistent key to survive container restarts.</p>
             </div>
           </div>
         </section>

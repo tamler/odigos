@@ -16,6 +16,7 @@ router = APIRouter(
 
 class SettingsUpdate(BaseModel):
     llm_api_key: str | None = None
+    api_key: str | None = None
     llm: dict | None = None
     agent: dict | None = None
     budget: dict | None = None
@@ -35,6 +36,7 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
     """Return current settings with secrets masked."""
     return {
         "llm_api_key": _mask_key(settings.llm_api_key),
+        "api_key": _mask_key(settings.api_key),
         "llm": settings.llm.model_dump(),
         "agent": settings.agent.model_dump(),
         "budget": settings.budget.model_dump(),
@@ -71,10 +73,17 @@ async def update_settings_endpoint(
     with open(config_path, "w") as f:
         yaml.dump(yaml_config, f, default_flow_style=False)
 
-    # Update .env if API key was provided
+    # Update .env if LLM API key was provided
     if update.llm_api_key is not None:
         _update_env_file(env_path, "LLM_API_KEY", update.llm_api_key)
         object.__setattr__(settings, "llm_api_key", update.llm_api_key)
+
+    # Update dashboard API key in config.yaml
+    if update.api_key is not None:
+        yaml_config["api_key"] = update.api_key
+        with open(config_path, "w") as f:
+            yaml.dump(yaml_config, f, default_flow_style=False)
+        object.__setattr__(settings, "api_key", update.api_key)
 
     # Hot-reload in-memory settings from merged sections
     for section in ("llm", "agent", "budget", "heartbeat", "sandbox"):
