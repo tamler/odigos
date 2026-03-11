@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Odigos — AI Systems That Actually Work</title>
+  <meta name="description" content="Odigos designs and builds AI agents, assistants, and workflows that remember, act, and improve. Not slide decks. Not chatbots. Systems.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0b;
+      --surface: #111113;
+      --surface-hover: #1a1a1d;
+      --border: #222225;
+      --text: #e8e8ec;
+      --text-muted: #8b8b96;
+      --accent: #6366f1;
+      --accent-soft: rgba(99, 102, 241, 0.12);
+      --green: #34d399;
+      --green-soft: rgba(52, 211, 153, 0.12);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Nav */
+    nav {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .logo {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      text-decoration: none;
+    }
+    .logo span { color: var(--accent); }
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .nav-link:hover {
+      color: var(--text);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 96px 0 64px;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 56px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 24px;
+    }
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+    .hero p {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 600px;
+      line-height: 1.7;
+      margin-bottom: 40px;
+    }
+
+    /* CTA */
+    .cta-group {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #5558e6;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover {
+      color: var(--text);
+      border-color: var(--text-muted);
+    }
+
+    /* Sections */
+    section {
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+    }
+    section h2 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    section > .container > p {
+      color: var(--text-muted);
+      margin-bottom: 48px;
+      font-size: 16px;
+      max-width: 560px;
+    }
+
+    /* Service Cards */
+    .services-grid {
+      display: grid;
+      gap: 16px;
+    }
+    .service-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      transition: all 0.2s;
+    }
+    .service-card:hover {
+      border-color: var(--accent);
+      background: var(--surface-hover);
+    }
+    .service-card h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .service-card p {
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .service-tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .tag-strategy { background: var(--accent-soft); color: var(--accent); }
+    .tag-build { background: var(--green-soft); color: var(--green); }
+    .tag-design { background: rgba(251, 191, 36, 0.12); color: #fbbf24; }
+    .tag-retain { background: rgba(244, 114, 182, 0.12); color: #f472b6; }
+
+    /* Proof section */
+    .proof-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px;
+    }
+    .proof-block h3 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .proof-block > p {
+      color: var(--text-muted);
+      font-size: 15px;
+      margin-bottom: 28px;
+      line-height: 1.7;
+    }
+    .proof-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 24px;
+    }
+    .stat {
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Principles */
+    .principles-list {
+      display: grid;
+      gap: 20px;
+    }
+    .principle {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .principle-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--accent);
+      font-weight: 600;
+      min-width: 28px;
+      padding-top: 2px;
+    }
+    .principle-text {
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .principle-text strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    /* About */
+    .about-block {
+      display: grid;
+      gap: 32px;
+    }
+    .about-text {
+      font-size: 16px;
+      color: var(--text-muted);
+      line-height: 1.8;
+    }
+    .about-text strong {
+      color: var(--text);
+    }
+    .credentials {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .credential {
+      font-size: 13px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    /* Contact / Agent */
+    .contact-block {
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: 12px;
+      padding: 48px 40px;
+      text-align: center;
+    }
+    .contact-block h3 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .contact-block p {
+      color: var(--text-muted);
+      font-size: 15px;
+      margin-bottom: 32px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .agent-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--green);
+      background: var(--green-soft);
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+    }
+    .agent-badge::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Footer */
+    footer {
+      padding: 40px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    footer a {
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+    footer a:hover { color: var(--text); }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .hero { padding: 64px 0 48px; }
+      section { padding: 56px 0; }
+      .proof-block, .contact-block { padding: 28px 20px; }
+      .cta-group { flex-direction: column; }
+      .btn { justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="container">
+      <a href="/" class="logo">odigos<span>.</span></a>
+      <a href="#contact" class="nav-link">Talk to us</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container">
+      <h1>We build AI that<br><em>actually works.</em></h1>
+      <p>Not slide decks about AI strategy. Not chatbots that forget you exist. We design and build agent systems that remember, act, and get better over time.</p>
+      <div class="cta-group">
+        <a href="#contact" class="btn btn-primary">Start a conversation</a>
+        <a href="#proof" class="btn btn-secondary">See what we've built</a>
+      </div>
+    </div>
+  </header>
+
+  <section id="services">
+    <div class="container">
+      <h2>What we do</h2>
+      <p>Four ways to work with us, depending on where you are in your AI journey.</p>
+      <div class="services-grid">
+        <div class="service-card">
+          <span class="service-tag tag-strategy">STRATEGY</span>
+          <h3>AI Strategy & Assessment</h3>
+          <p>We audit your workflows, identify where AI creates real value (not hype), and build a practical roadmap. You leave with a clear plan, prioritized by impact and feasibility, not a 60-page deck that sits in a drawer.</p>
+        </div>
+        <div class="service-card">
+          <span class="service-tag tag-build">BUILD</span>
+          <h3>Agent & Assistant Development</h3>
+          <p>Custom AI agents that integrate with your tools, remember context across sessions, take actions on your behalf, and improve with use. Built lean, deployed on your infrastructure, owned by you.</p>
+        </div>
+        <div class="service-card">
+          <span class="service-tag tag-design">DESIGN</span>
+          <h3>AI Experience Design</h3>
+          <p>Most AI products fail at the interface, not the model. We design how humans and AI systems interact — conversation flows, trust patterns, error recovery, progressive disclosure. The UX that makes AI usable.</p>
+        </div>
+        <div class="service-card">
+          <span class="service-tag tag-retain">ADVISORY</span>
+          <h3>Ongoing Advisory</h3>
+          <p>Monthly retainer for teams building AI products. Architecture reviews, prompt engineering guidance, vendor evaluation, and a direct line to someone who's built these systems from scratch.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="proof">
+    <div class="container">
+      <h2>Built, not theorized</h2>
+      <p>Odigos is our own AI agent system — and it's how we prove we can build yours.</p>
+      <div class="proof-block">
+        <h3>Odigos Agent System</h3>
+        <p>A self-hosted personal AI agent that runs on a VPS, talks via Telegram, and acts as a real virtual assistant. It remembers who you are, takes actions on your behalf, monitors things you care about, and improves over time. Memory-first architecture with a lean core and modular tool system.</p>
+        <div class="proof-stats">
+          <div class="stat">
+            <div class="stat-value">5.6K</div>
+            <div class="stat-label">lines of Python</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">7.4K</div>
+            <div class="stat-label">lines of tests</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">25+</div>
+            <div class="stat-label">integrated tools</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">&lt;$50</div>
+            <div class="stat-label">/mo to run</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="approach">
+    <div class="container">
+      <h2>How we think</h2>
+      <p>Principles that guide every engagement.</p>
+      <div class="principles-list">
+        <div class="principle">
+          <span class="principle-num">01</span>
+          <div class="principle-text"><strong>Memory is the product.</strong> An AI system that forgets is just a chatbot. Every interaction should make the next one better.</div>
+        </div>
+        <div class="principle">
+          <span class="principle-num">02</span>
+          <div class="principle-text"><strong>Actions over words.</strong> The system should do things, not describe how to do things. We build AI that takes action.</div>
+        </div>
+        <div class="principle">
+          <span class="principle-num">03</span>
+          <div class="principle-text"><strong>Resilience over perfection.</strong> It's better to degrade gracefully than crash spectacularly. Self-healing beats self-optimizing.</div>
+        </div>
+        <div class="principle">
+          <span class="principle-num">04</span>
+          <div class="principle-text"><strong>Lean core, rich periphery.</strong> Complexity belongs in modular tools and skills, not in the brain. Keep the core simple.</div>
+        </div>
+        <div class="principle">
+          <span class="principle-num">05</span>
+          <div class="principle-text"><strong>Your data, your server.</strong> Nothing phones home. No vendor lock-in on critical infrastructure. You own what we build.</div>
+        </div>
+        <div class="principle">
+          <span class="principle-num">06</span>
+          <div class="principle-text"><strong>Don't over-engineer.</strong> If a simpler approach works, use it. We add complexity when we hit the problem, not before.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="about">
+    <div class="container">
+      <h2>Who's behind this</h2>
+      <div class="about-block">
+        <div class="about-text">
+          <strong>Jacob</strong> is a systems designer who's been building at the intersection of AI and user experience since before the LLM era. Former UX designer turned AI architect, with experience designing conversational AI systems at scale at <strong>24/7.ai</strong> — where the problems were real, the users were millions, and "it works in the demo" wasn't good enough.
+          <br><br>
+          Odigos exists because the AI tools available today are either too dumb (chatbots) or too complex (agent frameworks that need a PhD to configure). There's a gap for systems that are smart, usable, and actually run in production. That's the gap we fill.
+        </div>
+        <div class="credentials">
+          <span class="credential">UX Design</span>
+          <span class="credential">Systems Architecture</span>
+          <span class="credential">Conversational AI</span>
+          <span class="credential">Agent Systems</span>
+          <span class="credential">Product Strategy</span>
+          <span class="credential">AI/ML Operations</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact">
+    <div class="container">
+      <div class="contact-block">
+        <div class="agent-badge">Agent online</div>
+        <h3>Let's talk about what you're building</h3>
+        <p>Start a conversation with our AI agent on Telegram. It'll learn about your needs, answer your questions, and schedule a call with Jacob if there's a fit.</p>
+        <div class="cta-group" style="justify-content: center;">
+          <a href="https://t.me/OdigosAgent" class="btn btn-primary" id="telegram-cta">Message us on Telegram</a>
+          <a href="mailto:jacob@odigos.one" class="btn btn-secondary">Or email directly</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      &copy; 2026 Odigos &middot; Cebu, Philippines &middot; Serving clients worldwide
+    </div>
+  </footer>
+
+</body>
+</html>
