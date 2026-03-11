@@ -1,12 +1,12 @@
-"""Test that heartbeat Phase 5 runs the evolution cycle."""
+"""Test heartbeat announces agent to peers."""
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 
 @pytest.mark.asyncio
-async def test_tick_runs_evolution_when_idle():
-    """Phase 5 should run when no other work was done."""
+async def test_tick_announces_periodically():
     from odigos.core.heartbeat import Heartbeat
 
     heartbeat = Heartbeat.__new__(Heartbeat)
@@ -23,11 +23,15 @@ async def test_tick_runs_evolution_when_idle():
     heartbeat.subagent_manager = None
     heartbeat._last_idle = 0
     heartbeat.paused = False
-    heartbeat.evolution_engine = AsyncMock()
-    heartbeat.evolution_engine.score_past_actions = AsyncMock(return_value=2)
-    heartbeat.evolution_engine.check_active_trial = AsyncMock(return_value=None)
-
-    heartbeat.agent_client = None
+    heartbeat.evolution_engine = None
+    heartbeat.strategist = None
+    heartbeat.agent_client = AsyncMock()
+    heartbeat.agent_client.broadcast_announce = AsyncMock()
+    heartbeat.agent_client.mark_stale_peers = AsyncMock(return_value=0)
+    heartbeat._announce_interval = 60
+    heartbeat._last_announce = time.monotonic() - 120  # ensure interval has elapsed
+    heartbeat._agent_role = "personal_assistant"
+    heartbeat._agent_description = "Test agent"
 
     heartbeat._fire_reminders = AsyncMock(return_value=False)
     heartbeat._work_todos = AsyncMock(return_value=False)
@@ -36,5 +40,6 @@ async def test_tick_runs_evolution_when_idle():
 
     await heartbeat._tick()
 
-    heartbeat.evolution_engine.score_past_actions.assert_called_once()
-    heartbeat.evolution_engine.check_active_trial.assert_called_once()
+    # Should have broadcast announce
+    heartbeat.agent_client.broadcast_announce.assert_called_once()
+    heartbeat.agent_client.mark_stale_peers.assert_called_once()

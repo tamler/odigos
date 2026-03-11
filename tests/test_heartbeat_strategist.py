@@ -29,6 +29,8 @@ async def test_tick_runs_strategist_when_should_run():
     heartbeat.strategist.should_run = AsyncMock(return_value=True)
     heartbeat.strategist.analyze = AsyncMock(return_value={"hypotheses": []})
 
+    heartbeat.agent_client = None
+
     heartbeat._fire_reminders = AsyncMock(return_value=False)
     heartbeat._work_todos = AsyncMock(return_value=False)
     heartbeat._deliver_subagent_results = AsyncMock(return_value=False)

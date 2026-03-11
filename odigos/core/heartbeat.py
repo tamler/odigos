@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from odigos.core.strategist import Strategist
     from odigos.core.subagent import SubagentManager
     from odigos.core.trace import Tracer
+    from odigos.core.agent_client import AgentClient
     from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,10 @@ class Heartbeat:
         subagent_manager: SubagentManager | None = None,
         evolution_engine: EvolutionEngine | None = None,
         strategist: Strategist | None = None,
+        agent_client: AgentClient | None = None,
+        agent_role: str = "",
+        agent_description: str = "",
+        announce_interval: int = 60,
     ) -> None:
         self.db = db
         self.agent = agent
@@ -58,6 +63,11 @@ class Heartbeat:
         self.strategist = strategist
         self._last_idle: float = 0
         self.paused: bool = False
+        self.agent_client = agent_client
+        self._agent_role = agent_role
+        self._agent_description = agent_description
+        self._announce_interval = announce_interval
+        self._last_announce: float = 0
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -104,6 +114,10 @@ class Heartbeat:
         # Phase 5: Self-improvement cycle (runs when idle)
         if not did_work and self.evolution_engine:
             await self._run_evolution()
+
+        # Phase 6: Peer announce + stale check
+        if self.agent_client:
+            await self._peer_maintenance()
 
         if self.tracer:
             await self.tracer.emit("heartbeat_tick", None, {
@@ -294,6 +308,20 @@ class Heartbeat:
                                     len(analysis.get("hypotheses", [])))
         except Exception:
             logger.debug("Evolution cycle failed", exc_info=True)
+
+    async def _peer_maintenance(self) -> None:
+        """Phase 6: Announce self to peers and mark stale peers offline."""
+        now = time.monotonic()
+        try:
+            if now - self._last_announce >= self._announce_interval:
+                self._last_announce = now
+                await self.agent_client.broadcast_announce(
+                    role=self._agent_role,
+                    description=self._agent_description,
+                )
+                await self.agent_client.mark_stale_peers()
+        except Exception:
+            logger.debug("Peer maintenance failed", exc_info=True)
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:
         try:

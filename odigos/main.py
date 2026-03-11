@@ -44,7 +44,9 @@ from odigos.api.evolution import router as evolution_router
 from odigos.api.agents import router as agents_router
 from odigos.api.upload import router as upload_router
 from odigos.channels.web import WebChannel
-from odigos.core.peers import PeerClient
+from odigos.core.agent_client import AgentClient
+from odigos.core.spawner import Spawner
+from odigos.api.agent_ws import router as agent_ws_router
 from odigos.tools.peer import MessagePeerTool
 
 logging.basicConfig(
@@ -98,8 +100,12 @@ async def lifespan(app: FastAPI):
     await _db.initialize()
     logger.info("Database initialized at %s", settings.database.path)
 
-    # Initialize peer client (after db so we can track messages)
-    peer_client = PeerClient(peers=settings.peers, agent_name="odigos", db=_db)
+    # Initialize agent client (WebSocket-primary, HTTP-fallback)
+    agent_client = AgentClient(
+        peers=settings.peers,
+        agent_name=settings.agent.name,
+        db=_db,
+    )
 
     # Initialize tracer
     tracer = Tracer(db=_db)
@@ -307,9 +313,9 @@ async def lifespan(app: FastAPI):
     logger.info("Subagent tool registered")
 
     # Register peer messaging tool if peers are configured
-    if peer_client.list_peer_names():
-        tool_registry.register(MessagePeerTool(peer_client=peer_client))
-        logger.info("Peer messaging tool registered for peers: %s", ", ".join(peer_client.list_peer_names()))
+    if agent_client.list_peer_names():
+        tool_registry.register(MessagePeerTool(peer_client=agent_client))
+        logger.info("Peer messaging tool registered for peers: %s", ", ".join(agent_client.list_peer_names()))
 
     # Connect MCP servers and register bridged tools
     if settings.mcp.servers:
@@ -428,6 +434,8 @@ async def lifespan(app: FastAPI):
     web_channel.setup_tracer_forwarding(tracer)
     app.state.db = _db
     app.state.web_channel = web_channel
+    app.state.agent_client = agent_client
+    app.state.spawner = spawner
 
     _channel_registry = channel_registry
 
@@ -469,6 +477,14 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Strategist initialized")
 
+    # Initialize spawner
+    spawner = Spawner(
+        db=_db,
+        provider=_router,
+        parent_name=settings.agent.name,
+    )
+    logger.info("Spawner initialized")
+
     # Initialize heartbeat
     _heartbeat = Heartbeat(
         db=_db,
@@ -483,6 +499,9 @@ async def lifespan(app: FastAPI):
         subagent_manager=subagent_manager,
         evolution_engine=evolution_engine,
         strategist=strategist,
+        agent_client=agent_client,
+        agent_role=settings.agent.role,
+        agent_description=settings.agent.description,
     )
 
     # Set heartbeat on agent so any channel can access it
@@ -544,6 +563,7 @@ app.include_router(message_router)
 app.include_router(upload_router)
 app.include_router(evolution_router)
 app.include_router(agents_router)
+app.include_router(agent_ws_router)
 app.include_router(ws_router)
 
 
