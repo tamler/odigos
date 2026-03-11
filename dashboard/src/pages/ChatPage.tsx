@@ -3,6 +3,7 @@ import { ChatSocket } from '@/lib/ws'
 import { get } from '@/lib/api'
 import ChatMessage from '@/components/ChatMessage'
 import ChatInput from '@/components/ChatInput'
+import ConversationSidebar from '@/components/ConversationSidebar'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -16,6 +17,7 @@ export default function ChatPage() {
   const [thinking, setThinking] = useState(false)
   const [hasSTT, setHasSTT] = useState(false)
   const [hasTTS, setHasTTS] = useState(false)
+  const [activeConversation, setActiveConversation] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
 
@@ -73,7 +75,9 @@ export default function ChatPage() {
   }, [])
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex">
+      <ConversationSidebar activeId={activeConversation} onSelect={setActiveConversation} />
+      <div className="flex-1 flex flex-col">
       <div className="border-b px-4 py-3 flex items-center justify-between">
         <h2 className="font-semibold">Chat</h2>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -107,6 +111,7 @@ export default function ChatPage() {
         hasSTT={hasSTT}
         hasTTS={hasTTS}
       />
+      </div>
     </div>
   )
 }
