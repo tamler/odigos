@@ -1,9 +1,12 @@
 """WebSocket endpoint for real-time chat, subscriptions, and event streaming."""
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from odigos.core.auto_title import maybe_auto_title
 
 from odigos.channels.base import UniversalMessage
 
@@ -62,6 +65,10 @@ async def websocket_endpoint(websocket: WebSocket):
                     "content": response,
                     "conversation_id": conversation_id,
                 })
+                asyncio.create_task(maybe_auto_title(
+                    agent.db, agent.executor.provider, conversation_id,
+                    data.get("content", ""), response,
+                ))
 
             elif msg_type == "peer_connect":
                 # Peer agent identifying itself
