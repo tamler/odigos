@@ -36,6 +36,7 @@ from odigos.api.memory import router as memory_router
 from odigos.api.budget import router as budget_router
 from odigos.api.metrics import router as metrics_router
 from odigos.api.plugins import router as plugins_router
+from odigos.api.settings import router as settings_router
 from odigos.api.message import router as message_router
 from odigos.api.ws import router as ws_router
 from odigos.api.setup import router as setup_router
@@ -83,6 +84,8 @@ async def lifespan(app: FastAPI):
         )
 
     app.state.settings = settings
+    app.state.config_path = config_path
+    app.state.env_path = ".env"
 
     logger.info("Starting Odigos agent: %s", settings.agent.name)
 
@@ -492,6 +495,7 @@ app.include_router(memory_router)
 app.include_router(budget_router)
 app.include_router(metrics_router)
 app.include_router(plugins_router)
+app.include_router(settings_router)
 app.include_router(message_router)
 app.include_router(ws_router)
 
