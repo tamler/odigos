@@ -40,6 +40,7 @@ from odigos.api.settings import router as settings_router
 from odigos.api.message import router as message_router
 from odigos.api.ws import router as ws_router
 from odigos.api.setup import router as setup_router
+from odigos.api.upload import router as upload_router
 from odigos.channels.web import WebChannel
 from odigos.core.peers import PeerClient
 from odigos.tools.peer import MessagePeerTool
@@ -86,6 +87,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.config_path = config_path
     app.state.env_path = ".env"
+    app.state.upload_dir = "data/uploads"
 
     logger.info("Starting Odigos agent: %s", settings.agent.name)
 
@@ -497,6 +499,7 @@ app.include_router(metrics_router)
 app.include_router(plugins_router)
 app.include_router(settings_router)
 app.include_router(message_router)
+app.include_router(upload_router)
 app.include_router(ws_router)
 
 
