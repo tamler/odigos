@@ -103,6 +103,15 @@ class ApprovalConfig(BaseModel):
     timeout: int = 300
 
 
+class DeployTargetConfig(BaseModel):
+    """Configuration for a VPS deployment target."""
+    name: str
+    host: str
+    method: str = "docker"
+    ssh_user: str = "root"
+    ssh_key_path: Optional[str] = None
+
+
 class PeerConfig(BaseModel):
     """Configuration for a trusted peer agent."""
     name: str
@@ -137,6 +146,7 @@ class Settings(BaseSettings):
     browser: BrowserConfig = BrowserConfig()
     approval: ApprovalConfig = ApprovalConfig()
     peers: list[PeerConfig] = []
+    deploy_targets: list[DeployTargetConfig] = []
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
