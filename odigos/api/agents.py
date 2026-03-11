@@ -1,7 +1,8 @@
 """Agent registry API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 
 from odigos.api.deps import get_db, require_api_key
 from odigos.db import Database
@@ -12,6 +13,15 @@ router = APIRouter(
 )
 
 
+class SpawnRequest(BaseModel):
+    agent_name: str
+    role: str
+    description: str
+    specialty: str = ""
+    deploy_target: str = ""
+    proposal_id: str = ""
+
+
 @router.get("/agents")
 async def list_agents(db: Database = Depends(get_db)):
     """List all registered agents."""
@@ -19,6 +29,39 @@ async def list_agents(db: Database = Depends(get_db)):
         "SELECT * FROM agent_registry ORDER BY agent_name"
     )
     return {"agents": [dict(r) for r in rows]}
+
+
+@router.post("/agents/spawn")
+async def spawn_agent(req: SpawnRequest, request: Request):
+    """Spawn a new specialist agent."""
+    spawner = request.app.state.spawner
+    result = await spawner.spawn(
+        agent_name=req.agent_name,
+        role=req.role,
+        description=req.description,
+        specialty=req.specialty or None,
+        deploy_target=req.deploy_target,
+        proposal_id=req.proposal_id or None,
+    )
+    return result
+
+
+@router.get("/agents/spawned")
+async def list_spawned(db: Database = Depends(get_db)):
+    """List all spawned specialist agents."""
+    rows = await db.fetch_all(
+        "SELECT * FROM spawned_agents ORDER BY created_at DESC"
+    )
+    return {"agents": [dict(r) for r in rows]}
+
+
+@router.get("/agents/deploy-targets")
+async def list_deploy_targets(db: Database = Depends(get_db)):
+    """List available deployment targets."""
+    rows = await db.fetch_all(
+        "SELECT * FROM deploy_targets ORDER BY name"
+    )
+    return {"targets": [dict(r) for r in rows]}
 
 
 @router.get("/agents/{agent_name}")
