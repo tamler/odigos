@@ -6,11 +6,28 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from odigos.core.auto_title import maybe_auto_title
-
 from odigos.channels.base import UniversalMessage
 
 router = APIRouter()
+
+
+async def _auto_title_and_notify(ws: WebSocket, db, provider, conversation_id: str,
+                                  user_msg: str, assistant_resp: str):
+    """Run auto-title in background and push the result to the client."""
+    from odigos.core.auto_title import maybe_auto_title
+    try:
+        await maybe_auto_title(db, provider, conversation_id, user_msg, assistant_resp)
+        conv = await db.fetch_one(
+            "SELECT title FROM conversations WHERE id = ?", (conversation_id,)
+        )
+        if conv and conv["title"]:
+            await ws.send_json({
+                "type": "title_updated",
+                "conversation_id": conversation_id,
+                "title": conv["title"],
+            })
+    except Exception:
+        pass
 
 
 @router.websocket("/api/ws")
@@ -65,9 +82,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     "content": response,
                     "conversation_id": conversation_id,
                 })
-                asyncio.create_task(maybe_auto_title(
-                    agent.db, agent.executor.provider, conversation_id,
-                    data.get("content", ""), response,
+                asyncio.create_task(_auto_title_and_notify(
+                    websocket, agent.db, agent.executor.provider,
+                    conversation_id, data.get("content", ""), response,
                 ))
 
             elif msg_type == "peer_connect":

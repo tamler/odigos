@@ -68,6 +68,10 @@ export default function ChatPage() {
           setSearchParams({ c: cid })
           refreshConversations()
         }
+        if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
+          setConversationTitle(msg.title as string)
+          refreshConversations()
+        }
       },
       (isConnected) => {
         setConnected(isConnected)
