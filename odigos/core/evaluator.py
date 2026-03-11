@@ -197,6 +197,24 @@ class Evaluator:
             logger.warning("C.2 scoring failed", exc_info=True)
             return None
 
+    async def find_qualified_evaluator(self, task_type: str) -> dict | None:
+        """Find a qualified peer to evaluate actions of this task type.
+
+        Requirements:
+        - Peer specialty matches task_type
+        - Peer is online
+        - Peer has allow_external_evaluation = 1
+        - Peer has evolution_score > 7.0
+        """
+        row = await self.db.fetch_one(
+            "SELECT * FROM agent_registry "
+            "WHERE specialty = ? AND status = 'online' "
+            "AND allow_external_evaluation = 1 AND evolution_score > 7.0 "
+            "ORDER BY evolution_score DESC LIMIT 1",
+            (task_type,),
+        )
+        return dict(row) if row else None
+
     async def _cache_rubric(self, task_type: str, rubric: dict) -> None:
         try:
             existing = await self.db.fetch_one(
