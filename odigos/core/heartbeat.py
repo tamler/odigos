@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from odigos.core.agent import Agent
     from odigos.core.goal_store import GoalStore
     from odigos.core.evolution import EvolutionEngine
+    from odigos.core.strategist import Strategist
     from odigos.core.subagent import SubagentManager
     from odigos.core.trace import Tracer
     from odigos.providers.base import LLMProvider
@@ -40,6 +41,7 @@ class Heartbeat:
         tracer: Tracer | None = None,
         subagent_manager: SubagentManager | None = None,
         evolution_engine: EvolutionEngine | None = None,
+        strategist: Strategist | None = None,
     ) -> None:
         self.db = db
         self.agent = agent
@@ -53,6 +55,7 @@ class Heartbeat:
         self.tracer = tracer
         self.subagent_manager = subagent_manager
         self.evolution_engine = evolution_engine
+        self.strategist = strategist
         self._last_idle: float = 0
         self.paused: bool = False
 
@@ -272,7 +275,7 @@ class Heartbeat:
         return True
 
     async def _run_evolution(self) -> None:
-        """Phase 5: Score past actions and manage active trials."""
+        """Phase 5: Score past actions, manage trials, run strategist."""
         try:
             scored = await self.evolution_engine.score_past_actions(limit=3)
             if scored:
@@ -281,6 +284,14 @@ class Heartbeat:
             result = await self.evolution_engine.check_active_trial()
             if result and result != "continue":
                 logger.info("Evolution: trial %s", result)
+
+            # Run strategist if enough new evaluations
+            if self.strategist:
+                if await self.strategist.should_run():
+                    analysis = await self.strategist.analyze()
+                    if analysis:
+                        logger.info("Strategist: analyzed, %d hypotheses",
+                                    len(analysis.get("hypotheses", [])))
         except Exception:
             logger.debug("Evolution cycle failed", exc_info=True)
 

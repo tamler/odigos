@@ -450,6 +450,21 @@ async def lifespan(app: FastAPI):
     agent.context_assembler.checkpoint_manager = checkpoint_manager
     logger.info("Evolution engine initialized")
 
+    # Initialize strategist
+    from odigos.core.strategist import Strategist
+
+    # Gather tool names for strategist context
+    tool_names = [t.name for t in tool_registry.list()] if hasattr(tool_registry, 'list') else []
+
+    strategist = Strategist(
+        db=_db,
+        provider=_router,
+        evolution_engine=evolution_engine,
+        agent_description=settings.agent.description,
+        agent_tools=tool_names,
+    )
+    logger.info("Strategist initialized")
+
     # Initialize heartbeat
     _heartbeat = Heartbeat(
         db=_db,
@@ -463,6 +478,7 @@ async def lifespan(app: FastAPI):
         tracer=tracer,
         subagent_manager=subagent_manager,
         evolution_engine=evolution_engine,
+        strategist=strategist,
     )
 
     # Set heartbeat on agent so any channel can access it
