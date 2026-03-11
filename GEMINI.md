@@ -11,7 +11,7 @@ Odigos is a Python-based personal AI assistant accessed primarily via Telegram. 
 
 **Key Technical Decisions:**
 *   **Core Language:** Python
-*   **Database:** SQLite (all-in-one: structured data, sqlite-vec for vectors, and entity-relationship tables for graph data).
+*   **Database:** SQLite for structured data and graph data (entity-relationship tables); ChromaDB for vector memory.
 *   **LLM Routing:** OpenRouter for heavy reasoning; local models for embeddings (EmbeddingGemma-300M), STT (Moonshine), and TTS (KittenTTS).
 *   **Architecture:** Core "Plan -> Execute -> Reflect" loop with tiered context loading to prevent "context rot".
 *   **Deployment:** VPS (Target: 4 vCPU, 16GB RAM, no GPU), running as a systemd service.
@@ -24,6 +24,6 @@ Odigos is a Python-based personal AI assistant accessed primarily via Telegram. 
 
 ## Important Notes for AI Agents
 *   **Do NOT** reference old "odigosWriter" (Tauri/Vanilla JS) architecture. This project has pivoted to a Python-based VPS agent.
-*   **Database:** Always use SQLite for everything (including vectors and graph data). Do not introduce external vector databases or graph databases.
+*   **Database:** Use SQLite for structured and graph data, and ChromaDB for vector embeddings. Do not introduce other external databases.
 *   **Context:** Keep agent core lean (<2,000 lines). Complexity belongs in plugins and specialized "sniper agents".
 *   Respect explicit cost controls and context overhead limits (strict bounds on tokens injected).
