@@ -26,10 +26,35 @@ async def get_entities(db: Database = Depends(get_db)):
 async def search_memory(
     q: str = Query(..., min_length=1),
     limit: int = Query(default=10, ge=1, le=50),
+    mode: str = Query(default="hybrid", pattern="^(hybrid|vector|fts)$"),
     vector_memory: VectorMemory = Depends(get_vector_memory),
 ):
-    """Semantic search over vector memory."""
-    results = await vector_memory.search(q, limit=limit)
+    """Search over memory. Modes: hybrid (default), vector, fts."""
+    if mode == "fts":
+        results = await vector_memory.search_fts(q, limit=limit)
+    elif mode == "vector":
+        results = await vector_memory.search(q, limit=limit)
+    else:
+        # Hybrid: vector + FTS5 merged via RRF
+        vector_results = await vector_memory.search(q, limit=limit * 3)
+        fts_results = await vector_memory.search_fts(q, limit=limit * 3)
+
+        scores: dict[str, float] = {}
+        result_map = {}
+        k = 60
+        for rank, r in enumerate(vector_results):
+            key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
+            scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
+            result_map[key] = r
+        for rank, r in enumerate(fts_results):
+            key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
+            scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
+            if key not in result_map:
+                result_map[key] = r
+
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        results = [result_map[key] for key, _ in ranked[:limit]]
+
     return {
         "results": [
             {
