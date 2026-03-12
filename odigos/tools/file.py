@@ -102,9 +102,6 @@ class FileTool(BaseTool):
     async def _write(self, path: Path, content: str) -> ToolResult:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            _, err = self._validate_path(str(path.parent.resolve()))
-            if err:
-                return ToolResult(success=False, data="", error=err)
             path.write_text(content)
             return ToolResult(success=True, data=f"Written {len(content)} chars to {path}")
         except Exception as e:

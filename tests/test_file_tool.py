@@ -46,6 +46,7 @@ class TestFileTool:
             "path": str(link / "passwd"),
         })
         assert not result.success
+        assert "not within allowed" in result.error.lower()
 
     async def test_list_directory(self, file_tool, tmp_path):
         (tmp_path / "a.txt").write_text("aaa")
