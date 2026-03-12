@@ -28,10 +28,8 @@ def mock_embedder():
 
 
 @pytest.fixture
-async def vector_memory(tmp_path, mock_embedder):
-    vm = VectorMemory(embedder=mock_embedder, persist_dir=str(tmp_path / "chroma"))
-    await vm.initialize()
-    return vm
+def vector_memory(db, mock_embedder):
+    return VectorMemory(embedder=mock_embedder, db=db)
 
 
 @pytest.fixture

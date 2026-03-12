@@ -30,10 +30,8 @@ async def graph(db: Database) -> EntityGraph:
 
 
 @pytest.fixture
-async def vector_memory(tmp_path, mock_embedder) -> VectorMemory:
-    vm = VectorMemory(embedder=mock_embedder, persist_dir=str(tmp_path / "chroma"))
-    await vm.initialize()
-    return vm
+def vector_memory(db, mock_embedder) -> VectorMemory:
+    return VectorMemory(embedder=mock_embedder, db=db)
 
 
 @pytest.fixture

@@ -79,11 +79,7 @@ class DocumentIngester:
         )
         chunk_count = row["chunk_count"] if row else 0
 
-        # Single query to delete all chunks
-        await self.db.execute(
-            "DELETE FROM memory_vectors WHERE source_type = 'document_chunk' AND source_id = ?",
-            (document_id,),
-        )
+        await self.vector_memory.delete_by_source("document_chunk", document_id)
 
         await self.db.execute(
             "DELETE FROM documents WHERE id = ?",

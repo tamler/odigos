@@ -145,9 +145,7 @@ async def lifespan(app: FastAPI):
     _embedder = EmbeddingProvider()
 
     # Initialize memory stack
-    from pathlib import Path
-    vector_memory = VectorMemory(embedder=_embedder, persist_dir=str(Path(settings.database.path).parent / "chroma"))
-    await vector_memory.initialize()
+    vector_memory = VectorMemory(embedder=_embedder, db=_db)
 
     from odigos.memory.chunking import ChunkingService
 
@@ -433,6 +431,7 @@ async def lifespan(app: FastAPI):
     channel_registry.register("web", web_channel)
     web_channel.setup_tracer_forwarding(tracer)
     app.state.db = _db
+    app.state.vector_memory = vector_memory
     app.state.web_channel = web_channel
     app.state.agent_client = agent_client
     app.state.spawner = spawner

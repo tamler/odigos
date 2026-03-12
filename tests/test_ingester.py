@@ -87,17 +87,20 @@ class TestDocumentIngester:
         doc_id = await ingester.ingest(text="", filename="empty.txt")
         assert doc_id is not None
 
-    async def test_delete_document(self, ingester, mock_db):
+    async def test_delete_document(self, ingester, mock_db, mock_vector_memory):
         mock_db.fetch_one = AsyncMock(return_value={"chunk_count": 2})
 
         await ingester.delete("doc-123")
 
+        # Vector chunks deleted via vector_memory
+        mock_vector_memory.delete_by_source.assert_called_once_with("document_chunk", "doc-123")
+
+        # Document record deleted via db
         delete_calls = [
             c for c in mock_db.execute.call_args_list
             if "DELETE" in str(c)
         ]
-        # Should have 2 DELETEs: one for vectors, one for document record
-        assert len(delete_calls) == 2
+        assert len(delete_calls) == 1
 
     async def test_ingest_code_file_uses_code_content_type(self, ingester, mock_vector_memory):
         """Code files should be detected by extension and chunked as code."""
