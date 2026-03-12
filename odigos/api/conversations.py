@@ -1,6 +1,9 @@
 """Conversation list, detail, and messages API endpoints."""
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from odigos.api.deps import get_db, require_api_key
@@ -111,3 +114,72 @@ async def delete_conversation(
         (conversation_id,),
     )
     return {"status": "ok"}
+
+
+async def _export_markdown(db: Database, conversation_id: str) -> str | None:
+    """Export a conversation as markdown."""
+    conv = await db.fetch_one(
+        "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+    )
+    if not conv:
+        return None
+
+    title = conv.get("title") or conv["id"]
+    messages = await db.fetch_all(
+        "SELECT role, content, timestamp FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+        (conversation_id,),
+    )
+
+    lines = [f"# {title}\n"]
+    for msg in messages:
+        ts = msg.get("timestamp", "")
+        role = msg["role"].capitalize()
+        lines.append(f"**{role}** ({ts}):\n{msg['content']}\n")
+
+    return "\n".join(lines)
+
+
+async def _export_json(db: Database, conversation_id: str) -> str | None:
+    """Export a conversation as JSON."""
+    conv = await db.fetch_one(
+        "SELECT * FROM conversations WHERE id = ?", (conversation_id,)
+    )
+    if not conv:
+        return None
+
+    messages = await db.fetch_all(
+        "SELECT id, role, content, timestamp FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+        (conversation_id,),
+    )
+
+    return json.dumps({
+        "conversation_id": conversation_id,
+        "title": conv.get("title") or conv["id"],
+        "messages": messages,
+    }, indent=2, default=str)
+
+
+@router.get("/conversations/{conversation_id:path}/export")
+async def export_conversation(
+    conversation_id: str,
+    format: str = Query(default="markdown", pattern="^(markdown|json)$"),
+    db: Database = Depends(get_db),
+):
+    """Export a conversation as markdown or JSON."""
+    if format == "json":
+        result = await _export_json(db, conversation_id)
+        media_type = "application/json"
+        filename = f"{conversation_id}.json"
+    else:
+        result = await _export_markdown(db, conversation_id)
+        media_type = "text/markdown"
+        filename = f"{conversation_id}.md"
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    return PlainTextResponse(
+        content=result,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
