@@ -100,8 +100,9 @@ class PluginManager:
             module = importlib.util.module_from_spec(spec)
             sys.modules[module_name] = module
             spec.loader.exec_module(module)
-        except Exception:
+        except Exception as e:
             logger.warning("Failed to import plugin %s", py_file, exc_info=True)
+            self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "import", "status": "error", "error_message": str(e)})
             return
 
         self._module_names.append(module_name)
@@ -111,10 +112,11 @@ class PluginManager:
         if register_fn is not None and callable(register_fn) and self._ctx is not None:
             try:
                 register_fn(self._ctx)
-                self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "register"})
+                self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "register", "status": "active"})
                 return
-            except Exception:
+            except Exception as e:
                 logger.warning("Plugin %s register() failed", py_file, exc_info=True)
+                self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "register", "status": "error", "error_message": str(e)})
                 return
 
         # Fall back to legacy pattern: hooks dict
@@ -125,7 +127,67 @@ class PluginManager:
                 if callable(callback):
                     self._tracer.subscribe(event_type, callback)
                     hook_count += 1
-            self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "hooks", "hook_count": hook_count})
+            self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "hooks", "hook_count": hook_count, "status": "active"})
             return
 
         logger.warning("Plugin %s has no register() or hooks, skipping", py_file)
+        self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "none", "status": "error", "error_message": "No register() function or hooks dict found"})
+
+    def scan_metadata(self, plugins_dir: str) -> list[dict]:
+        """Scan plugin directories for plugin.yaml metadata files."""
+        results = []
+        plugins_path = Path(plugins_dir)
+        if not plugins_path.exists():
+            return results
+
+        for subdir in sorted(plugins_path.iterdir()):
+            if not subdir.is_dir() or subdir.name.startswith("__"):
+                continue
+
+            # Category subdirs (providers/, tools/, channels/)
+            if subdir.name in ("providers", "tools", "channels"):
+                for nested in sorted(subdir.iterdir()):
+                    if nested.is_dir() and not nested.name.startswith("__"):
+                        meta = self._read_plugin_yaml(nested)
+                        if meta:
+                            results.append(meta)
+                continue
+
+            meta = self._read_plugin_yaml(subdir)
+            if meta:
+                results.append(meta)
+
+        return results
+
+    @staticmethod
+    def _read_plugin_yaml(plugin_dir: Path) -> dict | None:
+        """Read and parse a plugin.yaml, falling back to defaults."""
+        import yaml
+
+        init = plugin_dir / "__init__.py"
+        if not init.exists():
+            return None
+
+        yaml_file = plugin_dir / "plugin.yaml"
+        if yaml_file.exists():
+            try:
+                with open(yaml_file) as f:
+                    data = yaml.safe_load(f) or {}
+                data.setdefault("id", plugin_dir.name)
+                data.setdefault("name", plugin_dir.name)
+                data.setdefault("description", "")
+                data.setdefault("category", "tools")
+                data.setdefault("requires", [])
+                data.setdefault("config_keys", [])
+                return data
+            except Exception:
+                logger.warning("Failed to parse %s", yaml_file)
+
+        return {
+            "id": plugin_dir.name,
+            "name": plugin_dir.name,
+            "description": "",
+            "category": "tools",
+            "requires": [],
+            "config_keys": [],
+        }

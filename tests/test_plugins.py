@@ -69,7 +69,9 @@ class TestPluginManager:
         (tmp_path / "no_hooks.py").write_text("x = 1\n")
         pm.load_all(str(tmp_path))
 
-        assert len(pm.loaded_plugins) == 0
+        assert len(pm.loaded_plugins) == 1
+        assert pm.loaded_plugins[0]["status"] == "error"
+        assert pm.loaded_plugins[0]["pattern"] == "none"
 
     async def test_skip_file_with_import_error(self, db, tmp_path):
         tracer = Tracer(db)
@@ -78,7 +80,9 @@ class TestPluginManager:
         (tmp_path / "bad.py").write_text("import nonexistent_module_xyz\n")
         pm.load_all(str(tmp_path))
 
-        assert len(pm.loaded_plugins) == 0
+        assert len(pm.loaded_plugins) == 1
+        assert pm.loaded_plugins[0]["status"] == "error"
+        assert pm.loaded_plugins[0]["pattern"] == "import"
 
     async def test_skip_non_dict_hooks(self, db, tmp_path):
         tracer = Tracer(db)
@@ -87,7 +91,9 @@ class TestPluginManager:
         (tmp_path / "bad_hooks.py").write_text("hooks = [1, 2, 3]\n")
         pm.load_all(str(tmp_path))
 
-        assert len(pm.loaded_plugins) == 0
+        assert len(pm.loaded_plugins) == 1
+        assert pm.loaded_plugins[0]["status"] == "error"
+        assert pm.loaded_plugins[0]["pattern"] == "none"
 
     async def test_skip_non_callable_hook(self, db, tmp_path):
         tracer = Tracer(db)
