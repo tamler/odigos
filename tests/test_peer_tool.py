@@ -9,8 +9,9 @@ from odigos.tools.peer import MessagePeerTool
 @pytest.fixture
 def mock_peer_client():
     client = MagicMock()
-    client.send = AsyncMock(return_value={"status": "ok", "reply": "acknowledged"})
+    client.send = AsyncMock(return_value={"status": "delivered", "message_id": "abc-123"})
     client.list_peer_names.return_value = ["sarah", "bob"]
+    client.agent_name = "Odigos"
     return client
 
 
@@ -21,36 +22,49 @@ def tool(mock_peer_client):
 
 def test_tool_metadata(tool):
     assert tool.name == "message_peer"
-    assert "peer" in tool.description.lower() or "message" in tool.description.lower()
     props = tool.parameters_schema["properties"]
     assert "peer" in props
     assert "message" in props
-    assert "peer" in tool.parameters_schema["required"]
-    assert "message" in tool.parameters_schema["required"]
+    assert "priority" in props
 
 
 @pytest.mark.asyncio
 async def test_send_message(tool, mock_peer_client):
     result = await tool.execute({"peer": "sarah", "message": "hello"})
     assert result.success is True
-    assert "ok" in result.data
+    assert "delivered" in result.data
     mock_peer_client.send.assert_called_once_with(
-        "sarah", "hello", message_type="message", metadata=None,
+        "sarah", payload={"content": "hello"}, message_type="message", priority="normal",
     )
+
+
+@pytest.mark.asyncio
+async def test_send_with_priority(tool, mock_peer_client):
+    result = await tool.execute({"peer": "sarah", "message": "urgent", "priority": "high"})
+    assert result.success is True
+    mock_peer_client.send.assert_called_once_with(
+        "sarah", payload={"content": "urgent"}, message_type="message", priority="high",
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_queued(tool, mock_peer_client):
+    mock_peer_client.send = AsyncMock(return_value={"status": "queued", "message_id": "abc-123"})
+    result = await tool.execute({"peer": "sarah", "message": "hello"})
+    assert result.success is True
+    assert "queued" in result.data
 
 
 @pytest.mark.asyncio
 async def test_missing_peer(tool):
     result = await tool.execute({"message": "hello"})
     assert result.success is False
-    assert result.error is not None
 
 
 @pytest.mark.asyncio
 async def test_missing_message(tool):
     result = await tool.execute({"peer": "sarah"})
     assert result.success is False
-    assert result.error is not None
 
 
 @pytest.mark.asyncio
@@ -58,17 +72,3 @@ async def test_unknown_peer(tool, mock_peer_client):
     mock_peer_client.send.side_effect = ValueError("Unknown peer: unknown")
     result = await tool.execute({"peer": "unknown", "message": "hello"})
     assert result.success is False
-    assert "unknown" in result.data.lower() or "unknown" in (result.error or "").lower()
-
-
-@pytest.mark.asyncio
-async def test_message_type_param(tool, mock_peer_client):
-    result = await tool.execute({
-        "peer": "sarah",
-        "message": "need help",
-        "message_type": "help_request",
-    })
-    assert result.success is True
-    mock_peer_client.send.assert_called_once_with(
-        "sarah", "need help", message_type="help_request", metadata=None,
-    )

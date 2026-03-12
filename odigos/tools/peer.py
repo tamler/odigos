@@ -31,6 +31,11 @@ class MessagePeerTool(BaseTool):
                 "description": "Type of message: message, help_request, knowledge_share, task_delegation, status",
                 "default": "message",
             },
+            "priority": {
+                "type": "string",
+                "description": "Message priority: low, normal, high",
+                "default": "normal",
+            },
         },
         "required": ["peer", "message"],
     }
@@ -48,10 +53,11 @@ class MessagePeerTool(BaseTool):
             return ToolResult(success=False, data="", error="Missing required parameter: message")
 
         message_type = params.get("message_type", "message")
+        priority = params.get("priority", "normal")
 
         try:
             result = await self.peer_client.send(
-                peer, message, message_type=message_type, metadata=None,
+                peer, payload={"content": message}, message_type=message_type, priority=priority,
             )
         except ValueError as exc:
             return ToolResult(success=False, data=str(exc), error=str(exc))
