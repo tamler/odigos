@@ -328,6 +328,7 @@ async def lifespan(app: FastAPI):
     # Also load legacy event-hook plugins from data/plugins
     plugin_manager.load_all("data/plugins")
     logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
+    app.state.plugin_manager = plugin_manager
 
     # Check if docling plugin registered a provider
     docling_from_plugin = plugin_context.get_provider("docling")
