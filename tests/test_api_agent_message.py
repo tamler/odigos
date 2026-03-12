@@ -1,4 +1,4 @@
-"""Tests for the POST /api/agent/message peer endpoint."""
+"""Tests for the POST /api/agent/peer/announce discovery endpoint."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -11,11 +11,10 @@ from httpx import ASGITransport, AsyncClient
 from odigos.api.agent_message import router
 
 
-def _make_app(agent: MagicMock, api_key: str = "test-key", db=None) -> FastAPI:
+def _make_app(api_key: str = "test-key", db=None) -> FastAPI:
     """Create a minimal FastAPI app with the agent_message router and fake state."""
     app = FastAPI()
     app.include_router(router)
-    app.state.agent = agent
     app.state.settings = SimpleNamespace(api_key=api_key)
     if db is None:
         db = MagicMock()
@@ -25,16 +24,9 @@ def _make_app(agent: MagicMock, api_key: str = "test-key", db=None) -> FastAPI:
     return app
 
 
-@pytest.fixture
-def agent() -> MagicMock:
-    mock = MagicMock()
-    mock.handle_message = AsyncMock(return_value="Peer response")
-    return mock
-
-
 @pytest_asyncio.fixture
-async def client(agent: MagicMock) -> AsyncClient:
-    app = _make_app(agent)
+async def client() -> AsyncClient:
+    app = _make_app()
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport,
@@ -45,57 +37,65 @@ async def client(agent: MagicMock) -> AsyncClient:
 
 
 @pytest.mark.asyncio
-async def test_receive_peer_message(client: AsyncClient, agent: MagicMock):
+async def test_announce_new_peer(client: AsyncClient):
     resp = await client.post(
-        "/api/agent/message",
-        json={"from_agent": "planner-bot", "content": "Please summarize the report"},
+        "/api/agent/peer/announce",
+        json={
+            "agent_name": "planner-bot",
+            "ws_host": "100.64.0.5",
+            "ws_port": 8001,
+            "role": "planner",
+            "description": "Planning specialist",
+        },
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
-    assert data["response"] == "Peer response"
-
-    # Verify UniversalMessage was created with channel="peer"
-    agent.handle_message.assert_awaited_once()
-    msg = agent.handle_message.call_args[0][0]
-    assert msg.channel == "peer"
-    assert msg.sender == "planner-bot"
-    assert msg.metadata["chat_id"] == "planner-bot"
+    assert "planner-bot" in data["message"]
 
 
 @pytest.mark.asyncio
-async def test_missing_content(client: AsyncClient):
+async def test_announce_updates_existing_peer():
+    db = MagicMock()
+    db.fetch_one = AsyncMock(return_value={"agent_name": "planner-bot"})
+    db.execute = AsyncMock()
+    app = _make_app(db=db)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as c:
+        resp = await c.post(
+            "/api/agent/peer/announce",
+            json={
+                "agent_name": "planner-bot",
+                "ws_host": "100.64.0.5",
+                "role": "planner",
+            },
+        )
+    assert resp.status_code == 200
+    # Should have called UPDATE, not INSERT
+    call_args = db.execute.call_args[0][0]
+    assert "UPDATE" in call_args
+
+
+@pytest.mark.asyncio
+async def test_announce_missing_agent_name(client: AsyncClient):
     resp = await client.post(
-        "/api/agent/message",
-        json={"from_agent": "planner-bot"},
+        "/api/agent/peer/announce",
+        json={"ws_host": "100.64.0.5"},
     )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_help_request_type(client: AsyncClient, agent: MagicMock):
-    resp = await client.post(
-        "/api/agent/message",
-        json={
-            "from_agent": "helper-bot",
-            "message_type": "help_request",
-            "content": "I need assistance",
-        },
-    )
-    assert resp.status_code == 200
-
-    msg = agent.handle_message.call_args[0][0]
-    assert msg.metadata["message_type"] == "help_request"
-    assert "[help_request from helper-bot]" in msg.content
-
-
-@pytest.mark.asyncio
-async def test_auth_required_when_api_key_configured(agent: MagicMock):
-    app = _make_app(agent, api_key="secret-key")
+async def test_auth_required_when_api_key_configured():
+    app = _make_app(api_key="secret-key")
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         resp = await c.post(
-            "/api/agent/message",
-            json={"from_agent": "planner-bot", "content": "hello"},
+            "/api/agent/peer/announce",
+            json={"agent_name": "planner-bot", "ws_host": "100.64.0.5"},
         )
     assert resp.status_code == 401

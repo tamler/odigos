@@ -5,11 +5,9 @@ from httpx import ASGITransport, AsyncClient
 
 class TestPeerEndpointMounted:
     @pytest.mark.asyncio
-    async def test_agent_message_endpoint_exists(self):
+    async def test_peer_announce_endpoint_exists(self):
         from odigos.main import app
 
-        app.state.agent = MagicMock()
-        app.state.agent.handle_message = AsyncMock(return_value="ok")
         app.state.settings = type("S", (), {"api_key": "test-key"})()
         mock_db = MagicMock()
         mock_db.fetch_one = AsyncMock(return_value=None)
@@ -21,10 +19,12 @@ class TestPeerEndpointMounted:
             base_url="http://test",
             headers={"Authorization": "Bearer test-key"},
         ) as c:
-            resp = await c.post("/api/agent/message", json={
-                "from_agent": "test-peer",
-                "message_type": "message",
-                "content": "ping",
+            resp = await c.post("/api/agent/peer/announce", json={
+                "agent_name": "test-peer",
+                "ws_host": "100.64.0.1",
+                "ws_port": 8001,
+                "role": "tester",
+                "description": "Test peer",
             })
             assert resp.status_code == 200
             assert resp.json()["status"] == "ok"

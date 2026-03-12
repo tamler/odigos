@@ -1,16 +1,17 @@
-"""Inbound peer-agent message endpoint."""
+"""Peer agent discovery endpoint.
 
-import uuid
+Provides POST /api/agent/peer/announce for peers to register their
+WebSocket coordinates. Not used for messaging -- all messaging is WS-only.
+"""
+from __future__ import annotations
+
+import json
 from datetime import datetime, timezone
 
-import uuid as uuid_mod
-
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from odigos.api.deps import get_agent, require_api_key
-from odigos.channels.base import UniversalMessage
-from odigos.core.agent import Agent
+from odigos.api.deps import require_api_key
 
 router = APIRouter(
     prefix="/api/agent",
@@ -18,51 +19,49 @@ router = APIRouter(
 )
 
 
-class PeerMessageRequest(BaseModel):
-    from_agent: str
-    message_type: str = "message"
-    content: str = Field(min_length=1)
-    metadata: dict = Field(default_factory=dict)
+class PeerAnnounceRequest(BaseModel):
+    agent_name: str
+    ws_host: str = ""
+    ws_port: int = 8001
+    role: str = ""
+    description: str = ""
+    specialty: str | None = None
+    capabilities: list[str] = []
 
 
-@router.post("/message")
-async def receive_peer_message(
-    body: PeerMessageRequest,
+@router.post("/peer/announce")
+async def peer_announce(
+    body: PeerAnnounceRequest,
     request: Request,
-    agent: Agent = Depends(get_agent),
 ):
-    message_id = body.metadata.get("message_id", str(uuid_mod.uuid4()))
+    """Register a peer agent's WebSocket coordinates for future communication."""
     db = request.app.state.db
+    now = datetime.now(timezone.utc).isoformat()
 
-    # Check for duplicate
     existing = await db.fetch_one(
-        "SELECT 1 FROM peer_messages WHERE message_id = ?", (message_id,)
+        "SELECT agent_name FROM agent_registry WHERE agent_name = ?",
+        (body.agent_name,),
     )
+
     if existing:
-        return {"status": "duplicate", "message": "Message already processed"}
+        await db.execute(
+            "UPDATE agent_registry SET role = ?, description = ?, specialty = ?, "
+            "netbird_ip = ?, ws_port = ?, capabilities = ?, "
+            "status = 'online', last_seen = ?, updated_at = ? "
+            "WHERE agent_name = ?",
+            (body.role, body.description, body.specialty,
+             body.ws_host, body.ws_port, json.dumps(body.capabilities),
+             now, now, body.agent_name),
+        )
+    else:
+        await db.execute(
+            "INSERT INTO agent_registry "
+            "(agent_name, role, description, specialty, netbird_ip, ws_port, "
+            "capabilities, status, last_seen, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)",
+            (body.agent_name, body.role, body.description, body.specialty,
+             body.ws_host, body.ws_port, json.dumps(body.capabilities),
+             now, now),
+        )
 
-    # Record inbound
-    await db.execute(
-        "INSERT INTO peer_messages "
-        "(message_id, direction, peer_name, message_type, content, status) "
-        "VALUES (?, 'inbound', ?, ?, ?, 'received')",
-        (message_id, body.from_agent, body.message_type, body.content),
-    )
-
-    formatted_content = f"[{body.message_type} from {body.from_agent}]: {body.content}"
-
-    msg = UniversalMessage(
-        id=uuid.uuid4().hex,
-        channel="peer",
-        sender=body.from_agent,
-        content=formatted_content,
-        timestamp=datetime.now(timezone.utc),
-        metadata={
-            "chat_id": body.from_agent,
-            "message_type": body.message_type,
-            **body.metadata,
-        },
-    )
-
-    response = await agent.handle_message(msg)
-    return {"status": "ok", "response": response}
+    return {"status": "ok", "message": f"Peer {body.agent_name} registered"}
