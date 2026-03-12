@@ -26,6 +26,34 @@ class MemoryManager:
         self.summarizer = summarizer
         self.chunking = chunking_service or ChunkingService()
 
+    async def _hybrid_search(
+        self, query: str, limit: int = 5, k: int = 60
+    ) -> list:
+        """Run vector + FTS5 search and merge via Reciprocal Rank Fusion."""
+        from odigos.memory.vectors import MemoryResult
+
+        fetch_limit = limit * 4
+        vector_results = await self.vector_memory.search(query, limit=fetch_limit)
+        fts_results = await self.vector_memory.search_fts(query, limit=fetch_limit)
+
+        # RRF: score = sum(1 / (k + rank)) across both result lists
+        scores: dict[str, float] = {}
+        result_map: dict[str, MemoryResult] = {}
+
+        for rank, r in enumerate(vector_results):
+            key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
+            scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
+            result_map[key] = r
+
+        for rank, r in enumerate(fts_results):
+            key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
+            scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
+            if key not in result_map:
+                result_map[key] = r
+
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [result_map[key] for key, _score in ranked[:limit]]
+
     async def recall(self, query: str, limit: int = 5) -> str:
         """Recall relevant memories for the given query.
 
@@ -33,11 +61,11 @@ class MemoryManager:
         """
         sections = []
 
-        # 1. Vector search for relevant memories
-        vector_results = await self.vector_memory.search(query, limit=limit)
+        # 1. Hybrid search (vector + FTS5 with RRF)
+        hybrid_results = await self._hybrid_search(query, limit=limit)
         memory_lines = []
-        for result in vector_results:
-            if result.source_type != "entity_name":  # Skip entity name embeddings
+        for result in hybrid_results:
+            if result.source_type != "entity_name":
                 memory_lines.append(f"- {result.content_preview}")
 
         if memory_lines:
