@@ -61,6 +61,24 @@ class PluginManager:
                     elif subdir.suffix == ".py" and not subdir.name.startswith("__"):
                         self._load_plugin(subdir)
 
+    def load_channels(self, plugins_dir: str) -> None:
+        """Phase 2: Load channel plugins that need AgentService.
+
+        Scans for plugins in a 'channels' subdirectory.
+        These are loaded after the Agent is created and AgentService is set on the context.
+        """
+        channels_path = Path(plugins_dir) / "channels"
+        if not channels_path.exists():
+            return
+
+        for subdir in sorted(channels_path.iterdir()):
+            if subdir.is_dir() and not subdir.name.startswith("__"):
+                init = subdir / "__init__.py"
+                if init.exists():
+                    self._load_plugin(init, name_override=subdir.name)
+            elif subdir.suffix == ".py" and not subdir.name.startswith("__"):
+                self._load_plugin(subdir)
+
     def reload(self) -> None:
         """Clear and reload all plugins."""
         if self._tracer:

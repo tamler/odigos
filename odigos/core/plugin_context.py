@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from odigos.channels.base import Channel, ChannelRegistry
+    from odigos.core.agent_service import AgentService
     from odigos.core.trace import Tracer
     from odigos.tools.base import BaseTool
     from odigos.tools.registry import ToolRegistry
@@ -29,6 +30,7 @@ class PluginContext:
         self.channel_registry = channel_registry
         self.tracer = tracer
         self.config = config or {}
+        self.service: AgentService | None = None
         self._providers: dict[str, Any] = {}
 
     def register_tool(self, tool: BaseTool) -> None:
@@ -55,3 +57,7 @@ class PluginContext:
     def get_provider(self, name: str) -> Any | None:
         """Retrieve a registered provider by name."""
         return self._providers.get(name)
+
+    def set_service(self, service: AgentService) -> None:
+        """Set the AgentService after agent initialization (phase 2)."""
+        self.service = service

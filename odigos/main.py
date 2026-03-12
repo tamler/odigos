@@ -364,7 +364,7 @@ async def lifespan(app: FastAPI):
         tool_registry=tool_registry,
         channel_registry=channel_registry,
         tracer=tracer,
-        config={},  # Will come from settings.plugins when config schema is updated
+        config={"settings": settings}
     )
 
     # Load plugins — new register(ctx) pattern + legacy hooks
@@ -432,6 +432,22 @@ async def lifespan(app: FastAPI):
         channel_registry.register("telegram", telegram_channel)
     else:
         logger.warning("No TELEGRAM_BOT_TOKEN set — Telegram channel disabled")
+
+    # Create AgentService facade for interaction interfaces
+    from odigos.core.agent_service import AgentService
+
+    agent_service = AgentService(
+        agent=agent,
+        goal_store=goal_store,
+        budget_tracker=budget_tracker,
+        approval_gate=approval_gate,
+    )
+    plugin_context.set_service(agent_service)
+    app.state.agent_service = agent_service
+
+    # Phase 2: Load channel plugins (need AgentService)
+    plugin_manager.load_channels("plugins")
+    logger.info("Channel plugins loaded")
 
     # Initialize WebChannel for WebSocket-based web dashboard
     web_channel = WebChannel()
