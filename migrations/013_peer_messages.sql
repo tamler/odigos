@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS peer_messages (
     content TEXT NOT NULL,
     metadata_json TEXT,
     status TEXT NOT NULL DEFAULT 'queued'
-        CHECK (status IN ('queued', 'sent', 'delivered', 'failed', 'received', 'processed')),
+        CHECK (status IN ('queued', 'sent', 'delivered', 'failed', 'received', 'processed', 'expired')),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     delivered_at TEXT,
     conversation_id TEXT

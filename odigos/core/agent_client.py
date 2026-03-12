@@ -297,12 +297,55 @@ class AgentClient:
 
     async def broadcast_announce(self, **kwargs) -> None:
         """Send a registry_announce message to all configured peers."""
-        msg = self.build_announce(**kwargs)
+        env = self.build_announce(**kwargs)
         for peer_name in self._peers:
             try:
-                await self.send(peer_name, json.dumps(msg.payload), message_type=MSG_REGISTRY_ANNOUNCE)
+                await self.send(peer_name, payload=env.payload, message_type=MSG_REGISTRY_ANNOUNCE)
             except Exception:
                 logger.debug("Failed to announce to %s", peer_name, exc_info=True)
+
+    async def flush_outbox(self, expire_hours: int = 24) -> int:
+        """Flush queued outbox messages. Returns count of messages delivered."""
+        if not self._db:
+            return 0
+
+        # Expire old messages
+        await self._db.execute(
+            "UPDATE peer_messages SET status = 'expired' "
+            "WHERE status = 'queued' AND direction = 'outbound' "
+            "AND created_at < datetime('now', ?)",
+            (f"-{expire_hours} hours",),
+        )
+
+        # Fetch queued messages
+        queued = await self._db.fetch_all(
+            "SELECT message_id, peer_name, metadata_json FROM peer_messages "
+            "WHERE status = 'queued' AND direction = 'outbound' "
+            "ORDER BY created_at ASC",
+        )
+        if not queued:
+            return 0
+
+        delivered = 0
+        for row in queued:
+            peer_name = row["peer_name"]
+            ws = self._ws_connections.get(peer_name)
+            if not ws:
+                continue
+
+            try:
+                await ws.send(row["metadata_json"])
+                await self._db.execute(
+                    "UPDATE peer_messages SET status = 'delivered', delivered_at = datetime('now') "
+                    "WHERE message_id = ?",
+                    (row["message_id"],),
+                )
+                delivered += 1
+            except Exception:
+                logger.warning("Outbox flush to %s failed", peer_name)
+                del self._ws_connections[peer_name]
+
+        return delivered
 
     async def mark_stale_peers(self, stale_minutes: int = 5) -> int:
         """Mark agents as offline if not seen within stale_minutes."""

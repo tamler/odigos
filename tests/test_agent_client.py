@@ -212,3 +212,59 @@ async def test_handle_incoming_deduplicates(db, mock_peers):
     await client.handle_incoming(msg, peer_ip="100.64.0.2")  # same id
 
     handler.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_flush_outbox_delivers_queued(db, mock_peers):
+    """flush_outbox() sends queued messages when WS becomes available."""
+    client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
+
+    # Queue a message (no WS connection)
+    await client.send("Archie", payload={"text": "hello"}, message_type="message")
+
+    row = await db.fetch_one("SELECT * FROM peer_messages WHERE peer_name = 'Archie'")
+    assert row["status"] == "queued"
+
+    # Now connect WS
+    mock_ws = AsyncMock()
+    client._ws_connections["Archie"] = mock_ws
+
+    flushed = await client.flush_outbox()
+    assert flushed == 1
+
+    row = await db.fetch_one("SELECT * FROM peer_messages WHERE peer_name = 'Archie'")
+    assert row["status"] == "delivered"
+    mock_ws.send.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_flush_outbox_skips_disconnected(db, mock_peers):
+    """flush_outbox() leaves messages queued if WS is still down."""
+    client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
+
+    await client.send("Archie", payload={"text": "hello"}, message_type="message")
+
+    flushed = await client.flush_outbox()
+    assert flushed == 0
+
+    row = await db.fetch_one("SELECT * FROM peer_messages WHERE peer_name = 'Archie'")
+    assert row["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_flush_outbox_expires_old_messages(db, mock_peers):
+    """flush_outbox() marks old queued messages as expired."""
+    client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
+
+    # Insert an old queued message directly
+    await db.execute(
+        "INSERT INTO peer_messages "
+        "(message_id, direction, peer_name, message_type, content, metadata_json, status, created_at) "
+        "VALUES (?, 'outbound', 'Archie', 'message', '{}', '{}', 'queued', datetime('now', '-25 hours'))",
+        ("old-msg",),
+    )
+
+    await client.flush_outbox(expire_hours=24)
+
+    row = await db.fetch_one("SELECT * FROM peer_messages WHERE message_id = 'old-msg'")
+    assert row["status"] == "expired"
