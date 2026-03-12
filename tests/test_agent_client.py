@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
-from odigos.core.agent_client import AgentClient, AgentMessage
+from odigos.core.agent_client import AgentClient, PeerEnvelope
 from odigos.db import Database
 
 
@@ -28,22 +28,43 @@ def mock_peers():
     ]
 
 
-def test_agent_message_serialization():
-    msg = AgentMessage(
-        type="task_request",
+def test_peer_envelope_serialization():
+    env = PeerEnvelope(
         from_agent="Odigos",
-        content="Summarize this document",
-        metadata={"task_id": "123"},
+        to_agent="Archie",
+        type="task_request",
+        payload={"task": "summarize", "doc_id": "123"},
+        correlation_id="corr-abc",
+        priority="high",
     )
-    data = msg.to_dict()
+    data = env.to_dict()
     assert data["type"] == "task_request"
     assert data["from_agent"] == "Odigos"
-    assert data["content"] == "Summarize this document"
-    assert "message_id" in data
+    assert data["to_agent"] == "Archie"
+    assert data["payload"]["task"] == "summarize"
+    assert data["correlation_id"] == "corr-abc"
+    assert data["priority"] == "high"
+    assert "id" in data
+    assert "timestamp" in data
 
-    restored = AgentMessage.from_dict(data)
-    assert restored.type == msg.type
-    assert restored.from_agent == msg.from_agent
+    restored = PeerEnvelope.from_dict(data)
+    assert restored.type == env.type
+    assert restored.from_agent == env.from_agent
+    assert restored.to_agent == env.to_agent
+    assert restored.correlation_id == env.correlation_id
+
+
+def test_peer_envelope_defaults():
+    env = PeerEnvelope(
+        from_agent="Odigos",
+        to_agent="Archie",
+        type="message",
+        payload={"text": "hello"},
+    )
+    assert env.correlation_id is None
+    assert env.priority == "normal"
+    assert env.id  # UUID auto-generated
+    assert env.timestamp  # timestamp auto-generated
 
 
 @pytest.mark.asyncio
@@ -95,24 +116,25 @@ async def test_announce_self(db, mock_peers):
     )
     assert msg.type == "registry_announce"
     assert msg.from_agent == "Odigos"
-    assert "personal_assistant" in msg.content
+    assert "personal_assistant" in msg.payload["role"]
 
 
 @pytest.mark.asyncio
 async def test_handle_incoming_announce(db, mock_peers):
     client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
 
-    msg = AgentMessage(
+    msg = PeerEnvelope(
         type="registry_announce",
         from_agent="Archie",
-        content=json.dumps({
+        to_agent="Odigos",
+        payload={
             "role": "backend_dev",
             "description": "Backend specialist",
             "specialty": "coding",
             "capabilities": ["code_execute"],
             "evolution_score": 7.5,
             "allow_external_evaluation": True,
-        }),
+        },
     )
     await client.handle_incoming(msg, peer_ip="100.64.0.2")
 

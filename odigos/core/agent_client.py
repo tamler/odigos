@@ -32,34 +32,44 @@ MSG_STATUS_PING = "status_ping"
 
 
 @dataclass
-class AgentMessage:
-    type: str
+class PeerEnvelope:
     from_agent: str
-    content: str
-    metadata: dict = field(default_factory=dict)
-    message_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    to_agent: str
+    type: str
+    payload: dict
+    correlation_id: str | None = None
+    priority: str = "normal"
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict:
         return {
-            "type": self.type,
+            "id": self.id,
             "from_agent": self.from_agent,
-            "content": self.content,
-            "metadata": self.metadata,
-            "message_id": self.message_id,
+            "to_agent": self.to_agent,
+            "type": self.type,
+            "payload": self.payload,
+            "correlation_id": self.correlation_id,
+            "priority": self.priority,
             "timestamp": self.timestamp,
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> AgentMessage:
+    def from_dict(cls, data: dict) -> PeerEnvelope:
         return cls(
-            type=data["type"],
             from_agent=data["from_agent"],
-            content=data.get("content", ""),
-            metadata=data.get("metadata", {}),
-            message_id=data.get("message_id", str(uuid.uuid4())),
+            to_agent=data.get("to_agent", ""),
+            type=data["type"],
+            payload=data.get("payload", {}),
+            correlation_id=data.get("correlation_id"),
+            priority=data.get("priority", "normal"),
+            id=data.get("id", str(uuid.uuid4())),
             timestamp=data.get("timestamp", datetime.now(timezone.utc).isoformat()),
         )
+
+
+# Backward compatibility alias -- remove once all references are updated
+AgentMessage = PeerEnvelope
 
 
 class AgentClient:
@@ -99,11 +109,11 @@ class AgentClient:
         if not peer:
             raise ValueError(f"Unknown peer: {peer_name}")
 
-        msg = AgentMessage(
+        msg = PeerEnvelope(
             type=message_type,
             from_agent=self.agent_name,
-            content=content,
-            metadata=metadata or {},
+            to_agent=peer_name,
+            payload={"content": content, **(metadata or {})},
         )
 
         if self._db:
@@ -111,7 +121,7 @@ class AgentClient:
                 "INSERT INTO peer_messages "
                 "(message_id, direction, peer_name, message_type, content, metadata_json, status) "
                 "VALUES (?, 'outbound', ?, ?, ?, ?, 'queued')",
-                (msg.message_id, peer_name, message_type, content, json.dumps(metadata or {})),
+                (msg.id, peer_name, message_type, content, json.dumps(metadata or {})),
             )
 
         # Try WebSocket if we have an active connection
@@ -123,7 +133,7 @@ class AgentClient:
                     await self._db.execute(
                         "UPDATE peer_messages SET status = 'delivered', delivered_at = datetime('now') "
                         "WHERE message_id = ?",
-                        (msg.message_id,),
+                        (msg.id,),
                     )
                 return {"status": "sent", "via": "websocket"}
             except Exception:
@@ -135,7 +145,7 @@ class AgentClient:
             if self._db:
                 await self._db.execute(
                     "UPDATE peer_messages SET status = 'failed' WHERE message_id = ?",
-                    (msg.message_id,),
+                    (msg.id,),
                 )
             return {"status": "error", "response": f"No HTTP URL for {peer_name} and WebSocket unavailable"}
 
@@ -144,7 +154,7 @@ class AgentClient:
             "from_agent": self.agent_name,
             "message_type": message_type,
             "content": content,
-            "metadata": {**(metadata or {}), "message_id": msg.message_id},
+            "metadata": {**(metadata or {}), "message_id": msg.id},
         }
         headers = {}
         if peer.api_key:
@@ -157,7 +167,7 @@ class AgentClient:
             if self._db:
                 await self._db.execute(
                     "UPDATE peer_messages SET status = 'failed' WHERE message_id = ?",
-                    (msg.message_id,),
+                    (msg.id,),
                 )
             return {"status": "error", "response": f"Peer returned {resp.status_code}"}
 
@@ -165,7 +175,7 @@ class AgentClient:
             await self._db.execute(
                 "UPDATE peer_messages SET status = 'delivered', delivered_at = datetime('now') "
                 "WHERE message_id = ?",
-                (msg.message_id,),
+                (msg.id,),
             )
         return resp.json()
 
@@ -177,29 +187,30 @@ class AgentClient:
         capabilities: list[str] | None = None,
         evolution_score: float | None = None,
         allow_external_evaluation: bool = False,
-    ) -> AgentMessage:
+    ) -> PeerEnvelope:
         """Build a registry_announce message for broadcasting identity to peers."""
-        return AgentMessage(
+        return PeerEnvelope(
             type=MSG_REGISTRY_ANNOUNCE,
             from_agent=self.agent_name,
-            content=json.dumps({
+            to_agent="*",
+            payload={
                 "role": role,
                 "description": description,
                 "specialty": specialty,
                 "capabilities": capabilities or [],
                 "evolution_score": evolution_score,
                 "allow_external_evaluation": allow_external_evaluation,
-            }),
+            },
         )
 
-    async def handle_incoming(self, msg: AgentMessage, peer_ip: str = "") -> None:
+    async def handle_incoming(self, msg: PeerEnvelope, peer_ip: str = "") -> None:
         """Process an incoming message from a peer agent."""
         if self._db:
             await self._db.execute(
                 "INSERT INTO peer_messages "
                 "(message_id, direction, peer_name, message_type, content, metadata_json, status) "
                 "VALUES (?, 'inbound', ?, ?, ?, ?, 'received')",
-                (msg.message_id, msg.from_agent, msg.type, msg.content, json.dumps(msg.metadata)),
+                (msg.id, msg.from_agent, msg.type, json.dumps(msg.payload), json.dumps(msg.payload)),
             )
 
         if msg.type == MSG_REGISTRY_ANNOUNCE:
@@ -217,11 +228,10 @@ class AgentClient:
         """Register a callback for a specific message type."""
         self._handlers.setdefault(message_type, []).append(handler)
 
-    async def _handle_announce(self, msg: AgentMessage, peer_ip: str) -> None:
+    async def _handle_announce(self, msg: PeerEnvelope, peer_ip: str) -> None:
         """Upsert agent_registry from a registry_announce message."""
-        try:
-            data = json.loads(msg.content)
-        except (json.JSONDecodeError, TypeError):
+        data = msg.payload
+        if not isinstance(data, dict):
             return
 
         if not self._db:
@@ -270,7 +280,7 @@ class AgentClient:
                 ),
             )
 
-    async def _handle_ping(self, msg: AgentMessage) -> None:
+    async def _handle_ping(self, msg: PeerEnvelope) -> None:
         """Update last_seen timestamp for a peer that sent a status ping."""
         if self._db:
             now = datetime.now(timezone.utc).isoformat()
@@ -284,7 +294,7 @@ class AgentClient:
         msg = self.build_announce(**kwargs)
         for peer_name in self._peers:
             try:
-                await self.send(peer_name, msg.content, message_type=MSG_REGISTRY_ANNOUNCE)
+                await self.send(peer_name, json.dumps(msg.payload), message_type=MSG_REGISTRY_ANNOUNCE)
             except Exception:
                 logger.debug("Failed to announce to %s", peer_name, exc_info=True)
 
