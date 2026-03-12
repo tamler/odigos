@@ -8,6 +8,7 @@ import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
 import EvolutionPage from './pages/EvolutionPage'
 import AgentsPage from './pages/AgentsPage'
+import PluginsPage from './pages/PluginsPage'
 import LoginPrompt from './components/LoginPrompt'
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
               <Route path="/settings" element={<SettingsPage needsSetup={!setupDone} />} />
               <Route path="/evolution" element={<EvolutionPage />} />
               <Route path="/agents" element={<AgentsPage />} />
+              <Route path="/plugins" element={<PluginsPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
