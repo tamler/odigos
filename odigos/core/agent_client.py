@@ -1,8 +1,8 @@
-"""AgentClient: WebSocket-primary agent-to-agent communication.
+"""AgentClient: WebSocket-only agent-to-agent communication.
 
-Upgrades the HTTP-only PeerClient with persistent WebSocket connections
-for real-time delegation and streaming over a NetBird WireGuard mesh.
-Falls back to HTTP when WebSocket is unavailable.
+Persistent WebSocket connections for real-time delegation and streaming
+over a NetBird WireGuard mesh. Messages are queued to an outbox when
+the WebSocket connection is unavailable.
 """
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-import httpx
 
 if TYPE_CHECKING:
     from odigos.config import PeerConfig
@@ -73,7 +72,7 @@ AgentMessage = PeerEnvelope
 
 
 class AgentClient:
-    """WebSocket-primary, HTTP-fallback client for agent-to-agent communication."""
+    """WebSocket-only client for agent-to-agent communication with outbox queuing."""
 
     def __init__(
         self,
@@ -100,84 +99,59 @@ class AgentClient:
     async def send(
         self,
         peer_name: str,
-        content: str,
+        payload: dict | None = None,
         message_type: str = "message",
+        content: str = "",
         metadata: dict | None = None,
+        correlation_id: str | None = None,
+        priority: str = "normal",
     ) -> dict:
-        """Send a message to a peer. Tries WebSocket first, falls back to HTTP."""
+        """Send a message to a peer via WebSocket. Queues to outbox if WS is down."""
         peer = self._peers.get(peer_name)
         if not peer:
             raise ValueError(f"Unknown peer: {peer_name}")
 
-        msg = PeerEnvelope(
-            type=message_type,
+        # Support both new payload style and legacy content+metadata style
+        if payload is None:
+            payload = {"content": content, **(metadata or {})}
+
+        envelope = PeerEnvelope(
             from_agent=self.agent_name,
             to_agent=peer_name,
-            payload={"content": content, **(metadata or {})},
+            type=message_type,
+            payload=payload,
+            correlation_id=correlation_id,
+            priority=priority,
         )
 
+        # Record outbound message
         if self._db:
             await self._db.execute(
                 "INSERT INTO peer_messages "
                 "(message_id, direction, peer_name, message_type, content, metadata_json, status) "
                 "VALUES (?, 'outbound', ?, ?, ?, ?, 'queued')",
-                (msg.id, peer_name, message_type, content, json.dumps(metadata or {})),
+                (envelope.id, peer_name, message_type, json.dumps(payload),
+                 json.dumps(envelope.to_dict())),
             )
 
-        # Try WebSocket if we have an active connection
+        # Try WebSocket
         ws = self._ws_connections.get(peer_name)
         if ws:
             try:
-                await ws.send(json.dumps(msg.to_dict()))
+                await ws.send(json.dumps(envelope.to_dict()))
                 if self._db:
                     await self._db.execute(
                         "UPDATE peer_messages SET status = 'delivered', delivered_at = datetime('now') "
                         "WHERE message_id = ?",
-                        (msg.id,),
+                        (envelope.id,),
                     )
-                return {"status": "sent", "via": "websocket"}
+                return {"status": "delivered", "message_id": envelope.id}
             except Exception:
-                logger.warning("WebSocket send to %s failed, trying HTTP", peer_name)
+                logger.warning("WebSocket send to %s failed, message queued", peer_name)
                 del self._ws_connections[peer_name]
 
-        # Fall back to HTTP
-        if not peer.url:
-            if self._db:
-                await self._db.execute(
-                    "UPDATE peer_messages SET status = 'failed' WHERE message_id = ?",
-                    (msg.id,),
-                )
-            return {"status": "error", "response": f"No HTTP URL for {peer_name} and WebSocket unavailable"}
-
-        url = f"{peer.url.rstrip('/')}/api/agent/message"
-        payload = {
-            "from_agent": self.agent_name,
-            "message_type": message_type,
-            "content": content,
-            "metadata": {**(metadata or {}), "message_id": msg.id},
-        }
-        headers = {}
-        if peer.api_key:
-            headers["Authorization"] = f"Bearer {peer.api_key}"
-
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-
-        if resp.status_code != 200:
-            if self._db:
-                await self._db.execute(
-                    "UPDATE peer_messages SET status = 'failed' WHERE message_id = ?",
-                    (msg.id,),
-                )
-            return {"status": "error", "response": f"Peer returned {resp.status_code}"}
-
-        if self._db:
-            await self._db.execute(
-                "UPDATE peer_messages SET status = 'delivered', delivered_at = datetime('now') "
-                "WHERE message_id = ?",
-                (msg.id,),
-            )
-        return resp.json()
+        # No WS connection — message stays queued in outbox
+        return {"status": "queued", "message_id": envelope.id}
 
     def build_announce(
         self,

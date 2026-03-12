@@ -2,7 +2,7 @@
 import asyncio
 import json
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -68,42 +68,27 @@ def test_peer_envelope_defaults():
 
 
 @pytest.mark.asyncio
-async def test_send_falls_back_to_http(db, mock_peers):
+async def test_send_ws_delivers(db, mock_peers):
+    """Send via WebSocket returns delivered status."""
     client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
+    mock_ws = AsyncMock()
+    client._ws_connections["Archie"] = mock_ws
 
-    with patch("httpx.AsyncClient") as mock_httpx_cls:
-        mock_httpx = AsyncMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"status": "ok"}
-        mock_httpx.post = AsyncMock(return_value=mock_resp)
-        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
-        mock_httpx.__aexit__ = AsyncMock()
-        mock_httpx_cls.return_value = mock_httpx
-
-        result = await client.send("Legacy", "Hello", message_type="message")
-        assert result["status"] == "ok"
+    result = await client.send("Archie", payload={"text": "hello"}, message_type="message")
+    assert result["status"] == "delivered"
+    mock_ws.send.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_send_records_message(db, mock_peers):
+async def test_send_queues_when_ws_down(db, mock_peers):
+    """When WebSocket is not connected, message is queued."""
     client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
 
-    with patch("httpx.AsyncClient") as mock_httpx_cls:
-        mock_httpx = AsyncMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"status": "ok"}
-        mock_httpx.post = AsyncMock(return_value=mock_resp)
-        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
-        mock_httpx.__aexit__ = AsyncMock()
-        mock_httpx_cls.return_value = mock_httpx
+    result = await client.send("Archie", payload={"text": "hello"}, message_type="message")
+    assert result["status"] == "queued"
 
-        await client.send("Legacy", "Hello", message_type="message")
-
-    row = await db.fetch_one("SELECT * FROM peer_messages WHERE peer_name = 'Legacy'")
-    assert row is not None
-    assert row["direction"] == "outbound"
+    row = await db.fetch_one("SELECT * FROM peer_messages WHERE peer_name = 'Archie'")
+    assert row["status"] == "queued"
 
 
 @pytest.mark.asyncio
