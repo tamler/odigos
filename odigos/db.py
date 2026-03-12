@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 
 import aiosqlite
+import sqlite_vec
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,12 @@ class Database:
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA journal_mode=WAL")
         await self._conn.execute("PRAGMA foreign_keys=ON")
+
+        # Load sqlite-vec extension for vector search
+        await self._conn.enable_load_extension(True)
+        await self._conn.load_extension(sqlite_vec.loadable_path())
+        await self._conn.enable_load_extension(False)
+
         await self.run_migrations()
 
     async def close(self) -> None:
