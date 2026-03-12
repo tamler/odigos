@@ -8,7 +8,7 @@ from telegram.constants import ChatAction
 from telegram.ext import Application, CallbackQueryHandler, MessageHandler, filters
 
 from odigos.channels.base import Channel, UniversalMessage
-from odigos.core.agent import Agent
+from odigos.core.agent_service import AgentService
 
 logger = logging.getLogger(__name__)
 
@@ -23,21 +23,15 @@ class TelegramChannel(Channel):
     def __init__(
         self,
         token: str,
-        agent: Agent,
+        service: AgentService,
         mode: str = "polling",
         webhook_url: str = "",
-        goal_store=None,
-        budget_tracker=None,
-        approval_gate=None,
     ) -> None:
         self.token = token
-        self.agent = agent
+        self.service = service
         self.mode = mode
         self.webhook_url = webhook_url
         self._app: Application | None = None
-        self.goal_store = goal_store
-        self.budget_tracker = budget_tracker
-        self.approval_gate = approval_gate
 
     async def start(self) -> None:
         """Build and start the Telegram bot."""
@@ -124,7 +118,7 @@ class TelegramChannel(Channel):
         )
 
         try:
-            response = await self.agent.handle_message(message)
+            response = await self.service.handle_message(message)
             await update.effective_message.reply_text(response)
         except Exception:
             logger.exception("Error handling message")
@@ -174,7 +168,7 @@ class TelegramChannel(Channel):
         )
 
         try:
-            response = await self.agent.handle_message(message)
+            response = await self.service.handle_message(message)
             await update.effective_message.reply_text(response)
         except Exception:
             logger.exception("Error handling document message")
@@ -184,10 +178,7 @@ class TelegramChannel(Channel):
 
     async def _handle_goals_command(self, update: Update, context) -> None:
         """List active goals."""
-        if not self.goal_store:
-            await update.effective_message.reply_text("Goal store not available.")
-            return
-        goals = await self.goal_store.list_goals()
+        goals = await self.service.list_goals()
         if not goals:
             await update.effective_message.reply_text("No active goals.")
             return
@@ -199,10 +190,7 @@ class TelegramChannel(Channel):
 
     async def _handle_todos_command(self, update: Update, context) -> None:
         """List pending todos."""
-        if not self.goal_store:
-            await update.effective_message.reply_text("Goal store not available.")
-            return
-        todos = await self.goal_store.list_todos()
+        todos = await self.service.list_todos()
         if not todos:
             await update.effective_message.reply_text("No pending todos.")
             return
@@ -214,10 +202,7 @@ class TelegramChannel(Channel):
 
     async def _handle_reminders_command(self, update: Update, context) -> None:
         """List pending reminders."""
-        if not self.goal_store:
-            await update.effective_message.reply_text("Goal store not available.")
-            return
-        reminders = await self.goal_store.list_reminders()
+        reminders = await self.service.list_reminders()
         if not reminders:
             await update.effective_message.reply_text("No pending reminders.")
             return
@@ -230,19 +215,16 @@ class TelegramChannel(Channel):
 
     async def _handle_cancel_command(self, update: Update, context) -> None:
         """Cancel a goal, todo, or reminder by ID."""
-        if not self.goal_store:
-            await update.effective_message.reply_text("Goal store not available.")
-            return
         if not context.args:
             await update.effective_message.reply_text("Usage: /cancel <id>")
             return
         item_id = context.args[0]
         # Support prefix matching
-        for table_method in [self.goal_store.list_goals, self.goal_store.list_todos, self.goal_store.list_reminders]:
+        for table_method in [self.service.list_goals, self.service.list_todos, self.service.list_reminders]:
             items = await table_method()
             matches = [i for i in items if i["id"].startswith(item_id)]
             if len(matches) == 1:
-                await self.goal_store.cancel(matches[0]["id"])
+                await self.service.cancel_item(matches[0]["id"])
                 await update.effective_message.reply_text(f"Cancelled: {matches[0]['id'][:8]}")
                 return
             elif len(matches) > 1:
@@ -251,7 +233,7 @@ class TelegramChannel(Channel):
                 )
                 return
         # Try exact match
-        result = await self.goal_store.cancel(item_id)
+        result = await self.service.cancel_item(item_id)
         if result:
             await update.effective_message.reply_text(f"Cancelled: {item_id[:8]}")
         else:
@@ -259,16 +241,16 @@ class TelegramChannel(Channel):
 
     async def _handle_stop_command(self, update: Update, context) -> None:
         """Pause the heartbeat."""
-        if self.agent.heartbeat:
-            self.agent.heartbeat.paused = True
+        if self.service.heartbeat_paused is not None:
+            self.service.pause_heartbeat()
             await update.effective_message.reply_text("Heartbeat paused.")
         else:
             await update.effective_message.reply_text("Heartbeat not available.")
 
     async def _handle_start_command(self, update: Update, context) -> None:
         """Resume the heartbeat."""
-        if self.agent.heartbeat:
-            self.agent.heartbeat.paused = False
+        if self.service.heartbeat_paused is not None:
+            self.service.resume_heartbeat()
             await update.effective_message.reply_text("Heartbeat resumed.")
         else:
             await update.effective_message.reply_text("Heartbeat not available.")
@@ -322,7 +304,7 @@ class TelegramChannel(Channel):
         if decision not in ("approved", "denied"):
             return
 
-        if self.approval_gate and self.approval_gate.resolve(approval_id, decision):
+        if self.service.resolve_approval(approval_id, decision):
             status = "Approved" if decision == "approved" else "Denied"
             await query.edit_message_text(f"{status}.")
         else:
@@ -333,34 +315,29 @@ class TelegramChannel(Channel):
         lines = []
 
         # Budget
-        if self.budget_tracker:
-            status = await self.budget_tracker.check_budget()
-            daily_pct = (status.daily_spend / status.daily_limit * 100) if status.daily_limit else 0
-            monthly_pct = (status.monthly_spend / status.monthly_limit * 100) if status.monthly_limit else 0
-            lines.append("Budget:")
-            lines.append(f"  Daily: ${status.daily_spend:.4f} / ${status.daily_limit:.2f} ({daily_pct:.0f}%)")
-            lines.append(f"  Monthly: ${status.monthly_spend:.4f} / ${status.monthly_limit:.2f} ({monthly_pct:.0f}%)")
-            if not status.within_budget:
-                lines.append("  ** OVER BUDGET **")
-            elif status.warning:
-                lines.append("  ** Approaching limit **")
-        else:
-            lines.append("Budget: not configured")
+        status = await self.service.check_budget()
+        daily_pct = (status.daily_spend / status.daily_limit * 100) if status.daily_limit else 0
+        monthly_pct = (status.monthly_spend / status.monthly_limit * 100) if status.monthly_limit else 0
+        lines.append("Budget:")
+        lines.append(f"  Daily: ${status.daily_spend:.4f} / ${status.daily_limit:.2f} ({daily_pct:.0f}%)")
+        lines.append(f"  Monthly: ${status.monthly_spend:.4f} / ${status.monthly_limit:.2f} ({monthly_pct:.0f}%)")
+        if not status.within_budget:
+            lines.append("  ** OVER BUDGET **")
+        elif status.warning:
+            lines.append("  ** Approaching limit **")
 
         # Goals/Todos/Reminders
-        if self.goal_store:
-            goals = await self.goal_store.list_goals()
-            todos = await self.goal_store.list_todos()
-            reminders = await self.goal_store.list_reminders()
-            lines.append(f"\nGoals: {len(goals)} active")
-            lines.append(f"Todos: {len(todos)} pending")
-            lines.append(f"Reminders: {len(reminders)} pending")
-        else:
-            lines.append("\nGoal store: not configured")
+        goals = await self.service.list_goals()
+        todos = await self.service.list_todos()
+        reminders = await self.service.list_reminders()
+        lines.append(f"\nGoals: {len(goals)} active")
+        lines.append(f"Todos: {len(todos)} pending")
+        lines.append(f"Reminders: {len(reminders)} pending")
 
         # Heartbeat
-        if self.agent.heartbeat:
-            hb_status = "paused" if self.agent.heartbeat.paused else "running"
+        hb = self.service.heartbeat_paused
+        if hb is not None:
+            hb_status = "paused" if hb else "running"
             lines.append(f"Heartbeat: {hb_status}")
         else:
             lines.append("Heartbeat: not configured")

@@ -3,23 +3,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from odigos.channels.telegram import TelegramChannel
+from odigos.core.agent_service import AgentService
 
 
 @pytest.fixture
-def mock_agent():
-    agent = AsyncMock()
-    agent.handle_message.return_value = "Document processed."
-    return agent
+def mock_service():
+    service = MagicMock(spec=AgentService)
+    service.handle_message = AsyncMock(return_value="Document processed.")
+    return service
 
 
 @pytest.fixture
-def channel(mock_agent):
-    return TelegramChannel(token="test-token", agent=mock_agent, mode="polling")
+def channel(mock_service):
+    return TelegramChannel(token="test-token", service=mock_service, mode="polling")
 
 
 class TestTelegramDocumentHandler:
     async def test_handle_document_downloads_and_passes_path(
-        self, channel, mock_agent, tmp_path
+        self, channel, mock_service, tmp_path
     ):
         mock_file = AsyncMock()
         mock_file.download_to_drive = AsyncMock()
@@ -42,14 +43,14 @@ class TestTelegramDocumentHandler:
         with patch("odigos.channels.telegram.DOCUMENT_DIR", str(tmp_path)):
             await channel._handle_document(update, context)
 
-        call_args = mock_agent.handle_message.call_args[0][0]
+        call_args = mock_service.handle_message.call_args[0][0]
         assert call_args.content == "Summarize this report"
         assert "file_path" in call_args.metadata
         assert call_args.metadata["file_path"].endswith("report.pdf")
         assert call_args.channel == "telegram"
 
     async def test_handle_document_uses_default_caption(
-        self, channel, mock_agent, tmp_path
+        self, channel, mock_service, tmp_path
     ):
         mock_file = AsyncMock()
         mock_file.download_to_drive = AsyncMock()
@@ -72,14 +73,14 @@ class TestTelegramDocumentHandler:
         with patch("odigos.channels.telegram.DOCUMENT_DIR", str(tmp_path)):
             await channel._handle_document(update, context)
 
-        call_args = mock_agent.handle_message.call_args[0][0]
+        call_args = mock_service.handle_message.call_args[0][0]
         assert (
             "document" in call_args.content.lower()
             or "process" in call_args.content.lower()
         )
 
     async def test_handle_document_replies_on_download_failure(
-        self, channel, mock_agent, tmp_path
+        self, channel, mock_service, tmp_path
     ):
         update = MagicMock()
         update.effective_message.document.file_name = "fail.pdf"
@@ -98,4 +99,4 @@ class TestTelegramDocumentHandler:
 
         update.effective_message.reply_text.assert_called_once()
         assert "failed" in update.effective_message.reply_text.call_args[0][0].lower()
-        mock_agent.handle_message.assert_not_called()
+        mock_service.handle_message.assert_not_called()

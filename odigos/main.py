@@ -6,7 +6,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from odigos.channels.base import ChannelRegistry
-from odigos.channels.telegram import TelegramChannel
 from odigos.config import load_settings
 from odigos.core.agent import Agent
 from odigos.core.heartbeat import Heartbeat
@@ -372,21 +371,6 @@ async def lifespan(app: FastAPI):
         tracer=tracer,
         approval_gate=approval_gate,
     )
-
-    # Initialize Telegram channel (optional — skipped if no token)
-    if settings.telegram_bot_token:
-        telegram_channel = TelegramChannel(
-            token=settings.telegram_bot_token,
-            agent=agent,
-            mode=settings.telegram.mode,
-            webhook_url=settings.telegram.webhook_url,
-            goal_store=goal_store,
-            budget_tracker=budget_tracker,
-            approval_gate=approval_gate,
-        )
-        channel_registry.register("telegram", telegram_channel)
-    else:
-        logger.warning("No TELEGRAM_BOT_TOKEN set — Telegram channel disabled")
 
     # Create AgentService facade for interaction interfaces
     from odigos.core.agent_service import AgentService

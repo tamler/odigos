@@ -1,15 +1,43 @@
 # tests/test_telegram_commands.py
 import pytest
-import pytest_asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
+from odigos.core.agent_service import AgentService
+
+
+def _make_service(**overrides):
+    """Create a mock AgentService with sensible defaults."""
+    service = MagicMock(spec=AgentService)
+    service.handle_message = AsyncMock(return_value="ok")
+    service.list_goals = AsyncMock(return_value=[])
+    service.list_todos = AsyncMock(return_value=[])
+    service.list_reminders = AsyncMock(return_value=[])
+    service.cancel_item = AsyncMock(return_value=True)
+    service.check_budget = AsyncMock(return_value=MagicMock(
+        within_budget=True, warning=False,
+        daily_spend=0.0, monthly_spend=0.0,
+        daily_limit=1.0, monthly_limit=20.0,
+    ))
+    service.heartbeat_paused = False
+    service.pause_heartbeat = MagicMock()
+    service.resume_heartbeat = MagicMock()
+    service.resolve_approval = MagicMock(return_value=False)
+    for key, val in overrides.items():
+        setattr(service, key, val)
+    return service
+
+
+def _make_channel(service):
+    from odigos.channels.telegram import TelegramChannel
+    return TelegramChannel(token="fake", service=service)
 
 
 @pytest.mark.asyncio
 async def test_send_message():
     from odigos.channels.telegram import TelegramChannel
 
-    agent = MagicMock()
-    channel = TelegramChannel(token="fake", agent=agent)
+    service = _make_service()
+    channel = TelegramChannel(token="fake", service=service)
 
     mock_bot = MagicMock()
     mock_bot.send_message = AsyncMock()
@@ -23,15 +51,12 @@ async def test_send_message():
 
 @pytest.mark.asyncio
 async def test_goals_command():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    goal_store = MagicMock()
-    goal_store.list_goals = AsyncMock(return_value=[
-        {"id": "abc12345-full-uuid", "description": "Learn Python", "progress_note": "started chapter 1"},
-    ])
-
-    channel = TelegramChannel(token="fake", agent=agent, goal_store=goal_store)
+    service = _make_service(
+        list_goals=AsyncMock(return_value=[
+            {"id": "abc12345-full-uuid", "description": "Learn Python", "progress_note": "started chapter 1"},
+        ]),
+    )
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -46,13 +71,8 @@ async def test_goals_command():
 
 @pytest.mark.asyncio
 async def test_goals_command_empty():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    goal_store = MagicMock()
-    goal_store.list_goals = AsyncMock(return_value=[])
-
-    channel = TelegramChannel(token="fake", agent=agent, goal_store=goal_store)
+    service = _make_service()
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -66,15 +86,12 @@ async def test_goals_command_empty():
 
 @pytest.mark.asyncio
 async def test_todos_command():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    goal_store = MagicMock()
-    goal_store.list_todos = AsyncMock(return_value=[
-        {"id": "abc12345-full-uuid", "description": "Check email", "scheduled_at": "2026-03-05T10:00:00"},
-    ])
-
-    channel = TelegramChannel(token="fake", agent=agent, goal_store=goal_store)
+    service = _make_service(
+        list_todos=AsyncMock(return_value=[
+            {"id": "abc12345-full-uuid", "description": "Check email", "scheduled_at": "2026-03-05T10:00:00"},
+        ]),
+    )
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -88,13 +105,8 @@ async def test_todos_command():
 
 @pytest.mark.asyncio
 async def test_todos_command_empty():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    goal_store = MagicMock()
-    goal_store.list_todos = AsyncMock(return_value=[])
-
-    channel = TelegramChannel(token="fake", agent=agent, goal_store=goal_store)
+    service = _make_service()
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -108,15 +120,12 @@ async def test_todos_command_empty():
 
 @pytest.mark.asyncio
 async def test_reminders_command():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    goal_store = MagicMock()
-    goal_store.list_reminders = AsyncMock(return_value=[
-        {"id": "rem12345-full-uuid", "description": "Stand up", "due_at": "2026-03-05T14:00:00", "recurrence": "daily"},
-    ])
-
-    channel = TelegramChannel(token="fake", agent=agent, goal_store=goal_store)
+    service = _make_service(
+        list_reminders=AsyncMock(return_value=[
+            {"id": "rem12345-full-uuid", "description": "Stand up", "due_at": "2026-03-05T14:00:00", "recurrence": "daily"},
+        ]),
+    )
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -131,13 +140,8 @@ async def test_reminders_command():
 
 @pytest.mark.asyncio
 async def test_reminders_command_empty():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    goal_store = MagicMock()
-    goal_store.list_reminders = AsyncMock(return_value=[])
-
-    channel = TelegramChannel(token="fake", agent=agent, goal_store=goal_store)
+    service = _make_service()
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -151,18 +155,14 @@ async def test_reminders_command_empty():
 
 @pytest.mark.asyncio
 async def test_cancel_command():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    goal_store = MagicMock()
-    goal_store.cancel = AsyncMock(return_value=True)
-    goal_store.list_goals = AsyncMock(return_value=[])
-    goal_store.list_todos = AsyncMock(return_value=[
-        {"id": "abc-123-full-uuid", "description": "test todo"},
-    ])
-    goal_store.list_reminders = AsyncMock(return_value=[])
-
-    channel = TelegramChannel(token="fake", agent=agent, goal_store=goal_store)
+    service = _make_service(
+        list_goals=AsyncMock(return_value=[]),
+        list_todos=AsyncMock(return_value=[
+            {"id": "abc-123-full-uuid", "description": "test todo"},
+        ]),
+        list_reminders=AsyncMock(return_value=[]),
+    )
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -172,19 +172,15 @@ async def test_cancel_command():
     context.args = ["abc-123"]
 
     await channel._handle_cancel_command(update, context)
-    goal_store.cancel.assert_called_once_with("abc-123-full-uuid")
+    service.cancel_item.assert_called_once_with("abc-123-full-uuid")
     call_text = update.effective_message.reply_text.call_args[0][0]
     assert "cancelled" in call_text.lower()
 
 
 @pytest.mark.asyncio
 async def test_cancel_command_no_args():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    goal_store = MagicMock()
-
-    channel = TelegramChannel(token="fake", agent=agent, goal_store=goal_store)
+    service = _make_service()
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -199,14 +195,8 @@ async def test_cancel_command_no_args():
 
 @pytest.mark.asyncio
 async def test_stop_command_pauses_heartbeat():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    heartbeat = MagicMock()
-    heartbeat.paused = False
-    agent.heartbeat = heartbeat
-
-    channel = TelegramChannel(token="fake", agent=agent)
+    service = _make_service(heartbeat_paused=False)
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -214,19 +204,13 @@ async def test_stop_command_pauses_heartbeat():
     context = MagicMock()
 
     await channel._handle_stop_command(update, context)
-    assert heartbeat.paused is True
+    service.pause_heartbeat.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_start_command_resumes_heartbeat():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    heartbeat = MagicMock()
-    heartbeat.paused = True
-    agent.heartbeat = heartbeat
-
-    channel = TelegramChannel(token="fake", agent=agent)
+    service = _make_service(heartbeat_paused=True)
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
@@ -234,43 +218,33 @@ async def test_start_command_resumes_heartbeat():
     context = MagicMock()
 
     await channel._handle_start_command(update, context)
-    assert heartbeat.paused is False
+    service.resume_heartbeat.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_status_command():
-    from odigos.channels.telegram import TelegramChannel
-
-    agent = MagicMock()
-    budget_tracker = AsyncMock()
-    budget_tracker.check_budget = AsyncMock(return_value=AsyncMock(
-        within_budget=True,
-        warning=False,
-        daily_spend=0.05,
-        monthly_spend=1.20,
-        daily_limit=3.00,
-        monthly_limit=50.00,
-    ))
-    goal_store = MagicMock()
-    goal_store.list_goals = AsyncMock(return_value=[
-        {"id": "g1", "description": "goal1"},
-    ])
-    goal_store.list_todos = AsyncMock(return_value=[
-        {"id": "t1", "description": "todo1"},
-        {"id": "t2", "description": "todo2"},
-    ])
-    goal_store.list_reminders = AsyncMock(return_value=[
-        {"id": "r1", "description": "reminder1"},
-    ])
-    heartbeat = MagicMock()
-    heartbeat.paused = False
-
-    agent.heartbeat = heartbeat
-
-    channel = TelegramChannel(
-        token="fake", agent=agent,
-        budget_tracker=budget_tracker, goal_store=goal_store,
+    service = _make_service(
+        check_budget=AsyncMock(return_value=MagicMock(
+            within_budget=True,
+            warning=False,
+            daily_spend=0.05,
+            monthly_spend=1.20,
+            daily_limit=3.00,
+            monthly_limit=50.00,
+        )),
+        list_goals=AsyncMock(return_value=[
+            {"id": "g1", "description": "goal1"},
+        ]),
+        list_todos=AsyncMock(return_value=[
+            {"id": "t1", "description": "todo1"},
+            {"id": "t2", "description": "todo2"},
+        ]),
+        list_reminders=AsyncMock(return_value=[
+            {"id": "r1", "description": "reminder1"},
+        ]),
+        heartbeat_paused=False,
     )
+    channel = _make_channel(service)
 
     update = MagicMock()
     update.effective_message = MagicMock()
