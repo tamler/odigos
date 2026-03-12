@@ -50,9 +50,10 @@ class PluginManager:
                 if init.exists():
                     self._load_plugin(init, name_override=subdir.name)
 
-        # Recurse into category subdirectories (providers/, tools/, channels/)
+        # Recurse into category subdirectories (providers/, tools/)
+        # Note: channels/ is loaded separately via load_channels() (phase 2)
         for category_dir in sorted(plugins_path.iterdir()):
-            if category_dir.is_dir() and category_dir.name in ("providers", "tools", "channels"):
+            if category_dir.is_dir() and category_dir.name in ("providers", "tools"):
                 for subdir in sorted(category_dir.iterdir()):
                     if subdir.is_dir() and not subdir.name.startswith("__"):
                         init = subdir / "__init__.py"
