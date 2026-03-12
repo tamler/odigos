@@ -310,9 +310,21 @@ class Heartbeat:
             logger.debug("Evolution cycle failed", exc_info=True)
 
     async def _peer_maintenance(self) -> None:
-        """Phase 6: Announce self to peers and mark stale peers offline."""
+        """Phase 6: Announce self to peers, flush outbox, mark stale peers offline.
+
+        Inert when solo: skips entirely if no peers configured and no online peers in registry.
+        """
+        # Inert-when-solo guard
+        if not self.agent_client.list_peer_names():
+            online = await self.db.fetch_one(
+                "SELECT 1 FROM agent_registry WHERE status = 'online' LIMIT 1"
+            )
+            if not online:
+                return
+
         now = time.monotonic()
         try:
+            # Announce on schedule
             if now - self._last_announce >= self._announce_interval:
                 self._last_announce = now
                 await self.agent_client.broadcast_announce(
@@ -320,6 +332,9 @@ class Heartbeat:
                     description=self._agent_description,
                 )
                 await self.agent_client.mark_stale_peers()
+
+            # Always try to flush outbox
+            await self.agent_client.flush_outbox()
         except Exception:
             logger.debug("Peer maintenance failed", exc_info=True)
 
