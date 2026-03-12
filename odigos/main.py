@@ -231,6 +231,13 @@ async def lifespan(app: FastAPI):
     tool_registry.register(code_tool)
     logger.info("Code tool initialized (sandbox)")
 
+    # Initialize file tool with configured allowed paths
+    from odigos.tools.file import FileTool
+
+    file_tool = FileTool(allowed_paths=settings.file_access.allowed_paths)
+    tool_registry.register(file_tool)
+    logger.info("File tool initialized (allowed: %s)", settings.file_access.allowed_paths)
+
     # Register Google Workspace tool if enabled
     if settings.gws.enabled:
         import shutil
