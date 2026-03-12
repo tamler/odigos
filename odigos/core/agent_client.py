@@ -67,10 +67,6 @@ class PeerEnvelope:
         )
 
 
-# Backward compatibility alias -- remove once all references are updated
-AgentMessage = PeerEnvelope
-
-
 class AgentClient:
     """WebSocket-only client for agent-to-agent communication with outbox queuing."""
 
