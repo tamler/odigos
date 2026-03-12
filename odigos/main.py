@@ -397,7 +397,6 @@ async def lifespan(app: FastAPI):
     app.state.vector_memory = vector_memory
     app.state.web_channel = web_channel
     app.state.agent_client = agent_client
-    app.state.spawner = spawner
 
     _channel_registry = channel_registry
 
@@ -445,6 +444,7 @@ async def lifespan(app: FastAPI):
         provider=_router,
         parent_name=settings.agent.name,
     )
+    app.state.spawner = spawner
     logger.info("Spawner initialized")
 
     # Initialize heartbeat

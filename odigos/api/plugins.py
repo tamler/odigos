@@ -44,12 +44,15 @@ def _merge_plugins(
       - status: "active", "error", or "available"
       - config_keys[].configured: bool indicating whether the setting has a value
     """
-    loaded_by_name: dict[str, dict] = {p["name"]: p for p in loaded}
+    loaded_by_name: dict[str, dict] = {}
+    for p in loaded:
+        loaded_by_name[p["name"]] = p
 
     result = []
     for meta in metadata:
         plugin_id = meta["id"]
-        loaded_info = loaded_by_name.get(plugin_id)
+        plugin_name = meta.get("name", "")
+        loaded_info = loaded_by_name.get(plugin_id) or loaded_by_name.get(plugin_name)
 
         entry = {**meta}
 
