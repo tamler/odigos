@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
-    from odigos.core.peers import PeerClient
+    from odigos.core.agent_client import AgentClient
 
 
 class MessagePeerTool(BaseTool):
@@ -35,7 +35,7 @@ class MessagePeerTool(BaseTool):
         "required": ["peer", "message"],
     }
 
-    def __init__(self, peer_client: PeerClient) -> None:
+    def __init__(self, peer_client: AgentClient) -> None:
         self.peer_client = peer_client
 
     async def execute(self, params: dict) -> ToolResult:
