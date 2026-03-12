@@ -29,7 +29,7 @@ fi
 info "Docker daemon running"
 
 # ── Create directories ──────────────────────────────────────────────
-mkdir -p data data/plugins skills plugins
+mkdir -p data data/plugins data/files skills plugins
 info "Data directories ready"
 
 # ── LLM Configuration ──────────────────────────────────────────────
