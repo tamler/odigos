@@ -138,7 +138,7 @@ async def test_handle_incoming_announce(db, mock_peers):
     msg = PeerEnvelope(
         type="registry_announce",
         from_agent="Archie",
-        to_agent="Odigos",
+        to_agent="*",
         payload={
             "role": "backend_dev",
             "description": "Backend specialist",
@@ -154,3 +154,61 @@ async def test_handle_incoming_announce(db, mock_peers):
     assert row is not None
     assert row["role"] == "backend_dev"
     assert row["status"] == "online"
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_validates_to_agent(db, mock_peers):
+    """Messages not addressed to this agent are ignored."""
+    client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
+
+    handler = AsyncMock()
+    client.on_message("task_request", handler)
+
+    msg = PeerEnvelope(
+        from_agent="Archie",
+        to_agent="SomeOtherAgent",
+        type="task_request",
+        payload={"task": "summarize"},
+    )
+    await client.handle_incoming(msg, peer_ip="100.64.0.2")
+
+    handler.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_accepts_broadcast(db, mock_peers):
+    """Messages addressed to '*' (broadcast) are accepted."""
+    client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
+
+    handler = AsyncMock()
+    client.on_message("registry_announce", handler)
+
+    msg = PeerEnvelope(
+        from_agent="Archie",
+        to_agent="*",
+        type="registry_announce",
+        payload={"role": "backend_dev"},
+    )
+    await client.handle_incoming(msg, peer_ip="100.64.0.2")
+
+    handler.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_deduplicates(db, mock_peers):
+    """Duplicate message IDs are ignored."""
+    client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
+
+    handler = AsyncMock()
+    client.on_message("task_request", handler)
+
+    msg = PeerEnvelope(
+        from_agent="Archie",
+        to_agent="Odigos",
+        type="task_request",
+        payload={"task": "summarize"},
+    )
+    await client.handle_incoming(msg, peer_ip="100.64.0.2")
+    await client.handle_incoming(msg, peer_ip="100.64.0.2")  # same id
+
+    handler.assert_called_once()

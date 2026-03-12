@@ -193,19 +193,37 @@ class AgentClient:
 
     async def handle_incoming(self, msg: PeerEnvelope, peer_ip: str = "") -> None:
         """Process an incoming message from a peer agent."""
+        # Validate recipient
+        if msg.to_agent not in (self.agent_name, "*", ""):
+            logger.debug("Ignoring message for %s (we are %s)", msg.to_agent, self.agent_name)
+            return
+
+        # Deduplicate
         if self._db:
+            existing = await self._db.fetch_one(
+                "SELECT 1 FROM peer_messages WHERE message_id = ? AND direction = 'inbound'",
+                (msg.id,),
+            )
+            if existing:
+                logger.debug("Duplicate message %s, ignoring", msg.id)
+                return
+
+            # Record inbound
             await self._db.execute(
                 "INSERT INTO peer_messages "
-                "(message_id, direction, peer_name, message_type, content, metadata_json, status) "
-                "VALUES (?, 'inbound', ?, ?, ?, ?, 'received')",
-                (msg.id, msg.from_agent, msg.type, json.dumps(msg.payload), json.dumps(msg.payload)),
+                "(message_id, direction, peer_name, message_type, content, metadata_json, status, response_to) "
+                "VALUES (?, 'inbound', ?, ?, ?, ?, 'received', ?)",
+                (msg.id, msg.from_agent, msg.type, json.dumps(msg.payload),
+                 json.dumps(msg.to_dict()), msg.correlation_id),
             )
 
+        # Built-in handlers
         if msg.type == MSG_REGISTRY_ANNOUNCE:
             await self._handle_announce(msg, peer_ip)
         elif msg.type == MSG_STATUS_PING:
             await self._handle_ping(msg)
 
+        # Custom handlers
         for handler in self._handlers.get(msg.type, []):
             try:
                 await handler(msg)
