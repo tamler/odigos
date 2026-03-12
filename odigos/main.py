@@ -60,7 +60,6 @@ _db: Database | None = None
 _provider: LLMClient | None = None
 _embedder: EmbeddingProvider | None = None
 _channel_registry: ChannelRegistry | None = None
-_searxng = None
 _scraper = None
 _router: ModelRouter | None = None
 _heartbeat: Heartbeat | None = None
@@ -70,7 +69,7 @@ _mcp_servers: list = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
-    global _db, _provider, _embedder, _channel_registry, _searxng, _scraper, _router, _heartbeat, _mcp_servers
+    global _db, _provider, _embedder, _channel_registry, _scraper, _router, _heartbeat, _mcp_servers
 
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
     settings = load_settings(config_path)
@@ -179,20 +178,6 @@ async def lifespan(app: FastAPI):
     tool_registry.register(scrape_tool)
     logger.info("Scrape tool initialized")
 
-    # Add search tool if SearXNG is configured
-    if settings.searxng_url:
-        from odigos.providers.searxng import SearxngProvider
-        from odigos.tools.search import SearchTool
-
-        _searxng = SearxngProvider(
-            url=settings.searxng_url,
-            username=settings.searxng_username,
-            password=settings.searxng_password,
-        )
-        search_tool = SearchTool(searxng=_searxng)
-        tool_registry.register(search_tool)
-        logger.info("Search tool initialized (SearXNG: %s)", settings.searxng_url)
-
     # Initialize RSS feed tool
     from odigos.tools.feed import FeedTool
 
@@ -237,36 +222,6 @@ async def lifespan(app: FastAPI):
     file_tool = FileTool(allowed_paths=settings.file_access.allowed_paths)
     tool_registry.register(file_tool)
     logger.info("File tool initialized (allowed: %s)", settings.file_access.allowed_paths)
-
-    # Register Google Workspace tool if enabled
-    if settings.gws.enabled:
-        import shutil
-        from odigos.tools.gws import GWSTool
-
-        if shutil.which("gws"):
-            gws_tool = GWSTool(timeout=settings.gws.timeout)
-            tool_registry.register(gws_tool)
-            logger.info("Google Workspace tool initialized (gws CLI)")
-        else:
-            logger.warning(
-                "GWS enabled but gws CLI not found. "
-                "Install: npm install -g @googleworkspace/cli"
-            )
-
-    # Register Agent Browser tool if enabled
-    if settings.browser.enabled:
-        import shutil
-        from odigos.tools.browser import BrowserTool
-
-        if shutil.which("agent-browser"):
-            browser_tool = BrowserTool(timeout=settings.browser.timeout)
-            tool_registry.register(browser_tool)
-            logger.info("Agent Browser tool initialized")
-        else:
-            logger.warning(
-                "Browser enabled but agent-browser CLI not found. "
-                "Install: npm install -g @anthropic-ai/agent-browser"
-            )
 
     # Initialize goal store
     goal_store = GoalStore(db=_db)
@@ -559,8 +514,6 @@ async def lifespan(app: FastAPI):
     _mcp_servers.clear()
     if _scraper:
         await _scraper.close()
-    if _searxng:
-        await _searxng.close()
     if _embedder:
         await _embedder.close()
     if _router:
