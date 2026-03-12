@@ -3,7 +3,7 @@ import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X } from 'lucide-react'
+import { ArrowUp, Download, Paperclip, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   PromptInput,
@@ -178,12 +178,44 @@ export default function ChatPage() {
 
   const headerTitle = conversationTitle || (messages.length > 0 ? 'Conversation' : 'New conversation')
 
+  const handleExport = useCallback((format: 'markdown' | 'json') => {
+    const cid = activeConversationId
+    if (!cid) return
+    const token = localStorage.getItem('odigos_api_key') || ''
+    const url = `/api/conversations/${cid}/export?format=${format}`
+    fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+      .then((res) => {
+        if (!res.ok) throw new Error('Export failed')
+        return res.blob()
+      })
+      .then((blob) => {
+        const ext = format === 'json' ? 'json' : 'md'
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `${cid}.${ext}`
+        a.click()
+        URL.revokeObjectURL(a.href)
+        toast.success('Conversation exported')
+      })
+      .catch(() => toast.error('Failed to export conversation'))
+  }, [activeConversationId])
+
   return (
     <FileUpload onFilesAdded={handleFilesAdded}>
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4">
+        <div className="px-6 py-4 flex items-center justify-between">
           <h2 className="text-sm font-medium text-muted-foreground">{headerTitle}</h2>
+          {activeConversationId && messages.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => handleExport('markdown')}
+              title="Export conversation"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
         {/* Drag overlay */}
