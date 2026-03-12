@@ -9,7 +9,6 @@ __pycache__
 tests
 docs
 data/*.db
-data/chroma
 *.egg-info
 .worktrees
 worktrees
