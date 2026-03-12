@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from odigos.db import Database
 from odigos.memory.vectors import VectorMemory, MemoryResult
 
 
@@ -14,10 +15,16 @@ def mock_embedder():
 
 
 @pytest.fixture
-async def vector_memory(tmp_path, mock_embedder):
-    vm = VectorMemory(embedder=mock_embedder, persist_dir=str(tmp_path / "chroma"))
-    await vm.initialize()
-    return vm
+async def db(tmp_db_path):
+    database = Database(tmp_db_path, migrations_dir="migrations")
+    await database.initialize()
+    yield database
+    await database.close()
+
+
+@pytest.fixture
+def vector_memory(db, mock_embedder):
+    return VectorMemory(embedder=mock_embedder, db=db)
 
 
 class TestWhenToUse:

@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-import asyncio
 import logging
+import struct
 import uuid
 from dataclasses import dataclass
-from functools import partial
 from typing import TYPE_CHECKING
 
-import chromadb
-
 if TYPE_CHECKING:
+    from odigos.db import Database
     from odigos.providers.embeddings import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
-
-COLLECTION_NAME = "memory_vectors"
 
 
 @dataclass
@@ -27,109 +23,169 @@ class MemoryResult:
     memory_type: str = "general"
 
 
-class VectorMemory:
-    """ChromaDB-backed vector store for semantic memory search."""
+def _serialize_f32(vec: list[float]) -> bytes:
+    """Serialize a list of floats to a compact binary format for sqlite-vec."""
+    return struct.pack(f"{len(vec)}f", *vec)
 
-    def __init__(self, embedder: EmbeddingProvider, persist_dir: str = "data/chroma") -> None:
+
+class VectorMemory:
+    """SQLite-backed vector store using sqlite-vec for semantic memory search."""
+
+    def __init__(self, embedder: EmbeddingProvider, db: Database) -> None:
         self.embedder = embedder
-        self._persist_dir = persist_dir
-        self._client: chromadb.ClientAPI | None = None
-        self._collection: chromadb.Collection | None = None
+        self.db = db
 
     async def initialize(self) -> None:
-        """Create or open the ChromaDB persistent client and collection."""
-        loop = asyncio.get_running_loop()
-        self._client = await loop.run_in_executor(
-            None,
-            partial(chromadb.PersistentClient, path=self._persist_dir),
-        )
-        self._collection = await loop.run_in_executor(
-            None,
-            partial(
-                self._client.get_or_create_collection,
-                name=COLLECTION_NAME,
-                metadata={"hnsw:space": "cosine"},
-            ),
-        )
+        """No-op — schema is handled by migrations."""
+        pass
 
-    async def store(self, text: str, source_type: str, source_id: str, when_to_use: str = "", memory_type: str = "general") -> str:
-        """Embed text and store in ChromaDB. Returns the vector ID."""
+    async def store(
+        self,
+        text: str,
+        source_type: str,
+        source_id: str,
+        when_to_use: str = "",
+        memory_type: str = "general",
+    ) -> str:
+        """Embed text and store in SQLite. Returns the vector ID."""
         embed_input = when_to_use if when_to_use else text
         vector = await self.embedder.embed(embed_input)
         vec_id = str(uuid.uuid4())
 
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            None,
-            partial(
-                self._collection.add,
-                ids=[vec_id],
-                embeddings=[vector],
-                metadatas=[{
-                    "source_type": source_type,
-                    "source_id": source_id,
-                    "content_preview": text[:500],
-                    "when_to_use": when_to_use,
-                    "memory_type": memory_type,
-                }],
-                documents=[text[:500]],
+        await self.db.execute_in_transaction([
+            (
+                "INSERT INTO memory_entries (id, content_preview, source_type, source_id, when_to_use, memory_type) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (vec_id, text[:500], source_type, source_id, when_to_use, memory_type),
             ),
-        )
+            (
+                "INSERT INTO memory_vec (id, embedding) VALUES (?, ?)",
+                (vec_id, _serialize_f32(vector)),
+            ),
+        ])
         return vec_id
 
     async def search(
-        self, query: str, limit: int = 5, source_type: str | None = None,
+        self,
+        query: str,
+        limit: int = 5,
+        source_type: str | None = None,
         memory_type: str | None = None,
     ) -> list[MemoryResult]:
-        """Embed query and find nearest neighbors."""
-        loop = asyncio.get_running_loop()
-        count = await loop.run_in_executor(None, self._collection.count)
+        """Embed query and find nearest neighbors via sqlite-vec."""
+        count = await self.count()
         if count == 0:
             return []
 
         vector = await self.embedder.embed_query(query)
 
-        conditions = []
+        where_clauses = []
+        params: list = []
         if source_type:
-            conditions.append({"source_type": source_type})
+            where_clauses.append("e.source_type = ?")
+            params.append(source_type)
         if memory_type:
-            conditions.append({"memory_type": memory_type})
-        if len(conditions) == 1:
-            where_filter = conditions[0]
-        elif len(conditions) > 1:
-            where_filter = {"$and": conditions}
-        else:
-            where_filter = None
+            where_clauses.append("e.memory_type = ?")
+            params.append(memory_type)
 
-        results = await loop.run_in_executor(
-            None,
-            partial(
-                self._collection.query,
-                query_embeddings=[vector],
-                n_results=min(limit, count),
-                where=where_filter,
-            ),
+        where_sql = ""
+        if where_clauses:
+            where_sql = "AND " + " AND ".join(where_clauses)
+
+        # sqlite-vec KNN: MATCH on embedding column, ORDER BY distance
+        knn_sql = f"""
+            SELECT e.id, e.content_preview, e.source_type, e.source_id,
+                   e.when_to_use, e.memory_type, v.distance
+            FROM (
+                SELECT id, distance
+                FROM memory_vec
+                WHERE embedding MATCH ?
+                ORDER BY distance
+                LIMIT ?
+            ) v
+            JOIN memory_entries e ON e.id = v.id
+            {where_sql}
+        """
+        # Over-fetch from vec to account for filtering
+        fetch_limit = min(limit * 3, count) if where_clauses else min(limit, count)
+        all_params = [_serialize_f32(vector), fetch_limit] + params
+
+        rows = await self.db.fetch_all(knn_sql, tuple(all_params))
+
+        results = []
+        for row in rows[:limit]:
+            results.append(
+                MemoryResult(
+                    content_preview=row["content_preview"],
+                    source_type=row["source_type"],
+                    source_id=row["source_id"],
+                    distance=row["distance"],
+                    when_to_use=row.get("when_to_use", ""),
+                    memory_type=row.get("memory_type", "general"),
+                )
+            )
+        return results
+
+    async def search_fts(self, query: str, limit: int = 20) -> list[MemoryResult]:
+        """Full-text keyword search via FTS5."""
+        clean_terms = []
+        for word in query.split():
+            cleaned = "".join(c for c in word if c.isalnum())
+            if cleaned:
+                clean_terms.append(cleaned)
+
+        if not clean_terms:
+            return []
+
+        fts_query = " OR ".join(clean_terms)
+
+        rows = await self.db.fetch_all(
+            """
+            SELECT e.id, e.content_preview, e.source_type, e.source_id,
+                   e.when_to_use, e.memory_type,
+                   rank AS distance
+            FROM memory_fts
+            JOIN memory_entries e ON e.rowid = memory_fts.rowid
+            WHERE memory_fts MATCH ?
+            ORDER BY rank
+            LIMIT ?
+            """,
+            (fts_query, limit),
         )
 
-        memory_results = []
-        if results and results["ids"] and results["ids"][0]:
-            for i, _id in enumerate(results["ids"][0]):
-                meta = results["metadatas"][0][i]
-                dist = results["distances"][0][i] if results.get("distances") else 0.0
-                memory_results.append(
-                    MemoryResult(
-                        content_preview=meta.get("content_preview", ""),
-                        source_type=meta.get("source_type", ""),
-                        source_id=meta.get("source_id", ""),
-                        distance=dist,
-                        when_to_use=meta.get("when_to_use", ""),
-                        memory_type=meta.get("memory_type", "general"),
-                    )
-                )
-
-        return memory_results
+        return [
+            MemoryResult(
+                content_preview=row["content_preview"],
+                source_type=row["source_type"],
+                source_id=row["source_id"],
+                distance=row["distance"],
+                when_to_use=row.get("when_to_use", ""),
+                memory_type=row.get("memory_type", "general"),
+            )
+            for row in rows
+        ]
 
     async def count(self) -> int:
         """Return total number of vectors stored."""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._collection.count)
+        row = await self.db.fetch_one("SELECT COUNT(*) as cnt FROM memory_entries")
+        return row["cnt"] if row else 0
+
+    async def delete_by_source(self, source_type: str, source_id: str) -> None:
+        """Delete all entries matching source_type and source_id."""
+        rows = await self.db.fetch_all(
+            "SELECT id FROM memory_entries WHERE source_type = ? AND source_id = ?",
+            (source_type, source_id),
+        )
+        if not rows:
+            return
+
+        ids = [row["id"] for row in rows]
+        placeholders = ",".join("?" * len(ids))
+
+        await self.db.execute_in_transaction([
+            (f"DELETE FROM memory_vec WHERE id IN ({placeholders})", tuple(ids)),
+            (
+                "DELETE FROM memory_entries WHERE source_type = ? AND source_id = ?",
+                (source_type, source_id),
+            ),
+        ])
