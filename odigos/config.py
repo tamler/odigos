@@ -77,6 +77,10 @@ class SandboxConfig(BaseModel):
     allow_network: bool = False
 
 
+class FileAccessConfig(BaseModel):
+    allowed_paths: list[str] = ["data/files"]
+
+
 class MCPServerConfig(BaseModel):
     command: str
     args: list[str] = []
@@ -144,6 +148,7 @@ class Settings(BaseSettings):
     mcp: MCPConfig = MCPConfig()
     gws: GWSConfig = GWSConfig()
     browser: BrowserConfig = BrowserConfig()
+    file_access: FileAccessConfig = FileAccessConfig()
     approval: ApprovalConfig = ApprovalConfig()
     peers: list[PeerConfig] = []
     deploy_targets: list[DeployTargetConfig] = []
