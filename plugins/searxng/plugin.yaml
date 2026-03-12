@@ -1,0 +1,20 @@
+name: SearXNG Web Search
+id: searxng
+description: Adds web search capability using a SearXNG instance
+category: tools
+requires:
+  - label: SearXNG instance
+    url: https://docs.searxng.org
+config_keys:
+  - key: searxng_url
+    required: true
+    description: URL of your SearXNG instance
+    type: url
+  - key: searxng_username
+    required: false
+    description: SearXNG username (if auth is enabled)
+    type: string
+  - key: searxng_password
+    required: false
+    description: SearXNG password (if auth is enabled)
+    type: secret

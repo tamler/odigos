@@ -1,0 +1,16 @@
+name: Google Workspace
+id: gws
+description: Access Google Workspace (Gmail, Calendar, Drive) via the gws CLI
+category: tools
+requires:
+  - label: gws CLI
+    url: https://github.com/nichochar/gws
+config_keys:
+  - key: gws.enabled
+    required: true
+    description: Enable Google Workspace integration
+    type: boolean
+  - key: gws.timeout
+    required: false
+    description: Command timeout in seconds
+    type: number

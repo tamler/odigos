@@ -1,5 +1,8 @@
-name: docling
-description: Deep document extraction with table/figure/layout analysis
-version: "1.0.0"
+name: Docling Document Processor
+id: docling
+description: Deep document extraction with table, figure, and layout analysis
+category: providers
 requires:
-  - docling>=2.0.0
+  - label: docling Python package
+    url: https://github.com/DS4SD/docling
+config_keys: []

@@ -1,0 +1,18 @@
+name: Telegram Bot
+id: telegram
+description: Telegram bot channel for messaging your agent
+category: channels
+requires: []
+config_keys:
+  - key: telegram_bot_token
+    required: true
+    description: Bot token from @BotFather
+    type: secret
+  - key: telegram.mode
+    required: false
+    description: "Connection mode: polling or webhook"
+    type: string
+  - key: telegram.webhook_url
+    required: false
+    description: Webhook URL (only if mode is webhook)
+    type: url

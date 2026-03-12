@@ -1,0 +1,16 @@
+name: Agent Browser
+id: browser
+description: Browser automation for web interaction and testing
+category: tools
+requires:
+  - label: agent-browser CLI
+    url: https://github.com/anthropics/agent-browser
+config_keys:
+  - key: browser.enabled
+    required: true
+    description: Enable browser automation
+    type: boolean
+  - key: browser.timeout
+    required: false
+    description: Browser action timeout in seconds
+    type: number
