@@ -153,6 +153,20 @@ class AgentClient:
         # No WS connection — message stays queued in outbox
         return {"status": "queued", "message_id": envelope.id}
 
+    async def send_response(
+        self,
+        original: PeerEnvelope,
+        payload: dict,
+        message_type: str = "task_response",
+    ) -> dict:
+        """Send a response that automatically correlates to the original request."""
+        return await self.send(
+            peer_name=original.from_agent,
+            payload=payload,
+            message_type=message_type,
+            correlation_id=original.correlation_id,
+        )
+
     def build_announce(
         self,
         role: str = "",

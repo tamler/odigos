@@ -92,16 +92,43 @@ async def test_send_queues_when_ws_down(db, mock_peers):
 
 
 @pytest.mark.asyncio
-async def test_announce_self(db, mock_peers):
+async def test_announce_builds_envelope(db, mock_peers):
     client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
-    msg = client.build_announce(
+    env = client.build_announce(
         role="personal_assistant",
         description="Jacob's AI",
         capabilities=["search", "code"],
     )
-    assert msg.type == "registry_announce"
-    assert msg.from_agent == "Odigos"
-    assert "personal_assistant" in msg.payload["role"]
+    assert env.type == "registry_announce"
+    assert env.from_agent == "Odigos"
+    assert env.to_agent == "*"
+    assert env.payload["role"] == "personal_assistant"
+    assert env.payload["capabilities"] == ["search", "code"]
+
+
+@pytest.mark.asyncio
+async def test_send_response_correlates(db, mock_peers):
+    """send_response() copies correlation_id from original envelope."""
+    client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
+    mock_ws = AsyncMock()
+    client._ws_connections["Archie"] = mock_ws
+
+    original = PeerEnvelope(
+        from_agent="Archie",
+        to_agent="Odigos",
+        type="task_request",
+        payload={"task": "summarize"},
+        correlation_id="corr-123",
+    )
+
+    result = await client.send_response(original, payload={"result": "done"})
+    assert result["status"] == "delivered"
+
+    sent_data = json.loads(mock_ws.send.call_args[0][0])
+    assert sent_data["to_agent"] == "Archie"
+    assert sent_data["correlation_id"] == "corr-123"
+    assert sent_data["type"] == "task_response"
+    assert sent_data["payload"]["result"] == "done"
 
 
 @pytest.mark.asyncio
