@@ -5,6 +5,7 @@ import pytest
 
 from odigos.channels.base import UniversalMessage
 from odigos.channels.telegram import TelegramChannel
+from odigos.core.agent_service import AgentService
 
 
 def test_universal_message_creation():
@@ -24,17 +25,17 @@ def test_universal_message_creation():
 
 
 @pytest.fixture
-def mock_agent() -> AsyncMock:
-    agent = AsyncMock()
-    agent.handle_message.return_value = "Agent response"
-    return agent
+def mock_service() -> MagicMock:
+    service = MagicMock(spec=AgentService)
+    service.handle_message = AsyncMock(return_value="Agent response")
+    return service
 
 
-async def test_telegram_converts_update_to_universal_message(mock_agent: AsyncMock):
+async def test_telegram_converts_update_to_universal_message(mock_service: MagicMock):
     """Telegram handler converts telegram Update to UniversalMessage."""
     channel = TelegramChannel(
         token="test-token",
-        agent=mock_agent,
+        service=mock_service,
         mode="polling",
     )
 
@@ -52,9 +53,9 @@ async def test_telegram_converts_update_to_universal_message(mock_agent: AsyncMo
 
     await channel._handle_text(update, context)
 
-    # Verify the agent was called with a UniversalMessage
-    mock_agent.handle_message.assert_called_once()
-    msg = mock_agent.handle_message.call_args[0][0]
+    # Verify the service was called with a UniversalMessage
+    mock_service.handle_message.assert_called_once()
+    msg = mock_service.handle_message.call_args[0][0]
     assert msg.channel == "telegram"
     assert msg.content == "Hello"
     assert msg.metadata["chat_id"] == 12345
