@@ -119,7 +119,7 @@ async def test_search_returns_results(db: Database):
     assert data["results"][0]["source_type"] == "conversation"
     assert data["results"][0]["source_id"] == "conv-1"
     assert data["results"][0]["distance"] == pytest.approx(0.15)
-    mock_vm.search.assert_awaited_once_with("Alice", limit=5)
+    mock_vm.search.assert_awaited_once_with("Alice", limit=15)
 
 
 @pytest.mark.asyncio
