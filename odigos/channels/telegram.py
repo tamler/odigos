@@ -1,5 +1,9 @@
+import asyncio
+import hashlib
 import logging
 import os
+import secrets
+import shutil
 import tempfile
 from datetime import datetime, timezone
 
@@ -151,6 +155,33 @@ class TelegramChannel(Channel):
                 "Failed to download the file. Please try again."
             )
             return
+
+        # Copy to persistent uploads and auto-ingest into memory
+        upload_dir = getattr(self.service, "upload_dir", "data/uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        persistent_name = f"{secrets.token_hex(8)}_{os.path.basename(file_path)}"
+        persistent_path = os.path.join(upload_dir, persistent_name)
+        shutil.copy2(file_path, persistent_path)
+
+        ingester = getattr(self.service, "doc_ingester", None)
+        markitdown = getattr(self.service, "markitdown_provider", None)
+        if ingester and markitdown:
+            try:
+                with open(persistent_path, "rb") as fh:
+                    file_bytes = fh.read()
+                content_hash = hashlib.sha256(file_bytes).hexdigest()
+
+                extracted = await asyncio.to_thread(markitdown.convert_file, persistent_path)
+                if extracted:
+                    await ingester.ingest(
+                        text=extracted,
+                        filename=os.path.basename(file_path),
+                        file_path=persistent_path,
+                        file_size=len(file_bytes),
+                        content_hash=content_hash,
+                    )
+            except Exception:
+                logger.warning("Auto-ingestion failed for %s", file_path, exc_info=True)
 
         content = update.effective_message.caption or "Process this document"
 

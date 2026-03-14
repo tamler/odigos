@@ -440,6 +440,9 @@ async def lifespan(app: FastAPI):
         budget_tracker=budget_tracker,
         approval_gate=approval_gate,
     )
+    agent_service.doc_ingester = doc_ingester
+    agent_service.markitdown_provider = markitdown_provider
+    agent_service.upload_dir = "data/uploads"
     plugin_context.set_service(agent_service)
     app.state.agent_service = agent_service
 
