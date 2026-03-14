@@ -18,8 +18,8 @@ import { toast } from 'sonner'
 
 interface Conversation {
   id: string
-  created_at: string
-  last_message_at: string
+  started_at: string
+  last_message_at: string | null
   title?: string | null
   message_count: number
 }
@@ -139,7 +139,9 @@ export default function AppLayout() {
 
   function displayTitle(c: Conversation): string {
     if (c.title) return c.title
-    const date = new Date(c.created_at || c.last_message_at)
+    const raw = c.last_message_at || c.started_at
+    if (!raw) return 'New chat'
+    const date = new Date(raw + 'Z')
     const short = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     return `Chat ${short}`
   }
