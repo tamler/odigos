@@ -93,6 +93,21 @@ class BrowserConfig(BaseModel):
     timeout: int = 120
 
 
+class MeshConfig(BaseModel):
+    enabled: bool = False
+
+
+class FeedConfig(BaseModel):
+    enabled: bool = False
+    public: bool = False
+    max_entries: int = 200
+
+
+class TemplatesConfig(BaseModel):
+    repo_url: str = "https://github.com/msitarzewski/agency-agents"
+    cache_ttl_days: int = 7
+
+
 class ApprovalConfig(BaseModel):
     enabled: bool = True
     tools: list[str] = ["run_code", "run_shell", "write_file"]
@@ -150,6 +165,9 @@ class Settings(BaseSettings):
     file_access: FileAccessConfig = FileAccessConfig()
     approval: ApprovalConfig = ApprovalConfig()
     evolution: EvolutionConfig = EvolutionConfig()
+    mesh: MeshConfig = MeshConfig()
+    feed: FeedConfig = FeedConfig()
+    templates: TemplatesConfig = TemplatesConfig()
     peers: list[PeerConfig] = []
     deploy_targets: list[DeployTargetConfig] = []
 
