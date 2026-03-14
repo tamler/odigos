@@ -82,12 +82,22 @@ class DocTool(BaseTool):
         if not self.ingester:
             return
         try:
+            import hashlib
+            import os
+
             filename = source.rsplit("/", 1)[-1] if "/" in source else source
             source_url = source if source.startswith(("http://", "https://")) else None
+            file_path = source if not source.startswith(("http://", "https://")) else None
+            file_size = os.path.getsize(source) if file_path and os.path.exists(source) else None
+            content_hash = hashlib.sha256(content.encode()).hexdigest()
+
             await self.ingester.ingest(
                 text=content,
                 filename=filename,
                 source_url=source_url,
+                file_path=file_path,
+                file_size=file_size,
+                content_hash=content_hash,
             )
         except Exception as e:
             logger.warning("Document ingestion failed for %s: %s", source, e, exc_info=True)
