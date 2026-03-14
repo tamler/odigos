@@ -25,7 +25,18 @@ async def agent_websocket(websocket: WebSocket):
     expected = getattr(websocket.app.state, "settings", None)
     api_key = getattr(expected, "api_key", "") if expected else ""
 
-    if not api_key or token != api_key:
+    # Check global API key
+    authorized = bool(api_key and token == api_key)
+
+    # Check card key if global key didn't match
+    if not authorized and token.startswith("card-sk-"):
+        card_manager = getattr(websocket.app.state, "card_manager", None)
+        if card_manager:
+            card = await card_manager.validate_card_key(token)
+            if card and card.get("permissions") == "mesh":
+                authorized = True
+
+    if not authorized:
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
