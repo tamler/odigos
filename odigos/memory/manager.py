@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 
 from odigos.memory.chunking import ChunkingService
@@ -65,7 +67,15 @@ class MemoryManager:
         hybrid_results = await self._hybrid_search(query, limit=limit)
         memory_lines = []
         for result in hybrid_results:
-            if result.source_type != "entity_name":
+            if result.source_type == "document_chunk" and result.when_to_use:
+                source_hint = ""
+                if "from '" in result.when_to_use:
+                    source_hint = result.when_to_use.split("from '")[1].split("'")[0]
+                if source_hint:
+                    memory_lines.append(f"- [Source: {source_hint}] {result.content_preview}")
+                else:
+                    memory_lines.append(f"- {result.content_preview}")
+            elif result.source_type != "entity_name":
                 memory_lines.append(f"- {result.content_preview}")
 
         if memory_lines:
