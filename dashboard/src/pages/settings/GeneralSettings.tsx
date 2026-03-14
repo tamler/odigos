@@ -24,6 +24,9 @@ interface SettingsData {
   budget: { daily_limit_usd: number; monthly_limit_usd: number; warn_threshold: number }
   heartbeat: { interval_seconds: number; max_todos_per_tick: number; idle_think_interval: number }
   sandbox: { timeout_seconds: number; max_memory_mb: number; allow_network: boolean }
+  mesh: { enabled: boolean }
+  feed: { enabled: boolean; public: boolean; max_entries: number }
+  templates: { repo_url: string; cache_ttl_days: number }
 }
 
 interface Props {
@@ -218,6 +221,71 @@ export default function GeneralSettings({ needsSetup }: Props) {
           <Label className="text-xs text-muted-foreground">Dashboard API Key</Label>
           <Input type="password" placeholder="****" onChange={(e) => setSettings(s => s ? { ...s, api_key: e.target.value } : s)} className="bg-muted/50 border-border/40" />
           <p className="text-xs text-muted-foreground">Used to authenticate browser sessions. Set a persistent key to survive container restarts.</p>
+        </div>
+      </SectionCard>
+
+      {/* Mesh Networking */}
+      <SectionCard title="Mesh Networking">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-sm">Agent Mesh</Label>
+            <p className="text-xs text-muted-foreground">Enable peer-to-peer agent communication over the mesh. Disable for standalone / hermit mode.</p>
+          </div>
+          <Button
+            variant={settings.mesh.enabled ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => update('mesh', 'enabled', !settings.mesh.enabled)}
+          >
+            {settings.mesh.enabled ? 'Enabled' : 'Disabled'}
+          </Button>
+        </div>
+      </SectionCard>
+
+      {/* Feed */}
+      <SectionCard title="Feed">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-sm">Feed Publisher</Label>
+            <p className="text-xs text-muted-foreground">Enable the RSS feed endpoint so other agents can subscribe to your updates.</p>
+          </div>
+          <Button
+            variant={settings.feed.enabled ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => update('feed', 'enabled', !settings.feed.enabled)}
+          >
+            {settings.feed.enabled ? 'Enabled' : 'Disabled'}
+          </Button>
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-sm">Public Feed</Label>
+            <p className="text-xs text-muted-foreground">Allow anyone to read your feed without a subscribe card.</p>
+          </div>
+          <Button
+            variant={settings.feed.public ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => update('feed', 'public', !settings.feed.public)}
+          >
+            {settings.feed.public ? 'Public' : 'Private'}
+          </Button>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Max Entries</Label>
+          <Input type="number" value={settings.feed.max_entries} onChange={(e) => update('feed', 'max_entries', parseInt(e.target.value))} className="bg-muted/50 border-border/40 w-24" />
+        </div>
+      </SectionCard>
+
+      {/* Agent Templates */}
+      <SectionCard title="Agent Templates">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Template Repository URL</Label>
+          <Input value={settings.templates.repo_url} onChange={(e) => update('templates', 'repo_url', e.target.value)} placeholder="https://github.com/msitarzewski/agency-agents" className="bg-muted/50 border-border/40" />
+          <p className="text-xs text-muted-foreground">GitHub repository of agent personality templates. The agent uses these to build specialized identities when spawning or adopting roles.</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Cache TTL (days)</Label>
+          <Input type="number" value={settings.templates.cache_ttl_days} onChange={(e) => update('templates', 'cache_ttl_days', parseInt(e.target.value))} className="bg-muted/50 border-border/40 w-24" />
+          <p className="text-xs text-muted-foreground">How long to cache templates before re-fetching from GitHub.</p>
         </div>
       </SectionCard>
 
