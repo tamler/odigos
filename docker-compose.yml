@@ -10,6 +10,9 @@ services:
     image: ghcr.io/tamler/odigos:latest
     container_name: odigos
     restart: unless-stopped
+    # Required for bubblewrap sandbox isolation (code execution).
+    # On Linux hosts, cap_add: [SYS_ADMIN] may suffice instead.
+    privileged: true
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

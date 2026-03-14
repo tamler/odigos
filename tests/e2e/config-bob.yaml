@@ -21,8 +21,8 @@ database:
 
 llm:
   base_url: "https://openrouter.ai/api/v1"
-  default_model: "openai/gpt-oss-120b"
-  fallback_model: "openai/gpt-oss-120b"
+  default_model: "deepseek/deepseek-v3.2"
+  fallback_model: "deepseek/deepseek-v3.2"
 
 budget:
   daily_limit_usd: 1.00

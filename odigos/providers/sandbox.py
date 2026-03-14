@@ -53,12 +53,18 @@ class SandboxProvider:
         # Try bubblewrap first (best isolation)
         if _IS_LINUX and shutil.which("bwrap"):
             try:
+                # Use symlinks for /lib and /lib64 (they're often symlinks in slim images)
+                probe_cmd = [
+                    "bwrap",
+                    "--ro-bind", "/usr", "/usr",
+                    "--ro-bind", "/bin", "/bin",
+                    "--symlink", "/usr/lib", "/lib",
+                    "--proc", "/proc", "--dev", "/dev",
+                    "--tmpfs", "/tmp", "--unshare-all",
+                    "true",
+                ]
                 result = subprocess.run(
-                    ["bwrap", "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                     "--ro-bind", "/lib64", "/lib64", "--ro-bind", "/bin", "/bin",
-                     "--proc", "/proc", "--dev", "/dev",
-                     "--tmpfs", "/tmp", "--unshare-all",
-                     "true"],
+                    probe_cmd,
                     capture_output=True, timeout=5,
                 )
                 if result.returncode == 0:
