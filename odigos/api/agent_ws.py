@@ -6,6 +6,7 @@ Authenticated via first message (preferred) or query parameter (deprecated).
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 from typing import TYPE_CHECKING
 
@@ -28,7 +29,7 @@ async def _authenticate_agent_ws(websocket: WebSocket) -> bool:
 
     # Legacy query param flow
     if token:
-        authorized = bool(api_key and token == api_key)
+        authorized = bool(api_key and hmac.compare_digest(token.encode(), api_key.encode()))
         if not authorized and token.startswith("card-sk-"):
             card_manager = getattr(websocket.app.state, "card_manager", None)
             if card_manager:
@@ -52,7 +53,7 @@ async def _authenticate_agent_ws(websocket: WebSocket) -> bool:
         return False
 
     auth_token = data.get("token", "")
-    authorized = bool(api_key and auth_token == api_key)
+    authorized = bool(api_key and hmac.compare_digest(auth_token.encode(), api_key.encode()))
     if not authorized and auth_token.startswith("card-sk-"):
         card_manager = getattr(websocket.app.state, "card_manager", None)
         if card_manager:

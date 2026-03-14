@@ -1,6 +1,7 @@
 """WebSocket endpoint for real-time chat, subscriptions, and event streaming."""
 
 import asyncio
+import hmac
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -49,7 +50,7 @@ async def _authenticate_ws(websocket: WebSocket) -> bool:
     # Support legacy query param (log warning so operators know to migrate)
     token = websocket.query_params.get("token")
     if token:
-        if token == configured_key:
+        if hmac.compare_digest(token.encode(), configured_key.encode()):
             logger.debug("WebSocket authenticated via query param (deprecated)")
             return True
         await websocket.close(code=4003, reason="Invalid token")

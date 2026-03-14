@@ -1,6 +1,13 @@
 """FastAPI dependencies for API authentication and state access."""
 
+import hmac
+
 from fastapi import HTTPException, Request
+
+
+def _safe_compare(a: str, b: str) -> bool:
+    """Constant-time string comparison to prevent timing attacks."""
+    return hmac.compare_digest(a.encode(), b.encode())
 
 
 async def require_api_key(request: Request):
@@ -29,7 +36,7 @@ async def require_api_key(request: Request):
         raise HTTPException(status_code=401, detail="Invalid authorization header format")
 
     token = parts[1]
-    if token != configured_key:
+    if not _safe_compare(token, configured_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
 
@@ -53,7 +60,7 @@ async def require_card_or_api_key(request: Request):
     token = parts[1]
 
     # Check global API key first
-    if configured_key and token == configured_key:
+    if configured_key and _safe_compare(token, configured_key):
         return
 
     # Check card key

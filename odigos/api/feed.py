@@ -6,6 +6,7 @@ card key (subscribe or connect) or the global API key.
 """
 from __future__ import annotations
 
+import hmac
 import logging
 from datetime import datetime, timezone
 from xml.etree.ElementTree import Element, SubElement, tostring
@@ -40,7 +41,7 @@ async def get_feed(
         token = parts[1] if len(parts) == 2 and parts[0] == "Bearer" else ""
 
         # Accept global API key
-        if token == settings.api_key:
+        if settings.api_key and hmac.compare_digest(token.encode(), settings.api_key.encode()):
             pass
         else:
             # Accept card key

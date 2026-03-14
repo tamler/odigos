@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import platform
+import shutil
 import tempfile
 from dataclasses import dataclass
 
@@ -20,9 +21,15 @@ class SandboxResult:
 
 
 class SandboxProvider:
-    """Runs code in a sandboxed subprocess with resource limits."""
+    """Runs code in a sandboxed subprocess with resource limits.
 
-    _can_unshare: bool | None = None
+    Isolation strategy (best available, in order):
+    1. bubblewrap (bwrap) -- mount namespace, no access to /app or host fs
+    2. unshare --net -- network namespace only (needs CAP_SYS_ADMIN)
+    3. ulimit only -- CPU/memory limits, no filesystem isolation (dev fallback)
+    """
+
+    _isolation: str | None = None  # "bwrap", "unshare", or "ulimit"
 
     def __init__(
         self,
@@ -35,33 +42,54 @@ class SandboxProvider:
         self.max_memory_mb = max_memory_mb
         self.allow_network = allow_network
         self.max_output_chars = max_output_chars
-        if SandboxProvider._can_unshare is None and _IS_LINUX:
-            SandboxProvider._can_unshare = self._check_unshare()
+        if SandboxProvider._isolation is None:
+            SandboxProvider._isolation = self._detect_isolation()
 
     @staticmethod
-    def _check_unshare() -> bool:
-        """Probe whether unshare --net is available (needs CAP_SYS_ADMIN)."""
+    def _detect_isolation() -> str:
+        """Probe available isolation mechanisms at startup."""
         import subprocess
-        try:
-            result = subprocess.run(
-                ["unshare", "--net", "true"],
-                capture_output=True, timeout=3,
-            )
-            ok = result.returncode == 0
-            if not ok:
-                logger.info("unshare --net unavailable (no CAP_SYS_ADMIN?), sandbox runs without network isolation")
-            return ok
-        except Exception:
-            logger.info("unshare probe failed, sandbox runs without network isolation")
-            return False
+
+        # Try bubblewrap first (best isolation)
+        if _IS_LINUX and shutil.which("bwrap"):
+            try:
+                result = subprocess.run(
+                    ["bwrap", "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
+                     "--ro-bind", "/lib64", "/lib64", "--ro-bind", "/bin", "/bin",
+                     "--proc", "/proc", "--dev", "/dev",
+                     "--tmpfs", "/tmp", "--unshare-all",
+                     "true"],
+                    capture_output=True, timeout=5,
+                )
+                if result.returncode == 0:
+                    logger.info("Sandbox isolation: bubblewrap (bwrap)")
+                    return "bwrap"
+            except Exception:
+                pass
+
+        # Try unshare (network isolation only)
+        if _IS_LINUX:
+            try:
+                result = subprocess.run(
+                    ["unshare", "--net", "true"],
+                    capture_output=True, timeout=3,
+                )
+                if result.returncode == 0:
+                    logger.info("Sandbox isolation: unshare (network only)")
+                    return "unshare"
+            except Exception:
+                pass
+
+        level = "warning" if _IS_LINUX else "info"
+        getattr(logger, level)(
+            "Sandbox isolation: ulimit only (no filesystem isolation). "
+            "Install bubblewrap for proper sandboxing: apt-get install bubblewrap"
+        )
+        return "ulimit"
 
     async def execute(self, code: str, language: str = "python") -> SandboxResult:
-        """Run code in a sandboxed subprocess with filesystem isolation."""
-        if language == "python":
-            cmd = self._build_python_cmd(code)
-        elif language == "shell":
-            cmd = self._build_shell_cmd(code)
-        else:
+        """Run code in an isolated subprocess."""
+        if language not in ("python", "shell"):
             return SandboxResult(
                 stdout="",
                 stderr=f"Unsupported language: {language}",
@@ -69,7 +97,6 @@ class SandboxProvider:
                 timed_out=False,
             )
 
-        # Run in an isolated temp directory so code cannot access /app
         with tempfile.TemporaryDirectory(prefix="odigos_sandbox_") as tmpdir:
             env = {
                 "PATH": "/usr/local/bin:/usr/bin:/bin",
@@ -77,6 +104,11 @@ class SandboxProvider:
                 "TMPDIR": tmpdir,
                 "LANG": "C.UTF-8",
             }
+
+            if language == "python":
+                cmd = self._build_python_cmd(code, tmpdir)
+            else:
+                cmd = self._build_shell_cmd(code, tmpdir)
 
             try:
                 proc = await asyncio.create_subprocess_exec(
@@ -115,44 +147,62 @@ class SandboxProvider:
                     timed_out=False,
                 )
 
-    def _build_python_cmd(self, code: str) -> list[str]:
-        limits = self._resource_prefix()
-        # Wrap user code to restrict filesystem access via chdir + import hook
-        wrapper = (
-            "import sys, os\n"
-            "# Block imports that allow arbitrary file access from user code\n"
-            "_blocked_reads = {'/app', '/etc', '/proc/self/environ'}\n"
-            "_orig_open = open\n"
-            "def _safe_open(path, *a, **kw):\n"
-            "    rp = os.path.realpath(str(path))\n"
-            "    for b in _blocked_reads:\n"
-            "        if rp.startswith(b):\n"
-            "            raise PermissionError(f'Access denied: {path}')\n"
-            "    return _orig_open(path, *a, **kw)\n"
-            "import builtins; builtins.open = _safe_open\n"
-            + code
-        )
-        return [*limits, "python3", "-c", wrapper]
+    def _build_python_cmd(self, code: str, tmpdir: str) -> list[str]:
+        inner = ["python3", "-c", code]
+        return self._wrap_isolation(inner, tmpdir)
 
-    def _build_shell_cmd(self, code: str) -> list[str]:
-        limits = self._resource_prefix()
-        # Prevent shell access to sensitive paths
-        guard = "export -n LLM_API_KEY API_KEY 2>/dev/null; "
-        return [*limits, "bash", "-c", f"set -euo pipefail; {guard}{code}"]
+    def _build_shell_cmd(self, code: str, tmpdir: str) -> list[str]:
+        inner = ["bash", "-c", f"set -euo pipefail; {code}"]
+        return self._wrap_isolation(inner, tmpdir)
 
-    def _resource_prefix(self) -> list[str]:
-        """Build ulimit + optional unshare prefix."""
+    def _wrap_isolation(self, inner_cmd: list[str], tmpdir: str) -> list[str]:
+        """Wrap command with the best available isolation."""
         memory_kb = self.max_memory_mb * 1024
-        parts = [
+        ulimit_prefix = [
             "bash", "-c",
             f"ulimit -t {self.timeout} -v {memory_kb}; exec \"$@\"",
             "--",
         ]
-        if _IS_LINUX and not self.allow_network and self._can_unshare:
-            return ["unshare", "--net", *parts]
-        if not _IS_LINUX:
-            logger.debug("Skipping unshare on %s (not Linux)", platform.system())
-        return parts
+
+        if self._isolation == "bwrap":
+            # Full filesystem isolation: only /usr, /lib, /bin, /proc, /dev
+            # User code has NO access to /app, /etc, /home, or host filesystem
+            bwrap = [
+                "bwrap",
+                "--ro-bind", "/usr", "/usr",
+                "--ro-bind", "/bin", "/bin",
+                "--symlink", "/usr/lib", "/lib",
+                "--symlink", "/usr/lib64", "/lib64",
+                "--proc", "/proc",
+                "--dev", "/dev",
+                "--tmpfs", "/tmp",
+                "--bind", tmpdir, "/sandbox",
+                "--chdir", "/sandbox",
+                "--unshare-all",
+                "--die-with-parent",
+                "--new-session",
+            ]
+            # Bind Python stdlib and site-packages
+            # Python is in /usr/local in the Docker image
+            if shutil.which("python3"):
+                import sys
+                prefix = sys.prefix
+                if prefix.startswith("/usr/local"):
+                    bwrap.extend(["--ro-bind", "/usr/local", "/usr/local"])
+            # Also bind /lib and /lib64 if they're real directories (not symlinks)
+            import os
+            for libdir in ("/lib", "/lib64"):
+                if os.path.isdir(libdir) and not os.path.islink(libdir):
+                    bwrap.extend(["--ro-bind", libdir, libdir])
+            if not self.allow_network:
+                bwrap.append("--unshare-net")
+            return [*bwrap, *ulimit_prefix, *inner_cmd]
+
+        if self._isolation == "unshare" and not self.allow_network:
+            return ["unshare", "--net", *ulimit_prefix, *inner_cmd]
+
+        # Fallback: ulimit only
+        return [*ulimit_prefix, *inner_cmd]
 
     def _truncate(self, text: str) -> str:
         if len(text) > self.max_output_chars:

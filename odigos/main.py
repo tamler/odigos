@@ -3,6 +3,9 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
+
+from odigos.api.rate_limit import RateLimitMiddleware
 
 from odigos.channels.base import ChannelRegistry
 from odigos.config import load_settings
@@ -616,6 +619,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Odigos", lifespan=lifespan)
+
+# Rate limiting: 10 req/s per IP with burst of 30
+app.add_middleware(RateLimitMiddleware, rate=10.0, burst=30)
+
+# CORS: only allow same-origin requests (dashboard is served from same host)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[],  # No cross-origin allowed; dashboard is same-origin
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=False,
+)
 
 app.include_router(setup_router)
 app.include_router(agent_message_router)
