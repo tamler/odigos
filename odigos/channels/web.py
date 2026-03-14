@@ -47,6 +47,21 @@ class WebChannel(Channel):
         """Check if a peer agent is connected via WebSocket."""
         return f"peer:{peer_name}" in self._connections
 
+    async def notify(self, title: str, body: str, conversation_id: str | None = None) -> None:
+        """Send a notification to all connected clients (or specific conversation)."""
+        payload = {
+            "type": "notification",
+            "title": title,
+            "body": body,
+        }
+        if conversation_id:
+            payload["conversation_id"] = conversation_id
+            await self._send_to_connections(conversation_id, payload)
+        else:
+            # Broadcast to all connected conversations
+            for cid in list(self._connections.keys()):
+                await self._send_to_connections(cid, payload)
+
     async def send_approval_request(
         self, approval_id: str, tool_name: str, conversation_id: str, arguments: dict,
     ) -> None:

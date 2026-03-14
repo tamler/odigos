@@ -28,6 +28,8 @@ async def test_tick_runs_evolution_when_idle():
     heartbeat.evolution_engine.check_active_trial = AsyncMock(return_value=None)
 
     heartbeat.agent_client = None
+    heartbeat.cron_manager = None
+    heartbeat.notifier = None
 
     heartbeat._fire_reminders = AsyncMock(return_value=False)
     heartbeat._work_todos = AsyncMock(return_value=False)

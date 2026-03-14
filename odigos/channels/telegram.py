@@ -255,6 +255,17 @@ class TelegramChannel(Channel):
         else:
             await update.effective_message.reply_text("Heartbeat not available.")
 
+    async def notify(self, title: str, body: str, conversation_id: str | None = None) -> None:
+        """Send a notification to a Telegram chat."""
+        if not self._app:
+            return
+        text = f"{title}\n\n{body}" if title else body
+        if conversation_id:
+            chat_id = self._parse_chat_id(conversation_id)
+            if chat_id is not None:
+                await self._app.bot.send_message(chat_id=chat_id, text=text[:4096])
+        # If no conversation_id, we cannot broadcast to Telegram (no known chat IDs)
+
     async def send_approval_request(
         self, approval_id: str, tool_name: str, conversation_id: str, arguments: dict,
     ) -> None:

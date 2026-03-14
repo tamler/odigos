@@ -118,3 +118,13 @@ def get_upload_dir(request: Request):
 def get_skill_registry(request: Request):
     """Get the SkillRegistry instance from app state."""
     return request.app.state.skill_registry
+
+
+def get_cron_manager(request: Request):
+    """Get the CronManager instance from app state."""
+    return request.app.state.cron_manager
+
+
+def get_notifier(request: Request):
+    """Get the Notifier instance from app state."""
+    return request.app.state.notifier

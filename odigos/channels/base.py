@@ -37,6 +37,13 @@ class Channel(ABC):
         """Send a text message to a conversation. Override in subclasses."""
         raise NotImplementedError(f"{type(self).__name__} does not support send_message")
 
+    async def notify(self, title: str, body: str, conversation_id: str | None = None) -> None:
+        """Send a proactive notification. Override in subclasses.
+
+        Default implementation is a no-op so channels that don't support
+        notifications can silently ignore them.
+        """
+
     async def send_approval_request(
         self, approval_id: str, tool_name: str, conversation_id: str, arguments: dict,
     ) -> None:

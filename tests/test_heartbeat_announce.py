@@ -31,6 +31,8 @@ def _build_heartbeat(**overrides):
     hb._agent_role = "personal_assistant"
     hb._agent_description = "Test agent"
 
+    hb.cron_manager = None
+    hb.notifier = None
     hb._fire_reminders = AsyncMock(return_value=False)
     hb._work_todos = AsyncMock(return_value=False)
     hb._deliver_subagent_results = AsyncMock(return_value=False)

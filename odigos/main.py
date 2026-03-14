@@ -42,10 +42,14 @@ from odigos.api.ws import router as ws_router
 from odigos.api.setup import router as setup_router
 from odigos.api.evolution import router as evolution_router
 from odigos.api.agents import router as agents_router
+from odigos.api.state import router as state_router
 from odigos.api.upload import router as upload_router
 from odigos.channels.web import WebChannel
 from odigos.core.agent_client import AgentClient
+from odigos.core.cron import CronManager
+from odigos.core.notifier import Notifier
 from odigos.core.spawner import Spawner
+from odigos.api.cron import router as cron_router
 from odigos.api.agent_ws import router as agent_ws_router
 from odigos.tools.peer import MessagePeerTool
 
@@ -451,6 +455,16 @@ async def lifespan(app: FastAPI):
     app.state.spawner = spawner
     logger.info("Spawner initialized")
 
+    # Initialize cron manager
+    cron_manager = CronManager(db=_db)
+    app.state.cron_manager = cron_manager
+    logger.info("Cron manager initialized")
+
+    # Initialize notifier
+    notifier = Notifier(channel_registry=channel_registry)
+    app.state.notifier = notifier
+    logger.info("Notifier initialized")
+
     # Initialize heartbeat
     _heartbeat = Heartbeat(
         db=_db,
@@ -470,6 +484,8 @@ async def lifespan(app: FastAPI):
         agent_description=settings.agent.description,
         announce_interval=settings.heartbeat.announce_interval_seconds,
         background_model=settings.llm.background_model,
+        cron_manager=cron_manager,
+        notifier=notifier,
     )
 
     # Set heartbeat on agent so any channel can access it
@@ -537,6 +553,8 @@ app.include_router(message_router)
 app.include_router(upload_router)
 app.include_router(evolution_router)
 app.include_router(agents_router)
+app.include_router(cron_router)
+app.include_router(state_router)
 app.include_router(agent_ws_router)
 app.include_router(ws_router)
 

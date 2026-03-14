@@ -6,6 +6,7 @@ import { isAuthenticated, clearApiKey } from './lib/auth'
 import AppLayout from './layouts/AppLayout'
 import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
+import StatePage from './pages/StatePage'
 import LoginPrompt from './components/LoginPrompt'
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={setupDone ? <ChatPage /> : <Navigate to="/settings" />} />
               <Route path="/settings" element={<SettingsPage needsSetup={!setupDone} />} />
+              <Route path="/status" element={<StatePage />} />
             </Route>
           </Routes>
         </BrowserRouter>

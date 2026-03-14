@@ -15,8 +15,10 @@ from odigos.db import Database
 if TYPE_CHECKING:
     from odigos.channels.base import ChannelRegistry
     from odigos.core.agent import Agent
+    from odigos.core.cron import CronManager
     from odigos.core.goal_store import GoalStore
     from odigos.core.evolution import EvolutionEngine
+    from odigos.core.notifier import Notifier
     from odigos.core.strategist import Strategist
     from odigos.core.subagent import SubagentManager
     from odigos.core.trace import Tracer
@@ -48,6 +50,8 @@ class Heartbeat:
         agent_description: str = "",
         announce_interval: int = 60,
         background_model: str = "",
+        cron_manager: CronManager | None = None,
+        notifier: Notifier | None = None,
     ) -> None:
         self.db = db
         self.agent = agent
@@ -70,6 +74,8 @@ class Heartbeat:
         self._agent_description = agent_description
         self._announce_interval = announce_interval
         self._last_announce: float = 0
+        self.cron_manager = cron_manager
+        self.notifier = notifier
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -108,6 +114,9 @@ class Heartbeat:
 
         # Phase 3: Deliver subagent results
         did_work |= await self._deliver_subagent_results()
+
+        # Phase 3b: Run due cron jobs
+        did_work |= await self._run_cron_jobs()
 
         # Phase 4: Idle thoughts (only if nothing ran above)
         if not did_work:
@@ -290,6 +299,48 @@ class Heartbeat:
                 logger.info("Delivered subagent result %s to %s", r["id"], conv_id)
             except Exception:
                 logger.exception("Failed to deliver subagent result %s", r["id"])
+        return True
+
+    async def _run_cron_jobs(self) -> bool:
+        """Run due cron entries and notify with results."""
+        if not self.cron_manager:
+            return False
+        due_entries = await self.cron_manager.tick()
+        if not due_entries:
+            return False
+
+        for entry in due_entries:
+            try:
+                message = UniversalMessage(
+                    id=str(uuid.uuid4()),
+                    channel="cron",
+                    sender="system",
+                    content=entry.action,
+                    timestamp=datetime.now(timezone.utc),
+                    metadata={
+                        "cron_entry_id": entry.id,
+                        "cron_entry_name": entry.name,
+                    },
+                )
+                result = await self.agent.handle_message(message)
+                await self.cron_manager.mark_run(entry.id)
+                logger.info("Cron job '%s' completed: %s", entry.name, (result or "")[:80])
+
+                # Notify with the result
+                if self.notifier:
+                    await self.notifier.notify(
+                        title=f"Cron: {entry.name}",
+                        body=result[:4000] if result else "(no output)",
+                        conversation_id=entry.conversation_id,
+                    )
+                elif entry.conversation_id:
+                    await self._send_notification(
+                        entry.conversation_id,
+                        f"Cron '{entry.name}' result:\n\n{result}",
+                    )
+            except Exception:
+                logger.exception("Cron job '%s' failed", entry.name)
+                await self.cron_manager.mark_run(entry.id)
         return True
 
     async def _run_evolution(self) -> None:
