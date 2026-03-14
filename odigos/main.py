@@ -102,12 +102,28 @@ async def lifespan(app: FastAPI):
     await _db.initialize()
     logger.info("Database initialized at %s", settings.database.path)
 
-    # Initialize agent client (WebSocket-primary, HTTP-fallback)
+    # Initialize agent client (mesh networking)
+    mesh_enabled = settings.mesh.enabled
     agent_client = AgentClient(
-        peers=settings.peers,
+        peers=settings.peers if mesh_enabled else [],
         agent_name=settings.agent.name,
         db=_db,
     )
+    if not mesh_enabled:
+        logger.info("Mesh networking disabled (hermit mode)")
+
+    # Initialize card manager
+    from odigos.core.cards import CardManager
+
+    card_manager = CardManager(
+        db=_db,
+        agent_name=settings.agent.name,
+        host=settings.server.host,
+        ws_port=settings.server.ws_port,
+        feed_base_url=f"http://{settings.server.host}:{settings.server.port}",
+    )
+    app.state.card_manager = card_manager
+    logger.info("Card manager initialized")
 
     # Initialize tracer
     tracer = Tracer(db=_db)
@@ -269,10 +285,29 @@ async def lifespan(app: FastAPI):
     tool_registry.register(spawn_tool)
     logger.info("Subagent tool registered")
 
-    # Register peer messaging tool if peers are configured
-    if agent_client.list_peer_names():
+    # Register peer messaging tool (skip in hermit mode)
+    if mesh_enabled:
         tool_registry.register(MessagePeerTool(peer_client=agent_client))
-        logger.info("Peer messaging tool registered for peers: %s", ", ".join(agent_client.list_peer_names()))
+        if agent_client.list_peer_names():
+            logger.info("Peer messaging tool registered with pre-configured peers: %s", ", ".join(agent_client.list_peer_names()))
+        else:
+            logger.info("Peer messaging tool registered (discovery via announce)")
+
+    # Register card tools
+    from odigos.tools.card_tools import GenerateCardTool, ImportCardTool
+    tool_registry.register(GenerateCardTool(card_manager=card_manager))
+    tool_registry.register(ImportCardTool(card_manager=card_manager))
+    logger.info("Card tools registered")
+
+    # Register feed publish tool if feed is enabled
+    if settings.feed.enabled:
+        from odigos.tools.feed_publish import PublishToFeedTool
+        feed_tool = PublishToFeedTool(
+            db=_db,
+            feed_base_url=f"http://{settings.server.host}:{settings.server.port}",
+        )
+        tool_registry.register(feed_tool)
+        logger.info("Feed publish tool registered")
 
     # Connect MCP servers and register bridged tools
     if settings.mcp.servers:
@@ -444,6 +479,27 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Strategist initialized")
 
+    # Initialize agent template index and tools
+    from odigos.core.template_index import AgentTemplateIndex
+    from odigos.tools.template_tools import BrowseTemplates, AdoptTemplate
+
+    template_index = AgentTemplateIndex(
+        db=_db,
+        repo_url=settings.templates.repo_url,
+        cache_ttl_days=settings.templates.cache_ttl_days,
+    )
+    app.state.template_index = template_index
+
+    browse_templates_tool = BrowseTemplates(template_index=template_index)
+    tool_registry.register(browse_templates_tool)
+
+    adopt_template_tool = AdoptTemplate(
+        template_index=template_index,
+        skill_registry=skill_registry,
+    )
+    tool_registry.register(adopt_template_tool)
+    logger.info("Agent template index initialized with browse/adopt tools")
+
     # Initialize spawner
     spawner = Spawner(
         db=_db,
@@ -451,6 +507,7 @@ async def lifespan(app: FastAPI):
         parent_name=settings.agent.name,
         llm_config=settings.llm,
         server_config=settings.server,
+        template_index=template_index,
     )
     app.state.spawner = spawner
     logger.info("Spawner initialized")
@@ -479,13 +536,14 @@ async def lifespan(app: FastAPI):
         subagent_manager=subagent_manager,
         evolution_engine=evolution_engine,
         strategist=strategist,
-        agent_client=agent_client,
+        agent_client=agent_client if mesh_enabled else None,
         agent_role=settings.agent.role,
         agent_description=settings.agent.description,
         announce_interval=settings.heartbeat.announce_interval_seconds,
         background_model=settings.llm.background_model,
         cron_manager=cron_manager,
         notifier=notifier,
+        ws_port=settings.server.ws_port,
     )
 
     # Set heartbeat on agent so any channel can access it
@@ -526,6 +584,8 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.exception("Error disconnecting MCP server: %s", server.name)
     _mcp_servers.clear()
+    if hasattr(app.state, "template_index") and app.state.template_index:
+        await app.state.template_index.close()
     if _scraper:
         await _scraper.close()
     if _embedder:
@@ -557,6 +617,16 @@ app.include_router(cron_router)
 app.include_router(state_router)
 app.include_router(agent_ws_router)
 app.include_router(ws_router)
+
+from odigos.api.feed import router as feed_router
+app.include_router(feed_router)
+
+# Mount cards API router if available
+try:
+    from odigos.api.cards import router as cards_router
+    app.include_router(cards_router)
+except ImportError:
+    pass
 
 
 @app.get("/health")

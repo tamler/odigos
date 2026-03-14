@@ -22,6 +22,9 @@ class SettingsUpdate(BaseModel):
     budget: dict | None = None
     heartbeat: dict | None = None
     sandbox: dict | None = None
+    mesh: dict | None = None
+    templates: dict | None = None
+    feed: dict | None = None
 
 
 def _mask_key(key: str) -> str:
@@ -42,6 +45,9 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
         "budget": settings.budget.model_dump(),
         "heartbeat": settings.heartbeat.model_dump(),
         "sandbox": settings.sandbox.model_dump(),
+        "mesh": settings.mesh.model_dump(),
+        "templates": settings.templates.model_dump(),
+        "feed": settings.feed.model_dump(),
     }
 
 
@@ -63,7 +69,7 @@ async def update_settings_endpoint(
             yaml_config = yaml.safe_load(f) or {}
 
     # Merge updated sections into yaml config
-    for section in ("llm", "agent", "budget", "heartbeat", "sandbox"):
+    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "mesh", "templates", "feed"):
         section_data = getattr(update, section)
         if section_data is not None:
             if section not in yaml_config:
@@ -85,7 +91,7 @@ async def update_settings_endpoint(
         yaml.dump(yaml_config, f, default_flow_style=False)
 
     # Hot-reload in-memory settings from merged sections
-    for section in ("llm", "agent", "budget", "heartbeat", "sandbox"):
+    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "templates", "feed"):
         section_data = getattr(update, section)
         if section_data is not None:
             current = getattr(settings, section)

@@ -159,6 +159,24 @@ def _settings(**overrides):
                 "allow_network": False,
             },
         ),
+        mesh=SimpleNamespace(
+            enabled=False,
+            model_dump=lambda: {"enabled": False},
+        ),
+        feed=SimpleNamespace(
+            enabled=False,
+            public=False,
+            max_entries=200,
+            model_dump=lambda: {"enabled": False, "public": False, "max_entries": 200},
+        ),
+        templates=SimpleNamespace(
+            repo_url="https://github.com/msitarzewski/agency-agents",
+            cache_ttl_days=7,
+            model_dump=lambda: {
+                "repo_url": "https://github.com/msitarzewski/agency-agents",
+                "cache_ttl_days": 7,
+            },
+        ),
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
