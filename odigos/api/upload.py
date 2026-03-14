@@ -2,8 +2,11 @@
 
 import asyncio
 import hashlib
+import logging
 import os
 import secrets
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
@@ -52,7 +55,7 @@ async def upload_file(
     try:
         extracted_text = await asyncio.to_thread(markitdown.convert_file, dest)
     except Exception:
-        pass  # Non-extractable file (binary, corrupted, etc.)
+        logger.warning("Text extraction failed for %s", safe_name, exc_info=True)
 
     if extracted_text:
         try:
@@ -68,6 +71,7 @@ async def upload_file(
                 chunk_count = row["chunk_count"]
                 status = row["status"]
         except Exception:
+            logger.warning("Ingestion failed for %s", safe_name, exc_info=True)
             status = "failed"
 
     return {
