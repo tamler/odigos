@@ -194,6 +194,10 @@ npm run dev
 
 The dashboard is a React app served from `dashboard/dist/` in production.
 
+## Acknowledgments
+
+The evolution engine's self-evaluation and trial-based improvement loop was inspired by [autoresearch](https://github.com/karpathy/autoresearch) by Andrej Karpathy.
+
 ## License
 
 MIT
