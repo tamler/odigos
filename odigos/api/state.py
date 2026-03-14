@@ -8,7 +8,7 @@ import time
 
 from fastapi import APIRouter, Depends, Request
 
-from odigos.api.deps import require_api_key, get_db, get_agent, get_budget_tracker, get_settings
+from odigos.api.deps import require_api_key, get_db
 from odigos.db import Database
 
 router = APIRouter(

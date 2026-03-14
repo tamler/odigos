@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from odigos.api.deps import get_db, require_api_key
+from odigos.api.deps import get_agent_client, get_db, require_api_key
 
 router = APIRouter(
     prefix="/api/agent",
@@ -33,6 +33,7 @@ class PeerAnnounceRequest(BaseModel):
 async def peer_announce(
     body: PeerAnnounceRequest,
     db=Depends(get_db),
+    agent_client=Depends(get_agent_client),
 ):
     """Register a peer agent's WebSocket coordinates for future communication."""
     now = datetime.now(timezone.utc).isoformat()
@@ -62,5 +63,9 @@ async def peer_announce(
              body.ws_host, body.ws_port, json.dumps(body.capabilities),
              now, now),
         )
+
+    # Bidirectional discovery: add announcing peer so we can message it back
+    if agent_client and body.ws_host:
+        agent_client.add_discovered_peer(body.agent_name, body.ws_host, body.ws_port)
 
     return {"status": "ok", "message": f"Peer {body.agent_name} registered"}

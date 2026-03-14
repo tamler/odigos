@@ -52,6 +52,7 @@ class Heartbeat:
         background_model: str = "",
         cron_manager: CronManager | None = None,
         notifier: Notifier | None = None,
+        ws_port: int = 8001,
     ) -> None:
         self.db = db
         self.agent = agent
@@ -76,6 +77,7 @@ class Heartbeat:
         self._last_announce: float = 0
         self.cron_manager = cron_manager
         self.notifier = notifier
+        self._ws_port = ws_port
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -118,15 +120,19 @@ class Heartbeat:
         # Phase 3b: Run due cron jobs
         did_work |= await self._run_cron_jobs()
 
-        # Phase 4: Idle thoughts (only if nothing ran above)
+        # Phase 4: Process inbound peer messages
+        if self.agent_client:
+            did_work |= await self._process_peer_messages()
+
+        # Phase 5: Idle thoughts (only if nothing ran above)
         if not did_work:
             await self._idle_think()
 
-        # Phase 5: Self-improvement cycle (runs when idle)
+        # Phase 6: Self-improvement cycle (runs when idle)
         if not did_work and self.evolution_engine:
             await self._run_evolution()
 
-        # Phase 6: Peer announce + stale check
+        # Phase 7: Peer announce + stale check
         if self.agent_client:
             await self._peer_maintenance()
 
@@ -205,6 +211,54 @@ class Heartbeat:
                     todo["conversation_id"],
                     f"Todo failed: {description}\n\n{e}",
                 )
+
+    async def _process_peer_messages(self) -> bool:
+        """Phase 4: Process unhandled inbound messages from peer agents.
+
+        When a peer agent sends a message (help request, status update, task
+        delegation, etc.), this phase picks it up and routes it through the
+        agent for a response. This enables proactive cross-agent communication.
+        """
+        messages = await self.agent_client.get_unprocessed_inbound(limit=3)
+        if not messages:
+            return False
+
+        for msg in messages:
+            peer = msg["peer_name"]
+            msg_type = msg["message_type"]
+            try:
+                content_raw = msg["content"]
+                payload = json.loads(content_raw) if isinstance(content_raw, str) else content_raw
+                message_text = payload.get("content", "") if isinstance(payload, dict) else str(payload)
+            except (json.JSONDecodeError, TypeError):
+                message_text = str(msg["content"])
+
+            logger.info(
+                "Processing inbound %s from peer %s: %s",
+                msg_type, peer, message_text[:100],
+            )
+
+            # Route through the agent for a response
+            try:
+                agent_response = await self.agent.run(
+                    f"[Peer message from {peer} (type: {msg_type})]\n\n{message_text}",
+                    conversation_id=None,
+                )
+
+                # Send response back to the peer
+                if agent_response and self.agent_client:
+                    await self.agent_client.send(
+                        peer,
+                        payload={"content": agent_response},
+                        message_type="message",
+                        correlation_id=msg.get("response_to"),
+                    )
+            except Exception:
+                logger.warning("Failed to process peer message from %s", peer, exc_info=True)
+
+            await self.agent_client.mark_processed(msg["message_id"])
+
+        return True
 
     async def _idle_think(self) -> None:
         now = time.monotonic()
@@ -385,6 +439,7 @@ class Heartbeat:
                 await self.agent_client.broadcast_announce(
                     role=self._agent_role,
                     description=self._agent_description,
+                    ws_port=self._ws_port,
                 )
                 await self.agent_client.mark_stale_peers()
 

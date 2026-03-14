@@ -17,7 +17,8 @@ def _make_app():
     db.fetch_one = AsyncMock(return_value=None)
     db.execute = AsyncMock()
 
-    agent_client = AsyncMock()
+    agent_client = MagicMock()
+    agent_client.add_discovered_peer = MagicMock()
 
     app.state.settings = settings
     app.state.db = db

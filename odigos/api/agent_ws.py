@@ -5,14 +5,13 @@ Authenticated via API key in query parameter.
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 if TYPE_CHECKING:
-    from odigos.core.agent_client import AgentClient, PeerEnvelope
+    from odigos.core.agent_client import AgentClient
 
 logger = logging.getLogger(__name__)
 

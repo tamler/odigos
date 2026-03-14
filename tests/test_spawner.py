@@ -7,6 +7,7 @@ import pytest
 import pytest_asyncio
 
 from odigos.core.spawner import Spawner
+from odigos.core.template_index import AgentTemplateIndex
 from odigos.db import Database
 
 
@@ -47,17 +48,80 @@ async def test_generate_config(db, mock_provider):
 
 
 @pytest.mark.asyncio
-async def test_generate_seed_identity(db, mock_provider):
+async def test_generate_seed_identity_no_template(db, mock_provider):
+    """Without a template index, should return 'none' source with suggestion."""
     spawner = Spawner(db=db, provider=mock_provider, parent_name="Odigos")
 
-    identity = await spawner.generate_seed_identity(
-        role="backend_dev",
-        description="Python backend specialist",
-        specialty="coding",
+    result = await spawner.generate_seed_identity(
+        role="quantum physicist",
+        description="Studies entanglement",
     )
 
-    assert len(identity) > 0
-    mock_provider.complete.assert_called_once()
+    assert result["source"] == "none"
+    assert result["identity"] == ""
+    assert "No template found" in result["suggestion"]
+    assert "browse_agent_templates" in result["suggestion"]
+    # No LLM call wasted
+    mock_provider.complete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_generate_seed_identity_with_template(db, mock_provider):
+    """When a template match exists, should return tailored identity."""
+    template_index = AgentTemplateIndex(db=db)
+    await template_index.create_custom_template(
+        name="backend architect",
+        content="# Backend Architect\nYou design scalable APIs and services.",
+        division="engineering",
+    )
+
+    mock_provider.complete = AsyncMock(return_value=AsyncMock(
+        content="You are a backend architect who designs scalable APIs with a focus on reliability."
+    ))
+
+    spawner = Spawner(
+        db=db, provider=mock_provider, parent_name="Odigos",
+        template_index=template_index,
+    )
+
+    result = await spawner.generate_seed_identity(
+        role="backend architect",
+        description="Designs scalable APIs",
+        specialty="api design",
+    )
+
+    assert result["source"] == "template"
+    assert len(result["identity"]) > 0
+    assert result["template_name"] == "backend architect"
+    # LLM was called with higher token budget for template tailoring
+    call_kwargs = mock_provider.complete.call_args
+    assert call_kwargs.kwargs["max_tokens"] == 1500
+
+
+@pytest.mark.asyncio
+async def test_generate_seed_identity_template_index_no_match(db, mock_provider):
+    """With template index but no matching template, should return suggestion."""
+    template_index = AgentTemplateIndex(db=db)
+    await template_index.create_custom_template(
+        name="backend architect",
+        content="# Backend Architect",
+        division="engineering",
+    )
+
+    spawner = Spawner(
+        db=db, provider=mock_provider, parent_name="Odigos",
+        template_index=template_index,
+    )
+
+    result = await spawner.generate_seed_identity(
+        role="quantum physicist",
+        description="Studies entanglement",
+        specialty="quantum mechanics",
+    )
+
+    assert result["source"] == "none"
+    assert "No template found" in result["suggestion"]
+    mock_provider.complete.assert_not_called()
 
 
 @pytest.mark.asyncio

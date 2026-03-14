@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
-    from odigos.providers.markitdown import MarkItDownProvider
+    pass
 
 logger = logging.getLogger(__name__)
 

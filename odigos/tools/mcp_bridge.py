@@ -5,7 +5,7 @@ import os
 import re
 from typing import Any, Protocol
 
-from mcp import ClientSession, types
+from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from odigos.tools.base import BaseTool, ToolResult

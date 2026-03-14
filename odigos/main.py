@@ -1,7 +1,5 @@
-import asyncio
 import logging
 import os
-import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -51,7 +49,10 @@ from odigos.core.notifier import Notifier
 from odigos.core.spawner import Spawner
 from odigos.api.cron import router as cron_router
 from odigos.api.agent_ws import router as agent_ws_router
+from odigos.api.feed import router as feed_router
+from odigos.api.cards import router as cards_router
 from odigos.tools.peer import MessagePeerTool
+from odigos.dashboard import mount_dashboard
 
 logging.basicConfig(
     level=logging.INFO,
@@ -617,23 +618,14 @@ app.include_router(cron_router)
 app.include_router(state_router)
 app.include_router(agent_ws_router)
 app.include_router(ws_router)
-
-from odigos.api.feed import router as feed_router
 app.include_router(feed_router)
-
-# Mount cards API router if available
-try:
-    from odigos.api.cards import router as cards_router
-    app.include_router(cards_router)
-except ImportError:
-    pass
+app.include_router(cards_router)
 
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "agent": "odigos"}
 
-from odigos.dashboard import mount_dashboard
 mount_dashboard(app)
 
 

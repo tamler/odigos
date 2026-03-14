@@ -60,11 +60,16 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 - Multi-channel: Web dashboard, Telegram (via plugin)
 - MCP server integration
 
-**Multi-Agent**
+**Multi-Agent Mesh**
 
-- Peer-to-peer agent networking over WebSocket with persistent outbox
-- Specialist agent spawning with deployment targets
-- Cross-agent evaluation routing
+- Secure agent-to-agent mesh networking over [NetBird](https://github.com/netbirdio/netbird) WireGuard overlay -- agents communicate directly, not through a central hub
+- Bidirectional peer discovery: when one agent announces to another, both sides automatically learn how to reach each other. No manual configuration of every pair required.
+- WebSocket peer connections with persistent outbox for reliable delivery
+- Proactive inter-agent communication: agents can initiate messages to peers without being asked -- a systems agent that detects an issue will alert the user's agent for resolution
+- Specialist agent spawning with template-based identity from a curated catalog of 140+ agent personality templates ([agency-agents](https://github.com/msitarzewski/agency-agents) or your own repo)
+- Cross-agent evaluation routing: agents can request peer review from qualified specialists
+- Heartbeat-driven peer announcements broadcast each agent's capabilities and coordinates across the mesh
+- Template catalog browsable by the agent itself -- adopt specialist roles as live skills
 
 ## Quick Start
 
@@ -130,7 +135,8 @@ Key configuration areas:
 | `approval` | Which tools require human approval before running |
 | `evolution` | Trial duration, evaluation thresholds, auto-trial confidence |
 | `mcp` | External MCP server connections |
-| `peers` | Trusted peer agents for multi-agent networking |
+| `peers` | Trusted peer agents for mesh networking |
+| `templates` | Agent template catalog repo URL and cache TTL |
 
 ## Plugins
 
@@ -168,6 +174,8 @@ Odigos runs as a single FastAPI application backed by SQLite.
 - **Heartbeat loop** drives background processing: goal execution, evolution trials, cron jobs, peer announcements, idle-time thinking
 - **Plugin system** with two-phase loading: tools/providers first, then channels (which depend on the agent service)
 - **Subagent manager** for spawning focused subtasks within a conversation
+- **Agent mesh** -- peer agents communicate directly over WebSocket secured by [NetBird](https://github.com/netbirdio/netbird) WireGuard tunnels. Bidirectional discovery means agents only need one side configured -- when agent A announces to agent B, B automatically learns how to reach A. The heartbeat processes inbound peer messages so agents can act proactively on alerts and requests from the mesh.
+- **Template index** dynamically fetches and caches agent personality templates from GitHub, with keyword-overlap matching for role specialization during spawning
 - **Tracer** for structured logging of all agent actions and tool calls
 
 ## Development

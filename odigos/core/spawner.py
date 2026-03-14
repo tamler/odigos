@@ -2,6 +2,10 @@
 
 Handles the planning phase of specialist creation. Actual deployment
 is handled separately by the deploy tool.
+
+When a template match is found in the agency-agents index, the spawner
+uses it as a rich baseline and asks the LLM to tailor it. Otherwise
+falls back to generating a short identity from scratch.
 """
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from odigos.config import LLMConfig, ServerConfig
+    from odigos.core.template_index import AgentTemplateIndex
     from odigos.db import Database
     from odigos.providers.base import LLMProvider
 
@@ -28,12 +33,14 @@ class Spawner:
         parent_name: str,
         llm_config: LLMConfig | None = None,
         server_config: ServerConfig | None = None,
+        template_index: AgentTemplateIndex | None = None,
     ) -> None:
         self.db = db
         self.provider = provider
         self.parent_name = parent_name
         self.llm_config = llm_config
         self.server_config = server_config
+        self.template_index = template_index
 
     async def generate_config(
         self,
@@ -75,23 +82,89 @@ class Spawner:
         role: str,
         description: str,
         specialty: str | None = None,
+    ) -> dict:
+        """Generate a seed identity for the specialist.
+
+        Returns a dict with:
+          - source: "template" or "none"
+          - identity: the tailored identity text (if template found)
+          - template_name: name of the matched template (if found)
+          - suggestion: guidance for the caller when no match is found
+
+        When no template matches, does NOT waste an LLM call generating
+        a generic blurb. Instead returns a signal so the caller can
+        research and build a proper identity using available tools.
+        """
+        template_content = await self._find_template(role, specialty)
+
+        if template_content:
+            identity = await self._identity_from_template(
+                template_content, role, description, specialty,
+            )
+            match = await self.template_index.match_template(role, specialty) if self.template_index else None
+            return {
+                "source": "template",
+                "identity": identity,
+                "template_name": match["name"] if match else "unknown",
+            }
+
+        return {
+            "source": "none",
+            "identity": "",
+            "suggestion": (
+                f"No template found for role='{role}' specialty='{specialty or 'general'}'. "
+                f"Use browse_agent_templates to search the catalog, or use research skills "
+                f"to build a custom identity for this specialization. You can create a "
+                f"custom template with create_custom_template for future spawns."
+            ),
+        }
+
+    async def _find_template(self, role: str, specialty: str | None) -> str | None:
+        """Try to find and fetch a matching template."""
+        if not self.template_index:
+            return None
+
+        match = await self.template_index.match_template(role, specialty)
+        if not match:
+            logger.debug("No template match for role=%s specialty=%s", role, specialty)
+            return None
+
+        logger.info(
+            "Template match: %s/%s for role=%s specialty=%s",
+            match["division"], match["name"], role, specialty,
+        )
+        content = await self.template_index.fetch_template(match["github_path"])
+        if not content:
+            logger.warning("Failed to fetch template content for %s", match["github_path"])
+        return content
+
+    async def _identity_from_template(
+        self,
+        template_content: str,
+        role: str,
+        description: str,
+        specialty: str | None,
     ) -> str:
-        """Generate a seed identity.md prompt section for the specialist."""
+        """Tailor a template to the specific agent context."""
         prompt = (
-            f"Write a brief identity statement (2-3 sentences) for an AI agent with:\n"
+            f"Below is a specialist agent template. Adapt it into a focused identity "
+            f"and instruction set for an AI agent with:\n"
             f"- Role: {role}\n"
             f"- Description: {description}\n"
             f"- Specialty: {specialty or 'general'}\n\n"
-            f"The identity should define the agent's core purpose and approach. "
-            f"Write in second person ('You are...'). Be specific, not generic."
+            f"Keep the template's personality, workflows, deliverables, and success metrics "
+            f"where relevant. Remove anything that doesn't apply. Write in second person "
+            f"('You are...'). Output only the adapted identity -- no commentary.\n\n"
+            f"--- TEMPLATE ---\n{template_content}"
         )
         response = await self.provider.complete(
             [{"role": "user", "content": prompt}],
             model=getattr(self.provider, "fallback_model", None),
-            max_tokens=150,
+            max_tokens=1500,
             temperature=0.4,
         )
         return response.content.strip()
+
 
     async def gather_seed_knowledge(
         self,

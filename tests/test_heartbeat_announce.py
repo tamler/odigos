@@ -33,10 +33,12 @@ def _build_heartbeat(**overrides):
 
     hb.cron_manager = None
     hb.notifier = None
+    hb._ws_port = 8001
     hb._fire_reminders = AsyncMock(return_value=False)
     hb._work_todos = AsyncMock(return_value=False)
     hb._deliver_subagent_results = AsyncMock(return_value=False)
     hb._idle_think = AsyncMock()
+    hb._background_model = ""
     return hb
 
 
@@ -47,6 +49,7 @@ async def test_tick_announces_and_flushes():
     agent_client.mark_stale_peers = AsyncMock(return_value=0)
     agent_client.flush_outbox = AsyncMock(return_value=0)
     agent_client.list_peer_names = MagicMock(return_value=["Archie"])
+    agent_client.get_unprocessed_inbound = AsyncMock(return_value=[])
 
     hb = _build_heartbeat(agent_client=agent_client)
     await hb._tick()
@@ -63,6 +66,7 @@ async def test_tick_inert_when_no_peers():
     agent_client.list_peer_names = MagicMock(return_value=[])
     agent_client.broadcast_announce = AsyncMock()
     agent_client.flush_outbox = AsyncMock()
+    agent_client.get_unprocessed_inbound = AsyncMock(return_value=[])
 
     db = AsyncMock()
     db.fetch_one = AsyncMock(return_value=None)  # No online peers in registry
@@ -72,6 +76,46 @@ async def test_tick_inert_when_no_peers():
 
     agent_client.broadcast_announce.assert_not_called()
     agent_client.flush_outbox.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_tick_processes_inbound_messages():
+    """Heartbeat processes unhandled inbound peer messages."""
+    agent_client = AsyncMock()
+    agent_client.list_peer_names = MagicMock(return_value=["Archie"])
+    agent_client.broadcast_announce = AsyncMock()
+    agent_client.mark_stale_peers = AsyncMock(return_value=0)
+    agent_client.flush_outbox = AsyncMock(return_value=0)
+    agent_client.get_unprocessed_inbound = AsyncMock(return_value=[
+        {
+            "message_id": "msg-1",
+            "peer_name": "Archie",
+            "message_type": "message",
+            "content": '{"content": "Server disk is at 95%"}',
+            "created_at": "2026-03-14T00:00:00",
+            "response_to": None,
+        }
+    ])
+    agent_client.mark_processed = AsyncMock()
+    agent_client.send = AsyncMock(return_value={"status": "delivered"})
+
+    hb = _build_heartbeat(agent_client=agent_client)
+    hb.agent = AsyncMock()
+    hb.agent.run = AsyncMock(return_value="I'll look into the disk usage.")
+
+    await hb._tick()
+
+    # Agent should have been called with the peer message
+    hb.agent.run.assert_called_once()
+    call_args = hb.agent.run.call_args[0][0]
+    assert "Archie" in call_args
+    assert "Server disk is at 95%" in call_args
+
+    # Message should be marked processed
+    agent_client.mark_processed.assert_called_once_with("msg-1")
+
+    # Response should be sent back to the peer
+    agent_client.send.assert_called()
 
 
 @pytest.mark.asyncio
