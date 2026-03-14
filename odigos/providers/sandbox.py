@@ -22,6 +22,8 @@ class SandboxResult:
 class SandboxProvider:
     """Runs code in a sandboxed subprocess with resource limits."""
 
+    _can_unshare: bool | None = None
+
     def __init__(
         self,
         timeout: int = 5,
@@ -33,6 +35,25 @@ class SandboxProvider:
         self.max_memory_mb = max_memory_mb
         self.allow_network = allow_network
         self.max_output_chars = max_output_chars
+        if SandboxProvider._can_unshare is None and _IS_LINUX:
+            SandboxProvider._can_unshare = self._check_unshare()
+
+    @staticmethod
+    def _check_unshare() -> bool:
+        """Probe whether unshare --net is available (needs CAP_SYS_ADMIN)."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["unshare", "--net", "true"],
+                capture_output=True, timeout=3,
+            )
+            ok = result.returncode == 0
+            if not ok:
+                logger.info("unshare --net unavailable (no CAP_SYS_ADMIN?), sandbox runs without network isolation")
+            return ok
+        except Exception:
+            logger.info("unshare probe failed, sandbox runs without network isolation")
+            return False
 
     async def execute(self, code: str, language: str = "python") -> SandboxResult:
         """Run code in a sandboxed subprocess with filesystem isolation."""
@@ -110,7 +131,7 @@ class SandboxProvider:
             f"ulimit -t {self.timeout} -v {memory_kb}; exec \"$@\"",
             "--",
         ]
-        if _IS_LINUX and not self.allow_network:
+        if _IS_LINUX and not self.allow_network and self._can_unshare:
             return ["unshare", "--net", *parts]
         if not _IS_LINUX:
             logger.debug("Skipping unshare on %s (not Linux)", platform.system())
