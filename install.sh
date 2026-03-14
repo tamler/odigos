@@ -22,6 +22,14 @@ if ! command -v docker &> /dev/null; then
 fi
 info "Docker found"
 
+if ! docker compose version &> /dev/null; then
+    echo "Error: Docker Compose v2 is required (docker compose, not docker-compose)."
+    echo "       Update Docker Desktop or install the compose plugin:"
+    echo "       https://docs.docker.com/compose/install/"
+    exit 1
+fi
+info "Docker Compose v2 found"
+
 if ! docker info &> /dev/null; then
     echo "Error: Docker daemon is not running. Start Docker and try again."
     exit 1
@@ -32,9 +40,34 @@ info "Docker daemon running"
 mkdir -p data data/plugins data/files skills plugins
 info "Data directories ready"
 
+# ── Environment setup ───────────────────────────────────────────────
+if [ ! -f .env ]; then
+    if [ -f .env.example ]; then
+        cp .env.example .env
+        info "Copied .env.example to .env"
+    else
+        touch .env
+    fi
+fi
+
+# ── Generate API_KEY if not set ─────────────────────────────────────
+if ! grep -q "^API_KEY=.\+" .env 2>/dev/null; then
+    dashboard_key=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))" 2>/dev/null \
+                    || openssl rand -base64 32 | tr -d '/+=' | head -c 43)
+    if grep -q "^API_KEY=" .env 2>/dev/null; then
+        sed -i.bak "s/^API_KEY=.*/API_KEY=${dashboard_key}/" .env && rm -f .env.bak
+    else
+        echo "API_KEY=${dashboard_key}" >> .env
+    fi
+    info "Generated API_KEY"
+else
+    dashboard_key=$(grep "^API_KEY=" .env | cut -d= -f2-)
+    info "API_KEY already set"
+fi
+
 # ── LLM Configuration ──────────────────────────────────────────────
-if [ -f .env ] && grep -q "LLM_API_KEY=" .env && ! grep -q "your-api-key" .env; then
-    info ".env already configured"
+if grep -q "^LLM_API_KEY=.\+" .env && ! grep -q "your-api-key" .env; then
+    info "LLM_API_KEY already configured"
 else
     echo ""
     bold "LLM Provider Setup"
@@ -55,7 +88,7 @@ else
     case $provider_choice in
         1) base_url="https://openrouter.ai/api/v1"
            default_model="anthropic/claude-sonnet-4"
-           fallback_model="google/gemini-2.0-flash-001" ;;
+           fallback_model="openai/gpt-4.1-mini" ;;
         2) base_url="https://api.openai.com/v1"
            default_model="gpt-4o"
            fallback_model="gpt-4o-mini" ;;
@@ -71,33 +104,30 @@ else
            fallback_model=${fallback_model:-$default_model} ;;
         *) base_url="https://openrouter.ai/api/v1"
            default_model="anthropic/claude-sonnet-4"
-           fallback_model="google/gemini-2.0-flash-001" ;;
+           fallback_model="openai/gpt-4.1-mini" ;;
     esac
 
     echo ""
     # API key — local providers may not need one
     if [[ "$base_url" == *"localhost"* ]] || [[ "$base_url" == *"host.docker.internal"* ]]; then
-        read -rp "  Enter API key (press Enter to skip for local models): " api_key
-        api_key=${api_key:-no-key-needed}
+        read -rp "  Enter LLM API key (press Enter to skip for local models): " llm_key
+        llm_key=${llm_key:-no-key-needed}
     else
-        read -rp "  Enter API key: " api_key
-        while [ -z "$api_key" ]; do
-            warn "API key is required for remote providers."
-            read -rp "  Enter API key: " api_key
+        read -rp "  Enter LLM API key: " llm_key
+        while [ -z "$llm_key" ]; do
+            warn "LLM API key is required for remote providers."
+            read -rp "  Enter LLM API key: " llm_key
         done
     fi
 
-    # Write .env (secrets only)
-    cat > .env << EOF
-LLM_API_KEY=${api_key}
-EOF
-    info "Wrote .env (API key)"
+    # Update .env with LLM settings
+    sed -i.bak "s|^LLM_API_KEY=.*|LLM_API_KEY=${llm_key}|" .env && rm -f .env.bak
+    sed -i.bak "s|^LLM_BASE_URL=.*|LLM_BASE_URL=${base_url}|" .env && rm -f .env.bak
+    sed -i.bak "s|^LLM_DEFAULT_MODEL=.*|LLM_DEFAULT_MODEL=${default_model}|" .env && rm -f .env.bak
+    sed -i.bak "s|^LLM_FALLBACK_MODEL=.*|LLM_FALLBACK_MODEL=${fallback_model}|" .env && rm -f .env.bak
+    info "Updated .env with LLM settings"
 
-    # Generate a persistent dashboard API key
-    dashboard_key=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))" 2>/dev/null \
-                    || openssl rand -base64 32 | tr -d '/+=' | head -c 43)
-
-    # Write config.yaml (settings only, no secrets)
+    # Write config.yaml (settings, no secrets)
     cat > config.yaml << EOF
 # Odigos Configuration
 # See config.yaml.example for all available options.
@@ -147,10 +177,15 @@ if [[ "$start_now" =~ ^[Yy]$ ]]; then
 
     echo ""
     # Wait for health
+    port=$(grep "^ODIGOS_PORT=" .env 2>/dev/null | cut -d= -f2-)
+    port=${port:-8000}
+    domain=$(grep "^ODIGOS_DOMAIN=" .env 2>/dev/null | cut -d= -f2-)
+    domain=${domain:-localhost}
+
     echo -n "  Waiting for Odigos to start..."
     healthy=false
     for i in $(seq 1 60); do
-        if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+        if curl -sf "http://localhost:${port}/health" > /dev/null 2>&1; then
             healthy=true
             break
         fi
@@ -163,12 +198,16 @@ if [[ "$start_now" =~ ^[Yy]$ ]]; then
         echo ""
         info "Odigos is running!"
         echo ""
-        bold "  Dashboard: http://localhost:8000"
+        if [ "$domain" != "localhost" ]; then
+            bold "  Dashboard: https://${domain}"
+        else
+            bold "  Dashboard: http://localhost:${port}"
+        fi
         echo ""
         bold "  API Key: ${dashboard_key}"
         echo ""
         echo "  Use this key to log in to the dashboard."
-        echo "  It's saved in config.yaml — change it there anytime."
+        echo "  It's saved in config.yaml and .env — change it there anytime."
         echo ""
         echo "  Useful commands:"
         echo "    docker compose logs -f odigos    View logs"

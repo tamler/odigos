@@ -1,4 +1,10 @@
+# Odigos Docker Compose
+# Usage:
+#   cp .env.example .env   # fill in your values
+#   docker compose up -d
+
 services:
+  # ── Odigos agent ───────────────────────────────────────────────────
   odigos:
     build: .
     image: ghcr.io/tamler/odigos:latest
@@ -11,15 +17,37 @@ services:
     volumes:
       - ./data:/app/data
       - ./config.yaml:/app/config.yaml:ro
+      - ./.env:/app/.env:ro
       - ./skills:/app/skills:ro
       - ./plugins:/app/plugins:ro
     environment:
       - LLM_API_KEY=${LLM_API_KEY}
-      # Optional: uncomment to enable Telegram channel
-      # - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 120s
+
+  # ── Caddy reverse proxy (automatic HTTPS) ─────────────────────────
+  # Provides TLS termination via Let's Encrypt when ODIGOS_DOMAIN is set.
+  # For local dev, defaults to localhost (self-signed).
+  caddy:
+    image: caddy:2-alpine
+    container_name: odigos-caddy
+    restart: unless-stopped
+    depends_on:
+      odigos:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - ODIGOS_DOMAIN=${ODIGOS_DOMAIN:-localhost}
+    command: caddy reverse-proxy --from ${ODIGOS_DOMAIN:-localhost} --to odigos:8000
+    volumes:
+      - caddy_data:/data
+
+volumes:
+  caddy_data:
