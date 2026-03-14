@@ -33,6 +33,40 @@ async def require_api_key(request: Request):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
 
+async def require_card_or_api_key(request: Request):
+    """Validate Bearer token against global API key OR a contact card key.
+
+    Global API key: full access (dashboard + mesh).
+    Card key (card-sk-*): scoped access per card permissions.
+    """
+    settings = request.app.state.settings
+    configured_key = settings.api_key
+
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+
+    parts = auth_header.split(" ", 1)
+    if len(parts) != 2 or parts[0] != "Bearer":
+        raise HTTPException(status_code=401, detail="Invalid authorization header format")
+
+    token = parts[1]
+
+    # Check global API key first
+    if configured_key and token == configured_key:
+        return
+
+    # Check card key
+    card_manager = getattr(request.app.state, "card_manager", None)
+    if card_manager and token.startswith("card-sk-"):
+        card = await card_manager.validate_card_key(token)
+        if card:
+            request.state.card = card
+            return
+
+    raise HTTPException(status_code=403, detail="Invalid API key or card key")
+
+
 # -- State accessor helpers --
 
 def get_db(request: Request):
@@ -97,7 +131,7 @@ def get_web_channel(request: Request):
 
 def get_agent_client(request: Request):
     """Get the AgentClient instance from app state."""
-    return request.app.state.agent_client
+    return getattr(request.app.state, "agent_client", None)
 
 
 def get_config_path(request: Request):
