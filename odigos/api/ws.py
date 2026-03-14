@@ -26,8 +26,9 @@ async def _auto_title_and_notify(ws: WebSocket, db, provider, conversation_id: s
                 "conversation_id": conversation_id,
                 "title": conv["title"],
             })
-    except Exception:
-        pass
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Auto-title/notify failed: %s", exc)
 
 
 @router.websocket("/api/ws")

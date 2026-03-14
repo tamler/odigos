@@ -13,22 +13,42 @@ logger = logging.getLogger(__name__)
 
 async def generate_title(provider: LLMProvider, user_message: str, assistant_response: str) -> str:
     """Generate a short conversation title from the first exchange."""
-    response = await provider.complete(
-        [{"role": "user", "content": (
-            "Generate a short title (3-6 words, no quotes) for a conversation "
-            "that starts with this exchange:\n\n"
-            f"User: {user_message[:200]}\n"
-            f"Assistant: {assistant_response[:200]}\n\n"
-            "Title:"
-        )}],
-        model=getattr(provider, "fallback_model", None),
-        max_tokens=20,
-        temperature=0.3,
-    )
-    title = response.content.strip().strip('"').strip("'")
+    try:
+        response = await provider.complete(
+            [{"role": "user", "content": (
+                "Generate a short title (3-6 words, no quotes) for a conversation "
+                "that starts with this exchange:\n\n"
+                f"User: {user_message[:200]}\n"
+                f"Assistant: {assistant_response[:200]}\n\n"
+                "Title:"
+            )}],
+            model=getattr(provider, "fallback_model", None),
+            max_tokens=20,
+            temperature=0.3,
+        )
+        title = response.content.strip().strip('"').strip("'")
+    except Exception:
+        logger.warning("LLM title generation failed, using heuristic")
+        title = _heuristic_title(user_message)
     if len(title) > 60:
         title = title[:57] + "..."
     return title
+
+
+def _heuristic_title(user_message: str) -> str:
+    """Extract a short title from the first user message without LLM."""
+    text = user_message.strip().split("\n")[0]
+    # Remove common prefixes
+    for prefix in ("hey ", "hi ", "hello ", "please ", "can you ", "could you "):
+        if text.lower().startswith(prefix):
+            text = text[len(prefix):]
+            break
+    # Capitalize and truncate to first ~6 words
+    words = text.split()[:6]
+    title = " ".join(words)
+    if not title:
+        title = "New conversation"
+    return title[0].upper() + title[1:] if title else "New conversation"
 
 
 async def maybe_auto_title(
@@ -62,4 +82,4 @@ async def maybe_auto_title(
         )
         logger.debug("Auto-titled conversation %s: %s", conversation_id[:8], title)
     except Exception:
-        logger.debug("Auto-title failed for %s", conversation_id, exc_info=True)
+        logger.warning("Auto-title failed for %s", conversation_id, exc_info=True)

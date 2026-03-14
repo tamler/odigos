@@ -18,8 +18,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-ENTITY_PATTERN = re.compile(r"<!--entities\s*\n(.*?)\n-->", re.DOTALL)
-CORRECTION_PATTERN = re.compile(r"<!--correction\s*\n(.*?)\n-->", re.DOTALL)
+ENTITY_PATTERN = re.compile(r"<!--entities\s*\n?(.*?)\n?-->\s*$", re.DOTALL | re.MULTILINE)
+ENTITY_FALLBACK = re.compile(r"<!--entities\s*(\[.*?\])\s*$", re.DOTALL | re.MULTILINE)
+CORRECTION_PATTERN = re.compile(r"<!--correction\s*\n?(.*?)\n?-->\s*$", re.DOTALL | re.MULTILINE)
+CORRECTION_FALLBACK = re.compile(r"<!--correction\s*(\{.*?\})\s*$", re.DOTALL | re.MULTILINE)
 
 
 class Reflector:
@@ -53,13 +55,13 @@ class Reflector:
         # Parse and strip entity block
         content = response.content
         entities = []
-        match = ENTITY_PATTERN.search(content)
+        match = ENTITY_PATTERN.search(content) or ENTITY_FALLBACK.search(content)
         if match:
             try:
                 entities = json.loads(match.group(1))
             except (json.JSONDecodeError, IndexError):
                 logger.warning("Failed to parse entity block from response")
-            content = ENTITY_PATTERN.sub("", content).rstrip()
+            content = content[:match.start()].rstrip()
 
             if entities and self.tracer:
                 await self.tracer.emit("entity_extracted", conversation_id, {
@@ -67,7 +69,7 @@ class Reflector:
                 })
 
         # Parse and strip correction block
-        correction_match = CORRECTION_PATTERN.search(content)
+        correction_match = CORRECTION_PATTERN.search(content) or CORRECTION_FALLBACK.search(content)
         if correction_match:
             try:
                 correction_data = json.loads(correction_match.group(1))
@@ -85,7 +87,7 @@ class Reflector:
                         })
             except (json.JSONDecodeError, KeyError):
                 logger.warning("Failed to parse correction block from response")
-            content = CORRECTION_PATTERN.sub("", content).rstrip()
+            content = content[:correction_match.start()].rstrip()
 
         # Store the clean assistant message
         msg_id = str(uuid.uuid4())
