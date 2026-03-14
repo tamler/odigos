@@ -150,7 +150,6 @@ Enable plugins by providing their required configuration in the dashboard or `co
 
 Skills are Markdown files in the `skills/` directory that define reusable behaviors. Built-in skills:
 
-- `general-chat.md` -- Default conversational behavior
 - `research-deep-dive.md` -- Multi-source research workflow
 - `summarize-page.md` / `summarize-doc.md` -- Content summarization
 - `google-workspace.md` -- Google Workspace operations
