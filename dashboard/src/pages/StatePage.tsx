@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { get } from '@/lib/api'
-import { Activity, Cpu, Brain, MessageSquare, Wrench, Zap, Heart, Clock } from 'lucide-react'
+import { Activity, Cpu, Brain, MessageSquare, Wrench, Zap } from 'lucide-react'
 
 interface AgentState {
   agent: {
