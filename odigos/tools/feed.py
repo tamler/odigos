@@ -6,9 +6,12 @@ from functools import partial
 
 import feedparser
 
+from odigos.core.content_filter import ContentFilter
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
+
+_content_filter = ContentFilter()
 
 MAX_ENTRIES = 20
 
@@ -78,4 +81,20 @@ class FeedTool(BaseTool):
                 lines.append(f"   {summary}")
             lines.append("")
 
-        return ToolResult(success=True, data="\n".join(lines))
+        raw_output = "\n".join(lines)
+
+        result = _content_filter.scan(raw_output)
+        if result.risk_level == "high":
+            logger.warning(
+                "Content filter: HIGH risk from %s -- patterns: %s",
+                url, result.matched_patterns,
+            )
+            return ToolResult(success=True, data=result.sanitized_text)
+        if result.risk_level == "medium":
+            logger.info(
+                "Content filter: MEDIUM risk from %s -- patterns: %s",
+                url, result.matched_patterns,
+            )
+            return ToolResult(success=True, data=result.sanitized_text)
+
+        return ToolResult(success=True, data=raw_output)
