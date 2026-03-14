@@ -29,14 +29,19 @@ class MemoryManager:
         self.chunking = chunking_service or ChunkingService()
 
     async def _hybrid_search(
-        self, query: str, limit: int = 5, k: int = 60
+        self, query: str, limit: int = 5, k: int = 60,
+        source_type: str | None = None,
     ) -> list:
         """Run vector + FTS5 search and merge via Reciprocal Rank Fusion."""
         from odigos.memory.vectors import MemoryResult
 
         fetch_limit = limit * 4
-        vector_results = await self.vector_memory.search(query, limit=fetch_limit)
-        fts_results = await self.vector_memory.search_fts(query, limit=fetch_limit)
+        vector_results = await self.vector_memory.search(
+            query, limit=fetch_limit, source_type=source_type,
+        )
+        fts_results = await self.vector_memory.search_fts(
+            query, limit=fetch_limit, source_type=source_type,
+        )
 
         # RRF: score = sum(1 / (k + rank)) across both result lists
         scores: dict[str, float] = {}
@@ -59,29 +64,41 @@ class MemoryManager:
     async def recall(self, query: str, limit: int = 5) -> str:
         """Recall relevant memories for the given query.
 
+        Searches documents and conversations separately to prevent chat
+        messages from drowning out document knowledge.
         Returns a formatted context string for injection into the prompt.
         """
         sections = []
 
-        # 1. Hybrid search (vector + FTS5 with RRF)
-        hybrid_results = await self._hybrid_search(query, limit=limit)
-        memory_lines = []
-        for result in hybrid_results:
-            if result.source_type == "document_chunk" and result.when_to_use:
-                source_hint = ""
-                if "from '" in result.when_to_use:
-                    source_hint = result.when_to_use.split("from '")[1].split("'")[0]
-                if source_hint:
-                    memory_lines.append(f"- [Source: {source_hint}] {result.content_preview}")
-                else:
-                    memory_lines.append(f"- {result.content_preview}")
-            elif result.source_type != "entity_name":
-                memory_lines.append(f"- {result.content_preview}")
+        # 1. Document knowledge (from uploaded/ingested files)
+        doc_results = await self._hybrid_search(
+            query, limit=limit, source_type="document_chunk",
+        )
+        doc_lines = []
+        for result in doc_results:
+            source_hint = ""
+            if result.when_to_use and "from '" in result.when_to_use:
+                source_hint = result.when_to_use.split("from '")[1].split("'")[0]
+            if source_hint:
+                doc_lines.append(f"- [Source: {source_hint}] {result.content_preview}")
+            else:
+                doc_lines.append(f"- {result.content_preview}")
 
-        if memory_lines:
-            sections.append("## Relevant memories\n" + "\n".join(memory_lines))
+        if doc_lines:
+            sections.append("## Document knowledge\n" + "\n".join(doc_lines))
 
-        # 2. Entity lookup
+        # 2. Conversation memory (from past user messages)
+        conv_results = await self._hybrid_search(
+            query, limit=limit, source_type="user_message",
+        )
+        conv_lines = []
+        for result in conv_results:
+            conv_lines.append(f"- {result.content_preview}")
+
+        if conv_lines:
+            sections.append("## Conversation history\n" + "\n".join(conv_lines))
+
+        # 3. Entity lookup
         entity_lines = []
         words = [w for w in query.split() if len(w) > 2]
         seen_entities = set()

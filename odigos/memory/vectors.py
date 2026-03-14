@@ -126,7 +126,9 @@ class VectorMemory:
             )
         return results
 
-    async def search_fts(self, query: str, limit: int = 20) -> list[MemoryResult]:
+    async def search_fts(
+        self, query: str, limit: int = 20, source_type: str | None = None,
+    ) -> list[MemoryResult]:
         """Full-text keyword search via FTS5."""
         clean_terms = []
         for word in query.split():
@@ -139,19 +141,34 @@ class VectorMemory:
 
         fts_query = " OR ".join(clean_terms)
 
-        rows = await self.db.fetch_all(
-            """
-            SELECT e.id, e.content_preview, e.source_type, e.source_id,
-                   e.when_to_use, e.memory_type,
-                   rank AS distance
-            FROM memory_fts
-            JOIN memory_entries e ON e.rowid = memory_fts.rowid
-            WHERE memory_fts MATCH ?
-            ORDER BY rank
-            LIMIT ?
-            """,
-            (fts_query, limit),
-        )
+        if source_type:
+            rows = await self.db.fetch_all(
+                """
+                SELECT e.id, e.content_preview, e.source_type, e.source_id,
+                       e.when_to_use, e.memory_type,
+                       rank AS distance
+                FROM memory_fts
+                JOIN memory_entries e ON e.rowid = memory_fts.rowid
+                WHERE memory_fts MATCH ? AND e.source_type = ?
+                ORDER BY rank
+                LIMIT ?
+                """,
+                (fts_query, source_type, limit),
+            )
+        else:
+            rows = await self.db.fetch_all(
+                """
+                SELECT e.id, e.content_preview, e.source_type, e.source_id,
+                       e.when_to_use, e.memory_type,
+                       rank AS distance
+                FROM memory_fts
+                JOIN memory_entries e ON e.rowid = memory_fts.rowid
+                WHERE memory_fts MATCH ?
+                ORDER BY rank
+                LIMIT ?
+                """,
+                (fts_query, limit),
+            )
 
         return [
             MemoryResult(
