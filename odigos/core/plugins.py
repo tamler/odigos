@@ -15,9 +15,8 @@ logger = logging.getLogger(__name__)
 class PluginManager:
     """Discovers and loads plugins from a directory.
 
-    Supports two plugin patterns:
-    1. New: register(ctx) function -- receives PluginContext for registering tools/channels/providers
-    2. Legacy: hooks dict -- event type -> callback, wired into Tracer
+    Plugins must export a register(ctx) function that receives a PluginContext
+    for registering tools, channels, and providers.
     """
 
     def __init__(self, plugin_context: PluginContext | None = None, tracer=None) -> None:
@@ -111,27 +110,27 @@ class PluginManager:
         register_fn = getattr(module, "register", None)
         if register_fn is not None and callable(register_fn) and self._ctx is not None:
             try:
-                register_fn(self._ctx)
-                self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "register", "status": "active"})
+                result = register_fn(self._ctx)
+                # If register() returns a dict, use it to set status/error info.
+                # If it returns a string, treat as status. Otherwise "active".
+                if isinstance(result, dict):
+                    status = result.get("status", "active")
+                    entry = {"name": stem, "file": str(py_file), "pattern": "register", "status": status}
+                    if "error_message" in result:
+                        entry["error_message"] = result["error_message"]
+                    self.loaded_plugins.append(entry)
+                elif isinstance(result, str):
+                    self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "register", "status": result})
+                else:
+                    self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "register", "status": "active"})
                 return
             except Exception as e:
                 logger.warning("Plugin %s register() failed", py_file, exc_info=True)
                 self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "register", "status": "error", "error_message": str(e)})
                 return
 
-        # Fall back to legacy pattern: hooks dict
-        hooks = getattr(module, "hooks", None)
-        if hooks and isinstance(hooks, dict) and self._tracer:
-            hook_count = 0
-            for event_type, callback in hooks.items():
-                if callable(callback):
-                    self._tracer.subscribe(event_type, callback)
-                    hook_count += 1
-            self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "hooks", "hook_count": hook_count, "status": "active"})
-            return
-
-        logger.warning("Plugin %s has no register() or hooks, skipping", py_file)
-        self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "none", "status": "error", "error_message": "No register() function or hooks dict found"})
+        logger.warning("Plugin %s has no register() function, skipping", py_file)
+        self.loaded_plugins.append({"name": stem, "file": str(py_file), "pattern": "none", "status": "error", "error_message": "No register() function found"})
 
     def scan_metadata(self, plugins_dir: str) -> list[dict]:
         """Scan plugin directories for plugin.yaml metadata files."""

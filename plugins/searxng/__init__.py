@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def register(ctx):
     settings = ctx.config.get("settings")
     if not settings or not settings.searxng_url:
-        return
+        return {"status": "available", "error_message": "No searxng_url configured"}
 
     from odigos.providers.searxng import SearxngProvider
     from odigos.tools.search import SearchTool

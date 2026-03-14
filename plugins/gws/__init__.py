@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 def register(ctx):
     settings = ctx.config.get("settings")
     if not settings or not settings.gws.enabled:
-        return
+        return {"status": "available", "error_message": "GWS not enabled in settings"}
 
     if not shutil.which("gws"):
         logger.warning(
             "GWS enabled but gws CLI not found. "
             "Install: npm install -g @googleworkspace/cli"
         )
-        return
+        return {"status": "error", "error_message": "gws CLI not installed"}
 
     from odigos.tools.gws import GWSTool
 

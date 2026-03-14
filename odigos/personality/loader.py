@@ -26,7 +26,7 @@ class IdentityConfig:
 
 @dataclass
 class Personality:
-    name: str = "Odigos"
+    name: str = ""
     voice: VoiceConfig = field(default_factory=VoiceConfig)
     identity: IdentityConfig = field(default_factory=IdentityConfig)
 
@@ -55,7 +55,7 @@ def load_personality(path: str) -> Personality:
     identity_data = data.get("identity", {})
 
     personality = Personality(
-        name=data.get("name", "Odigos"),
+        name=data.get("name", ""),
         voice=VoiceConfig(
             **{k: v for k, v in voice_data.items() if k in VoiceConfig.__dataclass_fields__}
         ),

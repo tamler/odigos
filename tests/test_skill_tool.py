@@ -1,4 +1,3 @@
-import json
 
 import pytest
 from odigos.skills.registry import SkillRegistry, Skill
@@ -27,9 +26,9 @@ class TestActivateSkillTool:
         result = await tool.execute({"name": "research"})
 
         assert result.success is True
-        payload = json.loads(result.data)
-        assert payload["skill_name"] == "research"
-        assert "activated" in payload["message"].lower()
+        assert result.side_effect is not None
+        assert result.side_effect["skill_name"] == "research"
+        assert "activated" in result.data.lower()
 
     @pytest.mark.asyncio
     async def test_activate_nonexistent_skill(self, skill_registry):
@@ -56,15 +55,16 @@ class TestActivateSkillTool:
 
     @pytest.mark.asyncio
     async def test_payload_contains_skill_info(self, skill_registry):
-        """Activation returns structured JSON with skill info."""
+        """Activation returns side_effect with skill info."""
         tool = ActivateSkillTool(skill_registry=skill_registry)
         result = await tool.execute({"name": "research"})
 
-        payload = json.loads(result.data)
-        assert payload["__skill_activation__"] is True
-        assert payload["skill_name"] == "research"
-        assert payload["skill_prompt"] == "You are a thorough research assistant.\n1. Search\n2. Read\n3. Synthesize"
-        assert payload["skill_tools"] == ["web_search", "read_page"]
+        assert "activated" in result.data.lower()
+        assert result.side_effect is not None
+        assert result.side_effect["skill_activation"] is True
+        assert result.side_effect["skill_name"] == "research"
+        assert result.side_effect["skill_prompt"] == "You are a thorough research assistant.\n1. Search\n2. Read\n3. Synthesize"
+        assert result.side_effect["skill_tools"] == ["web_search", "read_page"]
 
     @pytest.mark.asyncio
     async def test_no_shared_state(self, skill_registry):

@@ -60,7 +60,7 @@ class TestContextAssembler:
         messages = await assembler.build("conv-1", "Hello there")
 
         assert messages[0]["role"] == "system"
-        assert "Odigos" in messages[0]["content"]
+        assert "TestBot" in messages[0]["content"]
         assert messages[-1]["role"] == "user"
         assert messages[-1]["content"] == "Hello there"
 
@@ -94,7 +94,7 @@ class TestContextAssembler:
         assert messages[2]["content"] == "Previous response"
         assert messages[3]["content"] == "New message"
 
-    async def test_includes_tool_context(self, db: Database):
+    async def test_builds_without_optional_context(self, db: Database):
         assembler = ContextAssembler(
             db=db,
             agent_name="TestBot",
@@ -105,12 +105,10 @@ class TestContextAssembler:
         messages = await assembler.build(
             "conv-1",
             "What is Python 3.13?",
-            tool_context="## Web search results\n1. Python 3.13 release notes.",
         )
 
         system_content = messages[0]["content"]
-        assert "Web search results" in system_content
-        assert "Python 3.13 release notes" in system_content
+        assert "TestBot" in system_content
 
 
 class TestContextAssemblerWithMemory:
@@ -823,7 +821,7 @@ class TestAgentBudgetEnforcement:
             return_value=AsyncMock(within_budget=False)
         )
 
-        agent = Agent(db=db, provider=mock_provider, budget_tracker=mock_budget)
+        agent = Agent(db=db, provider=mock_provider, agent_name="TestBot", budget_tracker=mock_budget)
 
         message = UniversalMessage(
             id="msg-1",
@@ -850,7 +848,7 @@ class TestAgentBudgetEnforcement:
             return_value=AsyncMock(within_budget=True, warning=False)
         )
 
-        agent = Agent(db=db, provider=mock_provider, budget_tracker=mock_budget)
+        agent = Agent(db=db, provider=mock_provider, agent_name="TestBot", budget_tracker=mock_budget)
 
         message = UniversalMessage(
             id="msg-2",
@@ -959,7 +957,7 @@ class TestExecutorErrorRecovery:
         provider = AsyncMock()
         provider.complete.side_effect = RuntimeError("Connection refused")
 
-        agent = Agent(db=db, provider=provider)
+        agent = Agent(db=db, provider=provider, agent_name="TestBot")
         msg = UniversalMessage(
             id="test-1", content="hello", sender="user1",
             channel="test", metadata={"chat_id": "1"},

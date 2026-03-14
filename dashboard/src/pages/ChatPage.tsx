@@ -3,22 +3,15 @@ import { useOutletContext, useSearchParams } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Download, Paperclip, X } from 'lucide-react'
+import { ArrowUp, Paperclip, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  PromptInput,
-  PromptInputTextarea,
-  PromptInputActions,
-  PromptInputAction,
-} from '@/components/ui/prompt-input'
-import { Message, MessageContent } from '@/components/ui/message'
+import { Markdown } from '@/components/ui/markdown'
+import { Loader } from '@/components/ui/loader'
 import {
   ChatContainerRoot,
   ChatContainerContent,
   ChatContainerScrollAnchor,
 } from '@/components/ui/chat-container'
-import { Markdown } from '@/components/ui/markdown'
-import { Loader } from '@/components/ui/loader'
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
 
 interface ChatMessage {
@@ -32,67 +25,56 @@ interface OutletCtx {
   activeConversationId: string | null
   setActiveId: (id: string | null) => void
   refreshConversations: () => void
+  socketRef: React.MutableRefObject<ChatSocket | null>
+  connected: boolean
 }
 
 export default function ChatPage() {
-  const { activeConversationId, setActiveId, refreshConversations } = useOutletContext<OutletCtx>()
+  const { activeConversationId, setActiveId, refreshConversations, socketRef, connected } = useOutletContext<OutletCtx>()
   const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [connected, setConnected] = useState(false)
   const [thinking, setThinking] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean }[]>([])
-  const [conversationTitle, setConversationTitle] = useState<string | null>(null)
-  const socketRef = useRef<ChatSocket | null>(null)
   const loadedConvRef = useRef<string | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // WebSocket connection
+  // Wire up message handler on the shared socket
   useEffect(() => {
-    const socket = new ChatSocket(
-      (msg) => {
-        if (msg.type === 'connected') {
-          toast.success('Connected to Odigos', { duration: 2000 })
-        }
-        if (msg.type === 'chat_response') {
-          setThinking(false)
-          setMessages((prev) => [...prev, {
-            role: 'assistant',
-            content: msg.content as string,
-            timestamp: new Date().toISOString(),
-          }])
-        }
-        // If server sends conversation_id for new conversations
-        if (msg.type === 'conversation_started' && msg.conversation_id) {
-          const cid = msg.conversation_id as string
-          setActiveId(cid)
-          setSearchParams({ c: cid })
-          refreshConversations()
-        }
-        if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
-          setConversationTitle(msg.title as string)
-          refreshConversations()
-        }
-      },
-      (isConnected) => {
-        setConnected(isConnected)
-        if (!isConnected) {
-          toast.error('Disconnected from server', { duration: 5000 })
-        }
-      },
-    )
-    socket.connect()
-    socketRef.current = socket
-    return () => socket.disconnect()
-  }, [setActiveId, setSearchParams, refreshConversations])
+    const socket = socketRef.current
+    if (!socket) return
+
+    socket.onMessage = (msg) => {
+      if (msg.type === 'chat_response') {
+        setThinking(false)
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: msg.content as string,
+          timestamp: new Date().toISOString(),
+        }])
+      }
+      if (msg.type === 'conversation_started' && msg.conversation_id) {
+        const cid = msg.conversation_id as string
+        setActiveId(cid)
+        setSearchParams({ c: cid })
+        refreshConversations()
+      }
+      if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
+        refreshConversations()
+      }
+    }
+
+    return () => {
+      socket.onMessage = null
+    }
+  }, [socketRef, setActiveId, setSearchParams, refreshConversations])
 
   // Load conversation messages when switching
   useEffect(() => {
     const cid = searchParams.get('c') || activeConversationId
     if (!cid) {
-      // New conversation
       if (loadedConvRef.current !== null) {
         setMessages([])
-        setConversationTitle(null)
         loadedConvRef.current = null
       }
       return
@@ -100,27 +82,31 @@ export default function ChatPage() {
     if (cid === loadedConvRef.current) return
     loadedConvRef.current = cid
 
-    // Load conversation details + messages
-    Promise.all([
-      get<{ id: string; title?: string }>(`/api/conversations/${cid}`).catch(() => null),
-      get<{ messages: { role: string; content: string; timestamp: string }[] }>(
-        `/api/conversations/${cid}/messages`
-      ).catch(() => null),
-    ]).then(([conv, data]) => {
-      if (conv) setConversationTitle(conv.title || null)
-      if (data?.messages) {
-        setMessages(
-          data.messages.map((m) => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content,
-            timestamp: m.timestamp,
-          }))
-        )
-      }
-    })
+    get<{ messages: { role: string; content: string; timestamp: string }[] }>(
+      `/api/conversations/${cid}/messages`
+    )
+      .then((data) => {
+        if (data?.messages) {
+          setMessages(
+            data.messages.map((m) => ({
+              role: m.role as 'user' | 'assistant',
+              content: m.content,
+              timestamp: m.timestamp,
+            }))
+          )
+        }
+      })
+      .catch(() => {})
   }, [activeConversationId, searchParams])
 
-  // File handling
+  // Auto-resize textarea
+  useEffect(() => {
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'
+  }, [inputValue])
+
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const newEntries = files.map((file) => ({ file, uploading: true }))
     setPendingFiles((prev) => [...prev, ...newEntries])
@@ -168,7 +154,14 @@ export default function ChatPage() {
 
     setInputValue('')
     setPendingFiles([])
-  }, [inputValue, pendingFiles, activeConversationId])
+  }, [inputValue, pendingFiles, activeConversationId, socketRef])
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
 
   function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`
@@ -176,48 +169,11 @@ export default function ChatPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const headerTitle = conversationTitle || (messages.length > 0 ? 'Conversation' : 'New conversation')
-
-  const handleExport = useCallback((format: 'markdown' | 'json') => {
-    const cid = activeConversationId
-    if (!cid) return
-    const token = localStorage.getItem('odigos_api_key') || ''
-    const url = `/api/conversations/${cid}/export?format=${format}`
-    fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
-      .then((res) => {
-        if (!res.ok) throw new Error('Export failed')
-        return res.blob()
-      })
-      .then((blob) => {
-        const ext = format === 'json' ? 'json' : 'md'
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = `${cid}.${ext}`
-        a.click()
-        URL.revokeObjectURL(a.href)
-        toast.success('Conversation exported')
-      })
-      .catch(() => toast.error('Failed to export conversation'))
-  }, [activeConversationId])
+  const canSend = connected && (inputValue.trim() || pendingFiles.length > 0)
 
   return (
     <FileUpload onFilesAdded={handleFilesAdded}>
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-muted-foreground">{headerTitle}</h2>
-          {activeConversationId && messages.length > 0 && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => handleExport('markdown')}
-              title="Export conversation"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-
+      <div className="flex-1 flex flex-col h-full">
         {/* Drag overlay */}
         <FileUploadContent>
           <div className="rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 p-12 text-center">
@@ -228,118 +184,108 @@ export default function ChatPage() {
 
         {/* Messages area */}
         <ChatContainerRoot className="flex-1">
-          <ChatContainerContent className="py-4">
-            <div className="max-w-3xl mx-auto px-6 space-y-6">
+          <ChatContainerContent>
+            <div className="max-w-[52rem] w-full mx-auto px-4 py-6 space-y-6">
               {messages.length === 0 && !thinking && (
-                <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-sm">
+                <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-base">
                   What can I help you with?
                 </div>
               )}
               {messages.map((msg, i) => (
-                <Message
-                  key={i}
-                  className={msg.role === 'user' ? 'justify-end' : 'justify-start'}
-                >
-                  <MessageContent
-                    className={
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground max-w-[85%] rounded-2xl'
-                        : 'bg-muted max-w-[85%] rounded-2xl'
-                    }
-                  >
-                    {msg.role === 'assistant' ? (
-                      <Markdown>{msg.content}</Markdown>
-                    ) : (
-                      <>
-                        {msg.content}
+                <div key={i}>
+                  {msg.role === 'user' ? (
+                    /* User: right-aligned bubble */
+                    <div className="flex justify-end">
+                      <div className="max-w-[85%]">
+                        <div className="rounded-3xl bg-muted/60 px-5 py-3">
+                          <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                        </div>
                         {msg.attachments && msg.attachments.length > 0 && (
-                          <div className="mt-2 space-y-1">
+                          <div className="mt-1.5 flex justify-end gap-2 flex-wrap">
                             {msg.attachments.map((a) => (
-                              <div key={a.id} className="text-xs opacity-75 flex items-center gap-1">
+                              <div key={a.id} className="text-xs text-muted-foreground flex items-center gap-1">
                                 <Paperclip className="h-3 w-3" />
                                 {a.filename} ({formatFileSize(a.size)})
                               </div>
                             ))}
                           </div>
                         )}
-                      </>
-                    )}
-                  </MessageContent>
-                </Message>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Assistant: left-aligned plain text */
+                    <div className="text-sm text-foreground leading-relaxed">
+                      <Markdown>{msg.content}</Markdown>
+                    </div>
+                  )}
+                </div>
               ))}
               {thinking && (
-                <Message className="justify-start">
-                  <MessageContent className="bg-muted max-w-[85%] rounded-2xl">
-                    <Loader variant="typing" />
-                  </MessageContent>
-                </Message>
+                <div>
+                  <Loader variant="typing" />
+                </div>
               )}
             </div>
             <ChatContainerScrollAnchor />
           </ChatContainerContent>
         </ChatContainerRoot>
 
-        {/* Pending files */}
-        {pendingFiles.length > 0 && (
-          <div className="px-6">
-            <div className="max-w-3xl mx-auto flex flex-wrap gap-2 pb-2">
-              {pendingFiles.map((p, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-sm"
-                >
-                  <Paperclip className="h-3 w-3 text-muted-foreground" />
-                  <span className="truncate max-w-[200px]">{p.file.name}</span>
-                  <span className="text-xs text-muted-foreground">{formatFileSize(p.file.size)}</span>
-                  {p.uploading && <Loader variant="typing" size="sm" />}
-                  <button onClick={() => removeFile(p.file)} className="text-muted-foreground hover:text-foreground">
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Input area */}
-        <div className="pb-6 px-6">
-          <div className="max-w-3xl mx-auto">
-            <PromptInput
-              value={inputValue}
-              onValueChange={setInputValue}
-              onSubmit={handleSend}
-              disabled={!connected}
-              className="border-border/40 bg-muted/50"
-            >
-              <PromptInputTextarea placeholder="Send a message..." />
-              <PromptInputActions className="justify-between px-2 pb-2">
-                <div className="flex items-center gap-1">
-                  <FileUploadTrigger asChild>
-                    <PromptInputAction tooltip="Attach files">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 rounded-full"
-                        disabled={!connected}
-                      >
-                        <Paperclip className="h-4 w-4" />
-                      </Button>
-                    </PromptInputAction>
-                  </FileUploadTrigger>
-                </div>
-                <PromptInputAction tooltip="Send message">
-                  <Button
-                    variant="default"
-                    size="icon"
-                    className="h-8 w-8 rounded-full"
-                    disabled={!connected || (!inputValue.trim() && pendingFiles.length === 0)}
-                    onClick={handleSend}
+        <div className="pb-4 pt-2 px-4">
+          <div className="max-w-[52rem] mx-auto">
+            {/* Pending files */}
+            {pendingFiles.length > 0 && (
+              <div className="flex flex-wrap gap-2 pb-2">
+                {pendingFiles.map((p, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-sm"
                   >
-                    <ArrowUp className="h-4 w-4" />
+                    <Paperclip className="h-3 w-3 text-muted-foreground" />
+                    <span className="truncate max-w-[200px]">{p.file.name}</span>
+                    <span className="text-xs text-muted-foreground">{formatFileSize(p.file.size)}</span>
+                    {p.uploading && <Loader variant="typing" size="sm" />}
+                    <button onClick={() => removeFile(p.file)} className="text-muted-foreground hover:text-foreground">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Composer */}
+            <div className="relative rounded-2xl border border-border/50 bg-muted/30 focus-within:border-border/80 transition-colors">
+              <textarea
+                ref={textareaRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Send a message..."
+                disabled={!connected}
+                rows={1}
+                className="w-full resize-none bg-transparent px-4 pt-3 pb-12 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+              />
+              <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
+                <FileUploadTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                    disabled={!connected}
+                  >
+                    <Paperclip className="h-4 w-4" />
                   </Button>
-                </PromptInputAction>
-              </PromptInputActions>
-            </PromptInput>
+                </FileUploadTrigger>
+                <Button
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  disabled={!canSend}
+                  onClick={handleSend}
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

@@ -3,9 +3,9 @@
 import os
 import secrets
 
-from fastapi import APIRouter, Depends, Request, UploadFile
+from fastapi import APIRouter, Depends, UploadFile
 
-from odigos.api.deps import require_api_key
+from odigos.api.deps import get_upload_dir, require_api_key
 
 router = APIRouter(
     prefix="/api",
@@ -14,9 +14,8 @@ router = APIRouter(
 
 
 @router.post("/upload")
-async def upload_file(file: UploadFile, request: Request):
+async def upload_file(file: UploadFile, upload_dir: str = Depends(get_upload_dir)):
     """Upload a file, store it, return a reference ID."""
-    upload_dir = getattr(request.app.state, "upload_dir", "data/uploads")
     os.makedirs(upload_dir, exist_ok=True)
 
     file_id = secrets.token_hex(8)

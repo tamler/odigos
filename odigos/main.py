@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 
@@ -21,7 +22,6 @@ from odigos.providers.embeddings import EmbeddingProvider
 from odigos.providers.llm import LLMClient
 from odigos.providers.sandbox import SandboxProvider
 from odigos.core.budget import BudgetTracker
-from odigos.core.router import ModelRouter
 from odigos.core.plugin_context import PluginContext
 from odigos.core.plugins import PluginManager
 from odigos.core.subagent import SubagentManager
@@ -36,6 +36,7 @@ from odigos.api.budget import router as budget_router
 from odigos.api.metrics import router as metrics_router
 from odigos.api.plugins import router as plugins_router
 from odigos.api.settings import router as settings_router
+from odigos.api.skills import router as skills_router
 from odigos.api.message import router as message_router
 from odigos.api.ws import router as ws_router
 from odigos.api.setup import router as setup_router
@@ -60,7 +61,6 @@ _provider: LLMClient | None = None
 _embedder: EmbeddingProvider | None = None
 _channel_registry: ChannelRegistry | None = None
 _scraper = None
-_router: ModelRouter | None = None
 _heartbeat: Heartbeat | None = None
 _mcp_servers: list = []
 
@@ -68,9 +68,9 @@ _mcp_servers: list = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
-    global _db, _provider, _embedder, _channel_registry, _scraper, _router, _heartbeat, _mcp_servers
+    global _db, _provider, _embedder, _channel_registry, _scraper, _heartbeat, _mcp_servers
 
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
+    config_path = os.environ.get("ODIGOS_CONFIG", "config.yaml")
     settings = load_settings(config_path)
 
     # Auto-generate API key if not configured
@@ -117,17 +117,8 @@ async def lifespan(app: FastAPI):
         fallback_model=settings.llm.fallback_model,
         max_tokens=settings.llm.max_tokens,
         temperature=settings.llm.temperature,
-    )
-
-    # Initialize model router (wraps provider for free model pool)
-    _router = ModelRouter(
-        provider=_provider,
-        free_pool=settings.router.free_pool,
-        rate_limit_rpm=settings.router.rate_limit_rpm,
-    )
-    logger.info(
-        "Model router initialized with %d free models",
-        len(settings.router.free_pool),
+        request_timeout=settings.llm.request_timeout_seconds,
+        connect_timeout=settings.llm.connect_timeout_seconds,
     )
 
     # Initialize budget tracker
@@ -137,6 +128,7 @@ async def lifespan(app: FastAPI):
         monthly_limit=settings.budget.monthly_limit_usd,
         warn_threshold=settings.budget.warn_threshold,
     )
+    app.state.budget_tracker = budget_tracker
     logger.info("Budget tracker initialized")
 
     # Initialize local embedding provider
@@ -224,6 +216,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize goal store
     goal_store = GoalStore(db=_db)
+    app.state.goal_store = goal_store
     logger.info("Goal store initialized")
 
     # Register goal tools
@@ -238,6 +231,7 @@ async def lifespan(app: FastAPI):
     skill_registry = SkillRegistry()
     skill_registry.load_all(settings.skills.path)
     logger.info("Loaded %d skills", len(skill_registry.list()))
+    app.state.skill_registry = skill_registry
 
     # Register skill tools (activation, creation, update)
     from odigos.tools.skill_tool import ActivateSkillTool
@@ -257,7 +251,7 @@ async def lifespan(app: FastAPI):
     # Initialize subagent manager
     subagent_manager = SubagentManager(
         db=_db,
-        provider=_router,
+        provider=_provider,
         tool_registry=tool_registry,
         tracer=tracer,
         memory_manager=memory_manager,
@@ -312,6 +306,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize channel registry
     channel_registry = ChannelRegistry()
+    app.state.channel_registry = channel_registry
 
     # Create plugin context with all registries
     plugin_context = PluginContext(
@@ -357,7 +352,7 @@ async def lifespan(app: FastAPI):
     # Initialize agent
     agent = Agent(
         db=_db,
-        provider=_router,
+        provider=_provider,
         agent_name=settings.agent.name,
         memory_manager=memory_manager,
         personality_path=settings.personality.path,
@@ -372,6 +367,7 @@ async def lifespan(app: FastAPI):
         tracer=tracer,
         approval_gate=approval_gate,
     )
+    app.state.agent = agent
 
     # Create AgentService facade for interaction interfaces
     from odigos.core.agent_service import AgentService
@@ -411,12 +407,17 @@ async def lifespan(app: FastAPI):
         personality_path=settings.personality.path,
         skills_dir=settings.skills.path,
     )
-    evaluator = Evaluator(db=_db, provider=_router)
+    evaluator = Evaluator(
+        db=_db,
+        provider=_provider,
+        qualified_evaluator_min_score=settings.evolution.qualified_evaluator_min_score,
+    )
     evolution_engine = EvolutionEngine(
         db=_db,
         checkpoint_manager=checkpoint_manager,
         evaluator=evaluator,
-        provider=_router,
+        provider=_provider,
+        evolution_config=settings.evolution,
     )
     agent.context_assembler.checkpoint_manager = checkpoint_manager
     app.state.checkpoint_manager = checkpoint_manager
@@ -431,18 +432,21 @@ async def lifespan(app: FastAPI):
 
     strategist = Strategist(
         db=_db,
-        provider=_router,
+        provider=_provider,
         evolution_engine=evolution_engine,
         agent_description=settings.agent.description,
         agent_tools=tool_names,
+        evolution_config=settings.evolution,
     )
     logger.info("Strategist initialized")
 
     # Initialize spawner
     spawner = Spawner(
         db=_db,
-        provider=_router,
+        provider=_provider,
         parent_name=settings.agent.name,
+        llm_config=settings.llm,
+        server_config=settings.server,
     )
     app.state.spawner = spawner
     logger.info("Spawner initialized")
@@ -453,7 +457,7 @@ async def lifespan(app: FastAPI):
         agent=agent,
         channel_registry=channel_registry,
         goal_store=goal_store,
-        provider=_router,
+        provider=_provider,
         interval=settings.heartbeat.interval_seconds,
         max_todos_per_tick=settings.heartbeat.max_todos_per_tick,
         idle_think_interval=settings.heartbeat.idle_think_interval,
@@ -464,6 +468,8 @@ async def lifespan(app: FastAPI):
         agent_client=agent_client,
         agent_role=settings.agent.role,
         agent_description=settings.agent.description,
+        announce_interval=settings.heartbeat.announce_interval_seconds,
+        background_model=settings.llm.background_model,
     )
 
     # Set heartbeat on agent so any channel can access it
@@ -477,6 +483,13 @@ async def lifespan(app: FastAPI):
     # Start heartbeat loop
     await _heartbeat.start()
     logger.info("Heartbeat started (interval=%ds)", settings.heartbeat.interval_seconds)
+
+    # Warn if binding to all interfaces without TLS
+    if settings.server.host == "0.0.0.0":
+        logger.warning(
+            "Server bound to 0.0.0.0 (all interfaces) without TLS. "
+            "Use a reverse proxy with TLS in production, or bind to 127.0.0.1 for local-only access."
+        )
 
     logger.info("Odigos is ready.")
 
@@ -501,8 +514,8 @@ async def lifespan(app: FastAPI):
         await _scraper.close()
     if _embedder:
         await _embedder.close()
-    if _router:
-        await _router.close()
+    if _provider:
+        await _provider.close()
     if _db:
         await _db.close()
     logger.info("Odigos stopped.")
@@ -519,6 +532,7 @@ app.include_router(budget_router)
 app.include_router(metrics_router)
 app.include_router(plugins_router)
 app.include_router(settings_router)
+app.include_router(skills_router)
 app.include_router(message_router)
 app.include_router(upload_router)
 app.include_router(evolution_router)
@@ -538,7 +552,7 @@ mount_dashboard(app)
 def main():
     import uvicorn
 
-    config_path = sys.argv[1] if len(sys.argv) > 1 else "config.yaml"
+    config_path = os.environ.get("ODIGOS_CONFIG", "config.yaml")
     settings = load_settings(config_path)
 
     uvicorn.run(

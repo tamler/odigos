@@ -8,10 +8,10 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from odigos.api.deps import require_api_key
+from odigos.api.deps import get_db, require_api_key
 
 router = APIRouter(
     prefix="/api/agent",
@@ -32,10 +32,9 @@ class PeerAnnounceRequest(BaseModel):
 @router.post("/peer/announce")
 async def peer_announce(
     body: PeerAnnounceRequest,
-    request: Request,
+    db=Depends(get_db),
 ):
     """Register a peer agent's WebSocket coordinates for future communication."""
-    db = request.app.state.db
     now = datetime.now(timezone.utc).isoformat()
 
     existing = await db.fetch_one(

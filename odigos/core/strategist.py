@@ -14,14 +14,12 @@ import uuid
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from odigos.config import EvolutionConfig
     from odigos.core.evolution import EvolutionEngine
     from odigos.db import Database
     from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
-
-AUTO_TRIAL_CONFIDENCE = 0.7
-MIN_EVALS_TO_RUN = 10
 
 
 class Strategist:
@@ -33,6 +31,7 @@ class Strategist:
         evolution_engine: EvolutionEngine,
         agent_description: str = "",
         agent_tools: list[str] | None = None,
+        evolution_config: EvolutionConfig | None = None,
     ) -> None:
         self.db = db
         self.provider = provider
@@ -41,13 +40,18 @@ class Strategist:
         self._agent_tools = agent_tools or []
         self._last_eval_count: int = 0
 
+        if evolution_config is None:
+            from odigos.config import EvolutionConfig
+            evolution_config = EvolutionConfig()
+        self._config = evolution_config
+
     async def should_run(self) -> bool:
         """Check if enough new evaluations have accumulated since last run."""
         row = await self.db.fetch_one(
             "SELECT COUNT(*) as cnt FROM evaluations"
         )
         total = row["cnt"] if row else 0
-        return (total - self._last_eval_count) >= MIN_EVALS_TO_RUN
+        return (total - self._last_eval_count) >= self._config.strategist_min_evals
 
     async def analyze(self) -> dict | None:
         """Run the full strategist cycle: analyze, hypothesize, act."""
@@ -104,7 +108,7 @@ class Strategist:
 
         # Act on hypotheses
         for h in result.get("hypotheses", []):
-            if h.get("type") == "trial_hypothesis" and h.get("confidence", 0) >= AUTO_TRIAL_CONFIDENCE:
+            if h.get("type") == "trial_hypothesis" and h.get("confidence", 0) >= self._config.auto_trial_confidence:
                 target_name = h.get("target_name", "voice")
                 await self.evolution.create_trial(
                     hypothesis=h["hypothesis"],

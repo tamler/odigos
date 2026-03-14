@@ -12,11 +12,11 @@ def register(ctx):
     settings = ctx.config.get("settings")
     if not settings or not settings.telegram_bot_token:
         logger.info("Telegram plugin skipped: no telegram_bot_token configured")
-        return
+        return {"status": "available", "error_message": "No telegram_bot_token configured"}
 
     if not ctx.service:
         logger.warning("Telegram plugin skipped: AgentService not available (wrong loading phase?)")
-        return
+        return {"status": "error", "error_message": "AgentService not available"}
 
     from odigos.channels.telegram import TelegramChannel
 

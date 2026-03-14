@@ -27,7 +27,6 @@ SKILL_CREATION_INSTRUCTION = """You can create reusable skills for task types yo
 def build_system_prompt(
     personality: Personality,
     memory_context: str = "",
-    tool_context: str = "",
     skill_catalog: str = "",
     corrections_context: str = "",
     sections: list | None = None,
@@ -38,12 +37,11 @@ def build_system_prompt(
     1. Identity -- who the agent is
     2. Voice guidelines -- how to communicate
     3. Memory context -- relevant memories (if any)
-    4. Tool context -- results from tool execution (if any)
-    5. Skill catalog -- available skills (if any)
-    6. Skill creation guidance (always)
-    7. Learned corrections (optional)
-    8. Correction detection (always)
-    9. Entity extraction -- always appended
+    4. Skill catalog -- available skills (if any)
+    5. Skill creation guidance (always)
+    6. Learned corrections (optional)
+    7. Correction detection (always)
+    8. Entity extraction -- always appended
     """
     parts = []
 
@@ -61,8 +59,6 @@ def build_system_prompt(
     # Always-included context sections
     if memory_context:
         parts.append(memory_context)
-    if tool_context:
-        parts.append(tool_context)
     if skill_catalog:
         parts.append(skill_catalog)
 

@@ -20,7 +20,7 @@ class ResolutionResult:
 class EntityResolver:
     """Multi-stage entity resolution pipeline.
 
-    Stages: exact match -> fuzzy match -> alias match -> vector match -> create new.
+    Stages: exact match -> fuzzy match -> vector match -> create new.
     LLM tiebreaker is deferred until an LLM provider is available for cheap calls.
     """
 
@@ -59,13 +59,7 @@ class EntityResolver:
                 confidence=0.85,
             )
 
-        # Stage 3: Alias match (already covered in find_entity, but check
-        # across all types if exact_typed was empty)
-        if exact and not exact_typed:
-            # Found by name/alias but different type -- treat as no match
-            pass
-
-        # Stage 4: Vector match
+        # Stage 3: Vector match
         vector_results = await self.vector_memory.search(f"{entity_type}: {name}", limit=3)
         for vr in vector_results:
             if vr.source_type == "entity_name" and vr.distance < 0.3:
@@ -77,7 +71,7 @@ class EntityResolver:
                         confidence=0.7,
                     )
 
-        # Stage 5: No match -- create new entity
+        # Stage 4: No match -- create new entity
         entity_id = await self.graph.create_entity(
             entity_type=entity_type, name=name, source="extraction"
         )

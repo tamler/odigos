@@ -1,9 +1,9 @@
 """Evolution engine API endpoints for dashboard."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from odigos.api.deps import get_db, require_api_key
+from odigos.api.deps import get_checkpoint_manager, get_db, require_api_key
 from odigos.db import Database
 
 router = APIRouter(
@@ -75,27 +75,33 @@ async def get_failed_trials(
 
 
 @router.post("/evolution/trial/{trial_id}/promote")
-async def promote_trial(trial_id: str, request: Request, db: Database = Depends(get_db)):
+async def promote_trial(
+    trial_id: str,
+    db: Database = Depends(get_db),
+    checkpoint_mgr=Depends(get_checkpoint_manager),
+):
     """Manually promote an active trial."""
     trial = await db.fetch_one(
         "SELECT * FROM trials WHERE id = ? AND status = 'active'", (trial_id,)
     )
     if not trial:
         raise HTTPException(status_code=404, detail="Active trial not found")
-    checkpoint_mgr = request.app.state.checkpoint_manager
     await checkpoint_mgr.promote_trial(trial_id)
     return {"status": "promoted"}
 
 
 @router.post("/evolution/trial/{trial_id}/revert")
-async def revert_trial(trial_id: str, request: Request, db: Database = Depends(get_db)):
+async def revert_trial(
+    trial_id: str,
+    db: Database = Depends(get_db),
+    checkpoint_mgr=Depends(get_checkpoint_manager),
+):
     """Manually revert an active trial."""
     trial = await db.fetch_one(
         "SELECT * FROM trials WHERE id = ? AND status = 'active'", (trial_id,)
     )
     if not trial:
         raise HTTPException(status_code=404, detail="Active trial not found")
-    checkpoint_mgr = request.app.state.checkpoint_manager
     await checkpoint_mgr.revert_trial(trial_id, reason="manual_revert")
     return {"status": "reverted"}
 

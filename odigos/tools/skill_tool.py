@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
@@ -29,9 +28,6 @@ class ActivateSkillTool(BaseTool):
         "required": ["name"],
     }
 
-    # Structured key in ToolResult.data JSON for executor to detect
-    ACTIVATION_KEY = "__skill_activation__"
-
     def __init__(self, skill_registry: SkillRegistry) -> None:
         self._registry = skill_registry
 
@@ -49,14 +45,13 @@ class ActivateSkillTool(BaseTool):
                 error=f"Skill '{name}' not found. Available: {', '.join(available)}",
             )
 
-        # Return skill info as structured JSON — executor extracts it.
-        # No mutable instance state, safe for concurrent use.
-        payload = json.dumps({
-            self.ACTIVATION_KEY: True,
-            "skill_name": skill.name,
-            "skill_prompt": skill.system_prompt,
-            "skill_tools": skill.tools,
-            "message": f"Skill '{name}' activated. Follow the instructions that will appear in context.",
-        })
-
-        return ToolResult(success=True, data=payload)
+        return ToolResult(
+            success=True,
+            data=f"Skill '{name}' activated. Follow the instructions that will appear in context.",
+            side_effect={
+                "skill_activation": True,
+                "skill_name": skill.name,
+                "skill_prompt": skill.system_prompt,
+                "skill_tools": skill.tools,
+            },
+        )

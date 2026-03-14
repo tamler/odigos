@@ -12,17 +12,13 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from odigos.config import EvolutionConfig
     from odigos.core.checkpoint import CheckpointManager
     from odigos.core.evaluator import Evaluator
     from odigos.db import Database
     from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
-
-PROMOTE_THRESHOLD = 0.5
-REVERT_THRESHOLD = -0.3
-DEFAULT_TRIAL_HOURS = 48
-DEFAULT_MIN_EVALS = 5
 
 
 class EvolutionEngine:
@@ -33,11 +29,17 @@ class EvolutionEngine:
         checkpoint_manager: CheckpointManager,
         evaluator: Evaluator,
         provider: LLMProvider,
+        evolution_config: EvolutionConfig | None = None,
     ) -> None:
         self.db = db
         self.checkpoint = checkpoint_manager
         self.evaluator = evaluator
         self.provider = provider
+
+        if evolution_config is None:
+            from odigos.config import EvolutionConfig
+            evolution_config = EvolutionConfig()
+        self._config = evolution_config
 
     async def create_trial(
         self,
@@ -45,10 +47,15 @@ class EvolutionEngine:
         target: str,
         change_description: str,
         overrides: dict[str, str],
-        trial_hours: int = DEFAULT_TRIAL_HOURS,
-        min_evaluations: int = DEFAULT_MIN_EVALS,
+        trial_hours: int | None = None,
+        min_evaluations: int | None = None,
         direction_log_id: str | None = None,
     ) -> str:
+        if trial_hours is None:
+            trial_hours = self._config.trial_duration_hours
+        if min_evaluations is None:
+            min_evaluations = self._config.min_evaluations
+
         active = await self.checkpoint.get_active_trial()
         if active:
             logger.warning("Cannot create trial: trial %s already active", active["id"][:8])
@@ -93,7 +100,7 @@ class EvolutionEngine:
 
         trial_id = trial["id"]
         eval_count = trial["evaluation_count"] or 0
-        min_evals = trial["min_evaluations"] or DEFAULT_MIN_EVALS
+        min_evals = trial["min_evaluations"] or self._config.min_evaluations
 
         if eval_count < min_evals:
             return "continue"
@@ -102,7 +109,7 @@ class EvolutionEngine:
         baseline = trial["baseline_avg_score"] or 0.0
         delta = avg - baseline
 
-        if delta >= PROMOTE_THRESHOLD:
+        if delta >= self._config.promote_threshold:
             await self.checkpoint.promote_trial(trial_id)
             logger.info(
                 "Promoted trial %s: score %.1f vs baseline %.1f (+%.1f)",
@@ -110,7 +117,7 @@ class EvolutionEngine:
             )
             return "promoted"
 
-        if delta <= REVERT_THRESHOLD:
+        if delta <= self._config.revert_threshold:
             await self._revert_with_log(trial, reason="worse_than_baseline")
             return "reverted"
 

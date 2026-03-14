@@ -22,6 +22,3 @@ def test_peer_config_has_netbird_fields():
     peer = PeerConfig(name="Archie", netbird_ip="100.64.0.2", ws_port=8001, api_key="secret")
     assert peer.netbird_ip == "100.64.0.2"
     assert peer.ws_port == 8001
-    # url should still work for backward compat
-    peer_legacy = PeerConfig(name="Legacy", url="http://old-peer:8000")
-    assert peer_legacy.url == "http://old-peer:8000"

@@ -292,7 +292,7 @@ class TestTracerInAgent:
             )
         )
 
-        agent = Agent(db=db, provider=mock_provider, tracer=tracer)
+        agent = Agent(db=db, provider=mock_provider, agent_name="TestBot", tracer=tracer)
 
         msg = _make_message("test:conv-1", "hi there")
         await agent.handle_message(msg)
@@ -315,7 +315,7 @@ class TestTracerInAgent:
             )
         )
 
-        agent = Agent(db=db, provider=mock_provider, tracer=tracer)
+        agent = Agent(db=db, provider=mock_provider, agent_name="TestBot", tracer=tracer)
 
         msg = _make_message("test:conv-1", "hi")
         await agent.handle_message(msg)
@@ -341,7 +341,7 @@ class TestTracerInAgent:
 
         mock_provider.complete = slow_complete
 
-        agent = Agent(db=db, provider=mock_provider, tracer=tracer, run_timeout=1)
+        agent = Agent(db=db, provider=mock_provider, agent_name="TestBot", tracer=tracer, run_timeout=1)
 
         msg = _make_message("test:conv-1", "hi")
         await agent.handle_message(msg)
@@ -362,8 +362,8 @@ class TestTracerInAgent:
         )
 
         agent = Agent(
-            db=db, provider=mock_provider, tracer=tracer,
-            budget_tracker=mock_budget,
+            db=db, provider=mock_provider, agent_name="TestBot",
+            tracer=tracer, budget_tracker=mock_budget,
         )
 
         msg = _make_message("test:conv-1", "hi")

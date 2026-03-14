@@ -73,3 +73,48 @@ def get_plugin_manager(request: Request):
 def get_channel_registry(request: Request):
     """Get the ChannelRegistry instance from app state."""
     return request.app.state.channel_registry
+
+
+def get_checkpoint_manager(request: Request):
+    """Get the CheckpointManager instance from app state."""
+    return request.app.state.checkpoint_manager
+
+
+def get_spawner(request: Request):
+    """Get the Spawner instance from app state."""
+    return request.app.state.spawner
+
+
+def get_agent_service(request: Request):
+    """Get the AgentService instance from app state."""
+    return request.app.state.agent_service
+
+
+def get_web_channel(request: Request):
+    """Get the WebChannel instance from app state."""
+    return request.app.state.web_channel
+
+
+def get_agent_client(request: Request):
+    """Get the AgentClient instance from app state."""
+    return request.app.state.agent_client
+
+
+def get_config_path(request: Request):
+    """Get the config file path from app state."""
+    return request.app.state.config_path
+
+
+def get_env_path(request: Request):
+    """Get the env file path from app state."""
+    return request.app.state.env_path
+
+
+def get_upload_dir(request: Request):
+    """Get the upload directory path from app state."""
+    return request.app.state.upload_dir
+
+
+def get_skill_registry(request: Request):
+    """Get the SkillRegistry instance from app state."""
+    return request.app.state.skill_registry

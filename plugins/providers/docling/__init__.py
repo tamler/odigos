@@ -61,3 +61,4 @@ def register(ctx):
         logger.info("Docling plugin loaded")
     except ImportError:
         logger.warning("Docling plugin skipped: docling package not installed")
+        return {"status": "available", "error_message": "docling package not installed"}

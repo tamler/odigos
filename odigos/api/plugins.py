@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from odigos.api.deps import get_plugin_manager, get_settings, require_api_key
+from odigos.api.deps import get_config_path, get_env_path, get_plugin_manager, get_settings, require_api_key
 from odigos.api.settings import _update_env_file
 
 router = APIRouter(
@@ -58,6 +58,8 @@ def _merge_plugins(
 
         if loaded_info:
             entry["status"] = loaded_info.get("status", "active")
+            if loaded_info.get("error_message"):
+                entry["error_message"] = loaded_info["error_message"]
         else:
             entry["status"] = "available"
 
@@ -95,9 +97,10 @@ class PluginConfigUpdate(BaseModel):
 async def configure_plugin(
     plugin_id: str,
     update: PluginConfigUpdate,
-    request: Request,
     plugin_manager=Depends(get_plugin_manager),
     settings=Depends(get_settings),
+    config_path_str: str = Depends(get_config_path),
+    env_path_str: str = Depends(get_env_path),
 ):
     """Configure a plugin by writing secrets to .env and settings to config.yaml."""
     # Verify plugin exists in metadata
@@ -106,8 +109,8 @@ async def configure_plugin(
     if not plugin_meta:
         raise HTTPException(status_code=404, detail=f"Plugin '{plugin_id}' not found")
 
-    config_path = Path(request.app.state.config_path)
-    env_path = Path(request.app.state.env_path)
+    config_path = Path(config_path_str)
+    env_path = Path(env_path_str)
 
     # Write secrets to .env
     for key, value in update.secrets.items():

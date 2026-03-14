@@ -55,7 +55,6 @@ class ContextAssembler:
         self,
         conversation_id: str,
         current_message: str,
-        tool_context: str = "",
         max_tokens: int = 0,
     ) -> list[dict]:
         """Assemble the full messages list: system + history + current."""
@@ -63,6 +62,9 @@ class ContextAssembler:
 
         # Load personality (hot reload -- re-read on every call)
         personality = load_personality(self.personality_path)
+        # Override personality name with configured agent name
+        if self.agent_name:
+            personality.name = self.agent_name
 
         # Get memory context if available
         memory_context = ""
@@ -96,7 +98,6 @@ class ContextAssembler:
         system_prompt = build_system_prompt(
             personality=personality,
             memory_context=memory_context,
-            tool_context=tool_context,
             skill_catalog=skill_catalog,
             corrections_context=corrections_context,
             sections=sections,

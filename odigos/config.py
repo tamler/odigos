@@ -24,8 +24,11 @@ class LLMConfig(BaseModel):
     base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "anthropic/claude-sonnet-4"
     fallback_model: str = "google/gemini-2.0-flash-001"
+    background_model: str = ""
     max_tokens: int = 4096
     temperature: float = 0.7
+    request_timeout_seconds: float = 60.0
+    connect_timeout_seconds: float = 10.0
 
 
 class PersonalityConfig(BaseModel):
@@ -40,25 +43,13 @@ class TelegramConfig(BaseModel):
 class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
+    ws_port: int = 8001
 
 
 class BudgetConfig(BaseModel):
     daily_limit_usd: float = 1.00
     monthly_limit_usd: float = 20.00
     warn_threshold: float = 0.80
-
-
-class RouterConfig(BaseModel):
-    free_pool: list[str] = [
-        "meta-llama/llama-4-scout:free",
-        "google/gemma-3-27b-it:free",
-        "mistralai/mistral-small-3.2-24b-instruct:free",
-    ]
-    rate_limit_rpm: int = 20
-
-
-class ContextConfig(BaseModel):
-    max_tokens: int = 12000
 
 
 class SkillsConfig(BaseModel):
@@ -69,6 +60,7 @@ class HeartbeatConfig(BaseModel):
     interval_seconds: int = 30
     max_todos_per_tick: int = 3
     idle_think_interval: int = 900
+    announce_interval_seconds: int = 60
 
 
 class SandboxConfig(BaseModel):
@@ -102,9 +94,19 @@ class BrowserConfig(BaseModel):
 
 
 class ApprovalConfig(BaseModel):
-    enabled: bool = False
-    tools: list[str] = []
+    enabled: bool = True
+    tools: list[str] = ["run_code", "run_shell", "write_file"]
     timeout: int = 300
+
+
+class EvolutionConfig(BaseModel):
+    trial_duration_hours: int = 48
+    min_evaluations: int = 5
+    promote_threshold: float = 0.5
+    revert_threshold: float = -0.3
+    auto_trial_confidence: float = 0.7
+    strategist_min_evals: int = 10
+    qualified_evaluator_min_score: float = 7.0
 
 
 class DeployTargetConfig(BaseModel):
@@ -119,7 +121,6 @@ class DeployTargetConfig(BaseModel):
 class PeerConfig(BaseModel):
     """Configuration for a trusted peer agent."""
     name: str
-    url: str = ""
     netbird_ip: str = ""
     ws_port: int = 8001
     api_key: str = ""
@@ -127,7 +128,7 @@ class PeerConfig(BaseModel):
 
 class Settings(BaseSettings):
     telegram_bot_token: str = ""
-    llm_api_key: str
+    llm_api_key: str = ""
     api_key: str = ""
     searxng_url: str = ""
     searxng_username: str = ""
@@ -140,8 +141,6 @@ class Settings(BaseSettings):
     telegram: TelegramConfig = TelegramConfig()
     server: ServerConfig = ServerConfig()
     budget: BudgetConfig = BudgetConfig()
-    router: RouterConfig = RouterConfig()
-    context: ContextConfig = ContextConfig()
     skills: SkillsConfig = SkillsConfig()
     heartbeat: HeartbeatConfig = HeartbeatConfig()
     sandbox: SandboxConfig = SandboxConfig()
@@ -150,6 +149,7 @@ class Settings(BaseSettings):
     browser: BrowserConfig = BrowserConfig()
     file_access: FileAccessConfig = FileAccessConfig()
     approval: ApprovalConfig = ApprovalConfig()
+    evolution: EvolutionConfig = EvolutionConfig()
     peers: list[PeerConfig] = []
     deploy_targets: list[DeployTargetConfig] = []
 

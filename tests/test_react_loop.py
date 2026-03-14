@@ -252,7 +252,7 @@ class TestAgentReAct:
         provider.complete.return_value = LLMResponse(
             content="Hello!", model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
         )
-        agent = Agent(db=db, provider=provider)
+        agent = Agent(db=db, provider=provider, agent_name="TestBot")
         response = await agent.handle_message(_make_message("Hello"))
         assert response == "Hello!"
         # Only one complete call (executor), no planner call
@@ -278,7 +278,7 @@ class TestAgentReAct:
                 tokens_in=20, tokens_out=15, cost_usd=0.002),
         ]
 
-        agent = Agent(db=db, provider=provider, tool_registry=registry)
+        agent = Agent(db=db, provider=provider, agent_name="TestBot", tool_registry=registry)
         response = await agent.handle_message(_make_message("What's new in Python?"))
         assert "Python 3.13" in response
 
@@ -296,7 +296,7 @@ class TestAgentReAct:
         provider = AsyncMock()
         provider.complete.side_effect = slow_complete
 
-        agent = Agent(db=db, provider=provider)
+        agent = Agent(db=db, provider=provider, agent_name="TestBot")
 
         msg1 = _make_message("First")
         msg2 = _make_message("Second")
@@ -316,7 +316,7 @@ class TestAgentReAct:
         mock_budget = AsyncMock()
         mock_budget.check_budget = AsyncMock(return_value=AsyncMock(within_budget=False))
 
-        agent = Agent(db=db, provider=provider, budget_tracker=mock_budget)
+        agent = Agent(db=db, provider=provider, agent_name="TestBot", budget_tracker=mock_budget)
         response = await agent.handle_message(_make_message("hello"))
         assert "spending limit" in response
         provider.complete.assert_not_called()
@@ -331,7 +331,7 @@ class TestAgentReAct:
         provider = AsyncMock()
         provider.complete.side_effect = hang_forever
 
-        agent = Agent(db=db, provider=provider, run_timeout=1)  # 1 second timeout
+        agent = Agent(db=db, provider=provider, agent_name="TestBot", run_timeout=1)  # 1 second timeout
         response = await agent.handle_message(_make_message("hello"))
         assert "time" in response.lower()
 
@@ -343,7 +343,7 @@ class TestAgentReAct:
             content="ok", model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
         )
 
-        agent = Agent(db=db, provider=provider)
+        agent = Agent(db=db, provider=provider, agent_name="TestBot")
         agent._lock_ttl = 0  # expire immediately
 
         await agent.handle_message(_make_message("hello"))
@@ -410,7 +410,7 @@ class TestSkillActivation:
         tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
         assert len(tool_msgs) == 1
         assert "activated" in tool_msgs[0]["content"].lower()
-        assert "__skill_activation__" not in tool_msgs[0]["content"]
+        assert "skill_activation" not in tool_msgs[0]["content"]
 
     @pytest.mark.asyncio
     async def test_tool_mismatch_logged(self, mock_provider, mock_assembler, skill_registry):

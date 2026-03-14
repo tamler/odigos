@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 def register(ctx):
     settings = ctx.config.get("settings")
     if not settings or not settings.browser.enabled:
-        return
+        return {"status": "available", "error_message": "Browser not enabled in settings"}
 
     if not shutil.which("agent-browser"):
         logger.warning(
             "Browser enabled but agent-browser CLI not found. "
             "Install: npm install -g @anthropic-ai/agent-browser"
         )
-        return
+        return {"status": "error", "error_message": "agent-browser CLI not installed"}
 
     from odigos.tools.browser import BrowserTool
 

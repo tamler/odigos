@@ -34,7 +34,7 @@ class Agent:
         self,
         db: Database,
         provider: LLMProvider,
-        agent_name: str = "Odigos",
+        agent_name: str,
         history_limit: int = 20,
         memory_manager: MemoryManager | None = None,
         personality_path: str = "data/personality.yaml",

@@ -1,10 +1,10 @@
 """Agent registry API endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from odigos.api.deps import get_db, require_api_key
+from odigos.api.deps import get_db, get_spawner, require_api_key
 from odigos.db import Database
 
 router = APIRouter(
@@ -32,9 +32,8 @@ async def list_agents(db: Database = Depends(get_db)):
 
 
 @router.post("/agents/spawn")
-async def spawn_agent(req: SpawnRequest, request: Request):
+async def spawn_agent(req: SpawnRequest, spawner=Depends(get_spawner)):
     """Spawn a new specialist agent."""
-    spawner = request.app.state.spawner
     result = await spawner.spawn(
         agent_name=req.agent_name,
         role=req.role,

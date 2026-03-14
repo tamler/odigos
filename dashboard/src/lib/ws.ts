@@ -4,15 +4,18 @@ type MessageHandler = (msg: Record<string, unknown>) => void
 
 export class ChatSocket {
   private ws: WebSocket | null = null
-  private onMessage: MessageHandler
+  private baseHandler: MessageHandler
   private onStatusChange: (connected: boolean) => void
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
+  // Public handler that pages can set/unset to receive messages
+  onMessage: MessageHandler | null = null
+
   constructor(
-    onMessage: MessageHandler,
+    baseHandler: MessageHandler,
     onStatusChange: (connected: boolean) => void,
   ) {
-    this.onMessage = onMessage
+    this.baseHandler = baseHandler
     this.onStatusChange = onStatusChange
   }
 
@@ -30,7 +33,9 @@ export class ChatSocket {
     }
     this.ws.onmessage = (e) => {
       try {
-        this.onMessage(JSON.parse(e.data))
+        const msg = JSON.parse(e.data)
+        this.baseHandler(msg)
+        if (this.onMessage) this.onMessage(msg)
       } catch { /* ignore parse errors */ }
     }
   }

@@ -47,12 +47,14 @@ class Heartbeat:
         agent_role: str = "",
         agent_description: str = "",
         announce_interval: int = 60,
+        background_model: str = "",
     ) -> None:
         self.db = db
         self.agent = agent
         self.channel_registry = channel_registry
         self.goal_store = goal_store
         self.provider = provider
+        self._background_model = background_model
         self._interval = interval
         self._max_todos_per_tick = max_todos_per_tick
         self._idle_think_interval = idle_think_interval
@@ -212,6 +214,9 @@ class Heartbeat:
         )
 
         try:
+            idle_kwargs: dict = {"max_tokens": 200, "temperature": 0.3}
+            if self._background_model:
+                idle_kwargs["model"] = self._background_model
             response = await self.provider.complete(
                 [
                     {
@@ -227,8 +232,7 @@ class Heartbeat:
                     },
                     {"role": "user", "content": f"Active goals:\n{goal_text}"},
                 ],
-                max_tokens=200,
-                temperature=0.3,
+                **idle_kwargs,
             )
             logger.debug("Idle thought: %s", response.content[:100])
             await self._process_idle_response(response.content, goals)

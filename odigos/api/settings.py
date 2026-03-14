@@ -3,10 +3,10 @@
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from odigos.api.deps import get_settings, require_api_key
+from odigos.api.deps import get_config_path, get_env_path, get_settings, require_api_key
 
 router = APIRouter(
     prefix="/api",
@@ -48,12 +48,13 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
 @router.post("/settings")
 async def update_settings_endpoint(
     update: SettingsUpdate,
-    request: Request,
     settings=Depends(get_settings),
+    config_path_str: str = Depends(get_config_path),
+    env_path_str: str = Depends(get_env_path),
 ):
     """Update settings, writing to config.yaml and .env, then hot-reload in-memory."""
-    config_path = Path(request.app.state.config_path)
-    env_path = Path(request.app.state.env_path)
+    config_path = Path(config_path_str)
+    env_path = Path(env_path_str)
 
     # Load existing config.yaml
     yaml_config: dict = {}
@@ -69,21 +70,19 @@ async def update_settings_endpoint(
                 yaml_config[section] = {}
             yaml_config[section].update(section_data)
 
-    # Write updated config.yaml
-    with open(config_path, "w") as f:
-        yaml.dump(yaml_config, f, default_flow_style=False)
-
-    # Update .env if LLM API key was provided
-    if update.llm_api_key is not None:
+    # Update LLM API key in .env (ignore masked placeholder)
+    if update.llm_api_key is not None and update.llm_api_key != "****":
         _update_env_file(env_path, "LLM_API_KEY", update.llm_api_key)
         object.__setattr__(settings, "llm_api_key", update.llm_api_key)
 
-    # Update dashboard API key in config.yaml
-    if update.api_key is not None:
+    # Update dashboard API key (ignore masked placeholder)
+    if update.api_key is not None and update.api_key != "****":
         yaml_config["api_key"] = update.api_key
-        with open(config_path, "w") as f:
-            yaml.dump(yaml_config, f, default_flow_style=False)
         object.__setattr__(settings, "api_key", update.api_key)
+
+    # Write config.yaml once with all updates
+    with open(config_path, "w") as f:
+        yaml.dump(yaml_config, f, default_flow_style=False)
 
     # Hot-reload in-memory settings from merged sections
     for section in ("llm", "agent", "budget", "heartbeat", "sandbox"):

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from odigos.core.plugin_context import PluginContext
 from odigos.core.plugins import PluginManager
 from odigos.core.trace import Tracer
 from odigos.db import Database
@@ -29,16 +30,18 @@ async def _seed_conversation(db: Database, conversation_id: str) -> None:
 
 
 class TestPluginManager:
-    async def test_load_plugin_registers_hooks(self, db, tmp_path):
+    async def test_load_plugin_registers_via_register(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
         plugin_file = tmp_path / "my_plugin.py"
         plugin_file.write_text(textwrap.dedent("""\
             async def on_step(event_type, conversation_id, data):
                 pass
 
-            hooks = {"step_start": on_step}
+            def register(ctx):
+                ctx.tracer.subscribe("step_start", on_step)
         """))
 
         pm.load_all(str(tmp_path))
@@ -47,14 +50,16 @@ class TestPluginManager:
 
     async def test_load_multiple_plugins(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
         for name in ("alpha", "beta"):
             (tmp_path / f"{name}.py").write_text(textwrap.dedent("""\
                 async def on_event(event_type, conversation_id, data):
                     pass
 
-                hooks = {"step_start": on_event}
+                def register(ctx):
+                    ctx.tracer.subscribe("step_start", on_event)
             """))
 
         pm.load_all(str(tmp_path))
@@ -62,11 +67,12 @@ class TestPluginManager:
         assert len(tracer._subscribers["step_start"]) == 2
         assert len(pm.loaded_plugins) == 2
 
-    async def test_skip_file_without_hooks(self, db, tmp_path):
+    async def test_skip_file_without_register(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
-        (tmp_path / "no_hooks.py").write_text("x = 1\n")
+        (tmp_path / "no_register.py").write_text("x = 1\n")
         pm.load_all(str(tmp_path))
 
         assert len(pm.loaded_plugins) == 1
@@ -84,33 +90,21 @@ class TestPluginManager:
         assert pm.loaded_plugins[0]["status"] == "error"
         assert pm.loaded_plugins[0]["pattern"] == "import"
 
-    async def test_skip_non_dict_hooks(self, db, tmp_path):
+    async def test_skip_non_callable_register(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
-        (tmp_path / "bad_hooks.py").write_text("hooks = [1, 2, 3]\n")
+        (tmp_path / "bad_register.py").write_text("register = 'not_a_function'\n")
         pm.load_all(str(tmp_path))
 
         assert len(pm.loaded_plugins) == 1
         assert pm.loaded_plugins[0]["status"] == "error"
-        assert pm.loaded_plugins[0]["pattern"] == "none"
-
-    async def test_skip_non_callable_hook(self, db, tmp_path):
-        tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
-
-        (tmp_path / "non_callable.py").write_text(textwrap.dedent("""\
-            hooks = {"step_start": "not_a_function"}
-        """))
-        pm.load_all(str(tmp_path))
-
-        assert len(pm.loaded_plugins) == 1
-        assert pm.loaded_plugins[0]["hook_count"] == 0
-        assert len(tracer._subscribers.get("step_start", [])) == 0
 
     async def test_empty_directory(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir()
@@ -120,7 +114,8 @@ class TestPluginManager:
 
     async def test_creates_directory_if_missing(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
         plugins_dir = tmp_path / "new_plugins_dir"
         assert not plugins_dir.exists()
@@ -132,13 +127,12 @@ class TestPluginManager:
 
     async def test_skips_dunder_files(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
         (tmp_path / "__init__.py").write_text(textwrap.dedent("""\
-            async def on_event(event_type, conversation_id, data):
-                pass
-
-            hooks = {"step_start": on_event}
+            def register(ctx):
+                ctx.tracer.subscribe("step_start", lambda *a: None)
         """))
         pm.load_all(str(tmp_path))
 
@@ -146,25 +140,28 @@ class TestPluginManager:
 
     async def test_reload_clears_and_reloads(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
         plugin_file = tmp_path / "reloadable.py"
         plugin_file.write_text(textwrap.dedent("""\
             async def on_step(event_type, conversation_id, data):
                 pass
 
-            hooks = {"step_start": on_step}
+            def register(ctx):
+                ctx.tracer.subscribe("step_start", on_step)
         """))
 
         pm.load_all(str(tmp_path))
         assert len(tracer._subscribers["step_start"]) == 1
 
-        # Rewrite with different hook
+        # Rewrite with different subscription
         plugin_file.write_text(textwrap.dedent("""\
             async def on_tool(event_type, conversation_id, data):
                 pass
 
-            hooks = {"tool_call": on_tool}
+            def register(ctx):
+                ctx.tracer.subscribe("tool_call", on_tool)
         """))
 
         pm.reload()
@@ -175,17 +172,13 @@ class TestPluginManager:
 
     async def test_loaded_plugins_metadata(self, db, tmp_path):
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
         plugin_file = tmp_path / "meta_plugin.py"
         plugin_file.write_text(textwrap.dedent("""\
-            async def on_a(event_type, conversation_id, data):
+            def register(ctx):
                 pass
-
-            async def on_b(event_type, conversation_id, data):
-                pass
-
-            hooks = {"step_start": on_a, "tool_call": on_b}
         """))
 
         pm.load_all(str(tmp_path))
@@ -194,14 +187,16 @@ class TestPluginManager:
         meta = pm.loaded_plugins[0]
         assert meta["name"] == "meta_plugin"
         assert meta["file"] == str(plugin_file)
-        assert meta["hook_count"] == 2
+        assert meta["pattern"] == "register"
+        assert meta["status"] == "active"
 
 
 class TestPluginManagerIntegration:
     async def test_plugin_receives_trace_event(self, db, tmp_path):
         await _seed_conversation(db, "conv-1")
         tracer = Tracer(db)
-        pm = PluginManager(tracer=tracer)
+        ctx = PluginContext(tracer=tracer)
+        pm = PluginManager(plugin_context=ctx)
 
         plugin_file = tmp_path / "collector.py"
         plugin_file.write_text(textwrap.dedent("""\
@@ -210,7 +205,8 @@ class TestPluginManagerIntegration:
             async def on_step(event_type, conversation_id, data):
                 collected.append({"event_type": event_type, "conversation_id": conversation_id, "data": data})
 
-            hooks = {"step_start": on_step}
+            def register(ctx):
+                ctx.tracer.subscribe("step_start", on_step)
         """))
 
         pm.load_all(str(tmp_path))
@@ -230,32 +226,30 @@ _SAMPLE_PLUGIN_PATH = str(
 
 
 class TestSamplePlugin:
-    def test_hooks_dict_exists(self):
+    def test_register_function_exists(self):
         spec = importlib.util.spec_from_file_location(
             "log_tools_test", _SAMPLE_PLUGIN_PATH
         )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        assert isinstance(module.hooks, dict)
-        assert "tool_call" in module.hooks
-        assert "tool_result" in module.hooks
-        assert callable(module.hooks["tool_call"])
-        assert callable(module.hooks["tool_result"])
+        assert hasattr(module, "register")
+        assert callable(module.register)
 
-    async def test_callbacks_run_without_error(self, caplog):
+    async def test_register_subscribes_tracer(self, db):
+        tracer = Tracer(db)
+        ctx = PluginContext(tracer=tracer)
+
         spec = importlib.util.spec_from_file_location(
             "log_tools_test2", _SAMPLE_PLUGIN_PATH
         )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        with caplog.at_level(logging.INFO, logger="plugin.log_tools"):
-            await module.hooks["tool_call"]("tool_call", "conv-1", {"tool": "search", "arguments": {"q": "test"}})
-            await module.hooks["tool_result"]("tool_result", "conv-1", {"tool": "search", "success": True, "duration_ms": 150})
+        module.register(ctx)
 
-        assert "Tool called: search" in caplog.text
-        assert "Tool result: search" in caplog.text
+        assert len(tracer._subscribers.get("tool_call", [])) == 1
+        assert len(tracer._subscribers.get("tool_result", [])) == 1
 
 
 class TestPluginContext:
@@ -395,16 +389,14 @@ class TestPluginLoader:
 
         assert ctx.get_provider("pkg_provider") is not None
 
-    def test_loads_legacy_hooks_plugins(self, tmp_path, db):
-        """PluginManager still supports legacy hooks-based plugins."""
+    def test_rejects_plugin_without_register(self, tmp_path, db):
+        """Plugins without register() are rejected."""
         from odigos.core.plugin_context import PluginContext
 
-        plugin_file = tmp_path / "legacy_plugin.py"
+        plugin_file = tmp_path / "no_register_plugin.py"
         plugin_file.write_text(textwrap.dedent("""\
             async def on_tool_call(event_type, conversation_id, data):
                 pass
-
-            hooks = {"tool_call": on_tool_call}
         """))
 
         tracer = Tracer(db=db)
@@ -413,26 +405,5 @@ class TestPluginLoader:
         manager.load_all(str(tmp_path))
 
         assert len(manager.loaded_plugins) == 1
-        assert manager.loaded_plugins[0]["pattern"] == "hooks"
-
-    def test_register_pattern_preferred_over_hooks(self, tmp_path):
-        """When a plugin has both register() and hooks, register() wins."""
-        from odigos.core.plugin_context import PluginContext
-
-        plugin_file = tmp_path / "dual_plugin.py"
-        plugin_file.write_text(textwrap.dedent("""\
-            async def on_step(event_type, conversation_id, data):
-                pass
-
-            hooks = {"step_start": on_step}
-
-            def register(ctx):
-                ctx.register_provider("dual", {"loaded": True})
-        """))
-
-        ctx = PluginContext()
-        manager = PluginManager(plugin_context=ctx)
-        manager.load_all(str(tmp_path))
-
-        assert ctx.get_provider("dual") is not None
-        assert manager.loaded_plugins[0]["pattern"] == "register"
+        assert manager.loaded_plugins[0]["status"] == "error"
+        assert manager.loaded_plugins[0]["pattern"] == "none"

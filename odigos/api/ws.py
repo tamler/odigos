@@ -53,6 +53,8 @@ async def websocket_endpoint(websocket: WebSocket):
     web_channel = websocket.app.state.web_channel
     web_channel.register_connection(conversation_id, websocket)
 
+    first_message = True
+
     try:
         await websocket.send_json({
             "type": "connected",
@@ -65,8 +67,12 @@ async def websocket_endpoint(websocket: WebSocket):
             msg_type = data.get("type")
 
             if msg_type == "chat":
-                # Extract chat_id from conversation_id so agent resolves to same id
-                chat_id = conversation_id.split(":", 1)[1]
+                # Use client-provided conversation_id if resuming
+                client_conv_id = data.get("conversation_id")
+                if client_conv_id:
+                    conversation_id = client_conv_id
+
+                chat_id = conversation_id.split(":", 1)[1] if ":" in conversation_id else conversation_id
                 msg = UniversalMessage(
                     id=uuid.uuid4().hex,
                     channel="web",
@@ -75,13 +81,23 @@ async def websocket_endpoint(websocket: WebSocket):
                     timestamp=datetime.now(timezone.utc),
                     metadata={"chat_id": chat_id},
                 )
-                agent = websocket.app.state.agent
-                response = await agent.handle_message(msg)
+                agent_service = websocket.app.state.agent_service
+                response = await agent_service.handle_message(msg)
+
+                # Notify frontend of new conversation so sidebar updates
+                if first_message:
+                    first_message = False
+                    await websocket.send_json({
+                        "type": "conversation_started",
+                        "conversation_id": conversation_id,
+                    })
+
                 await websocket.send_json({
                     "type": "chat_response",
                     "content": response,
                     "conversation_id": conversation_id,
                 })
+                agent = agent_service.agent
                 asyncio.create_task(_auto_title_and_notify(
                     websocket, agent.db, agent.executor.provider,
                     conversation_id, data.get("content", ""), response,
@@ -99,6 +115,18 @@ async def websocket_endpoint(websocket: WebSocket):
                         "type": "peer_connected",
                         "conversation_id": conversation_id,
                         "agent_name": peer_name,
+                    })
+
+            elif msg_type == "approval_response":
+                approval_id = data.get("approval_id", "")
+                decision = data.get("decision", "denied")
+                if approval_id and hasattr(agent_service, "resolve_approval"):
+                    resolved = agent_service.resolve_approval(approval_id, decision)
+                    await websocket.send_json({
+                        "type": "approval_resolved",
+                        "approval_id": approval_id,
+                        "decision": decision,
+                        "resolved": resolved,
                     })
 
             elif msg_type == "subscribe":

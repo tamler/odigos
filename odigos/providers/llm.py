@@ -23,6 +23,8 @@ class LLMClient(LLMProvider):
         fallback_model: str,
         max_tokens: int = 4096,
         temperature: float = 0.7,
+        request_timeout: float = 60.0,
+        connect_timeout: float = 10.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -31,7 +33,7 @@ class LLMClient(LLMProvider):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(60.0, connect=10.0),
+            timeout=httpx.Timeout(request_timeout, connect=connect_timeout),
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -40,7 +42,7 @@ class LLMClient(LLMProvider):
 
     async def complete(self, messages: list[dict], **kwargs) -> LLMResponse:
         """Try default model, fall back to fallback model on failure."""
-        model = kwargs.get("model", self.default_model)
+        model = kwargs.pop("model", self.default_model)
         models_to_try = [model]
         if model != self.fallback_model:
             models_to_try.append(self.fallback_model)

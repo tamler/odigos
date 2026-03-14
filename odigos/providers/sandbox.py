@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import platform
+import tempfile
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ class SandboxProvider:
         self.max_output_chars = max_output_chars
 
     async def execute(self, code: str, language: str = "python") -> SandboxResult:
-        """Run code in a sandboxed subprocess."""
+        """Run code in a sandboxed subprocess with filesystem isolation."""
         if language == "python":
             cmd = self._build_python_cmd(code)
         elif language == "shell":
@@ -47,40 +48,51 @@ class SandboxProvider:
                 timed_out=False,
             )
 
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                proc.communicate(), timeout=self.timeout + 5
-            )
-            stdout = self._truncate(stdout_bytes.decode(errors="replace"))
-            stderr = self._truncate(stderr_bytes.decode(errors="replace"))
-            return SandboxResult(
-                stdout=stdout,
-                stderr=stderr,
-                exit_code=proc.returncode or 0,
-                timed_out=False,
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            return SandboxResult(
-                stdout="",
-                stderr="Execution timed out",
-                exit_code=-1,
-                timed_out=True,
-            )
-        except Exception as e:
-            logger.exception("Sandbox execution failed")
-            return SandboxResult(
-                stdout="",
-                stderr=str(e),
-                exit_code=-1,
-                timed_out=False,
-            )
+        # Run in an isolated temp directory so code cannot access /app
+        with tempfile.TemporaryDirectory(prefix="odigos_sandbox_") as tmpdir:
+            env = {
+                "PATH": "/usr/local/bin:/usr/bin:/bin",
+                "HOME": tmpdir,
+                "TMPDIR": tmpdir,
+                "LANG": "C.UTF-8",
+            }
+
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=tmpdir,
+                    env=env,
+                )
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    proc.communicate(), timeout=self.timeout + 5
+                )
+                stdout = self._truncate(stdout_bytes.decode(errors="replace"))
+                stderr = self._truncate(stderr_bytes.decode(errors="replace"))
+                return SandboxResult(
+                    stdout=stdout,
+                    stderr=stderr,
+                    exit_code=proc.returncode or 0,
+                    timed_out=False,
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                return SandboxResult(
+                    stdout="",
+                    stderr="Execution timed out",
+                    exit_code=-1,
+                    timed_out=True,
+                )
+            except Exception as e:
+                logger.exception("Sandbox execution failed")
+                return SandboxResult(
+                    stdout="",
+                    stderr=str(e),
+                    exit_code=-1,
+                    timed_out=False,
+                )
 
     def _build_python_cmd(self, code: str) -> list[str]:
         limits = self._resource_prefix()

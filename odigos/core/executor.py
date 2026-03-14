@@ -268,17 +268,12 @@ class Executor:
                 {"tool": tool_call.name, "success": result.success, "error": result.error, "duration_ms": round(duration * 1000)},
             )
 
-            # Detect skill activation from structured payload
-            if tool_call.name == "activate_skill" and result.success:
-                try:
-                    payload = json.loads(result.data)
-                    if payload.get("__skill_activation__"):
-                        self._active_skill_name = payload["skill_name"]
-                        self._active_skill_tools = set(payload.get("skill_tools", []))
-                        self._pending_skill_prompt = payload["skill_prompt"]
-                        return payload.get("message", result.data)
-                except (json.JSONDecodeError, KeyError):
-                    pass
+            # Detect skill activation from structured side_effect
+            if result.side_effect and result.side_effect.get("skill_activation"):
+                self._active_skill_name = result.side_effect["skill_name"]
+                self._active_skill_tools = set(result.side_effect.get("skill_tools", []))
+                self._pending_skill_prompt = result.side_effect["skill_prompt"]
+                return result.data
 
             if result.success:
                 return result.data

@@ -68,9 +68,15 @@ async def infer_implicit_feedback(
 class Evaluator:
     """Scores past agent actions via rubric generation (C.1) and scoring (C.2)."""
 
-    def __init__(self, db: Database, provider: LLMProvider) -> None:
+    def __init__(
+        self,
+        db: Database,
+        provider: LLMProvider,
+        qualified_evaluator_min_score: float = 7.0,
+    ) -> None:
         self.db = db
         self.provider = provider
+        self._qualified_evaluator_min_score = qualified_evaluator_min_score
 
     async def get_unscored_messages(self, limit: int = 5) -> list[dict]:
         """Find assistant messages that haven't been evaluated yet."""
@@ -204,14 +210,14 @@ class Evaluator:
         - Peer specialty matches task_type
         - Peer is online
         - Peer has allow_external_evaluation = 1
-        - Peer has evolution_score > 7.0
+        - Peer has evolution_score > qualified_evaluator_min_score
         """
         row = await self.db.fetch_one(
             "SELECT * FROM agent_registry "
             "WHERE specialty = ? AND status = 'online' "
-            "AND allow_external_evaluation = 1 AND evolution_score > 7.0 "
+            "AND allow_external_evaluation = 1 AND evolution_score > ? "
             "ORDER BY evolution_score DESC LIMIT 1",
-            (task_type,),
+            (task_type, self._qualified_evaluator_min_score),
         )
         return dict(row) if row else None
 

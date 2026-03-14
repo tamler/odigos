@@ -73,7 +73,7 @@ class AgentClient:
     def __init__(
         self,
         peers: list[PeerConfig],
-        agent_name: str = "Odigos",
+        agent_name: str,
         db: Database | None = None,
     ) -> None:
         self._peers = {p.name: p for p in peers}

@@ -1,7 +1,10 @@
 """Tests for the WebSocket endpoint at /api/ws."""
 
+from __future__ import annotations
+
 import json
 from types import SimpleNamespace
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -11,14 +14,24 @@ from starlette.testclient import TestClient
 from odigos.api.ws import router
 
 
-def _make_app(api_key: str = "", agent: MagicMock | None = None) -> FastAPI:
-    """Create a minimal FastAPI app with the ws router and fake state."""
+def _make_app(api_key: str = "", agent: Optional[MagicMock] = None) -> FastAPI:
+    """Create a minimal FastAPI app with the ws router and fake state.
+
+    Mirrors real app state from main.py: agent_service (not agent).
+    """
     app = FastAPI()
     app.include_router(router)
 
     if agent is None:
         agent = MagicMock()
         agent.handle_message = AsyncMock(return_value="Agent response")
+        agent.db = MagicMock()
+        agent.executor = MagicMock()
+        agent.executor.provider = MagicMock()
+
+    agent_service = MagicMock()
+    agent_service.handle_message = agent.handle_message
+    agent_service.agent = agent
 
     web_channel = MagicMock()
     web_channel.register_connection = MagicMock()
@@ -26,7 +39,7 @@ def _make_app(api_key: str = "", agent: MagicMock | None = None) -> FastAPI:
     web_channel.add_subscription = MagicMock()
 
     app.state.settings = SimpleNamespace(api_key=api_key)
-    app.state.agent = agent
+    app.state.agent_service = agent_service
     app.state.web_channel = web_channel
     return app
 
@@ -84,6 +97,9 @@ class TestChatMessage:
     def test_chat_message_returns_agent_response(self):
         agent = MagicMock()
         agent.handle_message = AsyncMock(return_value="Hello from agent")
+        agent.db = MagicMock()
+        agent.executor = MagicMock()
+        agent.executor.provider = MagicMock()
         app = _make_app(api_key="test-key", agent=agent)
         client = TestClient(app)
         with client.websocket_connect("/api/ws?token=test-key") as ws:
@@ -92,8 +108,13 @@ class TestChatMessage:
             conversation_id = connected["conversation_id"]
 
             ws.send_json({"type": "chat", "content": "Hi there"})
-            response = ws.receive_json()
 
+            # First message on a new conversation is conversation_started
+            started = ws.receive_json()
+            assert started["type"] == "conversation_started"
+            assert started["conversation_id"] == conversation_id
+
+            response = ws.receive_json()
             assert response["type"] == "chat_response"
             assert response["content"] == "Hello from agent"
             assert response["conversation_id"] == conversation_id

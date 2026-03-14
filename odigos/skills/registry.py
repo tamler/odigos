@@ -99,6 +99,23 @@ class SkillRegistry:
         logger.info("Created skill: %s at %s", name, path)
         return skill
 
+    def delete(self, name: str) -> None:
+        """Delete an agent-created skill. Built-in skills cannot be deleted."""
+        skill = self._skills.get(name)
+        if not skill:
+            raise ValueError(f"Skill '{name}' not found")
+        if skill.builtin:
+            raise ValueError(f"Cannot delete built-in skill '{name}'")
+
+        target_dir = getattr(self, "skills_dir", None)
+        if target_dir:
+            path = Path(target_dir) / f"{name}.md"
+            if path.exists():
+                path.unlink()
+
+        del self._skills[name]
+        logger.info("Deleted skill: %s", name)
+
     def update(
         self,
         name: str,

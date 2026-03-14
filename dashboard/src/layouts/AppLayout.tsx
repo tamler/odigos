@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Outlet, NavLink, useNavigate, useSearchParams } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Activity, Users, Puzzle } from 'lucide-react'
+import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -9,9 +9,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { get, patch, del } from '@/lib/api'
+import { ChatSocket } from '@/lib/ws'
 import { toast } from 'sonner'
 
 interface Conversation {
@@ -28,9 +30,28 @@ export default function AppLayout() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [connected, setConnected] = useState(false)
   const editInputRef = useRef<HTMLInputElement>(null)
+  const socketRef = useRef<ChatSocket | null>(null)
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
+
+  // Persistent WebSocket — lives at layout level, survives page navigation
+  useEffect(() => {
+    const socket = new ChatSocket(
+      () => {},  // message handling delegated to ChatPage via ref
+      (isConnected) => {
+        setConnected(isConnected)
+        if (!isConnected) {
+          toast.error('Disconnected from server', { duration: 5000 })
+        }
+      },
+    )
+    socket.connect()
+    socketRef.current = socket
+    return () => socket.disconnect()
+  }, [])
 
   const loadConversations = useCallback(() => {
     get<{ conversations: Conversation[] }>('/api/conversations?limit=50')
@@ -42,13 +63,11 @@ export default function AppLayout() {
     loadConversations()
   }, [loadConversations])
 
-  // Pick up conversation ID from URL
   useEffect(() => {
     const cid = searchParams.get('c')
     if (cid) setActiveId(cid)
   }, [searchParams])
 
-  // Focus edit input when editing starts
   useEffect(() => {
     if (editingId) editInputRef.current?.focus()
   }, [editingId])
@@ -98,13 +117,34 @@ export default function AppLayout() {
     }
   }
 
+  function handleExport(id: string, format: 'markdown' | 'json') {
+    const token = localStorage.getItem('odigos_api_key') || ''
+    const url = `/api/conversations/${id}/export?format=${format}`
+    fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+      .then((res) => {
+        if (!res.ok) throw new Error('Export failed')
+        return res.blob()
+      })
+      .then((blob) => {
+        const ext = format === 'json' ? 'json' : 'md'
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `${id}.${ext}`
+        a.click()
+        URL.revokeObjectURL(a.href)
+        toast.success('Conversation exported')
+      })
+      .catch(() => toast.error('Failed to export conversation'))
+  }
+
   function displayTitle(c: Conversation): string {
     if (c.title) return c.title
-    // Fallback: short ID + date
     const date = new Date(c.created_at || c.last_message_at)
     const short = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     return `Chat ${short}`
   }
+
+  const isSettingsPage = location.pathname === '/settings'
 
   return (
     <TooltipProvider>
@@ -125,16 +165,6 @@ export default function AppLayout() {
               <Button variant="ghost" size="sm" className="flex-1 justify-start gap-2" onClick={handleNewChat}>
                 <Plus className="h-4 w-4" /> New Chat
               </Button>
-            )}
-            {collapsed && (
-              <Tooltip>
-                <TooltipTrigger>
-                  <Button variant="ghost" size="icon" onClick={handleNewChat} className="shrink-0">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">New Chat</TooltipContent>
-              </Tooltip>
             )}
           </div>
 
@@ -180,13 +210,17 @@ export default function AppLayout() {
                         <DropdownMenu>
                           <DropdownMenuTrigger>
                             <Button variant="ghost" size="icon" className="h-6 w-6">
-                              <Pencil className="h-3 w-3" />
+                              <MoreHorizontal className="h-3 w-3" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuContent align="end" className="w-40">
                             <DropdownMenuItem onClick={() => startRename(c)}>
                               <Pencil className="h-3 w-3 mr-2" /> Rename
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleExport(c.id, 'markdown')}>
+                              <Download className="h-3 w-3 mr-2" /> Export
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => handleDelete(c.id)}
                               className="text-destructive focus:text-destructive"
@@ -203,69 +237,19 @@ export default function AppLayout() {
             </ScrollArea>
           )}
 
-          {/* Bottom: Evolution + Settings */}
-          <div className="p-3 mt-auto space-y-1">
+          {/* Bottom: Settings */}
+          <div className="p-3 mt-auto">
             <Tooltip>
               <TooltipTrigger>
-                <NavLink
-                  to="/evolution"
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                    }`
-                  }
-                >
-                  <Activity className="h-4 w-4 shrink-0" />
-                  {!collapsed && 'Evolution'}
-                </NavLink>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Evolution</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
-                <NavLink
-                  to="/agents"
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                    }`
-                  }
-                >
-                  <Users className="h-4 w-4 shrink-0" />
-                  {!collapsed && 'Agents'}
-                </NavLink>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Agents</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
-                <NavLink
-                  to="/plugins"
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                    }`
-                  }
-                >
-                  <Puzzle className="h-4 w-4 shrink-0" />
-                  {!collapsed && 'Plugins'}
-                </NavLink>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Plugins</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
-                <NavLink
-                  to="/settings"
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
-                      isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                    }`
-                  }
+                <button
+                  onClick={() => navigate('/settings')}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
+                    isSettingsPage ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                  }`}
                 >
                   <Settings className="h-4 w-4 shrink-0" />
                   {!collapsed && 'Settings'}
-                </NavLink>
+                </button>
               </TooltipTrigger>
               {collapsed && <TooltipContent side="right">Settings</TooltipContent>}
             </Tooltip>
@@ -274,7 +258,13 @@ export default function AppLayout() {
 
         {/* Main content */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          <Outlet context={{ activeConversationId: activeId, setActiveId, refreshConversations: loadConversations }} />
+          <Outlet context={{
+            activeConversationId: activeId,
+            setActiveId,
+            refreshConversations: loadConversations,
+            socketRef,
+            connected,
+          }} />
         </main>
       </div>
     </TooltipProvider>

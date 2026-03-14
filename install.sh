@@ -93,10 +93,16 @@ LLM_API_KEY=${api_key}
 EOF
     info "Wrote .env (API key)"
 
+    # Generate a persistent dashboard API key
+    dashboard_key=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))" 2>/dev/null \
+                    || openssl rand -base64 32 | tr -d '/+=' | head -c 43)
+
     # Write config.yaml (settings only, no secrets)
     cat > config.yaml << EOF
 # Odigos Configuration
 # See config.yaml.example for all available options.
+
+api_key: "${dashboard_key}"
 
 agent:
   name: "Odigos"
@@ -159,20 +165,16 @@ if [[ "$start_now" =~ ^[Yy]$ ]]; then
         echo ""
         bold "  Dashboard: http://localhost:8000"
         echo ""
+        bold "  API Key: ${dashboard_key}"
+        echo ""
+        echo "  Use this key to log in to the dashboard."
+        echo "  It's saved in config.yaml — change it there anytime."
+        echo ""
         echo "  Useful commands:"
         echo "    docker compose logs -f odigos    View logs"
         echo "    docker compose restart odigos    Restart"
         echo "    docker compose down              Stop"
         echo ""
-        # Show auto-generated API key from logs
-        api_key_line=$(docker compose logs odigos 2>&1 | grep "generated a random key" | tail -1 || true)
-        if [ -n "$api_key_line" ]; then
-            warn "Dashboard API key (from logs):"
-            echo "    $api_key_line"
-            echo ""
-            echo "  Set 'api_key' in config.yaml for a persistent key."
-            echo ""
-        fi
     else
         warn "Odigos did not become healthy within 120s."
         echo "  Check logs: docker compose logs odigos"

@@ -11,6 +11,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from odigos.config import LLMConfig, ServerConfig
     from odigos.db import Database
     from odigos.providers.base import LLMProvider
 
@@ -24,11 +25,15 @@ class Spawner:
         self,
         db: Database,
         provider: LLMProvider,
-        parent_name: str = "Odigos",
+        parent_name: str,
+        llm_config: LLMConfig | None = None,
+        server_config: ServerConfig | None = None,
     ) -> None:
         self.db = db
         self.provider = provider
         self.parent_name = parent_name
+        self.llm_config = llm_config
+        self.server_config = server_config
 
     async def generate_config(
         self,
@@ -39,6 +44,8 @@ class Spawner:
         deploy_target: str = "",
     ) -> dict:
         """Generate a config.yaml structure for a new specialist agent."""
+        llm = self.llm_config
+        ws_port = self.server_config.ws_port if self.server_config else 8001
         return {
             "agent": {
                 "name": agent_name,
@@ -48,15 +55,15 @@ class Spawner:
                 "allow_external_evaluation": False,
             },
             "llm": {
-                "base_url": "https://openrouter.ai/api/v1",
-                "default_model": "anthropic/claude-sonnet-4",
-                "fallback_model": "google/gemini-2.0-flash-001",
+                "base_url": llm.base_url if llm else "https://openrouter.ai/api/v1",
+                "default_model": llm.default_model if llm else "anthropic/claude-sonnet-4",
+                "fallback_model": llm.fallback_model if llm else "google/gemini-2.0-flash-001",
             },
             "peers": [
                 {
                     "name": self.parent_name,
                     "netbird_ip": "",  # Filled at deploy time
-                    "ws_port": 8001,
+                    "ws_port": ws_port,
                 }
             ],
             "_deploy_target": deploy_target,

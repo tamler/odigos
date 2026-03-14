@@ -43,7 +43,7 @@ class TestLoadPersonality:
         """Missing file returns default personality."""
         personality = load_personality("/nonexistent/path.yaml")
 
-        assert personality.name == "Odigos"
+        assert personality.name == ""
         assert personality.voice.tone == "direct, warm, slightly informal"
         assert personality.identity.first_person is True
 
@@ -95,7 +95,7 @@ class TestPromptBuilder:
 
         prompt = build_system_prompt(personality)
 
-        assert "Odigos" in prompt
+        assert "personal assistant" in prompt
         assert "<!--entities" in prompt
         assert "Relevant memories" not in prompt
 
@@ -121,31 +121,12 @@ class TestPromptBuilder:
 
         assert "not sure" not in prompt.lower()
 
-    def test_builds_prompt_with_tool_context(self):
-        """Tool context is injected between memory and entity extraction."""
-        from odigos.personality.loader import Personality
-
-        personality = Personality()
-        result = build_system_prompt(
-            personality=personality,
-            memory_context="## Relevant memories\n- User likes Python.",
-            tool_context="## Web search results for: python 3.13\n\n1. **Python 3.13 Release**\n   https://python.org\n   New features in Python 3.13.\n",
-        )
-
-        assert "Web search results" in result
-        assert "python 3.13" in result
-        mem_pos = result.index("Relevant memories")
-        tool_pos = result.index("Web search results")
-        assert mem_pos < tool_pos
-        entity_pos = result.index("<!--entities")
-        assert tool_pos < entity_pos
-
-    def test_builds_prompt_without_tool_context(self):
-        """Prompt works fine without tool context (backward compatible)."""
+    def test_builds_prompt_without_optional_context(self):
+        """Prompt works fine without optional context sections."""
         from odigos.personality.loader import Personality
 
         personality = Personality()
         result = build_system_prompt(personality=personality)
 
-        assert "Odigos" in result
+        assert "personal assistant" in result
         assert "<!--entities" in result

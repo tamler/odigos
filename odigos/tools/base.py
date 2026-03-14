@@ -9,6 +9,7 @@ class ToolResult:
     success: bool
     data: str
     error: str | None = None
+    side_effect: dict | None = None
 
 
 class BaseTool(ABC):
