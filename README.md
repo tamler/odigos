@@ -68,43 +68,48 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 
 ## Quick Start
 
-Prerequisites: [Docker](https://docs.docker.com/get-docker/) and an LLM API key (from [OpenRouter](https://openrouter.ai/keys), OpenAI, or a local provider like Ollama).
+Prerequisites: an LLM API key (from [OpenRouter](https://openrouter.ai/keys), OpenAI, or a local provider like Ollama).
 
 ```bash
 git clone https://github.com/tamler/odigos.git && cd odigos
+```
+
+### Option A: Docker (recommended)
+
+Requires [Docker](https://docs.docker.com/get-docker/) with Compose v2.
+
+```bash
 bash install.sh
 ```
 
-The install script will:
+The install script checks for Docker, creates data directories, generates an API key, walks you through LLM provider selection, and starts the container. Includes a Caddy reverse proxy for automatic HTTPS.
 
-1. Check for Docker and Docker Compose v2
-2. Create data directories (`data/`, `skills/`, `plugins/`)
-3. Copy `.env.example` to `.env` and generate an API key
-4. Walk you through LLM provider selection (OpenRouter, OpenAI, Ollama, LM Studio, or custom)
-5. Write `config.yaml` with your settings
-6. Pull or build the Docker image and start the container
+### Option B: Bare metal
 
-Once running, open **http://localhost:8000** and log in with the API key shown in the terminal.
-
-## Manual Setup
+Requires Python 3.12+ and curl. Works on Ubuntu, Debian, RHEL, macOS.
 
 ```bash
-cp .env.example .env
-# Edit .env -- set LLM_API_KEY and optionally LLM_BASE_URL, LLM_DEFAULT_MODEL
-docker compose up -d
+bash install-bare.sh
 ```
 
-The compose stack includes:
+Installs [uv](https://docs.astral.sh/uv/), downloads dependencies and the embedding model, configures your LLM provider, and optionally installs a systemd service for automatic startup.
 
-- **odigos** -- the agent container (FastAPI on port 8000)
-- **caddy** -- reverse proxy with automatic HTTPS via Let's Encrypt (set `ODIGOS_DOMAIN` in `.env` for a real domain)
+### After install
+
+Open **http://localhost:8000** and log in with the API key shown in the terminal.
 
 Useful commands:
 
 ```bash
+# Docker
 docker compose logs -f odigos    # View logs
 docker compose restart odigos    # Restart
 docker compose down              # Stop
+
+# Bare metal (systemd)
+sudo journalctl -u odigos -f     # View logs
+sudo systemctl restart odigos    # Restart
+sudo systemctl stop odigos       # Stop
 ```
 
 ## Configuration
