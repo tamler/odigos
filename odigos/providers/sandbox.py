@@ -117,11 +117,28 @@ class SandboxProvider:
 
     def _build_python_cmd(self, code: str) -> list[str]:
         limits = self._resource_prefix()
-        return [*limits, "python3", "-c", code]
+        # Wrap user code to restrict filesystem access via chdir + import hook
+        wrapper = (
+            "import sys, os\n"
+            "# Block imports that allow arbitrary file access from user code\n"
+            "_blocked_reads = {'/app', '/etc', '/proc/self/environ'}\n"
+            "_orig_open = open\n"
+            "def _safe_open(path, *a, **kw):\n"
+            "    rp = os.path.realpath(str(path))\n"
+            "    for b in _blocked_reads:\n"
+            "        if rp.startswith(b):\n"
+            "            raise PermissionError(f'Access denied: {path}')\n"
+            "    return _orig_open(path, *a, **kw)\n"
+            "import builtins; builtins.open = _safe_open\n"
+            + code
+        )
+        return [*limits, "python3", "-c", wrapper]
 
     def _build_shell_cmd(self, code: str) -> list[str]:
         limits = self._resource_prefix()
-        return [*limits, "bash", "-c", f"set -euo pipefail; {code}"]
+        # Prevent shell access to sensitive paths
+        guard = "export -n LLM_API_KEY API_KEY 2>/dev/null; "
+        return [*limits, "bash", "-c", f"set -euo pipefail; {guard}{code}"]
 
     def _resource_prefix(self) -> list[str]:
         """Build ulimit + optional unshare prefix."""

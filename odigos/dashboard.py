@@ -24,9 +24,14 @@ def mount_dashboard(app: FastAPI, dashboard_dir: str | None = None) -> None:
         app.mount("/assets", StaticFiles(directory=assets_dir), name="dashboard_assets")
 
     # Catch-all: serve index.html for SPA routing
+    dist_real = os.path.realpath(dist)
+
     @app.get("/{path:path}")
     async def serve_spa(path: str):
-        file_path = os.path.join(dist, path)
+        file_path = os.path.realpath(os.path.join(dist, path))
+        # Block path traversal -- resolved path must stay inside dist/
+        if not file_path.startswith(dist_real + os.sep) and file_path != dist_real:
+            return FileResponse(index_html)
         if os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(index_html)

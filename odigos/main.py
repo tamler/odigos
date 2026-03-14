@@ -70,6 +70,23 @@ _heartbeat: Heartbeat | None = None
 _mcp_servers: list = []
 
 
+def _persist_generated_api_key(config_path: str, api_key: str) -> None:
+    """Append generated api_key to config.yaml so it survives restarts."""
+    try:
+        import yaml
+        from pathlib import Path
+        cp = Path(config_path)
+        data = {}
+        if cp.exists():
+            with open(cp) as f:
+                data = yaml.safe_load(f) or {}
+        data["api_key"] = api_key
+        with open(cp, "w") as f:
+            yaml.dump(data, f, default_flow_style=False)
+    except Exception:
+        logger.warning("Could not persist api_key to %s", config_path)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle for FastAPI."""
@@ -83,12 +100,12 @@ async def lifespan(app: FastAPI):
         import secrets
 
         settings.api_key = secrets.token_urlsafe(32)
+        # Write to config so it persists across restarts
+        _persist_generated_api_key(config_path, settings.api_key)
         logger.warning(
-            "No api_key configured — generated a random key for this session: %s",
-            settings.api_key,
-        )
-        logger.warning(
-            "Set 'api_key' in your config.yaml to use a persistent key."
+            "No api_key configured — generated and saved a random key to %s. "
+            "View it with: grep api_key %s",
+            config_path, config_path,
         )
 
     app.state.settings = settings
