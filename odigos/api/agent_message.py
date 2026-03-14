@@ -6,12 +6,15 @@ WebSocket coordinates. Not used for messaging -- all messaging is WS-only.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from odigos.api.deps import get_agent_client, get_db, require_api_key
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/agent",
@@ -32,11 +35,50 @@ class PeerAnnounceRequest(BaseModel):
 @router.post("/peer/announce")
 async def peer_announce(
     body: PeerAnnounceRequest,
+    request: Request,
     db=Depends(get_db),
     agent_client=Depends(get_agent_client),
 ):
-    """Register a peer agent's WebSocket coordinates for future communication."""
+    """Register a peer agent's WebSocket coordinates for future communication.
+
+    Validates that the announcing agent_name matches a known peer or an
+    accepted contact card with mesh permissions.
+    """
     now = datetime.now(timezone.utc).isoformat()
+
+    # Verify the claimed agent_name is a known/trusted peer
+    allowed = False
+
+    # Check configured peers
+    if agent_client and body.agent_name in agent_client.list_peer_names():
+        allowed = True
+
+    # Check accepted cards (a card-holder announcing themselves)
+    if not allowed:
+        card_manager = getattr(request.app.state, "card_manager", None)
+        if card_manager:
+            accepted = await card_manager.list_accepted()
+            for card in accepted:
+                if card.get("agent_name") == body.agent_name and card.get("status") == "active":
+                    allowed = True
+                    break
+
+    # Check if already registered (re-announce from known peer)
+    if not allowed:
+        existing_peer = await db.fetch_one(
+            "SELECT agent_name FROM agent_registry WHERE agent_name = ?",
+            (body.agent_name,),
+        )
+        if existing_peer:
+            allowed = True
+
+    if not allowed:
+        logger.warning("Rejected announce from unknown agent: %s", body.agent_name)
+        raise HTTPException(
+            status_code=403,
+            detail=f"Agent '{body.agent_name}' is not a recognized peer. "
+                   "Exchange contact cards or configure as a peer first.",
+        )
 
     existing = await db.fetch_one(
         "SELECT agent_name FROM agent_registry WHERE agent_name = ?",

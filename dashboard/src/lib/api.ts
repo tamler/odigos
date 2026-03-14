@@ -59,7 +59,7 @@ export async function del<T>(path: string): Promise<T> {
 }
 
 export async function uploadFile(file: File): Promise<{
-  id: string; filename: string; size: number; path: string
+  id: string; filename: string; size: number
 }> {
   const form = new FormData()
   form.append('file', file)

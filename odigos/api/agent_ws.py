@@ -1,10 +1,11 @@
 """WebSocket endpoint for agent-to-agent communication.
 
 Peer agents connect to /ws/agent to exchange PeerEnvelope messages in real-time.
-Authenticated via API key in query parameter.
+Authenticated via first message (preferred) or query parameter (deprecated).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -18,28 +19,63 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.websocket("/ws/agent")
-async def agent_websocket(websocket: WebSocket):
-    token = websocket.query_params.get("token", "")
+async def _authenticate_agent_ws(websocket: WebSocket) -> bool:
+    """Authenticate agent WebSocket via first message or legacy query param."""
     expected = getattr(websocket.app.state, "settings", None)
     api_key = getattr(expected, "api_key", "") if expected else ""
 
-    # Check global API key
-    authorized = bool(api_key and token == api_key)
+    token = websocket.query_params.get("token", "")
 
-    # Check card key if global key didn't match
-    if not authorized and token.startswith("card-sk-"):
+    # Legacy query param flow
+    if token:
+        authorized = bool(api_key and token == api_key)
+        if not authorized and token.startswith("card-sk-"):
+            card_manager = getattr(websocket.app.state, "card_manager", None)
+            if card_manager:
+                card = await card_manager.validate_card_key(token)
+                if card and card.get("permissions") == "mesh":
+                    authorized = True
+        if not authorized:
+            await websocket.close(code=4001, reason="Unauthorized")
+        return authorized
+
+    # First-message auth flow
+    await websocket.accept()
+    try:
+        data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
+    except (asyncio.TimeoutError, Exception):
+        await websocket.close(code=4001, reason="Auth timeout")
+        return False
+
+    if data.get("type") != "auth":
+        await websocket.close(code=4001, reason="Expected auth message")
+        return False
+
+    auth_token = data.get("token", "")
+    authorized = bool(api_key and auth_token == api_key)
+    if not authorized and auth_token.startswith("card-sk-"):
         card_manager = getattr(websocket.app.state, "card_manager", None)
         if card_manager:
-            card = await card_manager.validate_card_key(token)
+            card = await card_manager.validate_card_key(auth_token)
             if card and card.get("permissions") == "mesh":
                 authorized = True
 
     if not authorized:
+        await websocket.send_json({"type": "error", "payload": {"message": "Unauthorized"}})
         await websocket.close(code=4001, reason="Unauthorized")
+
+    return authorized
+
+
+@router.websocket("/ws/agent")
+async def agent_websocket(websocket: WebSocket):
+    already_accepted = not websocket.query_params.get("token", "")
+    authenticated = await _authenticate_agent_ws(websocket)
+    if not authenticated:
         return
 
-    await websocket.accept()
+    if not already_accepted:
+        await websocket.accept()
 
     agent_client: AgentClient = websocket.app.state.agent_client
     peer_name = None
@@ -48,6 +84,10 @@ async def agent_websocket(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
+
+            # Skip auth messages after initial auth
+            if isinstance(data, dict) and data.get("type") == "auth":
+                continue
 
             if not isinstance(data, dict) or "type" not in data:
                 await websocket.send_json({"type": "error", "payload": {"message": "Invalid message format"}})

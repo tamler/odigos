@@ -24,9 +24,13 @@ export class ChatSocket {
     if (!token) return
 
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    this.ws = new WebSocket(`${proto}//${window.location.host}/api/ws?token=${token}`)
+    this.ws = new WebSocket(`${proto}//${window.location.host}/api/ws`)
 
-    this.ws.onopen = () => this.onStatusChange(true)
+    this.ws.onopen = () => {
+      // Authenticate via first message instead of URL query param
+      this.ws?.send(JSON.stringify({ type: 'auth', token }))
+      this.onStatusChange(true)
+    }
     this.ws.onclose = () => {
       this.onStatusChange(false)
       this.scheduleReconnect()

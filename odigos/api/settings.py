@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from odigos.api.deps import get_config_path, get_env_path, get_settings, require_api_key
@@ -17,6 +17,7 @@ router = APIRouter(
 class SettingsUpdate(BaseModel):
     llm_api_key: str | None = None
     api_key: str | None = None
+    current_api_key: str | None = None  # Required when changing api_key
     llm: dict | None = None
     agent: dict | None = None
     budget: dict | None = None
@@ -81,8 +82,13 @@ async def update_settings_endpoint(
         _update_env_file(env_path, "LLM_API_KEY", update.llm_api_key)
         object.__setattr__(settings, "llm_api_key", update.llm_api_key)
 
-    # Update dashboard API key (ignore masked placeholder)
+    # Update dashboard API key (requires current key confirmation)
     if update.api_key is not None and update.api_key != "****":
+        if not update.current_api_key or update.current_api_key != settings.api_key:
+            raise HTTPException(
+                status_code=403,
+                detail="current_api_key must match the existing API key to change it",
+            )
         yaml_config["api_key"] = update.api_key
         object.__setattr__(settings, "api_key", update.api_key)
 

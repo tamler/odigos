@@ -1,12 +1,15 @@
 """WebSocket endpoint for real-time chat, subscriptions, and event streaming."""
 
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from odigos.channels.base import UniversalMessage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -27,26 +30,59 @@ async def _auto_title_and_notify(ws: WebSocket, db, provider, conversation_id: s
                 "title": conv["title"],
             })
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning("Auto-title/notify failed: %s", exc)
+        logger.warning("Auto-title/notify failed: %s", exc)
+
+
+async def _authenticate_ws(websocket: WebSocket) -> bool:
+    """Authenticate WebSocket via first message or legacy query param.
+
+    Accepts either:
+    - First message: {"type": "auth", "token": "<key>"}
+    - Query param: ?token=<key> (deprecated, logged as warning)
+    """
+    settings = websocket.app.state.settings
+    configured_key = settings.api_key
+    if not configured_key:
+        await websocket.close(code=4003, reason="API key not configured")
+        return False
+
+    # Support legacy query param (log warning so operators know to migrate)
+    token = websocket.query_params.get("token")
+    if token:
+        if token == configured_key:
+            logger.debug("WebSocket authenticated via query param (deprecated)")
+            return True
+        await websocket.close(code=4003, reason="Invalid token")
+        return False
+
+    # No query param -- accept and wait for auth message
+    await websocket.accept()
+    try:
+        data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
+    except (asyncio.TimeoutError, Exception):
+        await websocket.close(code=4003, reason="Auth timeout")
+        return False
+
+    if data.get("type") != "auth" or data.get("token") != configured_key:
+        await websocket.send_json({"type": "error", "message": "Invalid credentials"})
+        await websocket.close(code=4003, reason="Invalid credentials")
+        return False
+
+    return True
 
 
 @router.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint with auth, chat, and subscribe support."""
-    settings = websocket.app.state.settings
-    configured_key = settings.api_key
-
-    # Auth: always require token
-    token = websocket.query_params.get("token")
-    if not configured_key:
-        await websocket.close(code=4003, reason="API key not configured")
-        return
-    if not token or token != configured_key:
-        await websocket.close(code=4003, reason="Invalid or missing token")
+    # Try auth-in-first-message flow
+    already_accepted = not websocket.query_params.get("token")
+    authenticated = await _authenticate_ws(websocket)
+    if not authenticated:
         return
 
-    await websocket.accept()
+    # If auth was via query param, we still need to accept
+    if not already_accepted:
+        await websocket.accept()
 
     session_id = uuid.uuid4().hex[:12]
     conversation_id = f"web:{session_id}"
@@ -66,6 +102,10 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
+
+            # Ignore duplicate auth messages after initial auth
+            if msg_type == "auth":
+                continue
 
             if msg_type == "chat":
                 # Use client-provided conversation_id if resuming
