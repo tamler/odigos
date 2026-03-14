@@ -13,7 +13,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${ODIGOS_PORT:-8000}:8000"
+      - "127.0.0.1:${ODIGOS_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
       - ./config.yaml:/app/config.yaml:ro

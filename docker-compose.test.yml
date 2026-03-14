@@ -9,8 +9,8 @@ services:
     build: .
     container_name: odigos-alice
     ports:
-      - "8100:8000"
-      - "8101:8001"
+      - "127.0.0.1:8100:8000"
+      - "127.0.0.1:8101:8001"
     volumes:
       - alice_data:/app/data
       - ./tests/e2e/config-alice.yaml:/app/config.yaml:ro
@@ -32,8 +32,8 @@ services:
     build: .
     container_name: odigos-bob
     ports:
-      - "8200:8000"
-      - "8201:8001"
+      - "127.0.0.1:8200:8000"
+      - "127.0.0.1:8201:8001"
     volumes:
       - bob_data:/app/data
       - ./tests/e2e/config-bob.yaml:/app/config.yaml:ro
