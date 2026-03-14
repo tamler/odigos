@@ -8,6 +8,7 @@ import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
 import StatePage from './pages/StatePage'
 import FeedPage from './pages/FeedPage'
+import ConnectionsPage from './pages/ConnectionsPage'
 import LoginPrompt from './components/LoginPrompt'
 
 export default function App() {
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/settings" element={<SettingsPage needsSetup={!setupDone} />} />
               <Route path="/status" element={<StatePage />} />
               <Route path="/feed" element={<FeedPage />} />
+              <Route path="/connections" element={<ConnectionsPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
