@@ -25,7 +25,26 @@ class DocumentIngester:
         text: str,
         filename: str,
         source_url: str | None = None,
+        file_path: str | None = None,
+        file_size: int | None = None,
+        content_hash: str | None = None,
+        conversation_id: str | None = None,
     ) -> str:
+        # Check for existing document with same filename
+        existing = await self.db.fetch_one(
+            "SELECT id, content_hash FROM documents WHERE filename = ?",
+            (filename,),
+        )
+        if existing is not None:
+            if content_hash and existing["content_hash"] == content_hash:
+                logger.info(
+                    "Document '%s' already ingested with same content hash, skipping",
+                    filename,
+                )
+                return existing["id"]
+            # Different content — delete old document and re-ingest
+            await self.delete(existing["id"])
+
         doc_id = str(uuid.uuid4())
 
         # Detect content type from filename
@@ -35,20 +54,25 @@ class DocumentIngester:
 
         chunks = self.chunking.chunk(text, content_type=content_type)
 
-        # Insert document record first so partial failures are recoverable
+        # Insert document record with provenance, status='processing'
         await self.db.execute(
-            "INSERT INTO documents (id, filename, source_url, chunk_count) "
-            "VALUES (?, ?, ?, ?)",
-            (doc_id, filename, source_url, 0),
+            "INSERT INTO documents "
+            "(id, filename, source_url, chunk_count, file_path, file_size, "
+            "content_hash, conversation_id, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (doc_id, filename, source_url, 0, file_path, file_size,
+             content_hash, conversation_id, "processing"),
         )
 
         stored_count = 0
         for chunk_text in chunks:
+            when_to_use = f"when referencing content from '{filename}': {chunk_text[:100]}"
             try:
                 await self.vector_memory.store(
                     text=chunk_text,
                     source_type="document_chunk",
                     source_id=doc_id,
+                    when_to_use=when_to_use,
                 )
                 stored_count += 1
             except Exception:
@@ -58,15 +82,18 @@ class DocumentIngester:
                 )
                 break
 
-        # Update with actual stored chunk count
+        # Determine final status
+        status = "ingested" if stored_count > 0 else "failed"
+
+        # Update with actual stored chunk count and final status
         await self.db.execute(
-            "UPDATE documents SET chunk_count = ? WHERE id = ?",
-            (stored_count, doc_id),
+            "UPDATE documents SET chunk_count = ?, status = ? WHERE id = ?",
+            (stored_count, status, doc_id),
         )
 
         logger.info(
-            "Ingested document '%s' (%d/%d chunks) as %s",
-            filename, stored_count, len(chunks), doc_id,
+            "Ingested document '%s' (%d/%d chunks, status=%s) as %s",
+            filename, stored_count, len(chunks), status, doc_id,
         )
         return doc_id
 
@@ -87,3 +114,12 @@ class DocumentIngester:
         )
 
         logger.info("Deleted document %s (%d chunks)", document_id, chunk_count)
+
+    async def get_document_metadata(self, document_id: str) -> dict | None:
+        """Return full metadata for a document, or None if not found."""
+        return await self.db.fetch_one(
+            "SELECT id, filename, source_url, chunk_count, file_path, file_size, "
+            "content_hash, conversation_id, status, ingested_at "
+            "FROM documents WHERE id = ?",
+            (document_id,),
+        )
