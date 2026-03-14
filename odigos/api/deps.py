@@ -169,3 +169,13 @@ def get_cron_manager(request: Request):
 def get_notifier(request: Request):
     """Get the Notifier instance from app state."""
     return request.app.state.notifier
+
+
+def get_doc_ingester(request: Request):
+    """Get the DocumentIngester instance from app state."""
+    return request.app.state.doc_ingester
+
+
+def get_markitdown(request: Request):
+    """Get the MarkItDownProvider instance from app state."""
+    return request.app.state.markitdown_provider

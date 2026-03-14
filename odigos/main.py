@@ -228,6 +228,8 @@ async def lifespan(app: FastAPI):
     from odigos.memory.ingester import DocumentIngester
 
     doc_ingester = DocumentIngester(db=_db, vector_memory=vector_memory, chunking_service=chunking_service)
+    app.state.doc_ingester = doc_ingester
+    app.state.markitdown_provider = markitdown_provider
     doc_tool = DocTool(
         markitdown_provider=markitdown_provider,
         ingester=doc_ingester,
