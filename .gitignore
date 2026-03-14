@@ -6,8 +6,9 @@ dist/
 !dashboard/dist/
 .venv/
 
-# Environment
+# Environment and config (contain secrets)
 .env
+config.yaml
 
 # Data
 data/
