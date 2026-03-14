@@ -1,0 +1,36 @@
+agent:
+  name: "Alice"
+  role: "personal_assistant"
+  description: "Test agent Alice for e2e card exchange testing"
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+  ws_port: 8001
+
+mesh:
+  enabled: true
+
+feed:
+  enabled: true
+  public: false
+  max_entries: 200
+
+database:
+  path: "data/odigos.db"
+
+llm:
+  base_url: "https://openrouter.ai/api/v1"
+  default_model: "openai/gpt-oss-120b"
+  fallback_model: "openai/gpt-oss-120b"
+
+budget:
+  daily_limit_usd: 1.00
+  monthly_limit_usd: 5.00
+
+heartbeat:
+  interval_seconds: 30
+  announce_interval_seconds: 60
+
+approval:
+  enabled: false

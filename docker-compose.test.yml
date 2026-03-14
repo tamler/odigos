@@ -1,0 +1,60 @@
+# Two-agent test environment for contact cards e2e testing
+# Usage:
+#   LLM_API_KEY=your-key docker compose -f docker-compose.test.yml up --build -d
+#   bash tests/e2e/test-cards-e2e.sh
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  alice:
+    build: .
+    container_name: odigos-alice
+    ports:
+      - "8100:8000"
+      - "8101:8001"
+    volumes:
+      - alice_data:/app/data
+      - ./tests/e2e/config-alice.yaml:/app/config.yaml:ro
+      - ./skills:/app/skills:ro
+      - ./plugins:/app/plugins:ro
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY}
+      - API_KEY=alice-test-key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    networks:
+      - agentnet
+
+  bob:
+    build: .
+    container_name: odigos-bob
+    ports:
+      - "8200:8000"
+      - "8201:8001"
+    volumes:
+      - bob_data:/app/data
+      - ./tests/e2e/config-bob.yaml:/app/config.yaml:ro
+      - ./skills:/app/skills:ro
+      - ./plugins:/app/plugins:ro
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY}
+      - API_KEY=bob-test-key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    networks:
+      - agentnet
+
+volumes:
+  alice_data:
+  bob_data:
+
+networks:
+  agentnet:
+    driver: bridge

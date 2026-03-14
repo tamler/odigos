@@ -20,6 +20,10 @@ class GenerateCardRequest(BaseModel):
     expires_in_days: int | None = None
 
 
+class ImportCardRequest(BaseModel):
+    card_data: str
+
+
 @router.get("/cards/issued")
 async def list_issued(request: Request):
     card_manager = request.app.state.card_manager
@@ -46,6 +50,13 @@ async def generate_card(body: GenerateCardRequest, request: Request):
         "yaml": card_manager.card_to_yaml(card),
         "compact": card_manager.card_to_compact(card),
     }
+
+
+@router.post("/cards/import")
+async def import_card(body: ImportCardRequest, request: Request):
+    card_manager = request.app.state.card_manager
+    result = await card_manager.import_card(body.card_data)
+    return result
 
 
 @router.post("/cards/issued/{card_key}/revoke")
