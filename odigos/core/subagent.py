@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from odigos.core.executor import Executor
+from odigos.core.prompt_loader import load_prompt
 from odigos.db import Database
 from odigos.providers.base import LLMProvider
 from odigos.tools.registry import ToolRegistry
@@ -16,6 +17,11 @@ if TYPE_CHECKING:
     from odigos.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
+
+_SUBAGENT_SYSTEM_FALLBACK = (
+    "You are a focused subagent. Complete the given task concisely. "
+    "Do not ask follow-up questions."
+)
 
 MAX_CONCURRENT_PER_CONVERSATION = 3
 DEFAULT_TIMEOUT = 600
@@ -104,10 +110,7 @@ class SubagentManager:
             messages: list[dict] = [
                 {
                     "role": "system",
-                    "content": (
-                        "You are a focused subagent. Complete the given task concisely. "
-                        "Do not ask follow-up questions."
-                    ),
+                    "content": load_prompt("subagent.md", _SUBAGENT_SYSTEM_FALLBACK),
                 },
             ]
 

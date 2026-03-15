@@ -14,6 +14,8 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
+from odigos.core.prompt_loader import load_prompt
+
 if TYPE_CHECKING:
     from odigos.config import LLMConfig, ServerConfig
     from odigos.core.template_index import AgentTemplateIndex
@@ -21,6 +23,18 @@ if TYPE_CHECKING:
     from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+
+_ADAPT_TEMPLATE_FALLBACK = (
+    "Below is a specialist agent template. Adapt it into a focused identity "
+    "and instruction set for an AI agent with:\n"
+    "- Role: {role}\n"
+    "- Description: {description}\n"
+    "- Specialty: {specialty}\n\n"
+    "Keep the template's personality, workflows, deliverables, and success metrics "
+    "where relevant. Remove anything that doesn't apply. Write in second person "
+    "('You are...'). Output only the adapted identity -- no commentary.\n\n"
+    "--- TEMPLATE ---\n{template_content}"
+)
 
 
 class Spawner:
@@ -146,16 +160,12 @@ class Spawner:
         specialty: str | None,
     ) -> str:
         """Tailor a template to the specific agent context."""
-        prompt = (
-            f"Below is a specialist agent template. Adapt it into a focused identity "
-            f"and instruction set for an AI agent with:\n"
-            f"- Role: {role}\n"
-            f"- Description: {description}\n"
-            f"- Specialty: {specialty or 'general'}\n\n"
-            f"Keep the template's personality, workflows, deliverables, and success metrics "
-            f"where relevant. Remove anything that doesn't apply. Write in second person "
-            f"('You are...'). Output only the adapted identity -- no commentary.\n\n"
-            f"--- TEMPLATE ---\n{template_content}"
+        adapt_template = load_prompt("spawner_adapt.md", _ADAPT_TEMPLATE_FALLBACK)
+        prompt = adapt_template.format(
+            role=role,
+            description=description,
+            specialty=specialty or 'general',
+            template_content=template_content,
         )
         response = await self.provider.complete(
             [{"role": "user", "content": prompt}],

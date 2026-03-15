@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from odigos.channels.base import UniversalMessage
+from odigos.core.prompt_loader import load_prompt
 from odigos.db import Database
 
 if TYPE_CHECKING:
@@ -26,6 +27,15 @@ if TYPE_CHECKING:
     from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
+
+_IDLE_THINK_FALLBACK = (
+    "You are reviewing your active goals during idle time. "
+    "If there's something useful you could do right now, respond with a JSON object: "
+    '{"todo": "description of work item"}. '
+    "If you have a progress observation, respond with: "
+    '{"note": "goal_id", "progress": "observation"}. '
+    'If nothing to do, respond with: {"idle": true}'
+)
 
 
 class Heartbeat:
@@ -284,14 +294,7 @@ class Heartbeat:
                 [
                     {
                         "role": "system",
-                        "content": (
-                            "You are reviewing your active goals during idle time. "
-                            "If there's something useful you could do right now, respond with a JSON object: "
-                            '{"todo": "description of work item"}. '
-                            "If you have a progress observation, respond with: "
-                            '{"note": "goal_id", "progress": "observation"}. '
-                            'If nothing to do, respond with: {"idle": true}'
-                        ),
+                        "content": load_prompt("heartbeat_idle.md", _IDLE_THINK_FALLBACK),
                     },
                     {"role": "user", "content": f"Active goals:\n{goal_text}"},
                 ],

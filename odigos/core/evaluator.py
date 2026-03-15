@@ -10,6 +10,8 @@ import re
 import uuid
 from typing import TYPE_CHECKING
 
+from odigos.core.prompt_loader import load_prompt
+
 if TYPE_CHECKING:
     from odigos.db import Database
     from odigos.providers.base import LLMProvider
@@ -27,6 +29,28 @@ _POSITIVE_MARKERS = [
     "thanks", "thank you", "perfect", "great", "awesome", "that works",
     "makes sense", "got it", "exactly", "nice", "good job", "helpful",
 ]
+
+_RUBRIC_FALLBACK = (
+    "You are evaluating an AI assistant's response. "
+    "Generate a scoring rubric for this type of interaction.\n\n"
+    "User message: {user_content}\n"
+    "Assistant response: {assistant_content}\n"
+    "User reaction signal: {feedback} (-1=negative, +1=positive)\n\n"
+    "Return ONLY a JSON object:\n"
+    '{{"task_type": "category", "criteria": [{{"name": "...", "weight": 0.0-1.0, '
+    '"description": "what good looks like"}}], "notes": "..."}}'
+)
+
+_SCORING_FALLBACK = (
+    "Score this AI assistant interaction against the rubric.\n\n"
+    "Rubric: {rubric}\n\n"
+    "User message: {user_content}\n"
+    "Assistant response: {assistant_content}\n"
+    "User reaction signal: {feedback}\n\n"
+    "Return ONLY a JSON object:\n"
+    '{{"scores": [{{"criterion": "name", "score": 0-10, "observation": "..."}}], '
+    '"overall": 0-10, "improvement_signal": "what would have been better" or null}}'
+)
 
 
 async def infer_implicit_feedback(
@@ -156,15 +180,11 @@ class Evaluator:
     async def _get_or_generate_rubric(
         self, user_content: str, assistant_content: str, feedback: float
     ) -> dict | None:
-        prompt = (
-            "You are evaluating an AI assistant's response. "
-            "Generate a scoring rubric for this type of interaction.\n\n"
-            f"User message: {user_content[:500]}\n"
-            f"Assistant response: {assistant_content[:500]}\n"
-            f"User reaction signal: {feedback:.1f} (-1=negative, +1=positive)\n\n"
-            "Return ONLY a JSON object:\n"
-            '{"task_type": "category", "criteria": [{"name": "...", "weight": 0.0-1.0, '
-            '"description": "what good looks like"}], "notes": "..."}'
+        prompt_template = load_prompt("evaluator_rubric.md", _RUBRIC_FALLBACK)
+        prompt = prompt_template.format(
+            user_content=user_content[:500],
+            assistant_content=assistant_content[:500],
+            feedback=f"{feedback:.1f}",
         )
         try:
             response = await self.provider.complete(
@@ -181,15 +201,12 @@ class Evaluator:
     async def _score_against_rubric(
         self, rubric: dict, user_content: str, assistant_content: str, feedback: float
     ) -> dict | None:
-        prompt = (
-            "Score this AI assistant interaction against the rubric.\n\n"
-            f"Rubric: {json.dumps(rubric)}\n\n"
-            f"User message: {user_content[:500]}\n"
-            f"Assistant response: {assistant_content[:500]}\n"
-            f"User reaction signal: {feedback:.1f}\n\n"
-            "Return ONLY a JSON object:\n"
-            '{"scores": [{"criterion": "name", "score": 0-10, "observation": "..."}], '
-            '"overall": 0-10, "improvement_signal": "what would have been better" or null}'
+        prompt_template = load_prompt("evaluator_scoring.md", _SCORING_FALLBACK)
+        prompt = prompt_template.format(
+            rubric=json.dumps(rubric),
+            user_content=user_content[:500],
+            assistant_content=assistant_content[:500],
+            feedback=f"{feedback:.1f}",
         )
         try:
             response = await self.provider.complete(

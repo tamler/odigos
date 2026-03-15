@@ -1,6 +1,7 @@
 import logging
 import uuid
 
+from odigos.core.prompt_loader import load_prompt
 from odigos.db import Database
 from odigos.memory.vectors import VectorMemory
 from odigos.providers.base import LLMProvider
@@ -95,7 +96,7 @@ class ConversationSummarizer:
         # Call LLM to summarize
         summary_response = await self.llm_provider.complete(
             messages=[
-                {"role": "system", "content": STRUCTURED_COMPACTION_PROMPT},
+                {"role": "system", "content": load_prompt("summarizer.md", STRUCTURED_COMPACTION_PROMPT)},
                 {"role": "user", "content": conversation_text},
             ]
         )
