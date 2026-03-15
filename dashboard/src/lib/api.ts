@@ -46,6 +46,19 @@ export async function patch<T>(path: string, body?: unknown): Promise<T> {
   return res.json()
 }
 
+export async function put<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PUT',
+    headers: headers(),
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  if (res.status === 401 || res.status === 403) {
+    throw new Error('unauthorized')
+  }
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
 export async function del<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'DELETE',

@@ -38,6 +38,8 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 - Strategist: autonomous goal-setting and self-direction
 - Checkpointing with rollback on regressions
 - Corrections manager for learning from mistakes
+- Editable prompt files: agent identity and infrastructure prompts stored as Markdown, editable via dashboard or API
+- Prompts API for listing, reading, and updating prompt files programmatically
 
 **Scheduling and Notifications**
 
@@ -52,6 +54,12 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 - Sandboxed code execution with memory and timeout limits
 - Budget controls (daily and monthly spending caps with warnings)
 - API key authentication for dashboard and API access
+
+**Voice** (optional)
+
+- Text-to-speech output via pocket-tts
+- Speech-to-text input via moonshine-voice
+- One-command setup: `bash install-voice.sh`
 
 **Extensibility**
 
@@ -93,7 +101,7 @@ Requires [Docker](https://docs.docker.com/get-docker/) with Compose v2.
 bash install.sh
 ```
 
-The install script checks for Docker, creates data directories, generates an API key, walks you through LLM provider selection, and starts the container. Includes a Caddy reverse proxy for automatic HTTPS.
+The install script checks for Docker, creates data directories, generates an API key, walks you through LLM provider selection, optionally installs voice support, and starts the container. Includes a Caddy reverse proxy for automatic HTTPS.
 
 ### Option B: Bare metal
 
@@ -103,7 +111,7 @@ Requires Python 3.12+ and curl. Works on Ubuntu, Debian, RHEL, macOS.
 bash install-bare.sh
 ```
 
-Installs [uv](https://docs.astral.sh/uv/), downloads dependencies and the embedding model, configures your LLM provider, and optionally installs a systemd service for automatic startup.
+Installs [uv](https://docs.astral.sh/uv/), downloads dependencies and the embedding model, configures your LLM provider, optionally installs voice support, and optionally installs a systemd service for automatic startup.
 
 ### After install
 
@@ -145,6 +153,7 @@ Key configuration areas:
 | `feed` | RSS feed publisher: enabled, public/private, max entries |
 | `peers` | Trusted peer agents for mesh networking |
 | `templates` | Agent template catalog repo URL and cache TTL |
+| `voice` | Enable/disable TTS and STT, model paths |
 
 ## Plugins
 
@@ -171,6 +180,30 @@ Skills are Markdown files in the `skills/` directory that define reusable behavi
 - `tag-conversation.md` -- Conversation categorization
 
 The agent can activate, create, and update skills at runtime.
+
+## Prompt Files
+
+The agent's system prompt is assembled from editable Markdown files in two directories:
+
+- **`data/agent/`** -- Agent identity sections (personality, voice, meta-cognition). Each file has YAML frontmatter with `priority` and `always_include` fields that control assembly order.
+- **`data/prompts/`** -- Infrastructure prompts used by internal subsystems (summarizer, evaluator, strategist, heartbeat, subagent, spawner). These are plain Markdown templates with `{variable}` placeholders.
+
+Edit prompt files through the **Prompts** tab in Settings, or use the API:
+
+```bash
+# List all prompts
+curl -H "Authorization: Bearer $API_KEY" http://localhost:8000/api/prompts
+
+# Read a prompt
+curl -H "Authorization: Bearer $API_KEY" http://localhost:8000/api/prompts/agent/identity
+
+# Update a prompt
+curl -X PUT -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{"content": "You are a helpful assistant."}' \
+  http://localhost:8000/api/prompts/agent/identity
+```
+
+Changes take effect on the next message -- no restart required.
 
 ## Architecture
 

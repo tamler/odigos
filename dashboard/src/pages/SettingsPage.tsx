@@ -4,6 +4,7 @@ import EvolutionTab from './settings/EvolutionTab'
 import AgentsTab from './settings/AgentsTab'
 import PluginsTab from './settings/PluginsTab'
 import SkillsTab from './settings/SkillsTab'
+import PromptsTab from './settings/PromptsTab'
 
 interface Props {
   needsSetup?: boolean
@@ -12,6 +13,7 @@ interface Props {
 const TABS = [
   { id: 'general', label: 'General' },
   { id: 'skills', label: 'Skills' },
+  { id: 'prompts', label: 'Prompts' },
   { id: 'evolution', label: 'Evolution' },
   { id: 'agents', label: 'Agents' },
   { id: 'plugins', label: 'Plugins' },
@@ -50,6 +52,7 @@ export default function SettingsPage({ needsSetup }: Props) {
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'general' && <GeneralSettings needsSetup={needsSetup} />}
         {activeTab === 'skills' && <SkillsTab />}
+        {activeTab === 'prompts' && <PromptsTab />}
         {activeTab === 'evolution' && <EvolutionTab />}
         {activeTab === 'agents' && <AgentsTab />}
         {activeTab === 'plugins' && <PluginsTab />}
