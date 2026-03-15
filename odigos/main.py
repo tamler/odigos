@@ -54,6 +54,7 @@ from odigos.api.cron import router as cron_router
 from odigos.api.agent_ws import router as agent_ws_router
 from odigos.api.feed import router as feed_router
 from odigos.api.cards import router as cards_router
+from odigos.api.audio import router as audio_router
 from odigos.tools.peer import MessagePeerTool
 from odigos.dashboard import mount_dashboard
 
@@ -386,6 +387,7 @@ async def lifespan(app: FastAPI):
     plugin_manager.load_all("data/plugins")
     logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
     app.state.plugin_manager = plugin_manager
+    app.state.plugin_context = plugin_context
 
     # Check if docling plugin registered a provider
     docling_from_plugin = plugin_context.get_provider("docling")
@@ -657,6 +659,7 @@ app.include_router(agent_ws_router)
 app.include_router(ws_router)
 app.include_router(feed_router)
 app.include_router(cards_router)
+app.include_router(audio_router)
 
 
 @app.get("/health")
