@@ -1,67 +1,59 @@
-from odigos.personality.loader import Personality
-from odigos.personality.prompt_builder import (
-    CORRECTION_DETECTION_INSTRUCTION,
-    ENTITY_EXTRACTION_INSTRUCTION,
-    SKILL_CREATION_INSTRUCTION,
-    build_system_prompt,
-)
+"""Tests for the simplified prompt builder."""
+from odigos.personality.prompt_builder import build_system_prompt
+from odigos.personality.section_registry import PromptSection
 
 
-class TestCorrectionsInPrompt:
-    def test_corrections_section_included_when_provided(self):
-        """Corrections context appears in the system prompt when provided."""
-        personality = Personality()
-        corrections = "## Learned corrections\nApply these lessons from past feedback:\n- [tone] Be more casual"
+class TestBuildSystemPrompt:
+    def test_builds_from_sections(self):
+        sections = [
+            PromptSection(name="identity", content="You are {name}.", priority=10),
+            PromptSection(name="voice", content="Be concise.", priority=20),
+        ]
+        result = build_system_prompt(sections=sections, agent_name="TestBot")
+        assert "You are TestBot." in result
+        assert "Be concise." in result
 
-        prompt = build_system_prompt(personality, corrections_context=corrections)
+    def test_sections_sorted_by_priority(self):
+        sections = [
+            PromptSection(name="voice", content="VOICE", priority=20),
+            PromptSection(name="identity", content="IDENTITY", priority=10),
+        ]
+        result = build_system_prompt(sections=sections)
+        assert result.index("IDENTITY") < result.index("VOICE")
 
-        assert "Learned corrections" in prompt
-        assert "Be more casual" in prompt
-
-    def test_corrections_section_omitted_when_empty(self):
-        """No corrections section when corrections_context is empty."""
-        personality = Personality()
-
-        prompt = build_system_prompt(personality, corrections_context="")
-
-        assert "Learned corrections" not in prompt
-
-    def test_correction_detection_instructions_always_present(self):
-        """Correction detection instruction block is always in the prompt."""
-        personality = Personality()
-
-        prompt = build_system_prompt(personality)
-
-        assert "<!--correction" in prompt
-        assert "correction block" in prompt.lower()
-
-    def test_corrections_appear_before_entity_extraction(self):
-        """Corrections context and detection instruction come before entity extraction."""
-        personality = Personality()
-        corrections = "## Learned corrections\nApply these lessons from past feedback:\n- [tone] Be more casual"
-
-        prompt = build_system_prompt(personality, corrections_context=corrections)
-
-        corrections_pos = prompt.index("Learned corrections")
-        detection_pos = prompt.index("<!--correction")
-        entity_pos = prompt.index("<!--entities")
-
-        assert corrections_pos < detection_pos
-        assert detection_pos < entity_pos
-
-
-class TestSkillCreationInstruction:
-    def test_skill_creation_instruction_present(self):
-        personality = Personality()
-        prompt = build_system_prompt(personality)
-        assert "create_skill" in prompt
-
-    def test_skill_creation_after_catalog(self):
-        personality = Personality()
-        prompt = build_system_prompt(
-            personality,
-            skill_catalog="## Available skills\n- **research**: Deep research",
+    def test_memory_context_included(self):
+        sections = [PromptSection(name="id", content="You are Odigos.", priority=10)]
+        result = build_system_prompt(
+            sections=sections,
+            memory_context="## Relevant memories\n- Alice prefers mornings.",
         )
-        catalog_pos = prompt.find("Available skills")
-        creation_pos = prompt.find("create_skill")
-        assert catalog_pos < creation_pos
+        assert "Alice prefers mornings" in result
+
+    def test_memory_context_omitted_when_empty(self):
+        sections = [PromptSection(name="id", content="Agent.", priority=10)]
+        result = build_system_prompt(sections=sections, memory_context="")
+        assert "Relevant memories" not in result
+
+    def test_corrections_context_included(self):
+        sections = [PromptSection(name="id", content="Agent.", priority=10)]
+        corrections = "## Learned corrections\n- Be more casual"
+        result = build_system_prompt(sections=sections, corrections_context=corrections)
+        assert "Be more casual" in result
+
+    def test_skill_catalog_included(self):
+        sections = [PromptSection(name="id", content="Agent.", priority=10)]
+        result = build_system_prompt(
+            sections=sections,
+            skill_catalog="## Skills\n- research",
+        )
+        assert "research" in result
+
+    def test_empty_sections_still_works(self):
+        result = build_system_prompt(sections=[])
+        assert isinstance(result, str)
+
+    def test_name_replacement_in_content(self):
+        sections = [PromptSection(name="id", content="I am {name}.", priority=10)]
+        result = build_system_prompt(sections=sections, agent_name="Athena")
+        assert "I am Athena." in result
+        assert "{name}" not in result

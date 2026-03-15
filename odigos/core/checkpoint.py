@@ -26,12 +26,10 @@ class CheckpointManager:
         self,
         db: Database,
         sections_dir: str,
-        personality_path: str = "data/personality.yaml",
         skills_dir: str = "skills",
     ) -> None:
         self.db = db
         self._sections_dir = sections_dir
-        self._personality_path = personality_path
         self._skills_dir = skills_dir
         self._section_registry = SectionRegistry(sections_dir)
 
@@ -40,10 +38,6 @@ class CheckpointManager:
         cp_id = str(uuid.uuid4())
 
         personality_snapshot = ""
-        if self._personality_path:
-            p_path = Path(self._personality_path)
-            if p_path.is_file():
-                personality_snapshot = p_path.read_text()
 
         sections_snapshot = {}
         s_dir = Path(self._sections_dir)

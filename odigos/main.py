@@ -112,6 +112,17 @@ async def lifespan(app: FastAPI):
             config_path, config_path,
         )
 
+    # Migrate old sections directory to new location
+    from pathlib import Path as _Path
+    _agent_dir = _Path("data/agent")
+    _old_sections = _Path("data/prompt_sections")
+    if _old_sections.exists() and not _agent_dir.exists():
+        import shutil
+        shutil.copytree(str(_old_sections), str(_agent_dir))
+        logger.info("Migrated data/prompt_sections/ to data/agent/")
+    if _Path("data/personality.yaml").exists():
+        logger.warning("data/personality.yaml is deprecated and ignored — identity is now in data/agent/identity.md")
+
     app.state.settings = settings
     app.state.config_path = config_path
     app.state.env_path = ".env"
@@ -419,7 +430,6 @@ async def lifespan(app: FastAPI):
         provider=_provider,
         agent_name=settings.agent.name,
         memory_manager=memory_manager,
-        personality_path=settings.personality.path,
         tool_registry=tool_registry,
         skill_registry=skill_registry,
         cost_fetcher=None,
@@ -478,8 +488,7 @@ async def lifespan(app: FastAPI):
 
     checkpoint_manager = CheckpointManager(
         db=_db,
-        sections_dir="data/prompt_sections",
-        personality_path=settings.personality.path,
+        sections_dir="data/agent",
         skills_dir=settings.skills.path,
     )
     evaluator = Evaluator(

@@ -34,7 +34,7 @@ def sections_dir():
 
 @pytest.mark.asyncio
 async def test_create_checkpoint(db, sections_dir):
-    mgr = CheckpointManager(db=db, sections_dir=sections_dir, personality_path="")
+    mgr = CheckpointManager(db=db, sections_dir=sections_dir)
     cp_id = await mgr.create_checkpoint(label="initial")
     assert cp_id is not None
     row = await db.fetch_one("SELECT * FROM checkpoints WHERE id = ?", (cp_id,))
@@ -46,7 +46,7 @@ async def test_create_checkpoint(db, sections_dir):
 
 @pytest.mark.asyncio
 async def test_get_working_sections_no_trial(db, sections_dir):
-    mgr = CheckpointManager(db=db, sections_dir=sections_dir, personality_path="")
+    mgr = CheckpointManager(db=db, sections_dir=sections_dir)
     sections = await mgr.get_working_sections()
     names = [s.name for s in sections]
     assert "identity" in names
@@ -55,7 +55,7 @@ async def test_get_working_sections_no_trial(db, sections_dir):
 
 @pytest.mark.asyncio
 async def test_get_working_sections_with_active_override(db, sections_dir):
-    mgr = CheckpointManager(db=db, sections_dir=sections_dir, personality_path="")
+    mgr = CheckpointManager(db=db, sections_dir=sections_dir)
     cp_id = await mgr.create_checkpoint(label="base")
     trial_id = str(uuid.uuid4())
     expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
@@ -77,7 +77,7 @@ async def test_get_working_sections_with_active_override(db, sections_dir):
 
 @pytest.mark.asyncio
 async def test_expired_override_ignored(db, sections_dir):
-    mgr = CheckpointManager(db=db, sections_dir=sections_dir, personality_path="")
+    mgr = CheckpointManager(db=db, sections_dir=sections_dir)
     cp_id = await mgr.create_checkpoint(label="base")
     trial_id = str(uuid.uuid4())
     expired = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
@@ -99,7 +99,7 @@ async def test_expired_override_ignored(db, sections_dir):
 
 @pytest.mark.asyncio
 async def test_promote_trial_writes_to_disk(db, sections_dir):
-    mgr = CheckpointManager(db=db, sections_dir=sections_dir, personality_path="")
+    mgr = CheckpointManager(db=db, sections_dir=sections_dir)
     cp_id = await mgr.create_checkpoint(label="before-trial")
     trial_id = str(uuid.uuid4())
     expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
@@ -127,7 +127,7 @@ async def test_promote_trial_writes_to_disk(db, sections_dir):
 
 @pytest.mark.asyncio
 async def test_revert_trial_deletes_overrides(db, sections_dir):
-    mgr = CheckpointManager(db=db, sections_dir=sections_dir, personality_path="")
+    mgr = CheckpointManager(db=db, sections_dir=sections_dir)
     cp_id = await mgr.create_checkpoint(label="base")
     trial_id = str(uuid.uuid4())
     expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()

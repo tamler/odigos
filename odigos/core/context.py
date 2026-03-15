@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import tiktoken
 
 from odigos.db import Database
-from odigos.personality.loader import load_personality
+from odigos.personality.section_registry import SectionRegistry
 from odigos.personality.prompt_builder import build_system_prompt
 
 if TYPE_CHECKING:
@@ -35,7 +35,7 @@ class ContextAssembler:
         agent_name: str,
         history_limit: int = 20,
         memory_manager: MemoryManager | None = None,
-        personality_path: str = "data/personality.yaml",
+        sections_dir: str = "data/agent",
         summarizer: ConversationSummarizer | None = None,
         skill_registry: SkillRegistry | None = None,
         corrections_manager: CorrectionsManager | None = None,
@@ -45,11 +45,11 @@ class ContextAssembler:
         self.agent_name = agent_name
         self.history_limit = history_limit
         self.memory_manager = memory_manager
-        self.personality_path = personality_path
         self.summarizer = summarizer
         self.skill_registry = skill_registry
         self.corrections_manager = corrections_manager
         self.checkpoint_manager = checkpoint_manager
+        self._fallback_registry = SectionRegistry(sections_dir)
 
     async def build(
         self,
@@ -59,12 +59,6 @@ class ContextAssembler:
     ) -> list[dict]:
         """Assemble the full messages list: system + history + current."""
         messages: list[dict] = []
-
-        # Load personality (hot reload -- re-read on every call)
-        personality = load_personality(self.personality_path)
-        # Override personality name with configured agent name
-        if self.agent_name:
-            personality.name = self.agent_name
 
         # Get memory context if available
         memory_context = ""
@@ -89,18 +83,18 @@ class ContextAssembler:
         if self.corrections_manager:
             corrections_context = await self.corrections_manager.relevant(current_message)
 
-        # Load dynamic prompt sections if checkpoint manager available
-        sections = None
+        # Load dynamic prompt sections
         if self.checkpoint_manager:
             sections = await self.checkpoint_manager.get_working_sections()
+        else:
+            sections = self._fallback_registry.load_all()
 
-        # Build system prompt via structured prompt builder
         system_prompt = build_system_prompt(
-            personality=personality,
+            sections=sections,
             memory_context=memory_context,
             skill_catalog=skill_catalog,
             corrections_context=corrections_context,
-            sections=sections,
+            agent_name=self.agent_name,
         )
 
         messages.append({"role": "system", "content": system_prompt})

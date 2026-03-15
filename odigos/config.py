@@ -31,10 +31,6 @@ class LLMConfig(BaseModel):
     connect_timeout_seconds: float = 10.0
 
 
-class PersonalityConfig(BaseModel):
-    path: str = "data/personality.yaml"
-
-
 class TelegramConfig(BaseModel):
     mode: str = "polling"
     webhook_url: str = ""
@@ -163,7 +159,6 @@ class Settings(BaseSettings):
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()
     llm: LLMConfig = LLMConfig()
-    personality: PersonalityConfig = PersonalityConfig()
     telegram: TelegramConfig = TelegramConfig()
     server: ServerConfig = ServerConfig()
     budget: BudgetConfig = BudgetConfig()
