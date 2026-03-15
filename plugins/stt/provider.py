@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import tempfile
 
@@ -43,11 +44,19 @@ class MoonshineSTT:
         """Transcribe an audio file to text. Returns full transcript string."""
         self._ensure_loaded()
         wav_path = self._ensure_wav(audio_path)
-        from moonshine_voice.utils import load_wav_file
+        converted = wav_path != audio_path
+        try:
+            from moonshine_voice.utils import load_wav_file
 
-        audio_data, sample_rate = load_wav_file(wav_path)
-        transcript = self._transcriber.transcribe_without_streaming(audio_data, sample_rate)
-        return " ".join(line.text for line in transcript.lines)
+            audio_data, sample_rate = load_wav_file(wav_path)
+            transcript = self._transcriber.transcribe_without_streaming(audio_data, sample_rate)
+            return " ".join(line.text for line in transcript.lines)
+        finally:
+            if converted:
+                try:
+                    os.unlink(wav_path)
+                except OSError:
+                    pass
 
     async def transcribe_stream(self, audio_chunks):
         """Transcribe streaming audio. Yields partial transcript strings.
@@ -65,7 +74,9 @@ class MoonshineSTT:
         """Convert non-WAV audio to WAV via ffmpeg. Returns WAV path."""
         if path.lower().endswith(".wav"):
             return path
-        wav_path = tempfile.mktemp(suffix=".wav")
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        wav_path = tmp.name
+        tmp.close()
         subprocess.run(
             ["ffmpeg", "-i", path, "-ar", "16000", "-ac", "1", "-f", "wav", wav_path],
             capture_output=True,

@@ -65,6 +65,24 @@ async def ws_transcribe(websocket: WebSocket):
 
         await websocket.send_json({"partial": last_text, "final": True})
 
+        # Auto-ingest final transcript into memory
+        if last_text:
+            ingester = None
+            if plugin_context:
+                service = getattr(websocket.app.state, "agent_service", None)
+                ingester = getattr(service, "doc_ingester", None) if service else None
+            if ingester:
+                try:
+                    import hashlib
+                    content_hash = hashlib.sha256(last_text.encode()).hexdigest()
+                    await ingester.ingest(
+                        text=last_text,
+                        filename="voice_stream_transcript",
+                        content_hash=content_hash,
+                    )
+                except Exception:
+                    logger.warning("STT WebSocket transcript ingestion failed", exc_info=True)
+
     except WebSocketDisconnect:
         pass
     except Exception as e:
@@ -80,7 +98,7 @@ async def ws_speak(websocket: WebSocket):
     """Stream TTS audio generation.
 
     Client -> Server: {"text": "speak this", "voice": "alba"}
-    Server -> Client: binary PCM audio chunks
+    Server -> Client: binary float32 PCM audio chunks
     Final: {"done": true, "duration_ms": 1234}
     """
     await websocket.accept()
