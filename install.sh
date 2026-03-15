@@ -155,6 +155,19 @@ EOF
     info "Wrote config.yaml"
 fi
 
+# ── Voice Setup (optional) ────────────────────────────────────────
+echo ""
+read -rp "$(echo -e "${BOLD}Enable voice (text-to-speech and speech-to-text)? [y/N]:${NC} ")" enable_voice
+enable_voice=${enable_voice:-N}
+
+if [[ "$enable_voice" =~ ^[Yy]$ ]]; then
+    if [ -f "./install-voice.sh" ]; then
+        bash ./install-voice.sh
+    else
+        warn "install-voice.sh not found. Run it separately after install."
+    fi
+fi
+
 # ── Build and Start ─────────────────────────────────────────────────
 echo ""
 read -rp "$(echo -e "${BOLD}Build and start Odigos now? [Y/n]:${NC} ")" start_now
