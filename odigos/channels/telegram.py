@@ -53,6 +53,8 @@ class TelegramChannel(Channel):
         self._app.add_handler(CallbackQueryHandler(self._handle_approval_callback, pattern=r"^approve:"))
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         self._app.add_handler(MessageHandler(filters.Document.ALL, self._handle_document))
+        self._app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
+        self._app.add_handler(MessageHandler(filters.AUDIO, self._handle_voice))
 
         await self._app.initialize()
 
@@ -206,6 +208,106 @@ class TelegramChannel(Channel):
             await update.effective_message.reply_text(
                 "Something went wrong. Please try again."
             )
+
+    async def _handle_voice(self, update: Update, context) -> None:
+        """Handle incoming voice notes — transcribe via STT and process as text."""
+        voice = update.effective_message.voice or update.effective_message.audio
+        if not voice:
+            return
+
+        try:
+            await context.bot.send_chat_action(
+                chat_id=update.effective_chat.id, action=ChatAction.TYPING
+            )
+        except Exception:
+            pass
+
+        # Download voice note
+        os.makedirs(DOCUMENT_DIR, exist_ok=True)
+        ext = ".ogg"  # Telegram voice notes are OGG/Opus
+        if update.effective_message.audio:
+            ext = os.path.splitext(update.effective_message.audio.file_name or ".mp3")[1]
+        file_path = os.path.join(DOCUMENT_DIR, f"voice_{update.effective_message.message_id}{ext}")
+
+        try:
+            tg_file = await context.bot.get_file(voice.file_id)
+            await tg_file.download_to_drive(file_path)
+        except Exception:
+            logger.exception("Failed to download voice note")
+            await update.effective_message.reply_text("Failed to download the voice note.")
+            return
+
+        # Save to persistent uploads
+        upload_dir = getattr(self.service, "upload_dir", "data/uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        persistent_name = f"{secrets.token_hex(8)}_{os.path.basename(file_path)}"
+        persistent_path = os.path.join(upload_dir, persistent_name)
+        shutil.copy2(file_path, persistent_path)
+
+        # Transcribe via STT provider
+        stt_provider = getattr(self.service, "stt_provider", None)
+        transcript = None
+        if stt_provider:
+            try:
+                transcript = await asyncio.to_thread(stt_provider.transcribe_file, persistent_path)
+            except Exception:
+                logger.warning("Voice transcription failed for %s", file_path, exc_info=True)
+
+        if not transcript:
+            transcript = "[Voice note received but transcription unavailable]"
+
+        # Auto-ingest transcript into memory
+        ingester = getattr(self.service, "doc_ingester", None)
+        if ingester and transcript and not transcript.startswith("["):
+            try:
+                content_hash = hashlib.sha256(transcript.encode()).hexdigest()
+                await ingester.ingest(
+                    text=transcript,
+                    filename=os.path.basename(file_path),
+                    file_path=persistent_path,
+                    file_size=os.path.getsize(persistent_path),
+                    content_hash=content_hash,
+                )
+            except Exception:
+                logger.warning("Voice transcript ingestion failed", exc_info=True)
+
+        # Process transcribed text as a regular message
+        message = UniversalMessage(
+            id=str(update.effective_message.message_id),
+            channel="telegram",
+            sender=str(update.effective_user.id),
+            content=transcript,
+            timestamp=datetime.now(timezone.utc),
+            metadata={
+                "chat_id": update.effective_chat.id,
+                "username": getattr(update.effective_user, "username", None),
+                "voice_note": True,
+                "audio_path": persistent_path,
+            },
+        )
+
+        try:
+            response = await self.service.handle_message(message)
+
+            # If TTS is available, reply with voice message
+            tts_provider = getattr(self.service, "tts_provider", None)
+            if tts_provider and response:
+                try:
+                    audio_path, _duration = await asyncio.to_thread(
+                        tts_provider.generate_audio, response
+                    )
+                    with open(audio_path, "rb") as audio_file:
+                        await context.bot.send_voice(
+                            chat_id=update.effective_chat.id, voice=audio_file
+                        )
+                    return
+                except Exception:
+                    logger.warning("TTS voice reply failed, falling back to text", exc_info=True)
+
+            await update.effective_message.reply_text(response)
+        except Exception:
+            logger.exception("Error handling voice message")
+            await update.effective_message.reply_text("Something went wrong. Please try again.")
 
     async def _handle_goals_command(self, update: Update, context) -> None:
         """List active goals."""

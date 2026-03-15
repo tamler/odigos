@@ -448,6 +448,14 @@ async def lifespan(app: FastAPI):
     plugin_context.set_service(agent_service)
     app.state.agent_service = agent_service
 
+    # Wire audio providers to service for channel access
+    stt_from_plugin = plugin_context.get_provider("stt")
+    tts_from_plugin = plugin_context.get_provider("tts")
+    if stt_from_plugin:
+        agent_service.stt_provider = stt_from_plugin
+    if tts_from_plugin:
+        agent_service.tts_provider = tts_from_plugin
+
     # Phase 2: Load channel plugins (need AgentService)
     plugin_manager.load_channels("plugins")
     logger.info("Channel plugins loaded")
