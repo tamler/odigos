@@ -8,13 +8,23 @@ import secrets
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+
+from odigos.tools.transcribe import AUDIO_EXTENSIONS
 
 from odigos.api.deps import get_doc_ingester, get_markitdown, get_upload_dir, require_api_key
 from odigos.memory.ingester import DocumentIngester
 from odigos.providers.markitdown import MarkItDownProvider
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+def is_audio_file(filename: str) -> bool:
+    """Check if a filename has an audio extension."""
+    if not filename:
+        return False
+    ext = os.path.splitext(filename.lower())[1]
+    return ext in AUDIO_EXTENSIONS
 PREVIEW_CHARS = 2000
 
 router = APIRouter(
@@ -25,6 +35,7 @@ router = APIRouter(
 
 @router.post("/upload")
 async def upload_file(
+    request: Request,
     file: UploadFile,
     upload_dir: str = Depends(get_upload_dir),
     ingester: DocumentIngester = Depends(get_doc_ingester),
@@ -46,16 +57,27 @@ async def upload_file(
 
     content_hash = hashlib.sha256(content).hexdigest()
 
-    # Extract text via MarkItDown
+    # Extract text — use STT for audio files, MarkItDown for everything else
     extracted_text = None
     chunk_count = 0
     status = "failed"
     doc_id = None
 
-    try:
-        extracted_text = await asyncio.to_thread(markitdown.convert_file, dest)
-    except Exception:
-        logger.warning("Text extraction failed for %s", safe_name, exc_info=True)
+    stt_provider = None
+    plugin_context = getattr(request.app.state, "plugin_context", None)
+    if plugin_context:
+        stt_provider = plugin_context.get_provider("stt")
+
+    if is_audio_file(safe_name) and stt_provider:
+        try:
+            extracted_text = await asyncio.to_thread(stt_provider.transcribe_file, dest)
+        except Exception:
+            logger.warning("Audio transcription failed for %s", safe_name, exc_info=True)
+    else:
+        try:
+            extracted_text = await asyncio.to_thread(markitdown.convert_file, dest)
+        except Exception:
+            logger.warning("Text extraction failed for %s", safe_name, exc_info=True)
 
     if extracted_text:
         try:
