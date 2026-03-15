@@ -1,0 +1,10 @@
+id: stt
+name: Speech-to-Text (Moonshine)
+description: Local CPU speech-to-text transcription via Moonshine ONNX models
+category: providers
+requires:
+  - moonshine-voice
+config_keys:
+  - stt.enabled
+  - stt.model
+  - stt.language

@@ -1,0 +1,10 @@
+id: tts
+name: Text-to-Speech (Pocket-TTS)
+description: Local CPU text-to-speech generation via Pocket-TTS PyTorch model
+category: providers
+requires:
+  - pocket-tts
+  - scipy
+config_keys:
+  - tts.enabled
+  - tts.voice
