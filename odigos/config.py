@@ -103,6 +103,17 @@ class FeedConfig(BaseModel):
     max_entries: int = 200
 
 
+class STTConfig(BaseModel):
+    enabled: bool = False
+    model: str = "small"
+    language: str = "en"
+
+
+class TTSConfig(BaseModel):
+    enabled: bool = False
+    voice: str = "alba"
+
+
 class TemplatesConfig(BaseModel):
     repo_url: str = "https://github.com/msitarzewski/agency-agents"
     cache_ttl_days: int = 7
@@ -167,6 +178,8 @@ class Settings(BaseSettings):
     evolution: EvolutionConfig = EvolutionConfig()
     mesh: MeshConfig = MeshConfig()
     feed: FeedConfig = FeedConfig()
+    stt: STTConfig = STTConfig()
+    tts: TTSConfig = TTSConfig()
     templates: TemplatesConfig = TemplatesConfig()
     peers: list[PeerConfig] = []
     deploy_targets: list[DeployTargetConfig] = []
