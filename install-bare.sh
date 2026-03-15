@@ -52,7 +52,7 @@ fi
 info "uv found"
 
 # ── Create directories ──────────────────────────────────────────────
-mkdir -p data data/plugins data/files skills plugins
+mkdir -p data data/agent data/prompts data/plugins data/files skills plugins
 info "Data directories ready"
 
 # ── Install dependencies ────────────────────────────────────────────
