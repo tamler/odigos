@@ -19,6 +19,12 @@ class PromptUpdate(BaseModel):
     content: str
 
 
+def _validate_name(name: str) -> None:
+    """Reject path traversal in prompt names."""
+    if "/" in name or "\\" in name or ".." in name:
+        raise HTTPException(status_code=400, detail="Invalid prompt name")
+
+
 @router.get("")
 async def list_prompts():
     """List all prompt files from both directories."""
@@ -39,6 +45,7 @@ async def list_prompts():
 @router.get("/{directory}/{name}")
 async def read_prompt(directory: str, name: str):
     """Read a prompt file's content."""
+    _validate_name(name)
     if directory not in _PROMPT_DIRS:
         raise HTTPException(status_code=400, detail=f"Invalid directory: {directory}. Must be one of: {list(_PROMPT_DIRS.keys())}")
 
@@ -52,6 +59,7 @@ async def read_prompt(directory: str, name: str):
 @router.put("/{directory}/{name}")
 async def update_prompt(directory: str, name: str, body: PromptUpdate):
     """Update a prompt file's content."""
+    _validate_name(name)
     if directory not in _PROMPT_DIRS:
         raise HTTPException(status_code=400, detail=f"Invalid directory: {directory}")
 

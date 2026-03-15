@@ -55,6 +55,7 @@ from odigos.api.agent_ws import router as agent_ws_router
 from odigos.api.feed import router as feed_router
 from odigos.api.cards import router as cards_router
 from odigos.api.audio import router as audio_router
+from odigos.api.prompts import router as prompts_router
 from odigos.tools.peer import MessagePeerTool
 from odigos.dashboard import mount_dashboard
 
@@ -677,6 +678,7 @@ app.include_router(ws_router)
 app.include_router(feed_router)
 app.include_router(cards_router)
 app.include_router(audio_router)
+app.include_router(prompts_router)
 
 
 @app.get("/health")
