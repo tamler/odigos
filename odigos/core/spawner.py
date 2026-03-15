@@ -62,7 +62,6 @@ class Spawner:
         role: str,
         description: str,
         specialty: str | None = None,
-        deploy_target: str = "",
     ) -> dict:
         """Generate a config.yaml structure for a new specialist agent."""
         llm = self.llm_config
@@ -87,7 +86,6 @@ class Spawner:
                     "ws_port": ws_port,
                 }
             ],
-            "_deploy_target": deploy_target,
             "_specialty": specialty,
         }
 
@@ -196,7 +194,6 @@ class Spawner:
         agent_name: str,
         role: str,
         description: str,
-        deploy_target: str,
         config_snapshot: dict,
         proposal_id: str | None = None,
     ) -> str:
@@ -204,9 +201,9 @@ class Spawner:
         spawn_id = str(uuid.uuid4())
         await self.db.execute(
             "INSERT INTO spawned_agents "
-            "(id, agent_name, role, description, deploy_target, proposal_id, config_snapshot, status) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'deploying')",
-            (spawn_id, agent_name, role, description, deploy_target, proposal_id, json.dumps(config_snapshot)),
+            "(id, agent_name, role, description, proposal_id, config_snapshot, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'deploying')",
+            (spawn_id, agent_name, role, description, proposal_id, json.dumps(config_snapshot)),
         )
         return spawn_id
 
@@ -216,7 +213,6 @@ class Spawner:
         role: str,
         description: str,
         specialty: str | None = None,
-        deploy_target: str = "",
         proposal_id: str | None = None,
     ) -> dict:
         """Full spawn pipeline: config + identity + knowledge + record.
@@ -229,7 +225,6 @@ class Spawner:
             role=role,
             description=description,
             specialty=specialty,
-            deploy_target=deploy_target,
         )
 
         identity = await self.generate_seed_identity(
@@ -242,7 +237,6 @@ class Spawner:
             agent_name=agent_name,
             role=role,
             description=description,
-            deploy_target=deploy_target,
             config_snapshot=config,
             proposal_id=proposal_id,
         )

@@ -38,7 +38,6 @@ async def test_generate_config(db, mock_provider):
         role="backend_dev",
         description="Python backend specialist",
         specialty="coding",
-        deploy_target="vps-1",
     )
 
     assert config["agent"]["name"] == "CodeBot"
@@ -153,17 +152,10 @@ async def test_gather_seed_knowledge(db, mock_provider):
 async def test_record_spawn(db, mock_provider):
     spawner = Spawner(db=db, provider=mock_provider, parent_name="Odigos")
 
-    # Insert a deploy target
-    await db.execute(
-        "INSERT INTO deploy_targets (name, host, method) VALUES (?, ?, ?)",
-        ("vps-1", "100.64.0.1", "docker"),
-    )
-
     spawn_id = await spawner.record_spawn(
         agent_name="CodeBot",
         role="backend_dev",
         description="Python backend specialist",
-        deploy_target="vps-1",
         config_snapshot={"agent": {"name": "CodeBot"}},
     )
 

@@ -29,9 +29,13 @@ async def app():
 
 def test_agent_ws_rejects_without_auth(app):
     client = TestClient(app)
-    with pytest.raises(Exception):
-        with client.websocket_connect("/ws/agent"):
-            pass
+    with client.websocket_connect("/ws/agent") as ws:
+        # Send an auth message with an invalid token
+        ws.send_json({"type": "auth", "token": "bad-token"})
+        # Server should respond with an error and close the connection
+        response = ws.receive_json()
+        assert response["type"] == "error"
+        assert response["payload"]["message"] == "Unauthorized"
 
 
 def test_agent_ws_accepts_with_auth(app):

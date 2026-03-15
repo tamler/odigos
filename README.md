@@ -248,6 +248,16 @@ npm run dev
 
 The dashboard is a React app served from `dashboard/dist/` in production.
 
+## Security and Authentication
+
+**API authentication.** All API and dashboard endpoints require a Bearer token passed via the `Authorization` header. The API key is generated during installation and stored in `config.yaml`. Include it in requests as `Authorization: Bearer <your-key>`.
+
+**Single-user design.** Odigos is built for self-hosted, single-user deployments. There is no multi-user authentication, role-based access control, or session management. The API key acts as the sole credential for all access.
+
+**Production recommendation.** If exposing Odigos to the public internet, place it behind a reverse proxy (Caddy, nginx) with HTTPS termination. The Docker install includes a Caddy reverse proxy that handles automatic HTTPS out of the box.
+
+**Approval gates.** Dangerous tools -- code execution, shell commands, and file writes -- require explicit human approval before running. This is enabled by default and can be configured in the `approval` section of `config.yaml`.
+
 ## Acknowledgments
 
 The evolution engine's self-evaluation and trial-based improvement loop was inspired by [autoresearch](https://github.com/karpathy/autoresearch) by Andrej Karpathy.

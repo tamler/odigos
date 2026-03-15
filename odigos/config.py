@@ -131,15 +131,6 @@ class EvolutionConfig(BaseModel):
     qualified_evaluator_min_score: float = 7.0
 
 
-class DeployTargetConfig(BaseModel):
-    """Configuration for a VPS deployment target."""
-    name: str
-    host: str
-    method: str = "docker"
-    ssh_user: str = "root"
-    ssh_key_path: Optional[str] = None
-
-
 class PeerConfig(BaseModel):
     """Configuration for a trusted peer agent."""
     name: str
@@ -177,7 +168,6 @@ class Settings(BaseSettings):
     tts: TTSConfig = TTSConfig()
     templates: TemplatesConfig = TemplatesConfig()
     peers: list[PeerConfig] = []
-    deploy_targets: list[DeployTargetConfig] = []
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

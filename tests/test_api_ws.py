@@ -45,14 +45,17 @@ def _make_app(api_key: str = "", agent: Optional[MagicMock] = None) -> FastAPI:
 
 
 class TestAuthNoToken:
-    """Connection closed when token is required but not provided."""
+    """Connection closed when invalid auth message is sent."""
 
     def test_no_token_when_required(self):
         app = _make_app(api_key="secret-key")
         client = TestClient(app)
-        with pytest.raises(Exception):
-            with client.websocket_connect("/api/ws"):
-                pass  # should not reach here
+        with client.websocket_connect("/api/ws") as ws:
+            # Server accepted, waiting for first-message auth
+            ws.send_json({"type": "auth", "token": "wrong-key"})
+            error = ws.receive_json()
+            assert error["type"] == "error"
+            assert "Invalid" in error["message"]
 
 
 class TestAuthWrongToken:

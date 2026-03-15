@@ -18,6 +18,7 @@ def _make_app():
     db.execute = AsyncMock()
 
     agent_client = MagicMock()
+    agent_client.list_peer_names = MagicMock(return_value=["Archie"])
     agent_client.add_discovered_peer = MagicMock()
 
     app.state.settings = settings

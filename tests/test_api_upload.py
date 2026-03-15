@@ -13,6 +13,8 @@ def _make_app(tmp_path) -> FastAPI:
     settings.api_key = "test-key"
     app.state.settings = settings
     app.state.upload_dir = str(tmp_path)
+    app.state.doc_ingester = None
+    app.state.markitdown_provider = None
     return app
 
 

@@ -10,7 +10,7 @@ class TestPeerEndpointMounted:
 
         app.state.settings = type("S", (), {"api_key": "test-key"})()
         mock_db = MagicMock()
-        mock_db.fetch_one = AsyncMock(return_value=None)
+        mock_db.fetch_one = AsyncMock(return_value={"agent_name": "test-peer"})
         mock_db.execute = AsyncMock()
         app.state.db = mock_db
 

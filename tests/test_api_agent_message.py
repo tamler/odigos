@@ -11,14 +11,17 @@ from httpx import ASGITransport, AsyncClient
 from odigos.api.agent_message import router
 
 
-def _make_app(api_key: str = "test-key", db=None) -> FastAPI:
+def _make_app(api_key: str = "test-key", db=None, known_peer: bool = False) -> FastAPI:
     """Create a minimal FastAPI app with the agent_message router and fake state."""
     app = FastAPI()
     app.include_router(router)
     app.state.settings = SimpleNamespace(api_key=api_key)
     if db is None:
         db = MagicMock()
-        db.fetch_one = AsyncMock(return_value=None)
+        if known_peer:
+            db.fetch_one = AsyncMock(return_value={"agent_name": "planner-bot"})
+        else:
+            db.fetch_one = AsyncMock(return_value=None)
         db.execute = AsyncMock()
     app.state.db = db
     return app
@@ -26,7 +29,7 @@ def _make_app(api_key: str = "test-key", db=None) -> FastAPI:
 
 @pytest_asyncio.fixture
 async def client() -> AsyncClient:
-    app = _make_app()
+    app = _make_app(known_peer=True)
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport,
@@ -38,6 +41,7 @@ async def client() -> AsyncClient:
 
 @pytest.mark.asyncio
 async def test_announce_new_peer(client: AsyncClient):
+    """Announce from a known peer (already in agent_registry) succeeds."""
     resp = await client.post(
         "/api/agent/peer/announce",
         json={
@@ -52,6 +56,26 @@ async def test_announce_new_peer(client: AsyncClient):
     data = resp.json()
     assert data["status"] == "ok"
     assert "planner-bot" in data["message"]
+
+
+@pytest.mark.asyncio
+async def test_announce_unknown_peer_rejected():
+    """Announce from an unknown agent is rejected with 403."""
+    app = _make_app(known_peer=False)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-key"},
+    ) as c:
+        resp = await c.post(
+            "/api/agent/peer/announce",
+            json={
+                "agent_name": "unknown-bot",
+                "ws_host": "100.64.0.9",
+            },
+        )
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio

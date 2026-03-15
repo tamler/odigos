@@ -54,7 +54,6 @@ async def test_spawn_agent(client):
         "role": "backend_dev",
         "description": "Python backend specialist",
         "specialty": "coding",
-        "deploy_target": "vps-1",
     })
     assert resp.status_code == 200
     data = resp.json()
@@ -63,26 +62,12 @@ async def test_spawn_agent(client):
 
 @pytest.mark.asyncio
 async def test_list_spawned_agents(client, db):
-    # Insert a deploy target and spawned agent
     await db.execute(
-        "INSERT INTO deploy_targets (name, host, method) VALUES (?, ?, ?)",
-        ("vps-1", "100.64.0.1", "docker"),
-    )
-    await db.execute(
-        "INSERT INTO spawned_agents (id, agent_name, role, deploy_target, status) VALUES (?, ?, ?, ?, ?)",
-        (str(uuid.uuid4()), "CodeBot", "backend_dev", "vps-1", "running"),
+        "INSERT INTO spawned_agents (id, agent_name, role, status) VALUES (?, ?, ?, ?)",
+        (str(uuid.uuid4()), "CodeBot", "backend_dev", "running"),
     )
     resp = await client.get("/api/agents/spawned")
     assert resp.status_code == 200
     assert len(resp.json()["agents"]) == 1
 
 
-@pytest.mark.asyncio
-async def test_list_deploy_targets(client, db):
-    await db.execute(
-        "INSERT INTO deploy_targets (name, host, method) VALUES (?, ?, ?)",
-        ("vps-1", "100.64.0.1", "docker"),
-    )
-    resp = await client.get("/api/agents/deploy-targets")
-    assert resp.status_code == 200
-    assert len(resp.json()["targets"]) == 1

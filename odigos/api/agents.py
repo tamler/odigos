@@ -18,7 +18,6 @@ class SpawnRequest(BaseModel):
     role: str
     description: str
     specialty: str = ""
-    deploy_target: str = ""
     proposal_id: str = ""
 
 
@@ -39,7 +38,6 @@ async def spawn_agent(req: SpawnRequest, spawner=Depends(get_spawner)):
         role=req.role,
         description=req.description,
         specialty=req.specialty or None,
-        deploy_target=req.deploy_target,
         proposal_id=req.proposal_id or None,
     )
     return result
@@ -52,15 +50,6 @@ async def list_spawned(db: Database = Depends(get_db)):
         "SELECT * FROM spawned_agents ORDER BY created_at DESC"
     )
     return {"agents": [dict(r) for r in rows]}
-
-
-@router.get("/agents/deploy-targets")
-async def list_deploy_targets(db: Database = Depends(get_db)):
-    """List available deployment targets."""
-    rows = await db.fetch_all(
-        "SELECT * FROM deploy_targets ORDER BY name"
-    )
-    return {"targets": [dict(r) for r in rows]}
 
 
 @router.get("/agents/{agent_name}")

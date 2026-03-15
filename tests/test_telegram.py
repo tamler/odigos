@@ -1,9 +1,19 @@
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from odigos.channels.telegram import TelegramChannel
 from odigos.core.agent_service import AgentService
+
+
+def _make_download_side_effect(filename):
+    """Return an async side_effect that creates the file on disk."""
+    async def _download(file_path):
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            f.write(b"fake file content")
+    return _download
 
 
 @pytest.fixture
@@ -23,7 +33,7 @@ class TestTelegramDocumentHandler:
         self, channel, mock_service, tmp_path
     ):
         mock_file = AsyncMock()
-        mock_file.download_to_drive = AsyncMock()
+        mock_file.download_to_drive = AsyncMock(side_effect=_make_download_side_effect("report.pdf"))
 
         update = MagicMock()
         update.effective_message.document.file_name = "report.pdf"
@@ -53,7 +63,7 @@ class TestTelegramDocumentHandler:
         self, channel, mock_service, tmp_path
     ):
         mock_file = AsyncMock()
-        mock_file.download_to_drive = AsyncMock()
+        mock_file.download_to_drive = AsyncMock(side_effect=_make_download_side_effect("photo.jpg"))
 
         update = MagicMock()
         update.effective_message.document.file_name = "photo.jpg"
