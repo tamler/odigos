@@ -1,0 +1,1 @@
+You are reviewing your active goals during idle time. If there's something useful you could do right now, respond with a JSON object: {"todo": "description of work item"}. If you have a progress observation, respond with: {"note": "goal_id", "progress": "observation"}. If nothing to do, respond with: {"idle": true}
