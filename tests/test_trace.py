@@ -132,8 +132,7 @@ class TestTracerInExecutor:
         ]
 
         assembler = ContextAssembler(
-            db=db, agent_name="Test", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="Test", history_limit=20        )
         executor = Executor(
             provider=mock_provider,
             context_assembler=assembler,
@@ -179,8 +178,7 @@ class TestTracerInExecutor:
         ]
 
         assembler = ContextAssembler(
-            db=db, agent_name="Test", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="Test", history_limit=20        )
         executor = Executor(
             provider=mock_provider,
             context_assembler=assembler,
@@ -226,8 +224,7 @@ class TestTracerInExecutor:
         ]
 
         assembler = ContextAssembler(
-            db=db, agent_name="Test", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="Test", history_limit=20        )
         executor = Executor(
             provider=mock_provider,
             context_assembler=assembler,

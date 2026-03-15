@@ -58,7 +58,7 @@ def mock_provider():
 @pytest.mark.asyncio
 async def test_full_cycle_promote(db, sections_dir, mock_provider):
     """Trial that performs well gets promoted and changes persist to disk."""
-    checkpoint_mgr = CheckpointManager(db=db, sections_dir=sections_dir, personality_path="")
+    checkpoint_mgr = CheckpointManager(db=db, sections_dir=sections_dir)
     evaluator = Evaluator(db=db, provider=mock_provider)
     engine = EvolutionEngine(
         db=db, checkpoint_manager=checkpoint_mgr,
@@ -132,7 +132,7 @@ async def test_full_cycle_promote(db, sections_dir, mock_provider):
 @pytest.mark.asyncio
 async def test_full_cycle_revert(db, sections_dir, mock_provider):
     """Trial that performs poorly gets reverted, disk unchanged."""
-    checkpoint_mgr = CheckpointManager(db=db, sections_dir=sections_dir, personality_path="")
+    checkpoint_mgr = CheckpointManager(db=db, sections_dir=sections_dir)
     evaluator = Evaluator(db=db, provider=mock_provider)
     engine = EvolutionEngine(
         db=db, checkpoint_manager=checkpoint_mgr,

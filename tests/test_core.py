@@ -54,7 +54,6 @@ class TestContextAssembler:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
         )
 
         messages = await assembler.build("conv-1", "Hello there")
@@ -69,7 +68,6 @@ class TestContextAssembler:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
         )
 
         # Insert some history
@@ -99,7 +97,7 @@ class TestContextAssembler:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
         )
 
         messages = await assembler.build(
@@ -122,7 +120,7 @@ class TestContextAssemblerWithMemory:
             agent_name="TestBot",
             history_limit=20,
             memory_manager=mock_memory,
-            personality_path="/nonexistent",
+
         )
         messages = await assembler.build("conv-1", "When should we meet?")
 
@@ -136,7 +134,7 @@ class TestContextAssemblerWithMemory:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
         )
         messages = await assembler.build("conv-1", "Hello")
 
@@ -149,7 +147,7 @@ class TestContextAssemblerWithMemory:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
         )
         messages = await assembler.build("conv-1", "Hello")
 
@@ -157,49 +155,11 @@ class TestContextAssemblerWithMemory:
         assert messages[-1]["content"] == "Hello"
 
 
-class TestContextAssemblerWithPersonality:
-    async def test_uses_personality_from_file(self, db: Database, tmp_path):
-        """Context assembler loads personality from file and uses it in prompt."""
-        import yaml
-
-        personality_file = tmp_path / "personality.yaml"
-        personality_file.write_text(
-            yaml.dump({"name": "Hal", "voice": {"tone": "robotic and precise"}})
-        )
-
-        assembler = ContextAssembler(
-            db=db,
-            agent_name="Hal",
-            history_limit=20,
-            personality_path=str(personality_file),
-        )
-        messages = await assembler.build("conv-1", "Hello")
-
-        system_content = messages[0]["content"]
-        assert "Hal" in system_content
-        assert "robotic and precise" in system_content
-
-    async def test_falls_back_to_defaults(self, db: Database):
-        """Missing personality file falls back to defaults."""
-        assembler = ContextAssembler(
-            db=db,
-            agent_name="Odigos",
-            history_limit=20,
-            personality_path="/nonexistent/file.yaml",
-        )
-        messages = await assembler.build("conv-1", "Hello")
-
-        system_content = messages[0]["content"]
-        assert "Odigos" in system_content
-        assert "direct, warm" in system_content
-
-
 class TestExecutor:
     async def test_execute_respond(self, db: Database, mock_provider: AsyncMock):
         """Simple response without tool calls."""
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="TestBot", history_limit=20        )
         executor = Executor(provider=mock_provider, context_assembler=assembler)
 
         result = await executor.execute("conv-1", "Hello")
@@ -219,8 +179,7 @@ class TestExecutor:
         registry.register(mock_tool)
 
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="TestBot", history_limit=20        )
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
@@ -256,8 +215,7 @@ class TestExecutor:
         registry.register(mock_tool)
 
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="TestBot", history_limit=20        )
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
@@ -291,8 +249,7 @@ class TestExecutor:
         registry.register(mock_tool)
 
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="TestBot", history_limit=20        )
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
@@ -437,7 +394,7 @@ class TestAgentWithMemory:
             agent_name="TestBot",
             history_limit=20,
             memory_manager=mock_memory,
-            personality_path="/nonexistent",
+
         )
         message = _make_message("Hello agent")
 
@@ -454,7 +411,7 @@ class TestAgent:
             provider=mock_provider,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
         )
         message = _make_message("Hello agent")
 
@@ -500,7 +457,7 @@ class TestAgent:
             provider=mock_provider,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
             tool_registry=registry,
         )
         message = _make_message("What's new in Python 3.13?")
@@ -540,7 +497,7 @@ class TestAgent:
             provider=mock_provider,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
             tool_registry=registry,
         )
         message = _make_message("Read this: https://example.com/page")
@@ -566,7 +523,7 @@ class TestContextBudget:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
         )
 
         await db.execute(
@@ -591,7 +548,7 @@ class TestContextBudget:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
         )
 
         messages = await assembler.build("conv-notrim", "Short message", max_tokens=12000)
@@ -672,8 +629,7 @@ class TestExecutorDocumentAction:
         registry.register(mock_doc_tool)
 
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="TestBot", history_limit=20        )
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
@@ -715,8 +671,7 @@ class TestExecutorCodeAction:
         registry.register(mock_code_tool)
 
         assembler = ContextAssembler(
-            db=db, agent_name="TestBot", history_limit=20, personality_path="/nonexistent"
-        )
+            db=db, agent_name="TestBot", history_limit=20        )
         executor = Executor(
             provider=mock_provider, context_assembler=assembler, tool_registry=registry
         )
@@ -747,7 +702,7 @@ class TestContextCompaction:
 
         assembler = ContextAssembler(
             db=db, agent_name="TestBot", history_limit=20,
-            personality_path="/nonexistent", summarizer=mock_summarizer,
+            summarizer=mock_summarizer,
         )
 
         await db.execute(
@@ -778,7 +733,7 @@ class TestContextCompaction:
         """Without summarizer, context assembler works as before."""
         assembler = ContextAssembler(
             db=db, agent_name="TestBot", history_limit=20,
-            personality_path="/nonexistent",
+
         )
         messages = await assembler.build("conv-1", "Hello")
         assert messages[0]["role"] == "system"
@@ -788,7 +743,7 @@ class TestContextCompaction:
         """When over token budget, summaries are trimmed before history."""
         assembler = ContextAssembler(
             db=db, agent_name="TestBot", history_limit=20,
-            personality_path="/nonexistent",
+
         )
 
         await db.execute(
@@ -888,7 +843,7 @@ class TestSkillCatalogInContext:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
             skill_registry=skill_registry,
         )
 
@@ -909,7 +864,7 @@ class TestSkillCatalogInContext:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
         )
 
         messages = await assembler.build("conv-1", "Hello")
@@ -924,7 +879,7 @@ class TestSkillCatalogInContext:
             db=db,
             agent_name="TestBot",
             history_limit=20,
-            personality_path="/nonexistent",
+
             skill_registry=skill_registry,
         )
 
