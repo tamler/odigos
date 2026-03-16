@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from sentence_transformers import CrossEncoder
+
 from odigos.memory.chunking import ChunkingService
 from odigos.memory.graph import EntityGraph
 from odigos.memory.resolver import EntityResolver
@@ -9,6 +11,15 @@ from odigos.memory.summarizer import ConversationSummarizer
 from odigos.memory.vectors import VectorMemory
 
 logger = logging.getLogger(__name__)
+
+_reranker: CrossEncoder | None = None
+
+
+def _get_reranker() -> CrossEncoder:
+    global _reranker
+    if _reranker is None:
+        _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    return _reranker
 
 
 class MemoryManager:
@@ -59,6 +70,19 @@ class MemoryManager:
                 result_map[key] = r
 
         ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+        # After RRF ranking, rerank top candidates with cross-encoder
+        if len(ranked) > limit:
+            try:
+                reranker = _get_reranker()
+                candidates = [(query, result_map[key].content_preview) for key, _ in ranked[:limit * 3]]
+                scores_ce = reranker.predict(candidates)
+                reranked = sorted(zip(ranked[:limit * 3], scores_ce), key=lambda x: x[1], reverse=True)
+                return [result_map[key] for (key, _), _score in reranked[:limit]]
+            except Exception:
+                # Fall back to RRF ranking if reranker fails
+                pass
+
         return [result_map[key] for key, _score in ranked[:limit]]
 
     async def recall(self, query: str, limit: int = 5) -> str:
@@ -72,7 +96,7 @@ class MemoryManager:
 
         # 1. Document knowledge (from uploaded/ingested files)
         doc_results = await self._hybrid_search(
-            query, limit=limit, source_type="document_chunk",
+            query, limit=max(limit, 10), source_type="document_chunk",
         )
         doc_lines = []
         for result in doc_results:

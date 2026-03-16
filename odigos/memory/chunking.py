@@ -20,7 +20,7 @@ class ChunkingService:
     - "text": SentenceChunker for plain text (e.g. MarkItDown output)
     """
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 64) -> None:
+    def __init__(self, chunk_size: int = 256, chunk_overlap: int = 50) -> None:
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
         self._chunkers: dict = {}

@@ -71,6 +71,17 @@ print('  Done.', file=sys.stderr)
 " 2>&1
 info "Embedding model cached"
 
+# ── Download cross-encoder reranker model ───────────────────────────
+info "Pre-downloading cross-encoder reranker model (~80MB)..."
+uv run python3 -c "
+from sentence_transformers import CrossEncoder
+import sys
+print('  Loading ms-marco-MiniLM-L-6-v2...', file=sys.stderr)
+CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+print('  Done.', file=sys.stderr)
+" 2>&1
+info "Cross-encoder reranker model cached"
+
 # ── Environment setup ───────────────────────────────────────────────
 if [ ! -f .env ]; then
     if [ -f .env.example ]; then

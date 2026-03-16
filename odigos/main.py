@@ -256,6 +256,14 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Memory system initialized")
 
+    # Pre-download cross-encoder reranker model for document recall
+    try:
+        from sentence_transformers import CrossEncoder
+        CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        logger.info("Cross-encoder reranker model ready")
+    except Exception:
+        logger.warning("Could not load cross-encoder reranker model")
+
     # Initialize corrections manager
     corrections_manager = CorrectionsManager(db=_db, vector_memory=vector_memory)
     logger.info("Corrections manager initialized")

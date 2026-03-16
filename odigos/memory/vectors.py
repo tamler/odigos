@@ -140,7 +140,12 @@ class VectorMemory:
         if not clean_terms:
             return []
 
+        # Build FTS5 query with both individual terms and phrase matching
         fts_query = " OR ".join(clean_terms)
+        if len(clean_terms) >= 2:
+            # Add phrase match for consecutive terms (higher relevance)
+            phrase = " ".join(clean_terms)
+            fts_query = f'"{phrase}" OR {fts_query}'
 
         if source_type:
             rows = await self.db.fetch_all(
