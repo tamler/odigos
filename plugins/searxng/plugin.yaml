@@ -1,13 +1,14 @@
-name: SearXNG Web Search
-id: searxng
-description: Adds web search capability using a SearXNG instance
+name: Web Search
+id: search
+description: Adds web search capability using SearXNG, Brave Search, or Google Custom Search
 category: tools
-requires:
-  - label: SearXNG instance
-    url: https://docs.searxng.org
 config_keys:
+  - key: search_provider
+    required: false
+    description: "Search provider to use: searxng, brave, or google (auto-detected if empty)"
+    type: string
   - key: searxng_url
-    required: true
+    required: false
     description: URL of your SearXNG instance
     type: url
   - key: searxng_username
@@ -18,3 +19,15 @@ config_keys:
     required: false
     description: SearXNG password (if auth is enabled)
     type: secret
+  - key: brave_api_key
+    required: false
+    description: Brave Search API subscription token
+    type: secret
+  - key: google_search_api_key
+    required: false
+    description: Google API key with Custom Search enabled
+    type: secret
+  - key: google_search_cx
+    required: false
+    description: Google Custom Search Engine ID
+    type: string

@@ -144,6 +144,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     api_key: str = ""
     session_secret: str = ""
+    search_provider: str = ""
     searxng_url: str = ""
     searxng_username: str = ""
     searxng_password: str = ""
