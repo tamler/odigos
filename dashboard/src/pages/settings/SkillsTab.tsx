@@ -182,7 +182,7 @@ function SkillCard({
   )
 }
 
-export default function SkillsTab() {
+export default function SkillsTab({ active }: { active?: boolean }) {
   const [skills, setSkills] = useState<Skill[]>([])
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -203,6 +203,8 @@ export default function SkillsTab() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => { if (active) load() }, [active])
 
   async function handleCreate() {
     if (!newName.trim() || !newPrompt.trim()) {

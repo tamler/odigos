@@ -48,14 +48,14 @@ export default function SettingsPage({ needsSetup }: Props) {
         </div>
       </div>
 
-      {/* Tab content — all tabs stay mounted to avoid re-fetching on switch */}
+      {/* Tab content — all tabs stay mounted; active prop triggers background refetch */}
       <div className="flex-1 overflow-y-auto">
-        <div className={activeTab === 'general' ? '' : 'hidden'}><GeneralSettings needsSetup={needsSetup} /></div>
-        <div className={activeTab === 'skills' ? '' : 'hidden'}><SkillsTab /></div>
-        <div className={activeTab === 'prompts' ? '' : 'hidden'}><PromptsTab /></div>
-        <div className={activeTab === 'evolution' ? '' : 'hidden'}><EvolutionTab /></div>
-        <div className={activeTab === 'agents' ? '' : 'hidden'}><AgentsTab /></div>
-        <div className={activeTab === 'plugins' ? '' : 'hidden'}><PluginsTab /></div>
+        <div className={activeTab === 'general' ? '' : 'hidden'}><GeneralSettings needsSetup={needsSetup} active={activeTab === 'general'} /></div>
+        <div className={activeTab === 'skills' ? '' : 'hidden'}><SkillsTab active={activeTab === 'skills'} /></div>
+        <div className={activeTab === 'prompts' ? '' : 'hidden'}><PromptsTab active={activeTab === 'prompts'} /></div>
+        <div className={activeTab === 'evolution' ? '' : 'hidden'}><EvolutionTab active={activeTab === 'evolution'} /></div>
+        <div className={activeTab === 'agents' ? '' : 'hidden'}><AgentsTab active={activeTab === 'agents'} /></div>
+        <div className={activeTab === 'plugins' ? '' : 'hidden'}><PluginsTab active={activeTab === 'plugins'} /></div>
       </div>
     </div>
   )

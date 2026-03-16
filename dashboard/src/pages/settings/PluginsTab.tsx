@@ -164,7 +164,7 @@ function PluginCard({ plugin, onSaved }: { plugin: Plugin; onSaved: () => void }
   )
 }
 
-export default function PluginsTab() {
+export default function PluginsTab({ active: isActive }: { active?: boolean }) {
   const [plugins, setPlugins] = useState<Plugin[]>([])
 
   const load = useCallback(async () => {
@@ -177,6 +177,8 @@ export default function PluginsTab() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => { if (isActive) load() }, [isActive])
 
   const active = plugins.filter((p) => p.status === 'active')
   const available = plugins.filter((p) => p.status !== 'active')

@@ -143,7 +143,7 @@ function PromptCard({
   )
 }
 
-export default function PromptsTab() {
+export default function PromptsTab({ active }: { active?: boolean }) {
   const [prompts, setPrompts] = useState<Prompt[]>([])
 
   const load = useCallback(async () => {
@@ -158,6 +158,8 @@ export default function PromptsTab() {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => { if (active) load() }, [active])
 
   const agentPrompts = prompts.filter((p) => p.directory === 'agent')
   const infraPrompts = prompts.filter((p) => p.directory === 'prompts')

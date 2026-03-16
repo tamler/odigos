@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,6 +31,7 @@ interface SettingsData {
 
 interface Props {
   needsSetup?: boolean
+  active?: boolean
 }
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
@@ -46,17 +47,21 @@ function SectionCard({ title, children }: { title: string; children: React.React
   )
 }
 
-export default function GeneralSettings({ needsSetup }: Props) {
+export default function GeneralSettings({ needsSetup, active }: Props) {
   const [settings, setSettings] = useState<SettingsData | null>(null)
   const [saving, setSaving] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
   const { theme, setTheme } = useTheme()
 
-  useEffect(() => {
+  const loadSettings = useCallback(() => {
     get<SettingsData>('/api/settings')
       .then(setSettings)
       .catch(() => {})
   }, [])
+
+  useEffect(() => { loadSettings() }, [loadSettings])
+
+  useEffect(() => { if (active) loadSettings() }, [active])
 
   function selectProvider(id: string) {
     const p = PROVIDERS.find((p) => p.id === id)

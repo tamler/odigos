@@ -51,7 +51,7 @@ interface Proposal {
   created_at: string
 }
 
-export default function EvolutionTab() {
+export default function EvolutionTab({ active }: { active?: boolean }) {
   const [activeTrial, setActiveTrial] = useState<Trial | null>(null)
   const [recentAvg, setRecentAvg] = useState<number | null>(null)
   const [evalCount, setEvalCount] = useState(0)
@@ -83,6 +83,8 @@ export default function EvolutionTab() {
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  useEffect(() => { if (active) loadAll() }, [active])
 
   async function handlePromote(trialId: string) {
     try {

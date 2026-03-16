@@ -25,7 +25,7 @@ interface SpawnedAgent {
   created_at: string
 }
 
-export default function AgentsTab() {
+export default function AgentsTab({ active }: { active?: boolean }) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [spawned, setSpawned] = useState<SpawnedAgent[]>([])
   const [showSpawnForm, setShowSpawnForm] = useState(false)
@@ -47,6 +47,8 @@ export default function AgentsTab() {
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  useEffect(() => { if (active) loadAll() }, [active])
 
   async function handleSpawn() {
     if (!spawnForm.agent_name || !spawnForm.role || !spawnForm.description) {
