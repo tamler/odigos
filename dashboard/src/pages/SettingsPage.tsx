@@ -27,13 +27,13 @@ export default function SettingsPage({ needsSetup }: Props) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Tab bar */}
-      <div className="border-b border-border/40 px-6">
-        <div className="max-w-3xl mx-auto flex gap-1">
+      <div className="border-b border-border/40 px-4 sm:px-6">
+        <div className="max-w-3xl mx-auto flex gap-1 overflow-x-auto">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+              className={`px-4 py-3 text-sm font-medium transition-colors relative shrink-0 ${
                 activeTab === tab.id
                   ? 'text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
