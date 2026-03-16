@@ -46,7 +46,6 @@ fi
 
 # ── Step 3: Create tester directories and configs ────────────────────
 declare -A API_KEYS
-declare -A TEMP_PASSWORDS
 
 for i in "${!TESTERS[@]}"; do
     name="${TESTERS[$i]}"
@@ -63,11 +62,9 @@ for i in "${!TESTERS[@]}"; do
     fi
     API_KEYS[$name]="$api_key"
 
-    # Generate seed user with temp password
-    temp_password=$(python3 -c "import secrets; print(secrets.token_urlsafe(12))")
-    TEMP_PASSWORDS[$name]="$temp_password"
+    # Seed user with API key as temp password (simpler to communicate)
     cat > "$dir/data/seed_user.json" << SEEDEOF
-{"username": "$name", "password": "$temp_password", "must_change_password": true}
+{"username": "$name", "password": "$api_key", "must_change_password": true}
 SEEDEOF
 
     # Capitalize first letter for display name
@@ -221,8 +218,7 @@ for i in "${!TESTERS[@]}"; do
     echo "  ${display_name}:"
     echo "    URL: https://${name}.uxrls.com"
     echo "    Username: ${name}"
-    echo "    Temp Password: ${TEMP_PASSWORDS[$name]}"
-    echo "    API Key: ${API_KEYS[$name]}"
-    echo "    (Change password on first login)"
+    echo "    Password: ${API_KEYS[$name]}"
+    echo "    (You'll be asked to change your password on first login)"
     echo ""
 done
