@@ -12,9 +12,11 @@ COPY odigos/ odigos/
 RUN pip install --no-cache-dir --prefix=/install --timeout=300 .
 
 # The sqlite-vec pip package ships a broken 32-bit ARM binary on aarch64.
-# Replace with our pre-compiled vec0.so (vendor/vec0.so).
+# Replace with our pre-compiled vec0.so only on ARM (x86_64 pip binary works fine).
 COPY vendor/vec0.so /tmp/vec0.so
-RUN cp /tmp/vec0.so "$(find /install -path '*/sqlite_vec/vec0.so' -print -quit)"
+RUN if [ "$(uname -m)" = "aarch64" ]; then \
+      cp /tmp/vec0.so "$(find /install -path '*/sqlite_vec/vec0.so' -print -quit)"; \
+    fi
 
 # --- Runtime stage ---
 FROM python:3.12-slim
