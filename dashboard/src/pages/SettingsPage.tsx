@@ -48,14 +48,14 @@ export default function SettingsPage({ needsSetup }: Props) {
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — all tabs stay mounted to avoid re-fetching on switch */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'general' && <GeneralSettings needsSetup={needsSetup} />}
-        {activeTab === 'skills' && <SkillsTab />}
-        {activeTab === 'prompts' && <PromptsTab />}
-        {activeTab === 'evolution' && <EvolutionTab />}
-        {activeTab === 'agents' && <AgentsTab />}
-        {activeTab === 'plugins' && <PluginsTab />}
+        <div className={activeTab === 'general' ? '' : 'hidden'}><GeneralSettings needsSetup={needsSetup} /></div>
+        <div className={activeTab === 'skills' ? '' : 'hidden'}><SkillsTab /></div>
+        <div className={activeTab === 'prompts' ? '' : 'hidden'}><PromptsTab /></div>
+        <div className={activeTab === 'evolution' ? '' : 'hidden'}><EvolutionTab /></div>
+        <div className={activeTab === 'agents' ? '' : 'hidden'}><AgentsTab /></div>
+        <div className={activeTab === 'plugins' ? '' : 'hidden'}><PluginsTab /></div>
       </div>
     </div>
   )
