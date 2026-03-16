@@ -252,35 +252,22 @@ export default function AppLayout() {
             </ScrollArea>
           )}
 
-          {/* Bottom: Chat + Settings */}
-          <div className="p-3 mt-auto space-y-1">
+          {/* Bottom: Toggle between Chat and Settings */}
+          <div className="p-3 mt-auto">
             <Tooltip>
               <TooltipTrigger>
                 <button
-                  onClick={() => { setSidebarOpen(false); navigate('/') }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
-                    !isSettingsPage ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
+                  onClick={() => { setSidebarOpen(false); navigate(isSettingsPage ? '/' : '/settings') }}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                 >
-                  <MessageSquare className="h-4 w-4 shrink-0" />
-                  {!collapsed && 'Chat'}
+                  {isSettingsPage ? (
+                    <><MessageSquare className="h-4 w-4 shrink-0" />{!collapsed && 'Chat'}</>
+                  ) : (
+                    <><Settings className="h-4 w-4 shrink-0" />{!collapsed && 'Settings'}</>
+                  )}
                 </button>
               </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Chat</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/settings') }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
-                    isSettingsPage ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <Settings className="h-4 w-4 shrink-0" />
-                  {!collapsed && 'Settings'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Settings</TooltipContent>}
+              {collapsed && <TooltipContent side="right">{isSettingsPage ? 'Chat' : 'Settings'}</TooltipContent>}
             </Tooltip>
           </div>
         </aside>
