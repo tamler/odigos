@@ -138,11 +138,11 @@ for i in "${!TESTERS[@]}"; do
     ports:
       - "127.0.0.1:${port}:8000"
     volumes:
-      - ./testers/${name}/config.yaml:/app/config.yaml:ro
-      - ./testers/${name}/.env:/app/.env:ro
+      - ./testers/${name}/config.yaml:/app/config.yaml
+      - ./testers/${name}/.env:/app/.env
       - ./testers/${name}/data:/app/data
-      - ./testers/${name}/skills:/app/skills:ro
-      - ./testers/${name}/plugins:/app/plugins:ro
+      - ./testers/${name}/skills:/app/skills
+      - ./testers/${name}/plugins:/app/plugins
     environment:
       - LLM_API_KEY=\${LLM_API_KEY}
     healthcheck:

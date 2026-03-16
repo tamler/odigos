@@ -19,10 +19,10 @@ services:
       - "127.0.0.1:${ODIGOS_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
-      - ./config.yaml:/app/config.yaml:ro
-      - ./.env:/app/.env:ro
-      - ./skills:/app/skills:ro
-      - ./plugins:/app/plugins:ro
+      - ./config.yaml:/app/config.yaml
+      - ./.env:/app/.env
+      - ./skills:/app/skills
+      - ./plugins:/app/plugins
     environment:
       - LLM_API_KEY=${LLM_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
