@@ -87,7 +87,7 @@ function Label({ label, value }: { label: string; value: React.ReactNode }) {
   )
 }
 
-export default function StatePage() {
+export default function StatePage({ active }: { active?: boolean }) {
   const [state, setState] = useState<AgentState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
@@ -107,6 +107,7 @@ export default function StatePage() {
     const timer = setInterval(refresh, 10_000)
     return () => clearInterval(timer)
   }, [refresh])
+  useEffect(() => { if (active) refresh() }, [active])
 
   if (error) {
     return (
@@ -126,7 +127,7 @@ export default function StatePage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-6">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold text-foreground">Agent State Inspector</h2>
           {lastRefresh && (

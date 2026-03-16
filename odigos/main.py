@@ -57,6 +57,7 @@ from odigos.api.cards import router as cards_router
 from odigos.api.audio import router as audio_router
 from odigos.api.prompts import router as prompts_router
 from odigos.tools.peer import MessagePeerTool
+from odigos.tools.settings_tool import ManageSettingsTool
 from odigos.dashboard import mount_dashboard
 
 logging.basicConfig(
@@ -334,6 +335,10 @@ async def lifespan(app: FastAPI):
     tool_registry.register(GenerateCardTool(card_manager=card_manager))
     tool_registry.register(ImportCardTool(card_manager=card_manager))
     logger.info("Card tools registered")
+
+    # Register settings management tool
+    tool_registry.register(ManageSettingsTool(settings=settings, config_path=config_path))
+    logger.info("Settings tool registered")
 
     # Register feed publish tool if feed is enabled
     if settings.feed.enabled:

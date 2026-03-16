@@ -49,6 +49,8 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
         "mesh": settings.mesh.model_dump(),
         "templates": settings.templates.model_dump(),
         "feed": settings.feed.model_dump(),
+        "stt": settings.stt.model_dump() if hasattr(settings, 'stt') else {},
+        "tts": settings.tts.model_dump() if hasattr(settings, 'tts') else {},
     }
 
 

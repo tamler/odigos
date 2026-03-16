@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Activity, Rss, Link2, Menu } from 'lucide-react'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -150,9 +150,6 @@ export default function AppLayout() {
   }
 
   const isSettingsPage = location.pathname === '/settings'
-  const isStatusPage = location.pathname === '/status'
-  const isFeedPage = location.pathname === '/feed'
-  const isConnectionsPage = location.pathname === '/connections'
 
   return (
     <TooltipProvider>
@@ -258,48 +255,6 @@ export default function AppLayout() {
 
           {/* Bottom: Status + Settings */}
           <div className="p-3 mt-auto space-y-1">
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/connections') }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
-                    isConnectionsPage ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <Link2 className="h-4 w-4 shrink-0" />
-                  {!collapsed && 'Connections'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Connections</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/feed') }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
-                    isFeedPage ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <Rss className="h-4 w-4 shrink-0" />
-                  {!collapsed && 'Feed'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Feed</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/status') }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
-                    isStatusPage ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <Activity className="h-4 w-4 shrink-0" />
-                  {!collapsed && 'Inspector'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Inspector</TooltipContent>}
-            </Tooltip>
             <Tooltip>
               <TooltipTrigger>
                 <button

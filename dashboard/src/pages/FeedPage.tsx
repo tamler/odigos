@@ -11,7 +11,7 @@ interface FeedEntry {
   published_at: string
 }
 
-export default function FeedPage() {
+export default function FeedPage({ active }: { active?: boolean }) {
   const [entries, setEntries] = useState<FeedEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -33,6 +33,7 @@ export default function FeedPage() {
   useEffect(() => {
     refresh()
   }, [refresh])
+  useEffect(() => { if (active) refresh() }, [active])
 
   async function handleDelete(id: string) {
     try {
@@ -70,7 +71,7 @@ export default function FeedPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-6">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold text-foreground">Feed</h2>
         </div>
