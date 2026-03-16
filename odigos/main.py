@@ -145,10 +145,12 @@ async def lifespan(app: FastAPI):
 
         settings.session_secret = _secrets.token_urlsafe(48)
         env_path = _Path(".env")
-        # Append to .env so it persists across restarts
-        with open(env_path, "a") as _ef:
-            _ef.write(f"\nSESSION_SECRET={settings.session_secret}\n")
-        logger.info("Generated SESSION_SECRET and saved to .env")
+        try:
+            with open(env_path, "a") as _ef:
+                _ef.write(f"\nSESSION_SECRET={settings.session_secret}\n")
+            logger.info("Generated SESSION_SECRET and saved to .env")
+        except PermissionError:
+            logger.warning("Generated SESSION_SECRET (could not persist to .env -- read-only)")
 
     # Seed user from data/seed_user.json (for provisioned deploys)
     import json as _json
