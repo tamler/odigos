@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from odigos.api.deps import get_config_path, get_env_path, get_plugin_manager, get_settings, require_api_key
 from odigos.api.settings import _update_env_file
+from odigos.config import Settings
 
 router = APIRouter(
     prefix="/api",
@@ -99,12 +100,14 @@ class PluginConfigUpdate(BaseModel):
 async def configure_plugin(
     plugin_id: str,
     update: PluginConfigUpdate,
+    request: Request,
     plugin_manager=Depends(get_plugin_manager),
     settings=Depends(get_settings),
     config_path_str: str = Depends(get_config_path),
     env_path_str: str = Depends(get_env_path),
 ):
-    """Configure a plugin by writing secrets to .env and settings to config.yaml."""
+    """Configure a plugin by writing secrets to .env and settings to config.yaml,
+    then hot-reload settings and re-register all plugins."""
     # Verify plugin exists in metadata
     metadata = plugin_manager.scan_metadata("plugins")
     plugin_meta = next((m for m in metadata if m["id"] == plugin_id), None)
@@ -131,5 +134,14 @@ async def configure_plugin(
 
         with open(config_path, "w") as f:
             yaml.dump(yaml_config, f, default_flow_style=False)
+
+    # Hot-reload: re-read settings from disk and update app state
+    new_settings = Settings()
+    for field in new_settings.model_fields:
+        object.__setattr__(settings, field, getattr(new_settings, field))
+    request.app.state.settings = settings
+
+    # Re-register plugins so newly configured ones activate
+    plugin_manager.reload()
 
     return {"status": "ok", "plugin_id": plugin_id}

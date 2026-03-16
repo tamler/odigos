@@ -69,7 +69,7 @@ function PluginCard({ plugin, onSaved }: { plugin: Plugin; onSaved: () => void }
         else typed[ck.key] = v
       }
       await post(`/api/plugins/${plugin.id}/configure`, { values: typed })
-      toast.success('Configuration saved. Restart to apply.')
+      toast.success('Configuration saved and applied.')
       onSaved()
     } catch {
       toast.error('Failed to save configuration')
