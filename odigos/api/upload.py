@@ -87,6 +87,7 @@ async def upload_file(
                 file_path=dest,
                 file_size=len(content),
                 content_hash=content_hash,
+                force=True,  # User uploaded — always re-process with current chunk settings
             )
             row = await ingester.get_document_metadata(doc_id)
             if row:

@@ -29,6 +29,7 @@ class DocumentIngester:
         file_size: int | None = None,
         content_hash: str | None = None,
         conversation_id: str | None = None,
+        force: bool = False,
     ) -> str:
         # Check for existing document with same filename
         existing = await self.db.fetch_one(
@@ -36,13 +37,13 @@ class DocumentIngester:
             (filename,),
         )
         if existing is not None:
-            if content_hash and existing["content_hash"] == content_hash:
+            if not force and content_hash and existing["content_hash"] == content_hash:
                 logger.info(
                     "Document '%s' already ingested with same content hash, skipping",
                     filename,
                 )
                 return existing["id"]
-            # Different content — delete old document and re-ingest
+            # Different content or forced re-ingest — delete old and re-process
             await self.delete(existing["id"])
 
         doc_id = str(uuid.uuid4())
