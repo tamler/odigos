@@ -1,11 +1,10 @@
-"""Tests for API key authentication dependency."""
+"""Tests for API key authentication dependency (require_auth / require_api_key alias)."""
 
 import pytest
 from fastapi import Depends, FastAPI
-from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 
-from odigos.api.deps import require_api_key
+from odigos.api.deps import require_api_key, require_auth
 
 
 def _make_app(api_key_value: str) -> FastAPI:
@@ -13,11 +12,10 @@ def _make_app(api_key_value: str) -> FastAPI:
     app = FastAPI()
 
     class _FakeSettings:
-        pass
+        api_key = api_key_value
+        session_secret = "test-secret-for-sessions"
 
-    settings = _FakeSettings()
-    settings.api_key = api_key_value
-    app.state.settings = settings
+    app.state.settings = _FakeSettings()
 
     @app.get("/protected", dependencies=[Depends(require_api_key)])
     async def protected():
@@ -62,11 +60,17 @@ async def test_wrong_key_returns_403():
 
 
 @pytest.mark.asyncio
-async def test_empty_api_key_returns_403():
-    """When api_key is not configured, requests are denied."""
+async def test_empty_api_key_no_header_returns_401():
+    """When api_key is not configured and no cookie, requests get 401."""
     app = _make_app("")
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         resp = await client.get("/protected")
-    assert resp.status_code == 403
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_require_auth_is_require_api_key():
+    """require_api_key is an alias for require_auth."""
+    assert require_api_key is require_auth

@@ -143,6 +143,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     llm_api_key: str = ""
     api_key: str = ""
+    session_secret: str = ""
     searxng_url: str = ""
     searxng_username: str = ""
     searxng_password: str = ""

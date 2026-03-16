@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
@@ -55,6 +56,7 @@ from odigos.api.agent_ws import router as agent_ws_router
 from odigos.api.feed import router as feed_router
 from odigos.api.cards import router as cards_router
 from odigos.api.audio import router as audio_router
+from odigos.api.auth import router as auth_router
 from odigos.api.prompts import router as prompts_router
 from odigos.tools.peer import MessagePeerTool
 from odigos.tools.settings_tool import ManageSettingsTool
@@ -136,6 +138,50 @@ async def lifespan(app: FastAPI):
     _db = Database(settings.database.path)
     await _db.initialize()
     logger.info("Database initialized at %s", settings.database.path)
+
+    # Auto-generate SESSION_SECRET if not set
+    if not settings.session_secret:
+        import secrets as _secrets
+
+        settings.session_secret = _secrets.token_urlsafe(48)
+        env_path = _Path(".env")
+        # Append to .env so it persists across restarts
+        with open(env_path, "a") as _ef:
+            _ef.write(f"\nSESSION_SECRET={settings.session_secret}\n")
+        logger.info("Generated SESSION_SECRET and saved to .env")
+
+    # Seed user from data/seed_user.json (for provisioned deploys)
+    import json as _json
+
+    _seed_path = _Path("data/seed_user.json")
+    if _seed_path.exists():
+        try:
+            _seed = _json.loads(_seed_path.read_text())
+            _row = await _db.fetch_one("SELECT COUNT(*) as count FROM users")
+            if _row and _row["count"] == 0:
+                import uuid as _uuid
+                from odigos.api.auth import _hash_password
+
+                _user_id = _uuid.uuid4().hex
+                _now = datetime.now(timezone.utc).isoformat()
+                _must_change = 1 if _seed.get("must_change_password", True) else 0
+                await _db.execute(
+                    "INSERT INTO users (id, username, password_hash, display_name, must_change_password, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        _user_id,
+                        _seed["username"],
+                        _hash_password(_seed["password"]),
+                        _seed.get("display_name", ""),
+                        _must_change,
+                        _now,
+                    ),
+                )
+                logger.info("Seed user '%s' created from data/seed_user.json", _seed["username"])
+            _seed_path.unlink()
+            logger.info("Consumed and deleted data/seed_user.json")
+        except Exception:
+            logger.exception("Failed to process seed_user.json")
 
     # Initialize agent client (mesh networking)
     mesh_enabled = settings.mesh.enabled
@@ -662,6 +708,7 @@ app.add_middleware(
     allow_credentials=False,
 )
 
+app.include_router(auth_router)
 app.include_router(setup_router)
 app.include_router(agent_message_router)
 app.include_router(conversations_router)

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from odigos.api.auth import SESSION_COOKIE, _validate_session
 from odigos.channels.base import UniversalMessage
 
 logger = logging.getLogger(__name__)
@@ -34,54 +35,65 @@ async def _auto_title_and_notify(ws: WebSocket, db, provider, conversation_id: s
         logger.warning("Auto-title/notify failed: %s", exc)
 
 
-async def _authenticate_ws(websocket: WebSocket) -> bool:
-    """Authenticate WebSocket via first message or legacy query param.
+async def _authenticate_ws(websocket: WebSocket) -> tuple[bool, bool]:
+    """Authenticate WebSocket via cookie, query param, or first message.
 
-    Accepts either:
-    - First message: {"type": "auth", "token": "<key>"}
-    - Query param: ?token=<key> (deprecated, logged as warning)
+    Returns (authenticated, already_accepted).
+    - Cookie auth: authenticated before accept, so already_accepted=False.
+    - Query param auth: authenticated before accept, so already_accepted=False.
+    - First-message auth: we accept() first, so already_accepted=True.
     """
     settings = websocket.app.state.settings
-    configured_key = settings.api_key
-    if not configured_key:
-        await websocket.close(code=4003, reason="API key not configured")
-        return False
 
-    # Support legacy query param (log warning so operators know to migrate)
+    # 1. Try session cookie (available before accept)
+    cookie = websocket.cookies.get(SESSION_COOKIE)
+    if cookie:
+        secret = settings.session_secret
+        session = _validate_session(secret, cookie)
+        if session:
+            logger.debug("WebSocket authenticated via session cookie")
+            return True, False
+
+    configured_key = settings.api_key
+
+    # 2. Try legacy query param (before accept)
     token = websocket.query_params.get("token")
     if token:
-        if hmac.compare_digest(token.encode(), configured_key.encode()):
+        if configured_key and hmac.compare_digest(token.encode(), configured_key.encode()):
             logger.debug("WebSocket authenticated via query param (deprecated)")
-            return True
+            return True, False
         await websocket.close(code=4003, reason="Invalid token")
-        return False
+        return False, False
 
-    # No query param -- accept and wait for auth message
+    # 3. No API key configured and no valid cookie -- reject
+    if not configured_key:
+        await websocket.close(code=4003, reason="No valid authentication")
+        return False, False
+
+    # 4. Accept and wait for auth message
     await websocket.accept()
     try:
         data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
     except (asyncio.TimeoutError, Exception):
         await websocket.close(code=4003, reason="Auth timeout")
-        return False
+        return False, True
 
     if data.get("type") != "auth" or data.get("token") != configured_key:
         await websocket.send_json({"type": "error", "message": "Invalid credentials"})
         await websocket.close(code=4003, reason="Invalid credentials")
-        return False
+        return False, True
 
-    return True
+    return True, True
 
 
 @router.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint with auth, chat, and subscribe support."""
-    # Try auth-in-first-message flow
-    already_accepted = not websocket.query_params.get("token")
-    authenticated = await _authenticate_ws(websocket)
+    authenticated, already_accepted = await _authenticate_ws(websocket)
     if not authenticated:
         return
 
-    # If auth was via query param, we still need to accept
+    # If not yet accepted (cookie auth or query param auth), accept now
     if not already_accepted:
         await websocket.accept()
 
