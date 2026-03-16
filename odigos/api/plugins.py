@@ -66,6 +66,8 @@ def _merge_plugins(
         # Annotate config keys with configured status
         annotated_keys = []
         for ck in meta.get("config_keys", []):
+            if isinstance(ck, str):
+                ck = {"key": ck}
             ck_copy = {**ck}
             value = _resolve_setting(settings, ck["key"])
             ck_copy["configured"] = bool(value)

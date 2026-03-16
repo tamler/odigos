@@ -6,5 +6,11 @@ requires:
   - pocket-tts
   - scipy
 config_keys:
-  - tts.enabled
-  - tts.voice
+  - key: tts.enabled
+    required: true
+    description: Enable text-to-speech
+    type: boolean
+  - key: tts.voice
+    required: false
+    description: TTS voice name (default alba)
+    type: string
