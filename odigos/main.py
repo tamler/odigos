@@ -340,7 +340,10 @@ async def lifespan(app: FastAPI):
 
     # Ensure skills/code directory exists for executable code skills
     from pathlib import Path as _SkillPath
-    _SkillPath("skills/code").mkdir(parents=True, exist_ok=True)
+    try:
+        _SkillPath("skills/code").mkdir(parents=True, exist_ok=True)
+    except OSError:
+        logger.warning("Could not create skills/code/ (read-only filesystem)")
 
     # Register code skill tools from loaded skills
     code_skill_count = skill_registry.register_code_skills(tool_registry)
