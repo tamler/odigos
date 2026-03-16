@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu } from 'lucide-react'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -158,7 +158,7 @@ export default function AppLayout() {
           <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
-          <span className="text-sm font-semibold">Odigos</span>
+          <button onClick={() => navigate('/')} className="text-sm font-semibold hover:text-muted-foreground transition-colors">Odigos</button>
           <Button variant="ghost" size="icon" className="ml-auto" onClick={handleNewChat}>
             <Plus className="h-5 w-5" />
           </Button>
@@ -252,8 +252,22 @@ export default function AppLayout() {
             </ScrollArea>
           )}
 
-          {/* Bottom: Status + Settings */}
+          {/* Bottom: Chat + Settings */}
           <div className="p-3 mt-auto space-y-1">
+            <Tooltip>
+              <TooltipTrigger>
+                <button
+                  onClick={() => { setSidebarOpen(false); navigate('/') }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
+                    !isSettingsPage ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                  }`}
+                >
+                  <MessageSquare className="h-4 w-4 shrink-0" />
+                  {!collapsed && 'Chat'}
+                </button>
+              </TooltipTrigger>
+              {collapsed && <TooltipContent side="right">Chat</TooltipContent>}
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger>
                 <button
