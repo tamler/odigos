@@ -20,38 +20,27 @@ interface SpawnedAgent {
   agent_name: string
   role: string
   description: string
-  deploy_target: string
   status: string
   deployed_at: string | null
   created_at: string
 }
 
-interface DeployTarget {
-  name: string
-  host: string
-  method: string
-  status: string
-}
-
 export default function AgentsTab() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [spawned, setSpawned] = useState<SpawnedAgent[]>([])
-  const [targets, setTargets] = useState<DeployTarget[]>([])
   const [showSpawnForm, setShowSpawnForm] = useState(false)
   const [spawnForm, setSpawnForm] = useState({
-    agent_name: '', role: '', description: '', specialty: '', deploy_target: '',
+    agent_name: '', role: '', description: '', specialty: '',
   })
 
   const loadAll = useCallback(async () => {
     try {
-      const [a, s, t] = await Promise.all([
+      const [a, s] = await Promise.all([
         get<{ agents: Agent[] }>('/api/agents'),
         get<{ agents: SpawnedAgent[] }>('/api/agents/spawned'),
-        get<{ targets: DeployTarget[] }>('/api/agents/deploy-targets'),
       ])
       setAgents(a.agents)
       setSpawned(s.agents)
-      setTargets(t.targets)
     } catch {
       toast.error('Failed to load agent data')
     }
@@ -68,7 +57,7 @@ export default function AgentsTab() {
       await post('/api/agents/spawn', spawnForm)
       toast.success(`Specialist ${spawnForm.agent_name} spawn initiated`)
       setShowSpawnForm(false)
-      setSpawnForm({ agent_name: '', role: '', description: '', specialty: '', deploy_target: '' })
+      setSpawnForm({ agent_name: '', role: '', description: '', specialty: '' })
       loadAll()
     } catch {
       toast.error('Failed to spawn agent')
@@ -109,16 +98,6 @@ export default function AgentsTab() {
               value={spawnForm.specialty}
               onChange={(e) => setSpawnForm({ ...spawnForm, specialty: e.target.value })}
             />
-            <select
-              className="px-3 py-2 text-sm rounded-md border border-border/40 bg-muted/50"
-              value={spawnForm.deploy_target}
-              onChange={(e) => setSpawnForm({ ...spawnForm, deploy_target: e.target.value })}
-            >
-              <option value="">Deploy target...</option>
-              {targets.map((t) => (
-                <option key={t.name} value={t.name}>{t.name} ({t.host})</option>
-              ))}
-            </select>
           </div>
           <input
             className="w-full px-3 py-2 text-sm rounded-md border border-border/40 bg-muted/50"
@@ -199,7 +178,7 @@ export default function AgentsTab() {
                 }`}>{s.status}</span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                Target: {s.deploy_target} {s.deployed_at && `| Deployed: ${new Date(s.deployed_at).toLocaleString()}`}
+                {s.deployed_at && `Deployed: ${new Date(s.deployed_at).toLocaleString()}`}
               </div>
             </div>
           ))}
