@@ -338,6 +338,15 @@ async def lifespan(app: FastAPI):
     logger.info("Loaded %d skills", len(skill_registry.list()))
     app.state.skill_registry = skill_registry
 
+    # Ensure skills/code directory exists for executable code skills
+    from pathlib import Path as _SkillPath
+    _SkillPath("skills/code").mkdir(parents=True, exist_ok=True)
+
+    # Register code skill tools from loaded skills
+    code_skill_count = skill_registry.register_code_skills(tool_registry)
+    if code_skill_count:
+        logger.info("Registered %d code skill tools", code_skill_count)
+
     # Register skill tools (activation, creation, update)
     from odigos.tools.skill_tool import ActivateSkillTool
     from odigos.tools.skill_manage import CreateSkillTool, UpdateSkillTool
@@ -345,10 +354,10 @@ async def lifespan(app: FastAPI):
     activate_skill_tool = ActivateSkillTool(skill_registry=skill_registry)
     tool_registry.register(activate_skill_tool)
 
-    create_skill_tool = CreateSkillTool(skill_registry=skill_registry)
+    create_skill_tool = CreateSkillTool(skill_registry=skill_registry, tool_registry=tool_registry)
     tool_registry.register(create_skill_tool)
 
-    update_skill_tool = UpdateSkillTool(skill_registry=skill_registry)
+    update_skill_tool = UpdateSkillTool(skill_registry=skill_registry, tool_registry=tool_registry)
     tool_registry.register(update_skill_tool)
 
     logger.info("Skill tools registered (activate, create, update)")

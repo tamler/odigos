@@ -18,6 +18,11 @@ class Skill:
     complexity: str
     system_prompt: str
     builtin: bool = False
+    code: str | None = None
+    parameters: dict | None = None
+    verified: bool = False
+    timeout: int = 10
+    allow_network: bool = False
 
 
 class SkillRegistry:
@@ -55,6 +60,10 @@ class SkillRegistry:
         tools: list[str] | None = None,
         complexity: str = "standard",
         skills_dir: str | None = None,
+        code: str | None = None,
+        parameters: dict | None = None,
+        timeout: int = 10,
+        allow_network: bool = False,
     ) -> Skill:
         """Create a new skill .md file and register it in the live registry."""
         target_dir = skills_dir or getattr(self, "skills_dir", None)
@@ -73,12 +82,33 @@ class SkillRegistry:
         if existing and existing.builtin:
             raise ValueError(f"Cannot overwrite built-in skill '{name}'")
 
+        code_relative = None
+        if code is not None:
+            from odigos.skills.code_validator import validate_skill_code
+
+            errors = validate_skill_code(code, parameters or {})
+            if errors:
+                raise ValueError(f"Code validation failed: {'; '.join(errors)}")
+
+            code_dir = Path(skills_dir) / "code"
+            code_dir.mkdir(parents=True, exist_ok=True)
+            code_file = code_dir / f"{name}.py"
+            code_file.write_text(code)
+            code_relative = f"skills/code/{name}.py"
+
         meta = {
             "name": name,
             "description": description,
             "tools": tools or [],
             "complexity": complexity,
         }
+        if code_relative:
+            meta["code"] = code_relative
+            if parameters:
+                meta["parameters"] = parameters
+            meta["verified"] = False
+            meta["timeout"] = timeout
+            meta["allow_network"] = allow_network
         content = f"---\n{yaml.dump(meta, default_flow_style=False)}---\n{system_prompt}\n"
 
         path = Path(skills_dir) / f"{name}.md"
@@ -94,6 +124,11 @@ class SkillRegistry:
             complexity=complexity,
             system_prompt=system_prompt,
             builtin=False,
+            code=code_relative,
+            parameters=parameters if code_relative else None,
+            verified=False,
+            timeout=timeout if code_relative else 10,
+            allow_network=allow_network if code_relative else False,
         )
         self._skills[name] = skill
         logger.info("Created skill: %s at %s", name, path)
@@ -113,6 +148,11 @@ class SkillRegistry:
             if path.exists():
                 path.unlink()
 
+            if skill.code:
+                code_path = Path.cwd() / skill.code
+                if code_path.exists():
+                    code_path.unlink()
+
         del self._skills[name]
         logger.info("Deleted skill: %s", name)
 
@@ -123,6 +163,7 @@ class SkillRegistry:
         instructions: str | None = None,
         tools: list[str] | None = None,
         complexity: str | None = None,
+        code: str | None = None,
     ) -> Skill:
         """Update an existing agent-created skill. Built-in skills cannot be modified."""
         skill = self._skills.get(name)
@@ -140,6 +181,23 @@ class SkillRegistry:
         if complexity is not None:
             skill.complexity = complexity
 
+        if code is not None:
+            from odigos.skills.code_validator import validate_skill_code
+
+            errors = validate_skill_code(code, skill.parameters or {})
+            if errors:
+                raise ValueError(f"Code validation failed: {'; '.join(errors)}")
+
+            target_dir_for_code = getattr(self, "skills_dir", None)
+            if target_dir_for_code:
+                code_dir = Path(target_dir_for_code) / "code"
+                code_dir.mkdir(parents=True, exist_ok=True)
+                code_file = code_dir / f"{name}.py"
+                code_file.write_text(code)
+                skill.code = f"skills/code/{name}.py"
+
+            skill.verified = False
+
         # Rewrite file on disk
         target_dir = getattr(self, "skills_dir", None)
         if not target_dir:
@@ -151,6 +209,13 @@ class SkillRegistry:
             "tools": skill.tools,
             "complexity": skill.complexity,
         }
+        if skill.code:
+            meta["code"] = skill.code
+            if skill.parameters:
+                meta["parameters"] = skill.parameters
+            meta["verified"] = skill.verified
+            meta["timeout"] = skill.timeout
+            meta["allow_network"] = skill.allow_network
         content = f"---\n{yaml.dump(meta, default_flow_style=False)}---\n{skill.system_prompt}\n"
         path = Path(target_dir) / f"{name}.md"
         if not path.resolve().is_relative_to(Path(target_dir).resolve()):
@@ -159,6 +224,50 @@ class SkillRegistry:
 
         logger.info("Updated skill: %s", name)
         return skill
+
+    def register_code_skills(self, tool_registry) -> int:
+        """Register CodeSkillRunner tools for all skills that have a code field."""
+        from odigos.tools.code_skill_runner import CodeSkillRunner
+
+        count = 0
+        for skill in self._skills.values():
+            if not skill.code:
+                continue
+
+            code_path = Path.cwd() / skill.code
+            if not code_path.exists():
+                logger.warning(
+                    "Code skill '%s' references missing file: %s", skill.name, code_path
+                )
+                continue
+
+            tool_name = f"skill_{skill.name}"
+            if tool_registry.get(tool_name):
+                logger.warning(
+                    "Code skill '%s' skipped — tool name '%s' already registered",
+                    skill.name,
+                    tool_name,
+                )
+                continue
+
+            target_dir = getattr(self, "skills_dir", None)
+            md_path = str(Path(target_dir) / f"{skill.name}.md") if target_dir else None
+
+            runner = CodeSkillRunner(
+                skill_name=skill.name,
+                skill_description=skill.description,
+                code_path=str(code_path),
+                parameters=skill.parameters or {},
+                timeout=skill.timeout,
+                allow_network=skill.allow_network,
+                skill_md_path=md_path,
+                verified=skill.verified,
+            )
+            tool_registry.register(runner)
+            count += 1
+            logger.info("Registered code skill tool: %s", tool_name)
+
+        return count
 
     def _parse_skill(self, path: Path) -> Skill | None:
         """Parse a SKILL.md file into a Skill dataclass."""
@@ -188,4 +297,9 @@ class SkillRegistry:
             tools=meta.get("tools", []),
             complexity=meta.get("complexity", "standard"),
             system_prompt=system_prompt,
+            code=meta.get("code"),
+            parameters=meta.get("parameters"),
+            verified=meta.get("verified", False),
+            timeout=meta.get("timeout", 10),
+            allow_network=meta.get("allow_network", False),
         )

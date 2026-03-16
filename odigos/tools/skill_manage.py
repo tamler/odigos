@@ -7,6 +7,7 @@ from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
     from odigos.skills.registry import SkillRegistry
+    from odigos.tools.registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +46,29 @@ class CreateSkillTool(BaseTool):
                 "enum": ["light", "standard", "heavy"],
                 "description": "Expected complexity level (default: standard).",
             },
+            "code": {
+                "type": "string",
+                "description": "Python code defining a run() function that returns a string. Makes the skill an executable tool.",
+            },
+            "parameters": {
+                "type": "object",
+                "description": "Parameter schema for run(). Keys are param names, values have 'type' and 'description'.",
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Sandbox timeout seconds (default 10, max 60).",
+            },
+            "allow_network": {
+                "type": "boolean",
+                "description": "Allow network access (default false).",
+            },
         },
         "required": ["name", "description", "instructions"],
     }
 
-    def __init__(self, skill_registry: SkillRegistry) -> None:
+    def __init__(self, skill_registry: SkillRegistry, tool_registry: ToolRegistry | None = None) -> None:
         self._registry = skill_registry
+        self._tool_registry = tool_registry
 
     async def execute(self, params: dict) -> ToolResult:
         name = params.get("name")
@@ -64,6 +82,11 @@ class CreateSkillTool(BaseTool):
                 error="Missing required parameters: name, description, and instructions are all required.",
             )
 
+        code = params.get("code")
+        parameters = params.get("parameters")
+        timeout = params.get("timeout", 10)
+        allow_network = params.get("allow_network", False)
+
         try:
             skill = self._registry.create(
                 name=name,
@@ -71,14 +94,40 @@ class CreateSkillTool(BaseTool):
                 system_prompt=instructions,
                 tools=params.get("tools"),
                 complexity=params.get("complexity", "standard"),
+                code=code,
+                parameters=parameters,
+                timeout=timeout,
+                allow_network=allow_network,
             )
         except ValueError as e:
             return ToolResult(success=False, data="", error=str(e))
 
-        return ToolResult(
-            success=True,
-            data=f"Skill '{skill.name}' created and available in the catalog.",
-        )
+        if code and self._tool_registry:
+            from pathlib import Path
+            from odigos.tools.code_skill_runner import CodeSkillRunner
+
+            code_path = str(Path.cwd() / skill.code)
+            target_dir = getattr(self._registry, "skills_dir", None)
+            md_path = str(Path(target_dir) / f"{skill.name}.md") if target_dir else None
+
+            runner = CodeSkillRunner(
+                skill_name=skill.name,
+                skill_description=skill.description,
+                code_path=code_path,
+                parameters=skill.parameters or {},
+                timeout=skill.timeout,
+                allow_network=skill.allow_network,
+                skill_md_path=md_path,
+                verified=skill.verified,
+            )
+            self._tool_registry.register(runner)
+
+        msg = f"Skill '{skill.name}' created"
+        if code:
+            msg += " as an executable code skill tool"
+        msg += " and available in the catalog."
+
+        return ToolResult(success=True, data=msg)
 
 
 class UpdateSkillTool(BaseTool):
@@ -114,12 +163,17 @@ class UpdateSkillTool(BaseTool):
                 "enum": ["light", "standard", "heavy"],
                 "description": "New complexity level (optional).",
             },
+            "code": {
+                "type": "string",
+                "description": "New Python code for an executable code skill (optional).",
+            },
         },
         "required": ["name"],
     }
 
-    def __init__(self, skill_registry: SkillRegistry) -> None:
+    def __init__(self, skill_registry: SkillRegistry, tool_registry: ToolRegistry | None = None) -> None:
         self._registry = skill_registry
+        self._tool_registry = tool_registry
 
     async def execute(self, params: dict) -> ToolResult:
         name = params.get("name")
@@ -135,9 +189,36 @@ class UpdateSkillTool(BaseTool):
                 instructions=params.get("instructions"),
                 tools=params.get("tools"),
                 complexity=params.get("complexity"),
+                code=params.get("code"),
             )
         except ValueError as e:
             return ToolResult(success=False, data="", error=str(e))
+
+        if params.get("code") and self._tool_registry and skill.code:
+            from pathlib import Path
+            from odigos.tools.code_skill_runner import CodeSkillRunner
+
+            tool_name = f"skill_{skill.name}"
+            # Remove old runner if present
+            old = self._tool_registry.get(tool_name)
+            if old:
+                self._tool_registry._tools.pop(tool_name, None)
+
+            code_path = str(Path.cwd() / skill.code)
+            target_dir = getattr(self._registry, "skills_dir", None)
+            md_path = str(Path(target_dir) / f"{skill.name}.md") if target_dir else None
+
+            runner = CodeSkillRunner(
+                skill_name=skill.name,
+                skill_description=skill.description,
+                code_path=code_path,
+                parameters=skill.parameters or {},
+                timeout=skill.timeout,
+                allow_network=skill.allow_network,
+                skill_md_path=md_path,
+                verified=False,
+            )
+            self._tool_registry.register(runner)
 
         return ToolResult(
             success=True,
