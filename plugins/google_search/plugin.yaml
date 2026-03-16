@@ -1,0 +1,16 @@
+name: Google Custom Search
+id: google_search
+description: Adds web search capability using Google Custom Search API
+category: tools
+requires:
+  - label: Google Custom Search API key
+    url: https://developers.google.com/custom-search/v1/overview
+config_keys:
+  - key: google_search_api_key
+    required: true
+    description: Google API key with Custom Search enabled
+    type: secret
+  - key: google_search_cx
+    required: true
+    description: Google Custom Search Engine ID
+    type: string

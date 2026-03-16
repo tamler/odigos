@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, Protocol
 
 from odigos.tools.base import BaseTool, ToolResult
 
-if TYPE_CHECKING:
-    from odigos.providers.searxng import SearxngProvider
+from odigos.providers.search_base import SearchResult
+
+
+class SearchProvider(Protocol):
+    async def search(self, query: str, num_results: int = 5) -> list[SearchResult]: ...
 
 
 class SearchTool(BaseTool):
-    """Web search tool backed by SearXNG."""
+    """Web search tool backed by any SearchProvider."""
 
     name = "web_search"
     description = "Search the web for current information on any topic."
@@ -21,15 +24,18 @@ class SearchTool(BaseTool):
         "required": ["query"],
     }
 
-    def __init__(self, searxng: SearxngProvider) -> None:
-        self.searxng = searxng
+    def __init__(self, provider: Any = None, *, searxng: Any = None) -> None:
+        # Accept either `provider` (new style) or `searxng` (legacy compat)
+        self._provider = provider or searxng
+        # Keep .searxng attribute for any existing code that references it
+        self.searxng = self._provider
 
     async def execute(self, params: dict) -> ToolResult:
         query = params.get("query")
         if not query:
             return ToolResult(success=False, data="", error="Missing required parameter: query")
 
-        results = await self.searxng.search(query)
+        results = await self._provider.search(query)
 
         if not results:
             return ToolResult(success=True, data="No results found for this search.")

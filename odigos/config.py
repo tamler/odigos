@@ -147,6 +147,9 @@ class Settings(BaseSettings):
     searxng_url: str = ""
     searxng_username: str = ""
     searxng_password: str = ""
+    brave_api_key: str = ""
+    google_search_api_key: str = ""
+    google_search_cx: str = ""
 
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()

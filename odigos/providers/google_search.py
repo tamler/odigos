@@ -4,51 +4,44 @@ import logging
 
 import httpx
 
-from odigos.providers.search_base import SearchResult  # noqa: F401 — re-export
+from odigos.providers.search_base import SearchResult
 
 logger = logging.getLogger(__name__)
 
-SEARXNG_DEFAULT_CATEGORIES = "general"
 
+class GoogleSearchProvider:
+    """Google Custom Search API client."""
 
-class SearxngProvider:
-    """SearXNG search API client with basic auth."""
-
-    def __init__(
-        self,
-        url: str,
-        username: str,
-        password: str,
-    ) -> None:
-        self.url = url.rstrip("/")
+    def __init__(self, api_key: str, cx: str) -> None:
+        self.api_key = api_key
+        self.cx = cx
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0),
-            auth=httpx.BasicAuth(username, password),
         )
 
     async def search(
         self,
         query: str,
         num_results: int = 5,
-        categories: str = SEARXNG_DEFAULT_CATEGORIES,
     ) -> list[SearchResult]:
-        """Search SearXNG and return top results.
+        """Search Google Custom Search and return top results.
 
         Returns an empty list on any error (network, HTTP, parse).
         """
         try:
             response = await self._client.get(
-                f"{self.url}/search",
+                "https://www.googleapis.com/customsearch/v1",
                 params={
                     "q": query,
-                    "format": "json",
-                    "categories": categories,
+                    "key": self.api_key,
+                    "cx": self.cx,
+                    "num": num_results,
                 },
             )
 
             if response.status_code != 200:
                 logger.warning(
-                    "SearXNG returned status %d: %s",
+                    "Google Custom Search returned status %d: %s",
                     response.status_code,
                     response.text[:200],
                 )
@@ -56,18 +49,18 @@ class SearxngProvider:
 
             data = response.json()
             results = []
-            for item in data.get("results", [])[:num_results]:
+            for item in data.get("items", [])[:num_results]:
                 results.append(
                     SearchResult(
                         title=item.get("title", ""),
-                        url=item.get("url", ""),
-                        snippet=item.get("content", ""),
+                        url=item.get("link", ""),
+                        snippet=item.get("snippet", ""),
                     )
                 )
             return results
 
         except Exception:
-            logger.exception("SearXNG search failed for query: %s", query)
+            logger.exception("Google Custom Search failed for query: %s", query)
             return []
 
     async def close(self) -> None:
