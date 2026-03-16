@@ -73,12 +73,13 @@ llm:
   base_url: "https://openrouter.ai/api/v1"
   default_model: "deepseek/deepseek-v3.2"
   fallback_model: "inception/mercury-2"
+  background_model: "google/gemini-2.0-flash-001"
   max_tokens: 4096
   temperature: 0.7
 
 budget:
-  daily_limit_usd: 2.00
-  monthly_limit_usd: 20.00
+  daily_limit_usd: 5.00
+  monthly_limit_usd: 50.00
   warn_threshold: 0.8
 
 searxng_url: "http://host.docker.internal:8083"
@@ -152,7 +153,7 @@ info "Image built"
 
 # ── Step 6: Fix data directory ownership ─────────────────────────────
 info "Fixing data directory permissions..."
-ODIGOS_IDS=$(docker compose run --rm --no-deps -T odigos-jessica id)
+ODIGOS_IDS=$(docker compose run --rm --no-deps -T --entrypoint id odigos-jessica)
 ODIGOS_UID=$(echo "$ODIGOS_IDS" | grep -o 'uid=[0-9]*' | cut -d= -f2)
 ODIGOS_GID=$(echo "$ODIGOS_IDS" | grep -o 'gid=[0-9]*' | cut -d= -f2)
 
