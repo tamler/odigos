@@ -132,7 +132,7 @@ export default function EvolutionPage() {
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
         <h1 className="text-xl font-semibold">Evolution Engine</h1>
 
         {/* Overview stats */}

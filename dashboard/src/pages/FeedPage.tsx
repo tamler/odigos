@@ -70,7 +70,7 @@ export default function FeedPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold text-foreground">Feed</h2>
         </div>
