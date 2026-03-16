@@ -17,7 +17,7 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 - Multi-model LLM support (OpenRouter, OpenAI, Ollama, LM Studio, or any OpenAI-compatible API)
 - Primary and fallback model configuration
 - Conversation memory with vector search, entity graphs, and automatic summarization
-- Web dashboard (React) with real-time WebSocket updates
+- Web dashboard (React) with real-time WebSocket updates, mobile-responsive
 - SQLite storage -- no external databases required
 
 **Tools**
@@ -29,7 +29,7 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 - File management with configurable allowed paths
 - Google Workspace integration (Gmail, Calendar, Drive -- via plugin)
 - Browser automation (via plugin)
-- Web search (SearXNG -- via plugin)
+- Web search (SearXNG, Brave Search, or Google Custom Search -- via plugin)
 - MCP server bridge -- connect any MCP-compatible tool server
 
 **Intelligence**
@@ -49,22 +49,23 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 
 **Security**
 
+- Username/password authentication with HTTP-only session cookies
+- API key authentication for programmatic access (Telegram, peers, scripts)
 - Approval gates for dangerous tools (code execution, shell, file writes)
 - Content filtering for prompt injection
 - Sandboxed code execution with memory and timeout limits
 - Budget controls (daily and monthly spending caps with warnings)
-- API key authentication for dashboard and API access
 
 **Voice** (optional)
 
-- Text-to-speech output via pocket-tts
-- Speech-to-text input via moonshine-voice
+- Text-to-speech output via pocket-tts (speaker button on messages)
+- Speech-to-text input via moonshine-voice (mic button in chat)
 - One-command setup: `bash install-voice.sh`
 
 **Extensibility**
 
 - Plugin system for tools, channels, and providers
-- Custom skills (Markdown-defined, hot-reloadable)
+- Custom skills (Markdown-defined, hot-reloadable) and executable skills (agent saves working code as reusable tools)
 - Multi-channel: Web dashboard, Telegram (via plugin)
 - MCP server integration
 
@@ -115,7 +116,7 @@ Installs [uv](https://docs.astral.sh/uv/), downloads dependencies and the embedd
 
 ### After install
 
-Open **http://localhost:8000** and log in with the API key shown in the terminal.
+Open **http://localhost:8000**. On first visit, you'll be prompted to create a username and password. If you set up an account during install, log in with those credentials.
 
 Useful commands:
 
@@ -161,13 +162,15 @@ Plugins live in the `plugins/` directory and extend Odigos with optional capabil
 
 | Plugin | Category | What it adds |
 |--------|----------|-------------|
-| SearXNG | Search | Web search via a SearXNG instance |
-| Google Workspace | Tools | Gmail, Calendar, Drive access |
-| Agent Browser | Tools | Browser automation for web interaction |
+| Web Search | Search | SearXNG, Brave Search, or Google Custom Search (configure one) |
+| Google Workspace | Tools | Gmail, Calendar, Drive access (requires `gws` CLI) |
+| Agent Browser | Tools | Browser automation (requires `agent-browser` CLI) |
 | Telegram | Channel | Telegram bot interface |
+| TTS | Voice | Text-to-speech via Pocket-TTS |
+| STT | Voice | Speech-to-text via Moonshine |
 | Docling | Provider | Deep document extraction (tables, figures, layout) |
 
-Enable plugins by providing their required configuration in the dashboard or `config.yaml`. Restart to apply.
+Enable plugins by providing their required configuration in the **Plugins** tab in Settings. Changes apply immediately -- no restart required.
 
 ## Skills
 
@@ -180,6 +183,19 @@ Skills are Markdown files in the `skills/` directory that define reusable behavi
 - `tag-conversation.md` -- Conversation categorization
 
 The agent can activate, create, and update skills at runtime.
+
+### Executable Skills
+
+When the agent writes code that solves a reusable problem, it can save the code as an executable skill. Executable skills appear as callable tools in the agent's tool list:
+
+```
+skills/
+  fetch-stock-price.md     # Description + metadata (YAML frontmatter)
+  code/
+    fetch-stock-price.py   # def run(ticker: str) -> str
+```
+
+The agent decides on its own when to save code as a skill. Code is validated (syntax, structure, blocked dangerous imports) and runs in the same sandbox as regular code execution. Skills are auto-verified on first successful execution.
 
 ## Prompt Files
 
@@ -250,13 +266,17 @@ The dashboard is a React app served from `dashboard/dist/` in production.
 
 ## Security and Authentication
 
-**API authentication.** All API and dashboard endpoints require a Bearer token passed via the `Authorization` header. The API key is generated during installation and stored in `config.yaml`. Include it in requests as `Authorization: Bearer <your-key>`.
+**Username/password login.** The dashboard uses username/password authentication with HTTP-only session cookies. On first visit, you create an account. Session cookies are signed with a per-install secret, HttpOnly (no XSS access), Secure (HTTPS), and SameSite=Lax.
 
-**Single-user design.** Odigos is built for self-hosted, single-user deployments. There is no multi-user authentication, role-based access control, or session management. The API key acts as the sole credential for all access.
+**API key for programmatic access.** Telegram, peer agents, and scripts authenticate via Bearer token (`Authorization: Bearer <key>`). The API key is generated during install and visible in the Account tab in Settings.
 
-**Production recommendation.** If exposing Odigos to the public internet, place it behind a reverse proxy (Caddy, nginx) with HTTPS termination. The Docker install includes a Caddy reverse proxy that handles automatic HTTPS out of the box.
+**Provisioned accounts.** For deploying to testers, the install generates a seed user with a temporary password and forced password change on first login.
 
-**Approval gates.** Dangerous tools -- code execution, shell commands, and file writes -- require explicit human approval before running. This is enabled by default and can be configured in the `approval` section of `config.yaml`.
+**Single-user design.** Each Odigos instance is one agent, one owner. Multi-user is solved at the deployment layer (run multiple instances). There is no multi-tenant mode.
+
+**Production recommendation.** Place behind a reverse proxy (Caddy, nginx) with HTTPS. The Docker install includes Caddy with automatic Let's Encrypt.
+
+**Approval gates.** Dangerous tools (code execution, shell, file writes) require human approval. Configurable in the `approval` section of `config.yaml`.
 
 ## Acknowledgments
 
