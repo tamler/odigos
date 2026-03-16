@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from odigos.api.deps import get_config_path, get_env_path, get_settings, require_api_key
 
@@ -94,25 +94,37 @@ async def update_settings_endpoint(
         yaml_config["api_key"] = update.api_key
         object.__setattr__(settings, "api_key", update.api_key)
 
-    # Write config.yaml once with all updates
-    with open(config_path, "w") as f:
-        yaml.dump(yaml_config, f, default_flow_style=False)
-
-    # Hot-reload in-memory settings from merged sections
+    # Validate all merged sections with Pydantic BEFORE writing to disk
+    validated_sections: dict[str, object] = {}
     for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "templates", "feed"):
         section_data = getattr(update, section)
         if section_data is not None:
             current = getattr(settings, section)
             merged = current.model_dump()
             merged.update(section_data)
-            new_obj = type(current)(**merged)
-            object.__setattr__(settings, section, new_obj)
+            try:
+                validated_sections[section] = type(current)(**merged)
+            except ValidationError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid settings for '{section}': {exc.errors()}",
+                )
+
+    # Write config.yaml once with all updates (only after validation succeeds)
+    with open(config_path, "w") as f:
+        yaml.dump(yaml_config, f, default_flow_style=False)
+
+    # Hot-reload in-memory settings from validated objects
+    for section, new_obj in validated_sections.items():
+        object.__setattr__(settings, section, new_obj)
 
     return {"status": "ok"}
 
 
 def _update_env_file(env_path: Path, key: str, value: str) -> None:
     """Update or add a key=value pair in an .env file."""
+    # Sanitize: strip newlines to prevent env injection
+    value = value.replace("\n", "").replace("\r", "")
     lines: list[str] = []
     found = False
 

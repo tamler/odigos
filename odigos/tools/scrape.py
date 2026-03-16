@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
+import socket
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from odigos.core.content_filter import ContentFilter
 from odigos.tools.base import BaseTool, ToolResult
@@ -12,6 +15,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _content_filter = ContentFilter()
+
+
+def _is_private_url(url: str) -> bool:
+    """Check if a URL resolves to a private/loopback IP address."""
+    try:
+        hostname = urlparse(url).hostname
+        if not hostname:
+            return True
+        for info in socket.getaddrinfo(hostname, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local:
+                return True
+    except (socket.gaierror, ValueError):
+        pass
+    return False
 
 
 class ScrapeTool(BaseTool):
@@ -35,6 +53,9 @@ class ScrapeTool(BaseTool):
         tier = params.get("tier", "standard")
         if not url:
             return ToolResult(success=False, data="", error="No URL provided")
+
+        if _is_private_url(url):
+            return ToolResult(success=False, data="", error="Cannot scrape private or internal URLs")
 
         page = await self.scraper.scrape(url, tier=tier)
 
