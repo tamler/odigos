@@ -130,10 +130,11 @@ class VectorMemory:
         self, query: str, limit: int = 20, source_type: str | None = None,
     ) -> list[MemoryResult]:
         """Full-text keyword search via FTS5."""
+        _FTS5_RESERVED = {"AND", "OR", "NOT", "NEAR"}
         clean_terms = []
         for word in query.split():
             cleaned = "".join(c for c in word if c.isalnum())
-            if cleaned:
+            if cleaned and cleaned.upper() not in _FTS5_RESERVED:
                 clean_terms.append(cleaned)
 
         if not clean_terms:
