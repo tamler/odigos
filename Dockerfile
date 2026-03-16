@@ -54,7 +54,10 @@ RUN mkdir -p /app/data /app/data/plugins /app/data/files && \
 ENV HF_HOME=/app/.cache/huggingface
 RUN mkdir -p /app/.cache && chown -R odigos:odigos /app/.cache
 USER odigos
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True)"
+RUN python -c "\
+from sentence_transformers import SentenceTransformer, CrossEncoder; \
+SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True); \
+CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
 
 # Config file mount point
 VOLUME ["/app/data"]
