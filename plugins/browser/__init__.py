@@ -4,7 +4,8 @@ Registers the run_browser tool when browser.enabled is true and agent-browser CL
 Install CLI: npm install -g @anthropic-ai/agent-browser
 """
 import logging
-import shutil
+
+from odigos.utils.cli_installer import install_npm_package, is_installed
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +15,13 @@ def register(ctx):
     if not settings or not settings.browser.enabled:
         return {"status": "available", "error_message": "Browser not enabled in settings"}
 
-    if not shutil.which("agent-browser"):
-        logger.warning(
-            "Browser enabled but agent-browser CLI not found. "
-            "Install: npm install -g @anthropic-ai/agent-browser"
-        )
-        return {"status": "error", "error_message": "agent-browser CLI not installed"}
+    if not is_installed("agent-browser"):
+        if not install_npm_package("@anthropic-ai/agent-browser", "agent-browser"):
+            logger.warning(
+                "Browser enabled but agent-browser CLI not found. "
+                "Install: npm install -g @anthropic-ai/agent-browser"
+            )
+            return {"status": "error", "error_message": "agent-browser CLI not installed"}
 
     from odigos.tools.browser import BrowserTool
 
