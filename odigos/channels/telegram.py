@@ -58,6 +58,17 @@ class TelegramChannel(Channel):
 
         await self._app.initialize()
 
+        from telegram import BotCommand
+        await self._app.bot.set_my_commands([
+            BotCommand("start", "Start a conversation"),
+            BotCommand("goals", "List active goals"),
+            BotCommand("todos", "List pending todos"),
+            BotCommand("reminders", "List reminders"),
+            BotCommand("status", "Agent status"),
+            BotCommand("cancel", "Cancel current operation"),
+            BotCommand("stop", "Stop the agent"),
+        ])
+
         if self.mode == "webhook" and self.webhook_url:
             await self._app.bot.set_webhook(self.webhook_url)
             logger.info("Telegram bot started in webhook mode")
