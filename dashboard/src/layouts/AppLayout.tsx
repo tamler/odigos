@@ -121,9 +121,8 @@ export default function AppLayout() {
   }
 
   function handleExport(id: string, format: 'markdown' | 'json') {
-    const token = localStorage.getItem('odigos_api_key') || ''
     const url = `/api/conversations/${id}/export?format=${format}`
-    fetch(url, { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error('Export failed')
         return res.blob()

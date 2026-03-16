@@ -38,7 +38,6 @@ function SkillCard({
       await fetch(`/api/skills/${skill.name}`, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('odigos_api_key') || ''}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

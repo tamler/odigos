@@ -1,44 +1,50 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect, useState, useCallback } from 'react'
 import { Toaster } from '@/components/ui/sonner'
-import { get } from './lib/api'
-import { isAuthenticated, clearApiKey } from './lib/auth'
+import { getAuthStatus } from './lib/auth'
 import AppLayout from './layouts/AppLayout'
 import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
 import LoginPrompt from './components/LoginPrompt'
 
-export default function App() {
-  const [setupDone, setSetupDone] = useState<boolean | null>(null)
-  const [authed, setAuthed] = useState(isAuthenticated())
+interface AuthState {
+  setup_required: boolean
+  authenticated: boolean
+  must_change_password: boolean
+}
 
-  useEffect(() => {
-    get<{ configured: boolean }>('/api/setup-status')
-      .then((data) => setSetupDone(data.configured))
-      .catch((err) => {
-        if (err.message === 'unauthorized') {
-          clearApiKey()
-          setAuthed(false)
-        }
-        setSetupDone(false)
-      })
+export default function App() {
+  const [authState, setAuthState] = useState<AuthState | null>(null)
+
+  const checkAuth = useCallback(() => {
+    getAuthStatus()
+      .then(setAuthState)
+      .catch(() => setAuthState({ setup_required: false, authenticated: false, must_change_password: false }))
   }, [])
 
-  if (setupDone === null) {
+  useEffect(() => { checkAuth() }, [checkAuth])
+
+  if (authState === null) {
     return <div className="flex items-center justify-center h-screen text-muted-foreground text-sm">Loading...</div>
   }
+
+  const needsLogin = authState.setup_required || !authState.authenticated || authState.must_change_password
 
   return (
     <>
       <Toaster position="top-right" richColors />
-      {setupDone && !authed ? (
-        <LoginPrompt onLogin={() => setAuthed(true)} />
+      {needsLogin ? (
+        <LoginPrompt
+          setupRequired={authState.setup_required}
+          mustChangePassword={authState.must_change_password}
+          onAuth={checkAuth}
+        />
       ) : (
         <BrowserRouter>
           <Routes>
             <Route element={<AppLayout />}>
-              <Route path="/" element={setupDone ? <ChatPage /> : <Navigate to="/settings" />} />
-              <Route path="/settings" element={<SettingsPage needsSetup={!setupDone} />} />
+              <Route path="/" element={<ChatPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

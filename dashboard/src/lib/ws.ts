@@ -1,5 +1,3 @@
-import { getApiKey } from './auth'
-
 type MessageHandler = (msg: Record<string, unknown>) => void
 
 export class ChatSocket {
@@ -20,15 +18,10 @@ export class ChatSocket {
   }
 
   connect(): void {
-    const token = getApiKey()
-    if (!token) return
-
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     this.ws = new WebSocket(`${proto}//${window.location.host}/api/ws`)
 
     this.ws.onopen = () => {
-      // Authenticate via first message instead of URL query param
-      this.ws?.send(JSON.stringify({ type: 'auth', token }))
       this.onStatusChange(true)
     }
     this.ws.onclose = () => {

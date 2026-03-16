@@ -37,8 +37,16 @@ else
     info "LLM_API_KEY configured"
 fi
 
+# ── Generate SESSION_SECRET if not present ────────────────────────────
+if ! grep -q "^SESSION_SECRET=.\+" "$ENV_FILE" 2>/dev/null; then
+    session_secret=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
+    echo "SESSION_SECRET=${session_secret}" >> "$ENV_FILE"
+    info "Generated SESSION_SECRET"
+fi
+
 # ── Step 3: Create tester directories and configs ────────────────────
 declare -A API_KEYS
+declare -A TEMP_PASSWORDS
 
 for i in "${!TESTERS[@]}"; do
     name="${TESTERS[$i]}"
@@ -54,6 +62,13 @@ for i in "${!TESTERS[@]}"; do
         api_key=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
     fi
     API_KEYS[$name]="$api_key"
+
+    # Generate seed user with temp password
+    temp_password=$(python3 -c "import secrets; print(secrets.token_urlsafe(12))")
+    TEMP_PASSWORDS[$name]="$temp_password"
+    cat > "$dir/data/seed_user.json" << SEEDEOF
+{"username": "$name", "password": "$temp_password", "must_change_password": true}
+SEEDEOF
 
     # Capitalize first letter for display name
     display_name="$(echo "${name:0:1}" | tr '[:lower:]' '[:upper:]')${name:1}"
@@ -205,6 +220,9 @@ for i in "${!TESTERS[@]}"; do
     display_name="$(echo "${name:0:1}" | tr '[:lower:]' '[:upper:]')${name:1}"
     echo "  ${display_name}:"
     echo "    URL: https://${name}.uxrls.com"
+    echo "    Username: ${name}"
+    echo "    Temp Password: ${TEMP_PASSWORDS[$name]}"
     echo "    API Key: ${API_KEYS[$name]}"
+    echo "    (Change password on first login)"
     echo ""
 done

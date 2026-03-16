@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import GeneralSettings from './settings/GeneralSettings'
+import AccountTab from './settings/AccountTab'
 import EvolutionTab from './settings/EvolutionTab'
 import AgentsTab from './settings/AgentsTab'
 import PluginsTab from './settings/PluginsTab'
@@ -9,11 +10,8 @@ import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
 import InspectorTab from './StatePage'
 
-interface Props {
-  needsSetup?: boolean
-}
-
 const TABS = [
+  { id: 'account', label: 'Account' },
   { id: 'general', label: 'General' },
   { id: 'skills', label: 'Skills' },
   { id: 'prompts', label: 'Prompts' },
@@ -27,7 +25,7 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id']
 
-export default function SettingsPage({ needsSetup }: Props) {
+export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('general')
 
   return (
@@ -56,7 +54,8 @@ export default function SettingsPage({ needsSetup }: Props) {
 
       {/* Tab content — all tabs stay mounted; active prop triggers background refetch */}
       <div className="flex-1 overflow-y-auto">
-        <div className={activeTab === 'general' ? '' : 'hidden'}><GeneralSettings needsSetup={needsSetup} active={activeTab === 'general'} /></div>
+        <div className={activeTab === 'account' ? '' : 'hidden'}><AccountTab active={activeTab === 'account'} /></div>
+        <div className={activeTab === 'general' ? '' : 'hidden'}><GeneralSettings active={activeTab === 'general'} /></div>
         <div className={activeTab === 'skills' ? '' : 'hidden'}><SkillsTab active={activeTab === 'skills'} /></div>
         <div className={activeTab === 'prompts' ? '' : 'hidden'}><PromptsTab active={activeTab === 'prompts'} /></div>
         <div className={activeTab === 'evolution' ? '' : 'hidden'}><EvolutionTab active={activeTab === 'evolution'} /></div>

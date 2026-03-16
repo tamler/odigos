@@ -95,6 +95,13 @@ else
     info "API_KEY already set"
 fi
 
+# ── Generate SESSION_SECRET if not set ────────────────────────────
+if ! grep -q "^SESSION_SECRET=.\+" .env 2>/dev/null; then
+    session_secret=$(python3 -c "import secrets; print(secrets.token_urlsafe(48))")
+    echo "SESSION_SECRET=${session_secret}" >> .env
+    info "Generated SESSION_SECRET"
+fi
+
 # ── LLM Configuration ──────────────────────────────────────────────
 if grep -q "^LLM_API_KEY=.\+" .env && ! grep -q "your-api-key" .env; then
     info "LLM_API_KEY already configured"
@@ -193,6 +200,29 @@ if [[ "$enable_voice" =~ ^[Yy]$ ]]; then
     else
         warn "install-voice.sh not found. Run it separately after install."
     fi
+fi
+
+# ── Account Setup (optional) ──────────────────────────────────────
+echo ""
+read -rp "$(echo -e "${BOLD}Create owner account now? [Y/n]:${NC} ")" create_account
+create_account=${create_account:-Y}
+
+if [[ "$create_account" =~ ^[Yy]$ ]]; then
+    read -rp "  Username: " owner_username
+    while [ -z "$owner_username" ]; do
+        read -rp "  Username: " owner_username
+    done
+    read -srp "  Password (min 8 chars): " owner_password
+    echo ""
+    while [ ${#owner_password} -lt 8 ]; do
+        read -srp "  Password too short. Try again (min 8 chars): " owner_password
+        echo ""
+    done
+    mkdir -p data
+    cat > data/seed_user.json << SEEDEOF
+{"username": "$owner_username", "password": "$owner_password", "must_change_password": false}
+SEEDEOF
+    info "Account will be created on first startup"
 fi
 
 # ── Systemd service (Linux only) ────────────────────────────────────

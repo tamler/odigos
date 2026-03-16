@@ -3,10 +3,9 @@ import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { get, post } from '@/lib/api'
 import { toast } from 'sonner'
-import { Sun, Moon, Monitor, AlertCircle } from 'lucide-react'
+import { Sun, Moon, Monitor } from 'lucide-react'
 
 const PROVIDERS = [
   { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4', fallback: 'google/gemini-2.0-flash-001' },
@@ -30,7 +29,6 @@ interface SettingsData {
 }
 
 interface Props {
-  needsSetup?: boolean
   active?: boolean
 }
 
@@ -47,7 +45,7 @@ function SectionCard({ title, children }: { title: string; children: React.React
   )
 }
 
-export default function GeneralSettings({ needsSetup, active }: Props) {
+export default function GeneralSettings({ active }: Props) {
   const [settings, setSettings] = useState<SettingsData | null>(null)
   const [saving, setSaving] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
@@ -84,9 +82,6 @@ export default function GeneralSettings({ needsSetup, active }: Props) {
     try {
       await post('/api/settings', settings)
       toast.success('Settings saved')
-      if (needsSetup) {
-        window.location.href = '/'
-      }
     } catch {
       toast.error('Failed to save settings')
     } finally {
@@ -103,16 +98,9 @@ export default function GeneralSettings({ needsSetup, active }: Props) {
       {/* Save bar */}
       <div className="flex items-center justify-end">
         <Button onClick={save} disabled={saving} size="sm">
-          {saving ? 'Saving...' : needsSetup ? 'Save & Start' : 'Save'}
+          {saving ? 'Saving...' : 'Save'}
         </Button>
       </div>
-
-      {needsSetup && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Configure your LLM provider to get started.</AlertDescription>
-        </Alert>
-      )}
 
       {/* Appearance */}
       <SectionCard title="Appearance">

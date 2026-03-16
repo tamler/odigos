@@ -174,10 +174,7 @@ export default function ChatPage() {
 
   const playTTS = useCallback(async (text: string) => {
     try {
-      const token = localStorage.getItem('odigos_api_key') || ''
-      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      })
+      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`)
       if (!res.ok) {
         toast.error('TTS request failed')
         return

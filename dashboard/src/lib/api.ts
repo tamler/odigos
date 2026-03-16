@@ -1,14 +1,7 @@
 const BASE = ''  // Same origin
 
-function getToken(): string {
-  return localStorage.getItem('odigos_api_key') || ''
-}
-
 function headers(): HeadersInit {
-  return {
-    'Authorization': `Bearer ${getToken()}`,
-    'Content-Type': 'application/json',
-  }
+  return { 'Content-Type': 'application/json' }
 }
 
 export async function get<T>(path: string): Promise<T> {
@@ -78,7 +71,6 @@ export async function uploadFile(file: File): Promise<{
   form.append('file', file)
   const res = await fetch(`${BASE}/api/upload`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${getToken()}` },
     body: form,
   })
   if (!res.ok) throw new Error(`Upload error: ${res.status}`)
