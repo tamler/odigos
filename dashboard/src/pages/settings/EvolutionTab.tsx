@@ -131,7 +131,7 @@ export default function EvolutionTab() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
       {/* Overview stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="p-4 rounded-lg border border-border/40 bg-card">

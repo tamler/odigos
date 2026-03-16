@@ -94,7 +94,7 @@ export default function GeneralSettings({ needsSetup }: Props) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
       {/* Save bar */}
       <div className="flex items-center justify-end">
         <Button onClick={save} disabled={saving} size="sm">

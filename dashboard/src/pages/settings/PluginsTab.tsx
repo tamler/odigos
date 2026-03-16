@@ -182,7 +182,7 @@ export default function PluginsTab() {
   const available = plugins.filter((p) => p.status !== 'active')
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
       {active.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-sm font-medium text-muted-foreground">Active</h2>

@@ -76,7 +76,7 @@ export default function AgentsTab() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium flex items-center gap-2">
           <Users className="h-4 w-4" /> Agent Network

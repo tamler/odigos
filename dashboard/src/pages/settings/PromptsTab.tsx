@@ -163,7 +163,7 @@ export default function PromptsTab() {
   const infraPrompts = prompts.filter((p) => p.directory === 'prompts')
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-6 space-y-5">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
       <p className="text-sm text-muted-foreground">
         Editable prompt files that shape the agent's behavior. Agent prompts
         define the system personality. Infrastructure prompts are templates used
