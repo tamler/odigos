@@ -1,5 +1,5 @@
 import os
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
@@ -15,6 +15,10 @@ def _make_app(tmp_path) -> FastAPI:
     app.state.upload_dir = str(tmp_path)
     app.state.doc_ingester = None
     app.state.markitdown_provider = None
+    # db mock for soft-limit chunk count check
+    db = MagicMock()
+    db.fetch_one = AsyncMock(return_value={"total": 0})
+    app.state.db = db
     return app
 
 

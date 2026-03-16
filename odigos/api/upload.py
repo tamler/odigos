@@ -12,7 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 
 from odigos.tools.transcribe import AUDIO_EXTENSIONS
 
-from odigos.api.deps import get_doc_ingester, get_markitdown, get_upload_dir, require_api_key
+from odigos.api.deps import get_db, get_doc_ingester, get_markitdown, get_upload_dir, require_api_key
+from odigos.db import Database
 from odigos.memory.ingester import DocumentIngester
 from odigos.providers.markitdown import MarkItDownProvider
 
@@ -38,6 +39,7 @@ async def upload_file(
     request: Request,
     file: UploadFile,
     upload_dir: str = Depends(get_upload_dir),
+    db: Database = Depends(get_db),
     ingester: DocumentIngester = Depends(get_doc_ingester),
     markitdown: MarkItDownProvider = Depends(get_markitdown),
 ):
@@ -79,6 +81,13 @@ async def upload_file(
         except Exception:
             logger.warning("Text extraction failed for %s", safe_name, exc_info=True)
 
+    # Soft limit check
+    storage_warning = None
+    chunk_row = await db.fetch_one("SELECT SUM(chunk_count) as total FROM documents")
+    total_chunks = chunk_row["total"] if chunk_row and chunk_row["total"] else 0
+    if total_chunks > 200000:
+        storage_warning = "Storage is near capacity. Consider deleting unused documents in Settings > Documents."
+
     if extracted_text:
         try:
             doc_id = await ingester.ingest(
@@ -97,7 +106,7 @@ async def upload_file(
             logger.warning("Ingestion failed for %s", safe_name, exc_info=True)
             status = "failed"
 
-    return {
+    result = {
         "id": file_id,
         "document_id": doc_id,
         "filename": file.filename,
@@ -106,3 +115,6 @@ async def upload_file(
         "status": status,
         "content_preview": extracted_text[:PREVIEW_CHARS] if extracted_text else None,
     }
+    if storage_warning:
+        result["storage_warning"] = storage_warning
+    return result

@@ -6,6 +6,7 @@ import AgentsTab from './settings/AgentsTab'
 import PluginsTab from './settings/PluginsTab'
 import SkillsTab from './settings/SkillsTab'
 import PromptsTab from './settings/PromptsTab'
+import DocumentsTab from './settings/DocumentsTab'
 import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
 import InspectorTab from './StatePage'
@@ -18,6 +19,7 @@ const TABS = [
   { id: 'evolution', label: 'Evolution' },
   { id: 'agents', label: 'Agents' },
   { id: 'plugins', label: 'Plugins' },
+  { id: 'documents', label: 'Documents' },
   { id: 'connections', label: 'Connections' },
   { id: 'feed', label: 'Feed' },
   { id: 'inspector', label: 'Inspector' },
@@ -61,6 +63,7 @@ export default function SettingsPage() {
         <div className={activeTab === 'evolution' ? '' : 'hidden'}><EvolutionTab active={activeTab === 'evolution'} /></div>
         <div className={activeTab === 'agents' ? '' : 'hidden'}><AgentsTab active={activeTab === 'agents'} /></div>
         <div className={activeTab === 'plugins' ? '' : 'hidden'}><PluginsTab active={activeTab === 'plugins'} /></div>
+        <div className={activeTab === 'documents' ? '' : 'hidden'}><DocumentsTab active={activeTab === 'documents'} /></div>
         <div className={activeTab === 'connections' ? '' : 'hidden'}><ConnectionsTab active={activeTab === 'connections'} /></div>
         <div className={activeTab === 'feed' ? '' : 'hidden'}><FeedTab active={activeTab === 'feed'} /></div>
         <div className={activeTab === 'inspector' ? '' : 'hidden'}><InspectorTab active={activeTab === 'inspector'} /></div>
