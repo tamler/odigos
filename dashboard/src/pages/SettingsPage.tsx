@@ -32,12 +32,12 @@ export default function SettingsPage() {
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Tab bar */}
       <div className="border-b border-border/40 px-4 sm:px-6">
-        <div className="max-w-3xl mx-auto flex gap-1 overflow-x-auto">
+        <div className="max-w-4xl mx-auto flex gap-0.5 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 text-sm font-medium transition-colors relative shrink-0 ${
+              className={`px-3 py-3 text-xs sm:text-sm font-medium transition-colors relative shrink-0 ${
                 activeTab === tab.id
                   ? 'text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
