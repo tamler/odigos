@@ -101,15 +101,15 @@ async def test_tick_processes_inbound_messages():
 
     hb = _build_heartbeat(agent_client=agent_client)
     hb.agent = AsyncMock()
-    hb.agent.run = AsyncMock(return_value="I'll look into the disk usage.")
+    hb.agent.handle_message = AsyncMock(return_value="I'll look into the disk usage.")
 
     await hb._tick()
 
-    # Agent should have been called with the peer message
-    hb.agent.run.assert_called_once()
-    call_args = hb.agent.run.call_args[0][0]
-    assert "Archie" in call_args
-    assert "Server disk is at 95%" in call_args
+    # Agent should have been called with a UniversalMessage containing the peer message
+    hb.agent.handle_message.assert_called_once()
+    msg_arg = hb.agent.handle_message.call_args[0][0]
+    assert "Archie" in msg_arg.content
+    assert "Server disk is at 95%" in msg_arg.content
 
     # Message should be marked processed
     agent_client.mark_processed.assert_called_once_with("msg-1")

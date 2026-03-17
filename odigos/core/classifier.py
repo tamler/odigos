@@ -171,6 +171,8 @@ class QueryClassifier:
         """Store an embedding for a query_log row. Called by the executor after logging."""
         if self.vector_memory is None:
             return
+        if self.db is None:
+            return
         try:
             vector = await self.vector_memory.embedder.embed(message)
             await self.db.execute(

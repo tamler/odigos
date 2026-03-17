@@ -133,11 +133,13 @@ class Database:
 
     async def execute_in_transaction(self, statements: list[tuple[str, tuple]]) -> None:
         """Execute multiple statements atomically in a single transaction."""
-        await self.conn.execute("BEGIN")
-        try:
-            for sql, params in statements:
-                await self.conn.execute(sql, params)
-            await self.conn.commit()
-        except Exception:
-            await self.conn.rollback()
-            raise
+        async def _do():
+            await self.conn.execute("BEGIN")
+            try:
+                for sql, params in statements:
+                    await self.conn.execute(sql, params)
+                await self.conn.commit()
+            except Exception:
+                await self.conn.rollback()
+                raise
+        await _retry_on_busy(_do)

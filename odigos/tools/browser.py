@@ -10,6 +10,14 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 120
 
+_BROWSER_ALLOWED_SUBCOMMANDS = {
+    "navigate", "click", "type", "screenshot", "extract",
+    "scroll", "wait", "select", "hover", "back", "forward",
+    "refresh", "evaluate", "pdf", "close",
+}
+
+_DANGEROUS_PATTERNS = ("--output", "../", "..\\")
+
 
 class BrowserTool(BaseTool):
     """Execute browser automation commands via the agent-browser CLI."""
@@ -50,6 +58,20 @@ class BrowserTool(BaseTool):
                 success=False, data="",
                 error=f"Invalid command syntax: {exc}",
             )
+
+        if not args or args[0] not in _BROWSER_ALLOWED_SUBCOMMANDS:
+            return ToolResult(
+                success=False, data="",
+                error=f"Unknown subcommand: {args[0] if args else '(empty)'}. "
+                       f"Allowed: {', '.join(sorted(_BROWSER_ALLOWED_SUBCOMMANDS))}",
+            )
+
+        for arg in args:
+            if any(pat in arg for pat in _DANGEROUS_PATTERNS):
+                return ToolResult(
+                    success=False, data="",
+                    error=f"Blocked dangerous argument: {arg}",
+                )
 
         try:
             proc = await asyncio.create_subprocess_exec(

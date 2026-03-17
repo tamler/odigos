@@ -49,16 +49,12 @@ class EntityGraph:
         if results:
             return results
 
-        # Alias match (search aliases_json)
-        all_with_aliases = await self.db.fetch_all(
-            "SELECT * FROM entities WHERE aliases_json IS NOT NULL AND status = 'active'"
+        # Alias match using SQLite JSON functions (avoids full table scan)
+        return await self.db.fetch_all(
+            "SELECT e.* FROM entities e, json_each(e.aliases_json) j "
+            "WHERE j.value = ? AND e.status = 'active'",
+            (name,),
         )
-        matches = []
-        for row in all_with_aliases:
-            aliases = json.loads(row["aliases_json"])
-            if name in aliases:
-                matches.append(row)
-        return matches
 
     async def update_entity(
         self,

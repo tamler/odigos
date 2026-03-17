@@ -10,6 +10,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 30
 
+_GWS_ALLOWED_SUBCOMMANDS = {
+    "gmail", "calendar", "drive", "sheets", "docs", "slides",
+    "forms", "chat", "admin", "tasks", "people", "vault",
+}
+
+_DANGEROUS_PATTERNS = ("--output", "../", "..\\")
+
 
 class GWSTool(BaseTool):
     """Execute Google Workspace commands via the gws CLI."""
@@ -49,6 +56,20 @@ class GWSTool(BaseTool):
                 success=False, data="",
                 error=f"Invalid command syntax: {exc}",
             )
+
+        if not args or args[0] not in _GWS_ALLOWED_SUBCOMMANDS:
+            return ToolResult(
+                success=False, data="",
+                error=f"Unknown subcommand: {args[0] if args else '(empty)'}. "
+                       f"Allowed: {', '.join(sorted(_GWS_ALLOWED_SUBCOMMANDS))}",
+            )
+
+        for arg in args:
+            if any(pat in arg for pat in _DANGEROUS_PATTERNS):
+                return ToolResult(
+                    success=False, data="",
+                    error=f"Blocked dangerous argument: {arg}",
+                )
 
         try:
             proc = await asyncio.create_subprocess_exec(

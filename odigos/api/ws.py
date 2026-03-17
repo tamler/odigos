@@ -78,7 +78,9 @@ async def _authenticate_ws(websocket: WebSocket) -> tuple[bool, bool]:
         await websocket.close(code=4003, reason="Auth timeout")
         return False, True
 
-    if data.get("type") != "auth" or data.get("token") != configured_key:
+    if data.get("type") != "auth" or not hmac.compare_digest(
+        (data.get("token") or "").encode(), configured_key.encode()
+    ):
         await websocket.send_json({"type": "error", "message": "Invalid credentials"})
         await websocket.close(code=4003, reason="Invalid credentials")
         return False, True

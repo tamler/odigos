@@ -250,10 +250,15 @@ class Heartbeat:
 
             # Route through the agent for a response
             try:
-                agent_response = await self.agent.run(
-                    f"[Peer message from {peer} (type: {msg_type})]\n\n{message_text}",
-                    conversation_id=None,
+                peer_msg = UniversalMessage(
+                    id=str(uuid.uuid4()),
+                    channel="peer",
+                    sender=peer,
+                    content=f"[Peer message from {peer} (type: {msg_type})]\n\n{message_text}",
+                    timestamp=datetime.now(timezone.utc),
+                    metadata={"peer_name": peer, "message_type": msg_type},
                 )
+                agent_response = await self.agent.handle_message(peer_msg)
 
                 # Send response back to the peer
                 if agent_response and self.agent_client:

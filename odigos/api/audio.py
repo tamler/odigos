@@ -20,7 +20,7 @@ def _authenticate(websocket: WebSocket) -> bool:
     token = websocket.query_params.get("token", "")
     if not settings.api_key:
         return False
-    return hmac.compare_digest(token, settings.api_key)
+    return hmac.compare_digest(token.encode(), settings.api_key.encode())
 
 
 @router.websocket("/ws/audio/transcribe")
