@@ -41,7 +41,22 @@ export default function AppLayout() {
   // Persistent WebSocket — lives at layout level, survives page navigation
   useEffect(() => {
     const socket = new ChatSocket(
-      () => {},  // message handling delegated to ChatPage via ref
+      (msg) => {
+        // Global notification handler -- toasts show on any page
+        if (msg.type === 'notification') {
+          const body = (msg.body || msg.message || '') as string
+          const title = msg.title as string | undefined
+          const label = title ? `${title}: ${body}` : body
+          const priority = (msg.priority || 'info') as string
+          if (priority === 'urgent') {
+            toast.error(label)
+          } else if (priority === 'warning') {
+            toast.warning(label)
+          } else {
+            toast.info(label)
+          }
+        }
+      },
       (isConnected) => {
         setConnected(isConnected)
         if (!isConnected) {
