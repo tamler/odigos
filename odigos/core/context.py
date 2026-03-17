@@ -106,6 +106,28 @@ class ContextAssembler:
             except Exception:
                 pass  # Documents table may not exist in tests
 
+        # Skill recommendations based on past usage
+        skill_hints = ""
+        if query_analysis and self.db:
+            try:
+                classification = query_analysis.classification
+                rows = await self.db.fetch_all(
+                    "SELECT su.skill_name, su.skill_type, AVG(su.evaluation_score) as avg_score, COUNT(*) as uses "
+                    "FROM skill_usage su "
+                    "JOIN query_log ql ON su.conversation_id = ql.conversation_id "
+                    "WHERE ql.classification = ? AND su.evaluation_score > 0.7 "
+                    "GROUP BY su.skill_name "
+                    "ORDER BY avg_score DESC LIMIT 5",
+                    (classification,),
+                )
+                if rows:
+                    lines = ["## Relevant skills for this type of query"]
+                    for row in rows:
+                        lines.append(f"- {row['skill_name']} ({row['skill_type']}, used {row['uses']}x, avg score {(row['avg_score'] or 0):.1f})")
+                    skill_hints = "\n".join(lines)
+            except Exception:
+                pass
+
         # Get corrections context if available
         corrections_context = ""
         if self.corrections_manager:
@@ -129,6 +151,7 @@ class ContextAssembler:
             corrections_context=corrections_context,
             doc_listing=doc_listing,
             agent_name=self.agent_name,
+            skill_hints=skill_hints,
         )
 
         messages.append({"role": "system", "content": system_prompt})

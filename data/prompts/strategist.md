@@ -17,6 +17,11 @@ Available tools: {agent_tools}
 ## Query Classification Performance (last 7 days)
 {query_log_summary}
 
+## Skill Usage Performance (last 7 days)
+{skill_usage_summary}
+
+Skills with high scores are working well. Skills with low scores may need improvement or the agent may be using them inappropriately.
+
 When proposing hypotheses, consider:
 - Classifications with low average scores may need better routing
 - High duration classifications may benefit from pipeline optimization

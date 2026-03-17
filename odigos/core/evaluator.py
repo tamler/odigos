@@ -180,6 +180,16 @@ class Evaluator:
         except Exception:
             pass  # query_log may not exist yet
 
+        # Link evaluation score to skill usage
+        try:
+            await self.db.execute(
+                "UPDATE skill_usage SET evaluation_score = ?, message_id = ? "
+                "WHERE conversation_id = ? AND message_id IS NULL",
+                (overall, message_id, conversation_id),
+            )
+        except Exception:
+            pass
+
         return {
             "eval_id": eval_id,
             "task_type": task_type,

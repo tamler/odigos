@@ -211,6 +211,31 @@ class Executor:
             except Exception:
                 logger.warning("Failed to log query", exc_info=True)
 
+        # Log skill usage
+        if self.db:
+            import uuid
+            from datetime import datetime, timezone
+            for tool_name in tools_used:
+                skill_name = None
+                skill_type = "text"
+                if tool_name.startswith("skill_"):
+                    skill_name = tool_name[6:]  # strip "skill_" prefix
+                    skill_type = "code"
+                elif tool_name == "activate_skill":
+                    skill_name = "activated"
+                    skill_type = "text"
+
+                if skill_name:
+                    try:
+                        await self.db.execute(
+                            "INSERT INTO skill_usage (id, conversation_id, skill_name, skill_type, created_at) "
+                            "VALUES (?, ?, ?, ?, ?)",
+                            (str(uuid.uuid4()), conversation_id, skill_name, skill_type,
+                             datetime.now(timezone.utc).isoformat()),
+                        )
+                    except Exception:
+                        pass
+
         # Append budget warning to response if triggered
         if budget_warning and last_response and last_response.content and not last_response.tool_calls:
             pct = max(
