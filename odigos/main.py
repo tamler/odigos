@@ -59,6 +59,7 @@ from odigos.api.audio import router as audio_router
 from odigos.api.auth import router as auth_router
 from odigos.api.prompts import router as prompts_router
 from odigos.api.documents import router as documents_router
+from odigos.api.analytics import router as analytics_router
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
@@ -775,6 +776,7 @@ app.include_router(cards_router)
 app.include_router(audio_router)
 app.include_router(prompts_router)
 app.include_router(documents_router)
+app.include_router(analytics_router)
 
 
 @app.get("/health")
