@@ -65,17 +65,19 @@ Mesh networking over WireGuard. Contact cards for establishing trust. Spawn spec
 
 Odigos has a self-improvement loop that runs continuously:
 
-**1. Classify** -- Every incoming message is categorized (simple, standard, document query, complex, planning) with evolvable rules. Simple questions skip heavy processing. Complex ones get decomposed into sub-tasks.
+**1. Classify** -- Every incoming message is categorized (simple, standard, document query, complex, planning) with [evolvable rules](https://arxiv.org/html/2603.11808v1). Simple questions skip heavy processing. Complex ones get decomposed into sub-tasks with persistent plans.
 
-**2. Execute** -- The agent works through the request using its tools, memory, and skills. It tracks which tools it uses and how long each step takes.
+**2. Execute** -- The agent works through the request using its tools, memory, and skills. It tracks which tools it uses, how long each step takes, and how many tokens each classification costs.
 
 **3. Evaluate** -- After responding, the evaluator scores the conversation using implicit feedback signals and rubric-based assessment.
 
-**4. Learn** -- The strategist analyzes patterns: which query types score well? Which tools work for which tasks? Which skills get reused? It proposes experimental changes.
+**4. Dream** -- In the background, the heartbeat ["dreams"](https://github.com/plastic-labs/honcho): analyzing conversations to build a [user profile](https://manthanguptaa.in/posts/chatgpt_memory/), extracting [tactical experiences](https://arxiv.org/html/2603.12056v2) from tool successes and failures, and mining repeated patterns for new skills.
 
-**5. Evolve** -- The evolution engine runs time-boxed trials. Changes that improve scores get promoted. Changes that hurt get reverted. Classification rules, routing, prompt sections, and skills all evolve this way.
+**5. Learn** -- The strategist analyzes classification stats, skill usage, token costs, and experience data. It proposes experimental changes AND auto-creates new skills when it detects repeated patterns.
 
-The agent also learns from errors (tool failures are logged and surfaced to avoid repeating mistakes) and from skill reuse (successful code patterns are tracked and recommended for similar future tasks).
+**6. Evolve** -- The evolution engine runs time-boxed trials. Changes that improve scores get promoted. Changes that hurt get reverted. Classification rules, routing, prompt sections, and skills all evolve this way.
+
+Three layers of memory feed the loop: [explicit facts](https://manthanguptaa.in/posts/chatgpt_memory/) the user states ("I prefer Python"), a user profile built from conversation analysis, and long-term conversation memory with vector search and entity graphs. The agent also maintains tactical experiences -- lessons learned from past tool interactions that prevent repeating the same mistakes.
 
 ## Architecture
 
@@ -143,9 +145,12 @@ cd dashboard && npm run dev    # Dashboard dev server
 
 - Evolution engine inspired by [autoresearch](https://github.com/karpathy/autoresearch) by Andrej Karpathy
 - Executable skills inspired by [SAGE](https://arxiv.org/html/2512.17102v2) (Skill Augmented GRPO for Self-Evolution)
+- Skill mining and three-level loading inspired by [Automating Skill Acquisition](https://arxiv.org/html/2603.11808v1) and [Anthropic Skills](https://github.com/anthropics/skills)
+- Experience layer inspired by [XSkill](https://arxiv.org/html/2603.12056v2) (Continual Learning in Multimodal Agents)
 - Document analysis inspired by [RLM](https://arxiv.org/html/2512.24601v2) (Recursive Language Models)
 - Plan persistence inspired by [planning-with-files](https://github.com/OthmanAdi/planning-with-files)
 - User profiling and fact extraction inspired by [ChatGPT's memory architecture](https://manthanguptaa.in/posts/chatgpt_memory/) and [Honcho](https://github.com/plastic-labs/honcho)
+- Token efficiency tracking inspired by [jMunchWorkbench](https://github.com/jgravelle/jMunchWorkbench)
 
 ## License
 
