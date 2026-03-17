@@ -27,6 +27,8 @@ or cross-reference information, write Python code using the document helpers:
 - list_documents() -- see all available documents with metadata
 - read_document(name) -- read the full text of a specific document
 - search_documents(query) -- search across all loaded documents for a text pattern
+Always print() results from these functions so you can see the output.
+Example: `results = search_documents("Trafalgar"); print(results)`
 RAG gives you relevant chunks automatically. Use code when you need to dig deeper,
 verify across multiple documents, or find specific passages.
 
