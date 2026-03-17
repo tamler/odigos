@@ -655,9 +655,12 @@ async def lifespan(app: FastAPI):
     tool_registry.register(NotifyTool(notifier=notifier))
     logger.info("Notification tool registered")
 
-    # Register decompose query tool
+    # Register decompose query tool and plan management tools
     tool_registry.register(DecomposeQueryTool(provider=_provider))
-    logger.info("Decompose query tool registered")
+    from odigos.tools.plan import CheckPlanTool, UpdatePlanTool
+    tool_registry.register(CheckPlanTool(db=_db))
+    tool_registry.register(UpdatePlanTool(db=_db))
+    logger.info("Decompose, check_plan, update_plan tools registered")
 
     # Initialize heartbeat
     _heartbeat = Heartbeat(
