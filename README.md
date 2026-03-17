@@ -25,7 +25,7 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 - Web scraping (Scrapling)
 - RSS feed parsing
 - Document processing (MarkItDown, optional Docling for deep extraction)
-- Code execution (sandboxed, memory-limited, network-restricted by default)
+- Code execution (sandboxed, with document analysis helpers for deep document querying)
 - File management with configurable allowed paths
 - Google Workspace integration (Gmail, Calendar, Drive -- via plugin)
 - Browser automation (via plugin)
@@ -39,6 +39,7 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 - Checkpointing with rollback on regressions
 - Corrections manager for learning from mistakes
 - Editable prompt files: agent identity and infrastructure prompts stored as Markdown, editable via dashboard or API
+- Document-aware code sandbox: agent can write Python to search, filter, and cross-reference across uploaded documents programmatically
 - Prompts API for listing, reading, and updating prompt files programmatically
 
 **Scheduling and Notifications**

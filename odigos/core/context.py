@@ -78,6 +78,25 @@ class ContextAssembler:
                     lines.append(f"- **{s.name}**: {s.description}")
                 skill_catalog = "\n".join(lines)
 
+        # Document listing for code-based analysis
+        doc_listing = ""
+        if self.db:
+            try:
+                doc_rows = await self.db.fetch_all(
+                    "SELECT id, filename, chunk_count FROM documents WHERE status IN ('complete', 'ingested') ORDER BY filename"
+                )
+                if doc_rows:
+                    lines = [
+                        "## Available documents",
+                        "Write Python code with list_documents(), read_document(name), search_documents(query) to analyze these:",
+                        "",
+                    ]
+                    for row in doc_rows:
+                        lines.append(f"- [{row['id'][:8]}] {row['filename']} ({row['chunk_count']} chunks)")
+                    doc_listing = "\n".join(lines)
+            except Exception:
+                pass  # Documents table may not exist in tests
+
         # Get corrections context if available
         corrections_context = ""
         if self.corrections_manager:
@@ -94,6 +113,7 @@ class ContextAssembler:
             memory_context=memory_context,
             skill_catalog=skill_catalog,
             corrections_context=corrections_context,
+            doc_listing=doc_listing,
             agent_name=self.agent_name,
         )
 
