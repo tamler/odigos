@@ -33,7 +33,14 @@ class Database:
 
     def __init__(self, db_path: str, migrations_dir: str = "migrations") -> None:
         self.db_path = db_path
-        self.migrations_dir = Path(migrations_dir)
+        migrations_path = Path(migrations_dir)
+        # If relative and doesn't exist in CWD, try relative to package root
+        if not migrations_path.is_absolute() and not migrations_path.exists():
+            package_root = Path(__file__).parent.parent
+            alt = package_root / migrations_dir
+            if alt.exists():
+                migrations_path = alt
+        self.migrations_dir = migrations_path
         self._conn: aiosqlite.Connection | None = None
 
     async def initialize(self) -> None:

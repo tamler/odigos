@@ -185,10 +185,13 @@ async def lifespan(app: FastAPI):
                     ),
                 )
                 logger.info("Seed user '%s' created from data/seed_user.json", _seed["username"])
-            _seed_path.unlink()
-            logger.info("Consumed and deleted data/seed_user.json")
+                _seed_path.unlink()
+                logger.info("Consumed and deleted data/seed_user.json")
+            else:
+                _seed_path.unlink()
+                logger.info("Seed user skipped (users exist), deleted seed_user.json")
         except Exception:
-            logger.exception("Failed to process seed_user.json")
+            logger.warning("Failed to process seed_user.json (will retry on next startup)")
 
     # Initialize agent client (mesh networking)
     mesh_enabled = settings.mesh.enabled
