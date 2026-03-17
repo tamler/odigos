@@ -36,7 +36,7 @@ async def test_malformed_quotes(browser_tool):
 
 @pytest.mark.asyncio
 async def test_cli_not_found(browser_tool):
-    with patch("odigos.tools.browser.asyncio.create_subprocess_exec", side_effect=FileNotFoundError):
+    with patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec", side_effect=FileNotFoundError):
         result = await browser_tool.execute({"command": "navigate --url 'https://example.com'"})
     assert not result.success
     assert "agent-browser CLI not found" in result.error
@@ -48,8 +48,8 @@ async def test_timeout(browser_tool):
     mock_proc.kill = MagicMock()
     mock_proc.wait = AsyncMock()
 
-    with patch("odigos.tools.browser.asyncio.create_subprocess_exec", return_value=mock_proc):
-        with patch("odigos.tools.browser.asyncio.wait_for", side_effect=asyncio.TimeoutError):
+    with patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("odigos.tools.subprocess_tool.asyncio.wait_for", side_effect=asyncio.TimeoutError):
             result = await browser_tool.execute({"command": "navigate --url 'https://slow.com'"})
     assert not result.success
     assert "timed out" in result.error
@@ -63,8 +63,8 @@ async def test_nonzero_exit(browser_tool):
     mock_proc.communicate.return_value = (b"partial output", b"some error")
     mock_proc.returncode = 1
 
-    with patch("odigos.tools.browser.asyncio.create_subprocess_exec", return_value=mock_proc):
-        with patch("odigos.tools.browser.asyncio.wait_for", return_value=(b"partial output", b"some error")):
+    with patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("odigos.tools.subprocess_tool.asyncio.wait_for", return_value=(b"partial output", b"some error")):
             mock_proc.communicate.return_value = (b"partial output", b"some error")
             result = await browser_tool.execute({"command": "click --selector '#btn'"})
     assert not result.success
@@ -76,8 +76,8 @@ async def test_success(browser_tool):
     mock_proc = AsyncMock()
     mock_proc.returncode = 0
 
-    with patch("odigos.tools.browser.asyncio.create_subprocess_exec", return_value=mock_proc):
-        with patch("odigos.tools.browser.asyncio.wait_for", return_value=(b'{"status": "ok"}', b"")):
+    with patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec", return_value=mock_proc):
+        with patch("odigos.tools.subprocess_tool.asyncio.wait_for", return_value=(b'{"status": "ok"}', b"")):
             result = await browser_tool.execute({"command": "navigate --url 'https://example.com'"})
     assert result.success
     assert '{"status": "ok"}' in result.data
@@ -89,8 +89,8 @@ async def test_subprocess_receives_correct_args():
     mock_proc = AsyncMock()
     mock_proc.returncode = 0
 
-    with patch("odigos.tools.browser.asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
-        with patch("odigos.tools.browser.asyncio.wait_for", return_value=(b"ok", b"")):
+    with patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec", return_value=mock_proc) as mock_exec:
+        with patch("odigos.tools.subprocess_tool.asyncio.wait_for", return_value=(b"ok", b"")):
             await tool.execute({"command": "navigate --url 'https://example.com'"})
 
     mock_exec.assert_called_once_with(

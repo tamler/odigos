@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import uuid
 from typing import TYPE_CHECKING
 
+from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 
 if TYPE_CHECKING:
@@ -75,6 +75,12 @@ Return ONLY the JSON object, no markdown."""
 
 
 class Strategist:
+    """Analyzes evaluation trends and proposes self-improvement hypotheses.
+
+    Runs periodically during heartbeat Phase 5 when enough new evaluations
+    accumulate. Generates trial hypotheses for prompt section changes and
+    specialization proposals for new dedicated agents.
+    """
 
     def __init__(
         self,
@@ -125,7 +131,7 @@ class Strategist:
                 max_tokens=800,
                 temperature=0.4,
             )
-            result = _parse_json(response.content)
+            result = parse_json_response(response.content)
             if result is None:
                 logger.warning("Strategist: failed to parse LLM response")
                 return None
@@ -292,16 +298,3 @@ class Strategist:
         )
 
 
-def _parse_json(text: str) -> dict | None:
-    """Extract JSON from LLM response."""
-    try:
-        return json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        pass
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except (json.JSONDecodeError, TypeError):
-            pass
-    return None

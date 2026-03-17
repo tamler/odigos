@@ -30,9 +30,6 @@ What should happen next (bulleted list)
 Important facts, preferences, or context worth remembering (bulleted list)\
 """
 
-# Backward-compatible alias
-SUMMARIZE_PROMPT = STRUCTURED_COMPACTION_PROMPT
-
 
 class ConversationSummarizer:
     """Summarizes conversation segments that fall out of the context window."""

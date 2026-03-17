@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import uuid
 from typing import TYPE_CHECKING
 
+from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 
 if TYPE_CHECKING:
@@ -29,6 +29,12 @@ _POSITIVE_MARKERS = [
     "thanks", "thank you", "perfect", "great", "awesome", "that works",
     "makes sense", "got it", "exactly", "nice", "good job", "helpful",
 ]
+
+# Feedback score constants for infer_implicit_feedback
+FEEDBACK_NO_FOLLOWUP = -0.2
+FEEDBACK_CORRECTION = -0.7
+FEEDBACK_POSITIVE = 0.5
+FEEDBACK_NEUTRAL = 0.2
 
 _RUBRIC_FALLBACK = (
     "You are evaluating an AI assistant's response. "
@@ -74,19 +80,19 @@ async def infer_implicit_feedback(
     )
 
     if next_user is None:
-        return -0.2
+        return FEEDBACK_NO_FOLLOWUP
 
     content_lower = next_user["content"].lower().strip()
 
     for marker in _CORRECTION_MARKERS:
         if content_lower.startswith(marker) or marker in content_lower[:50]:
-            return -0.7
+            return FEEDBACK_CORRECTION
 
     for marker in _POSITIVE_MARKERS:
         if marker in content_lower:
-            return 0.5
+            return FEEDBACK_POSITIVE
 
-    return 0.2
+    return FEEDBACK_NEUTRAL
 
 
 class Evaluator:
@@ -214,7 +220,7 @@ class Evaluator:
                 max_tokens=300,
                 temperature=0.2,
             )
-            return _parse_json(response.content)
+            return parse_json_response(response.content)
         except Exception:
             logger.warning("C.1 rubric generation failed", exc_info=True)
             return None
@@ -236,7 +242,7 @@ class Evaluator:
                 max_tokens=300,
                 temperature=0.2,
             )
-            return _parse_json(response.content)
+            return parse_json_response(response.content)
         except Exception:
             logger.warning("C.2 scoring failed", exc_info=True)
             return None
@@ -279,22 +285,3 @@ class Evaluator:
             pass
 
 
-def _parse_json(text: str) -> dict | None:
-    """Extract JSON from LLM response, handling markdown code blocks."""
-    try:
-        return json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        pass
-    match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(1))
-        except (json.JSONDecodeError, TypeError):
-            pass
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except (json.JSONDecodeError, TypeError):
-            pass
-    return None

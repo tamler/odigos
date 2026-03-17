@@ -35,10 +35,6 @@ class VectorMemory:
         self.embedder = embedder
         self.db = db
 
-    async def initialize(self) -> None:
-        """No-op — schema is handled by migrations."""
-        pass
-
     async def store(
         self,
         text: str,

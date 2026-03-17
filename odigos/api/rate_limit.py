@@ -7,16 +7,10 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
-from typing import NamedTuple
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-
-
-class _Bucket(NamedTuple):
-    tokens: float
-    last_refill: float
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

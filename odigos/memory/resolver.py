@@ -6,10 +6,6 @@ from odigos.memory.vectors import VectorMemory
 
 logger = logging.getLogger(__name__)
 
-CONFIDENCE_HIGH = 0.8
-CONFIDENCE_LOW = 0.3
-
-
 @dataclass
 class ResolutionResult:
     entity_id: str

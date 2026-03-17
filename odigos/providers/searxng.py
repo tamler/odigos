@@ -4,7 +4,7 @@ import logging
 
 import httpx
 
-from odigos.providers.search_base import SearchResult  # noqa: F401 — re-export
+from odigos.providers.search_base import SearchResult
 
 logger = logging.getLogger(__name__)
 

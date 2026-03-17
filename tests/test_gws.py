@@ -32,7 +32,7 @@ class TestGWSTool:
         assert "Missing required parameter" in result.error
 
     @pytest.mark.asyncio
-    @patch("odigos.tools.gws.asyncio.create_subprocess_exec")
+    @patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec")
     async def test_successful_command(self, mock_exec):
         proc = AsyncMock()
         proc.returncode = 0
@@ -52,7 +52,7 @@ class TestGWSTool:
         assert "list" in call_args
 
     @pytest.mark.asyncio
-    @patch("odigos.tools.gws.asyncio.create_subprocess_exec")
+    @patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec")
     async def test_command_failure(self, mock_exec):
         proc = AsyncMock()
         proc.returncode = 1
@@ -66,7 +66,7 @@ class TestGWSTool:
         assert "unauthorized" in result.error
 
     @pytest.mark.asyncio
-    @patch("odigos.tools.gws.asyncio.create_subprocess_exec")
+    @patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec")
     async def test_gws_not_found(self, mock_exec):
         mock_exec.side_effect = FileNotFoundError()
 
@@ -84,7 +84,7 @@ class TestGWSTool:
         assert "Invalid command syntax" in result.error
 
     @pytest.mark.asyncio
-    @patch("odigos.tools.gws.asyncio.create_subprocess_exec")
+    @patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec")
     async def test_timeout(self, mock_exec):
         proc = AsyncMock()
         proc.communicate.side_effect = asyncio.TimeoutError()
@@ -101,7 +101,7 @@ class TestGWSTool:
         proc.wait.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("odigos.tools.gws.asyncio.create_subprocess_exec")
+    @patch("odigos.tools.subprocess_tool.asyncio.create_subprocess_exec")
     async def test_quoted_params(self, mock_exec):
         proc = AsyncMock()
         proc.returncode = 0

@@ -37,6 +37,8 @@ class CheckpointManager:
         """Snapshot current disk state into a checkpoint record."""
         cp_id = str(uuid.uuid4())
 
+        # personality_snapshot is deprecated (personality file removed);
+        # column kept for schema compatibility with existing checkpoints.
         personality_snapshot = ""
 
         sections_snapshot = {}
