@@ -65,6 +65,12 @@ class DocumentIngester:
              content_hash, conversation_id, "processing"),
         )
 
+        # Store full document text for code-based analysis
+        await self.db.execute(
+            "INSERT OR REPLACE INTO document_text (document_id, full_text) VALUES (?, ?)",
+            (doc_id, text),
+        )
+
         stored_count = 0
         for chunk_text in chunks:
             when_to_use = f"when referencing content from '{filename}': {chunk_text[:100]}"
