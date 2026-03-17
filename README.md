@@ -1,293 +1,150 @@
 # Odigos
 
-A self-improving AI agent platform. Deploy it as a Docker container, connect an LLM provider, and get a personal AI assistant with a web dashboard that learns and improves over time.
+Your personal AI that gets smarter every day.
+
+Deploy it anywhere, connect any LLM, and get an assistant that remembers everything, learns from its mistakes, writes and saves its own tools, and improves its own behavior without you touching a prompt.
 
 **License:** MIT
 
 ---
 
-## What is Odigos?
+## Why Odigos?
 
-Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and provides a conversational assistant through a web dashboard. It maintains long-term memory across conversations using vector search and entity graphs. A built-in evolution engine evaluates the agent's own performance and refines its behavior automatically -- no manual prompt tuning required.
+Most AI assistants are stateless -- every conversation starts from scratch. Odigos is different:
 
-## Features
-
-**Core**
-
-- Multi-model LLM support (OpenRouter, OpenAI, Ollama, LM Studio, or any OpenAI-compatible API)
-- Primary and fallback model configuration
-- Conversation memory with vector search, entity graphs, and automatic summarization
-- Web dashboard (React) with real-time WebSocket updates, mobile-responsive
-- SQLite storage -- no external databases required
-
-**Tools**
-
-- Web scraping (Scrapling)
-- RSS feed parsing
-- Document processing (MarkItDown, optional Docling for deep extraction)
-- Code execution (sandboxed, with document analysis helpers for deep document querying)
-- File management with configurable allowed paths
-- Google Workspace integration (Gmail, Calendar, Drive -- via plugin)
-- Browser automation (via plugin)
-- Web search (SearXNG, Brave Search, or Google Custom Search -- via plugin)
-- MCP server bridge -- connect any MCP-compatible tool server
-
-**Intelligence**
-
-- Evolution engine: automatic self-evaluation and prompt refinement over trial periods
-- Strategist: autonomous goal-setting and self-direction
-- Checkpointing with rollback on regressions
-- Corrections manager for learning from mistakes
-- Editable prompt files: agent identity and infrastructure prompts stored as Markdown, editable via dashboard or API
-- Document-aware code sandbox: agent can write Python to search, filter, and cross-reference across uploaded documents programmatically
-- Adaptive query classification: automatically routes simple, standard, document, complex, and planning queries through optimized pipelines with evolvable rules
-- Query decomposition: breaks complex multi-part requests into sequential sub-tasks
-- Skill usage tracking and task similarity: learns which tools and skills work for which query types
-- Executable skills: agent saves working code as reusable tools that persist across conversations (SAGE-inspired)
-- Cross-encoder reranking for improved document retrieval accuracy
-- Push notifications: agent can send toast messages across all channels when something important happens
-- Prompts API for listing, reading, and updating prompt files programmatically
-
-**Scheduling and Notifications**
-
-- Cron jobs for recurring tasks
-- Proactive notifications across channels
-- Heartbeat loop for background processing, goal tracking, and idle-time thinking
-
-**Security**
-
-- Username/password authentication with HTTP-only session cookies
-- API key authentication for programmatic access (Telegram, peers, scripts)
-- Approval gates for dangerous tools (code execution, shell, file writes)
-- Content filtering for prompt injection
-- Sandboxed code execution with memory and timeout limits
-- Budget controls (daily and monthly spending caps with warnings)
-
-**Voice** (optional)
-
-- Text-to-speech output via pocket-tts (speaker button on messages)
-- Speech-to-text input via moonshine-voice (mic button in chat)
-- One-command setup: `bash install-voice.sh`
-
-**Extensibility**
-
-- Plugin system for tools, channels, and providers
-- Custom skills (Markdown-defined, hot-reloadable) and executable skills (agent saves working code as reusable tools)
-- Multi-channel: Web dashboard, Telegram (via plugin)
-- MCP server integration
-
-**Multi-Agent Mesh**
-
-- Secure agent-to-agent mesh networking over [NetBird](https://github.com/netbirdio/netbird) WireGuard overlay -- agents communicate directly, not through a central hub
-- **Contact cards**: portable credentials for establishing agent-to-agent relationships. Three card types: `connect` (full bidirectional mesh), `subscribe` (read-only RSS feed access), `invite` (pre-authorized mesh join for spawned agents)
-- Per-relationship scoped API keys (`card-sk-*`) with granular revocation -- revoking one peer doesn't affect others
-- Card fingerprint verification (SHA-256) prevents tampering in transit
-- Compact card format (`odigos-card:<base64>`) for easy sharing via chat or paste
-- **RSS feed publisher**: agents can publish updates via `GET /feed.xml` for subscribers to consume without granting mesh access
-- Bidirectional peer discovery: when one agent announces to another, both sides automatically learn how to reach each other
-- WebSocket peer connections with persistent outbox for reliable delivery
-- Proactive inter-agent communication: agents can initiate messages to peers without being asked
-- Mute noisy peers without revoking access -- silently drop inbound messages while preserving the relationship
-- Mesh defaults to disabled (`mesh.enabled: false`) for security-first standalone operation
-- Specialist agent spawning with template-based identity from a curated catalog of 140+ agent personality templates ([agency-agents](https://github.com/msitarzewski/agency-agents) or your own repo)
-- Cross-agent evaluation routing: agents can request peer review from qualified specialists
-- Heartbeat-driven peer announcements broadcast each agent's capabilities and coordinates across the mesh
+- **It remembers.** Long-term memory across all conversations. Vector search, entity graphs, and automatic summarization mean your agent knows who you are, what you've discussed, and what matters to you.
+- **It improves itself.** A built-in evolution engine evaluates every response, runs experiments on its own behavior, and promotes changes that work. No manual prompt tuning.
+- **It builds its own tools.** When the agent writes code that solves a problem, it can save it as a reusable executable skill. Next time a similar problem comes up, the tool is already there.
+- **It understands complex requests.** An adaptive classifier routes simple questions fast and decomposes complex ones into sub-tasks. The agent tracks its plan, learns from errors, and gets better at routing over time.
+- **It's yours.** Self-hosted. Your data stays on your machine. One agent, one owner -- no shared infrastructure, no data leaving your network.
 
 ## Quick Start
 
-Prerequisites: an LLM API key (from [OpenRouter](https://openrouter.ai/keys), OpenAI, or a local provider like Ollama).
+You need an LLM API key ([OpenRouter](https://openrouter.ai/keys), OpenAI, Ollama, or any OpenAI-compatible provider).
 
 ```bash
 git clone https://github.com/tamler/odigos.git && cd odigos
 ```
 
-### Option A: Docker (recommended)
-
-Requires [Docker](https://docs.docker.com/get-docker/) with Compose v2.
-
+**Docker (recommended):**
 ```bash
 bash install.sh
 ```
 
-The install script checks for Docker, creates data directories, generates an API key, walks you through LLM provider selection, optionally installs voice support, and starts the container. Includes a Caddy reverse proxy for automatic HTTPS.
-
-### Option B: Bare metal
-
-Requires Python 3.12+ and curl. Works on Ubuntu, Debian, RHEL, macOS.
-
+**Bare metal (Ubuntu, Debian, RHEL, macOS):**
 ```bash
 bash install-bare.sh
 ```
 
-Installs [uv](https://docs.astral.sh/uv/), downloads dependencies and the embedding model, configures your LLM provider, optionally installs voice support, and optionally installs a systemd service for automatic startup.
+Open **http://localhost:8000**, create your account, and start chatting.
 
-### After install
+## What Can It Do?
 
-Open **http://localhost:8000**. On first visit, you'll be prompted to create a username and password. If you set up an account during install, log in with those credentials.
+### Talk and remember
+Chat through the web dashboard (mobile-friendly), Telegram, or the API. The agent maintains memory across every conversation -- it knows what you discussed last week.
 
-Useful commands:
+### Search and research
+Web search (SearXNG, Brave, or Google), web scraping, RSS feeds. Upload documents and the agent indexes them for retrieval. Ask questions across all your documents -- the agent writes code to search them programmatically when simple retrieval isn't enough.
 
-```bash
-# Docker
-docker compose logs -f odigos    # View logs
-docker compose restart odigos    # Restart
-docker compose down              # Stop
+### Execute code
+Sandboxed Python and shell execution with memory limits, timeouts, and network isolation. The agent can write and run code to solve problems, then save working solutions as reusable tools.
 
-# Bare metal (systemd)
-sudo journalctl -u odigos -f     # View logs
-sudo systemctl restart odigos    # Restart
-sudo systemctl stop odigos       # Stop
-```
+### Manage your life
+Goals, todos, reminders with proactive follow-up. Cron jobs for recurring tasks. The agent checks in via its heartbeat loop and nudges you when things are due.
 
-## Configuration
+### Work with your tools
+Google Workspace (Gmail, Calendar, Drive), browser automation, MCP server integration, file management. Extend with plugins -- no restart required.
 
-Odigos is configured through two files:
+### Speak and listen
+Optional voice: mic button for speech-to-text, speaker button for text-to-speech. Local models, no cloud dependency.
 
-- **`.env`** -- Secrets and API keys (never committed). See [`.env.example`](.env.example) for all variables.
-- **`config.yaml`** -- Agent settings, model selection, budget limits, tool configuration, peer agents. See [`odigos/config.py`](odigos/config.py) for all available options and defaults.
+### Connect with other agents
+Mesh networking over WireGuard. Contact cards for establishing trust. Spawn specialist agents from a catalog of 140+ personality templates. Agents evaluate each other's work.
 
-Key configuration areas:
+## How It Gets Smarter
 
-| Section | What it controls |
-|---------|-----------------|
-| `llm` | Base URL, default/fallback/background models, temperature, timeouts |
-| `budget` | Daily and monthly spending limits (USD) |
-| `agent` | Name, role, description, tool turn limits |
-| `sandbox` | Code execution timeout, memory limit, network access |
-| `approval` | Which tools require human approval before running |
-| `evolution` | Trial duration, evaluation thresholds, auto-trial confidence |
-| `mcp` | External MCP server connections |
-| `mesh` | Enable/disable mesh networking (disabled by default) |
-| `feed` | RSS feed publisher: enabled, public/private, max entries |
-| `peers` | Trusted peer agents for mesh networking |
-| `templates` | Agent template catalog repo URL and cache TTL |
-| `voice` | Enable/disable TTS and STT, model paths |
+Odigos has a self-improvement loop that runs continuously:
 
-## Plugins
+**1. Classify** -- Every incoming message is categorized (simple, standard, document query, complex, planning) with evolvable rules. Simple questions skip heavy processing. Complex ones get decomposed into sub-tasks.
 
-Plugins live in the `plugins/` directory and extend Odigos with optional capabilities.
+**2. Execute** -- The agent works through the request using its tools, memory, and skills. It tracks which tools it uses and how long each step takes.
 
-| Plugin | Category | What it adds |
-|--------|----------|-------------|
-| Web Search | Search | SearXNG, Brave Search, or Google Custom Search (configure one) |
-| Google Workspace | Tools | Gmail, Calendar, Drive access (requires `gws` CLI) |
-| Agent Browser | Tools | Browser automation (requires `agent-browser` CLI) |
-| Telegram | Channel | Telegram bot interface |
-| TTS | Voice | Text-to-speech via Pocket-TTS |
-| STT | Voice | Speech-to-text via Moonshine |
-| Docling | Provider | Deep document extraction (tables, figures, layout) |
+**3. Evaluate** -- After responding, the evaluator scores the conversation using implicit feedback signals and rubric-based assessment.
 
-Enable plugins by providing their required configuration in the **Plugins** tab in Settings. Changes apply immediately -- no restart required.
+**4. Learn** -- The strategist analyzes patterns: which query types score well? Which tools work for which tasks? Which skills get reused? It proposes experimental changes.
 
-## Skills
+**5. Evolve** -- The evolution engine runs time-boxed trials. Changes that improve scores get promoted. Changes that hurt get reverted. Classification rules, routing, prompt sections, and skills all evolve this way.
 
-Skills are Markdown files in the `skills/` directory that define reusable behaviors. Built-in skills:
-
-- `research-deep-dive.md` -- Multi-source research workflow
-- `summarize-page.md` / `summarize-doc.md` -- Content summarization
-- `google-workspace.md` -- Google Workspace operations
-- `agent-browser.md` -- Browser automation tasks
-- `tag-conversation.md` -- Conversation categorization
-
-The agent can activate, create, and update skills at runtime.
-
-### Executable Skills
-
-When the agent writes code that solves a reusable problem, it can save the code as an executable skill. Executable skills appear as callable tools in the agent's tool list:
-
-```
-skills/
-  fetch-stock-price.md     # Description + metadata (YAML frontmatter)
-  code/
-    fetch-stock-price.py   # def run(ticker: str) -> str
-```
-
-The agent decides on its own when to save code as a skill. Code is validated (syntax, structure, blocked dangerous imports) and runs in the same sandbox as regular code execution. Skills are auto-verified on first successful execution.
-
-## Prompt Files
-
-The agent's system prompt is assembled from editable Markdown files in two directories:
-
-- **`data/agent/`** -- Agent identity sections (personality, voice, meta-cognition). Each file has YAML frontmatter with `priority` and `always_include` fields that control assembly order.
-- **`data/prompts/`** -- Infrastructure prompts used by internal subsystems (summarizer, evaluator, strategist, heartbeat, subagent, spawner). These are plain Markdown templates with `{variable}` placeholders.
-
-Edit prompt files through the **Prompts** tab in Settings, or use the API:
-
-```bash
-# List all prompts
-curl -H "Authorization: Bearer $API_KEY" http://localhost:8000/api/prompts
-
-# Read a prompt
-curl -H "Authorization: Bearer $API_KEY" http://localhost:8000/api/prompts/agent/identity
-
-# Update a prompt
-curl -X PUT -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
-  -d '{"content": "You are a helpful assistant."}' \
-  http://localhost:8000/api/prompts/agent/identity
-```
-
-Changes take effect on the next message -- no restart required.
+The agent also learns from errors (tool failures are logged and surfaced to avoid repeating mistakes) and from skill reuse (successful code patterns are tracked and recommended for similar future tasks).
 
 ## Architecture
 
-Odigos runs as a single FastAPI application backed by SQLite.
+One process. One database. No microservices.
 
-- **FastAPI** with WebSocket support for real-time communication
-- **SQLite** with **sqlite-vec** (vector search) and **FTS5** (full-text search) for all storage
-- **sentence-transformers** (nomic-embed-text-v1.5) for local embeddings on CPU
-- **Heartbeat loop** drives background processing: goal execution, evolution trials, cron jobs, peer announcements, idle-time thinking
-- **Plugin system** with two-phase loading: tools/providers first, then channels (which depend on the agent service)
-- **Subagent manager** for spawning focused subtasks within a conversation
-- **Agent mesh** -- peer agents communicate directly over WebSocket secured by [NetBird](https://github.com/netbirdio/netbird) WireGuard tunnels. Contact cards provide per-relationship scoped API keys for establishing connections. Bidirectional discovery means agents only need one side configured. The heartbeat processes inbound peer messages so agents can act proactively on alerts and requests from the mesh.
-- **Feed publisher** -- RSS 2.0 endpoint (`/feed.xml`) for sharing updates with subscribers without granting mesh access
-- **Template index** dynamically fetches and caches agent personality templates from GitHub, with keyword-overlap matching for role specialization during spawning
-- **Tracer** for structured logging of all agent actions and tool calls
+- **FastAPI** with WebSocket for real-time chat
+- **SQLite** with vector search (sqlite-vec) and full-text search (FTS5)
+- **Local embeddings** (nomic-embed-text-v1.5) on CPU -- no API calls for embedding
+- **Cross-encoder reranking** (ms-marco-MiniLM) for document retrieval accuracy
+- **Plugin system** for tools, channels, and providers
+- **Heartbeat loop** for background processing, goal tracking, evolution trials
+
+Everything runs on a single VPS. 4 CPU, 16GB RAM is comfortable. No external databases, no message queues, no container orchestration.
+
+## Configuration
+
+Two files:
+
+- **`.env`** -- Secrets (LLM API key, session secret)
+- **`config.yaml`** -- Everything else (models, budget, tools, plugins)
+
+Key settings:
+
+| Section | What it controls |
+|---------|-----------------|
+| `llm` | Models, temperature, base URL |
+| `budget` | Daily/monthly spending caps |
+| `agent` | Name, tool turn limits, timeouts |
+| `approval` | Which tools need human sign-off |
+| `evolution` | Trial duration, thresholds |
+| `voice` | TTS/STT on/off |
+
+## Plugins
+
+| Plugin | What it adds |
+|--------|-------------|
+| Web Search | SearXNG, Brave, or Google search |
+| Google Workspace | Gmail, Calendar, Drive |
+| Agent Browser | Browser automation |
+| Telegram | Telegram bot interface |
+| TTS/STT | Voice input and output |
+| Docling | Deep document extraction |
+
+Enable in the Plugins tab. Changes apply immediately.
+
+## Security
+
+- **Auth:** Username/password with signed HTTP-only session cookies. API key for programmatic access.
+- **Sandbox:** Code runs in bubblewrap isolation with memory/timeout limits.
+- **Approval gates:** Dangerous tools require human sign-off.
+- **Budget controls:** Daily and monthly spending caps.
+- **SSRF protection:** Private IP ranges blocked in web scraping.
+- **Single-user:** One agent, one owner. Multi-user is handled at the deployment layer.
 
 ## Development
 
-Prerequisites: Python 3.12+, [uv](https://docs.astral.sh/uv/)
-
 ```bash
-# Install dependencies
-uv sync
-
-# Run tests
-uv run pytest
-
-# Start the server locally
-uv run python -m odigos.main
-
-# Run linting
-uv run ruff check .
+uv sync                        # Install dependencies
+uv run pytest                  # Run tests (1000+)
+uv run python -m odigos.main   # Start locally
+cd dashboard && npm run dev    # Dashboard dev server
 ```
-
-Dashboard development:
-
-```bash
-cd dashboard
-npm install
-npm run dev
-```
-
-The dashboard is a React app served from `dashboard/dist/` in production.
-
-## Security and Authentication
-
-**Username/password login.** The dashboard uses username/password authentication with HTTP-only session cookies. On first visit, you create an account. Session cookies are signed with a per-install secret, HttpOnly (no XSS access), Secure (HTTPS), and SameSite=Lax.
-
-**API key for programmatic access.** Telegram, peer agents, and scripts authenticate via Bearer token (`Authorization: Bearer <key>`). The API key is generated during install and visible in the Account tab in Settings.
-
-**Provisioned accounts.** For deploying to testers, the install generates a seed user with a temporary password and forced password change on first login.
-
-**Single-user design.** Each Odigos instance is one agent, one owner. Multi-user is solved at the deployment layer (run multiple instances). There is no multi-tenant mode.
-
-**Production recommendation.** Place behind a reverse proxy (Caddy, nginx) with HTTPS. The Docker install includes Caddy with automatic Let's Encrypt.
-
-**Approval gates.** Dangerous tools (code execution, shell, file writes) require human approval. Configurable in the `approval` section of `config.yaml`.
 
 ## Acknowledgments
 
-The evolution engine's self-evaluation and trial-based improvement loop was inspired by [autoresearch](https://github.com/karpathy/autoresearch) by Andrej Karpathy.
+- Evolution engine inspired by [autoresearch](https://github.com/karpathy/autoresearch) by Andrej Karpathy
+- Executable skills inspired by [SAGE](https://arxiv.org/html/2512.17102v2) (Skill Augmented GRPO for Self-Evolution)
+- Document analysis inspired by [RLM](https://arxiv.org/html/2512.24601v2) (Recursive Language Models)
+- Plan persistence inspired by [planning-with-files](https://github.com/OthmanAdi/planning-with-files)
 
 ## License
 
