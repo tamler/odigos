@@ -48,6 +48,7 @@ class Agent:
         tracer: Tracer | None = None,
         approval_gate: ApprovalGate | None = None,
         classifier: QueryClassifier | None = None,
+        reasoning_model: str = "",
     ) -> None:
         self.db = db
         self.budget_tracker = budget_tracker
@@ -78,6 +79,7 @@ class Agent:
             budget_tracker=budget_tracker,
             tracer=tracer,
             approval_gate=approval_gate,
+            reasoning_model=reasoning_model,
         )
         self.reflector = Reflector(
             db,

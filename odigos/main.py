@@ -531,6 +531,7 @@ async def lifespan(app: FastAPI):
         tracer=tracer,
         approval_gate=approval_gate,
         classifier=classifier,
+        reasoning_model=settings.llm.reasoning_model,
     )
     app.state.agent = agent
 

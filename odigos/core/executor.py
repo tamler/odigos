@@ -60,6 +60,7 @@ class Executor:
         budget_tracker: BudgetTracker | None = None,
         tracer: Tracer | None = None,
         approval_gate: ApprovalGate | None = None,
+        reasoning_model: str = "",
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
@@ -70,6 +71,7 @@ class Executor:
         self.budget_tracker = budget_tracker
         self.tracer = tracer
         self.approval_gate = approval_gate
+        self._reasoning_model = reasoning_model
         self._active_skill_name: str | None = None
         self._active_skill_tools: set[str] = set()
         self._pending_skill_prompt: str | None = None
@@ -147,9 +149,13 @@ class Executor:
                 if status.warning:
                     budget_warning = status
 
-            # Call LLM
+            # Call LLM -- use reasoning model for complex/document queries
+            model_kwargs: dict = {}
+            if query_analysis and query_analysis.classification in ("document_query", "complex", "planning"):
+                if self._reasoning_model:
+                    model_kwargs["model"] = self._reasoning_model
             try:
-                response = await self.provider.complete(messages, tools=tools)
+                response = await self.provider.complete(messages, tools=tools, **model_kwargs)
             except Exception as e:
                 logger.error("LLM call failed at turn %d: %s", turn, e)
                 if last_response is not None:

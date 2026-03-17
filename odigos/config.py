@@ -26,6 +26,7 @@ class LLMConfig(BaseModel):
     default_model: str = "anthropic/claude-sonnet-4"
     fallback_model: str = "google/gemini-2.0-flash-001"
     background_model: str = ""
+    reasoning_model: str = ""  # Used for document_query and complex classifications. Falls back to default_model if empty.
     max_tokens: int = 4096
     temperature: float = 0.7
     request_timeout_seconds: float = 60.0
