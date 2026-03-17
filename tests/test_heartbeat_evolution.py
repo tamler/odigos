@@ -30,6 +30,8 @@ async def test_tick_runs_evolution_when_idle():
     heartbeat.agent_client = None
     heartbeat.cron_manager = None
     heartbeat.notifier = None
+    heartbeat._dream_tick_counter = 0
+    heartbeat._dream_interval_ticks = 10
 
     heartbeat._fire_reminders = AsyncMock(return_value=False)
     heartbeat._work_todos = AsyncMock(return_value=False)

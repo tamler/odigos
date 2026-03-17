@@ -88,6 +88,8 @@ class Heartbeat:
         self.cron_manager = cron_manager
         self.notifier = notifier
         self._ws_port = ws_port
+        self._dream_tick_counter: int = 0
+        self._dream_interval_ticks: int = 10
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -145,6 +147,12 @@ class Heartbeat:
         # Phase 7: Peer announce + stale check
         if self.agent_client:
             await self._peer_maintenance()
+
+        # Phase 8: User profile dreaming (every N ticks)
+        self._dream_tick_counter += 1
+        if self._dream_tick_counter >= self._dream_interval_ticks:
+            self._dream_tick_counter = 0
+            await self._dream_analyze_user()
 
         if self.tracer:
             await self.tracer.emit("heartbeat_tick", None, {
@@ -455,6 +463,113 @@ class Heartbeat:
             await self.agent_client.flush_outbox()
         except Exception:
             logger.debug("Peer maintenance failed", exc_info=True)
+
+    async def _dream_analyze_user(self) -> None:
+        """Analyze recent conversations to build/update the user profile."""
+        _PROFILE_PROMPT_FALLBACK = (
+            "Analyze recent conversations and update the user profile. "
+            "Respond with JSON containing: communication_style, expertise_areas, "
+            "preferences, recurring_topics, correction_patterns, summary."
+        )
+        try:
+            # Fetch current profile
+            profile = await self.db.fetch_one(
+                "SELECT * FROM user_profile WHERE id = 'owner'"
+            )
+            if not profile:
+                return
+
+            # Check if enough new conversations since last analysis
+            total_convs = await self.db.fetch_one(
+                "SELECT COUNT(*) as cnt FROM conversations"
+            )
+            conv_count = total_convs["cnt"] if total_convs else 0
+            last_count = profile.get("conversation_count") or 0
+            if conv_count - last_count < 5:
+                return
+
+            # Fetch last 20 conversations with their messages
+            convs = await self.db.fetch_all(
+                "SELECT id, title FROM conversations ORDER BY created_at DESC LIMIT 20"
+            )
+            if not convs:
+                return
+
+            conv_texts = []
+            for c in convs:
+                msgs = await self.db.fetch_all(
+                    "SELECT role, content FROM messages WHERE conversation_id = ? "
+                    "ORDER BY timestamp ASC LIMIT 20",
+                    (c["id"],),
+                )
+                if msgs:
+                    title = c.get("title") or c["id"][:8]
+                    lines = [f"### {title}"]
+                    for m in msgs:
+                        content = (m["content"] or "")[:500]
+                        lines.append(f"{m['role']}: {content}")
+                    conv_texts.append("\n".join(lines))
+
+            if not conv_texts:
+                return
+
+            # Build current profile text
+            current_profile = (
+                f"Communication style: {profile.get('communication_style') or '(unknown)'}\n"
+                f"Expertise: {profile.get('expertise_areas') or '(unknown)'}\n"
+                f"Preferences: {profile.get('preferences') or '(unknown)'}\n"
+                f"Recurring topics: {profile.get('recurring_topics') or '(unknown)'}\n"
+                f"Correction patterns: {profile.get('correction_patterns') or '(unknown)'}\n"
+                f"Summary: {profile.get('summary') or '(none yet)'}"
+            )
+
+            prompt_template = load_prompt("user_profile.md", _PROFILE_PROMPT_FALLBACK)
+            prompt_text = prompt_template.format(
+                current_profile=current_profile,
+                conversations="\n\n".join(conv_texts[:10]),
+            )
+
+            dream_kwargs: dict = {"max_tokens": 800, "temperature": 0.3}
+            if self._background_model:
+                dream_kwargs["model"] = self._background_model
+
+            response = await self.provider.complete(
+                [
+                    {"role": "system", "content": "You are a user profiling assistant. Respond only with valid JSON."},
+                    {"role": "user", "content": prompt_text},
+                ],
+                **dream_kwargs,
+            )
+
+            # Parse the response
+            text = response.content.strip()
+            # Strip markdown code fences if present
+            if text.startswith("```"):
+                text = re.sub(r"^```(?:json)?\s*", "", text)
+                text = re.sub(r"\s*```$", "", text)
+            parsed = json.loads(text)
+
+            now = datetime.now(timezone.utc).isoformat()
+            await self.db.execute(
+                "UPDATE user_profile SET "
+                "communication_style = ?, expertise_areas = ?, preferences = ?, "
+                "recurring_topics = ?, correction_patterns = ?, summary = ?, "
+                "last_analyzed_at = ?, conversation_count = ? "
+                "WHERE id = 'owner'",
+                (
+                    parsed.get("communication_style", ""),
+                    parsed.get("expertise_areas", ""),
+                    parsed.get("preferences", ""),
+                    parsed.get("recurring_topics", ""),
+                    parsed.get("correction_patterns", ""),
+                    parsed.get("summary", ""),
+                    now,
+                    conv_count,
+                ),
+            )
+            logger.info("User profile updated (analyzed %d conversations)", len(conv_texts))
+        except Exception:
+            logger.debug("Dream user profile analysis failed", exc_info=True)
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:
         try:

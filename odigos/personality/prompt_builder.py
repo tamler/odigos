@@ -13,12 +13,17 @@ def build_system_prompt(
     skill_hints: str = "",
     active_plan: str = "",
     error_hints: str = "",
+    user_profile: str = "",
 ) -> str:
     """Compose the system prompt from file-based sections."""
     parts = []
     for section in sorted(sections, key=lambda s: s.priority):
         content = section.content.replace("{name}", agent_name)
         parts.append(content)
+
+    # User profile goes early -- after identity sections, before tools/skills
+    if user_profile:
+        parts.append(user_profile)
 
     if memory_context:
         parts.append(memory_context)

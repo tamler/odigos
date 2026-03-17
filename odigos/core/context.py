@@ -168,6 +168,29 @@ class ContextAssembler:
             except Exception:
                 logger.debug("Could not load error hints", exc_info=True)
 
+        # User profile (built from conversation patterns)
+        user_profile = ""
+        is_simple = query_analysis and query_analysis.classification == "simple"
+        if self.db and not is_simple:
+            try:
+                profile_row = await self.db.fetch_one(
+                    "SELECT communication_style, expertise_areas, preferences, "
+                    "recurring_topics, summary FROM user_profile WHERE id = 'owner'"
+                )
+                if profile_row and profile_row["summary"]:
+                    lines = ["## About your user"]
+                    if profile_row["summary"]:
+                        lines.append(profile_row["summary"])
+                    if profile_row["communication_style"]:
+                        lines.append(f"Communication style: {profile_row['communication_style']}")
+                    if profile_row["preferences"]:
+                        lines.append(f"Preferences: {profile_row['preferences']}")
+                    if profile_row["expertise_areas"]:
+                        lines.append(f"Expertise: {profile_row['expertise_areas']}")
+                    user_profile = "\n".join(lines)
+            except Exception:
+                logger.debug("Could not load user profile", exc_info=True)
+
         system_prompt = build_system_prompt(
             sections=sections,
             memory_context=memory_context,
@@ -178,6 +201,7 @@ class ContextAssembler:
             skill_hints=skill_hints,
             active_plan=active_plan,
             error_hints=error_hints,
+            user_profile=user_profile,
         )
 
         messages.append({"role": "system", "content": system_prompt})

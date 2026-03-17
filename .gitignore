@@ -16,6 +16,8 @@ data/
 !data/personality.yaml
 !data/plugins/
 !data/plugins/**
+!data/prompts/
+!data/prompts/**
 
 # IDE
 .idea/
