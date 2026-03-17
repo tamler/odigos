@@ -1,10 +1,10 @@
 """DecomposeQueryTool -- break complex requests into structured sub-tasks."""
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
+from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 from odigos.tools.base import BaseTool, ToolResult
 
@@ -81,7 +81,7 @@ class DecomposeQueryTool(BaseTool):
                 max_tokens=1024,
             )
 
-            steps = json.loads(response.content)
+            steps = parse_json_response(response.content)
             if not isinstance(steps, list) or not steps:
                 return self._single_step_fallback(query)
 

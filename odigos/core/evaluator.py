@@ -9,8 +9,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
-from odigos.core.json_utils import parse_json_response
-from odigos.core.prompt_loader import load_prompt
+from odigos.core.llm_prompt import run_prompt
 
 if TYPE_CHECKING:
     from odigos.db import Database
@@ -207,45 +206,37 @@ class Evaluator:
     async def _get_or_generate_rubric(
         self, user_content: str, assistant_content: str, feedback: float
     ) -> dict | None:
-        prompt_template = load_prompt("evaluator_rubric.md", _RUBRIC_FALLBACK)
-        prompt = prompt_template.format(
-            user_content=user_content[:500],
-            assistant_content=assistant_content[:500],
-            feedback=f"{feedback:.1f}",
+        return await run_prompt(
+            self.provider,
+            "evaluator_rubric.md",
+            {
+                "user_content": user_content[:500],
+                "assistant_content": assistant_content[:500],
+                "feedback": f"{feedback:.1f}",
+            },
+            _RUBRIC_FALLBACK,
+            model=getattr(self.provider, "fallback_model", None),
+            max_tokens=300,
+            temperature=0.2,
         )
-        try:
-            response = await self.provider.complete(
-                [{"role": "user", "content": prompt}],
-                model=getattr(self.provider, "fallback_model", None),
-                max_tokens=300,
-                temperature=0.2,
-            )
-            return parse_json_response(response.content)
-        except Exception:
-            logger.warning("C.1 rubric generation failed", exc_info=True)
-            return None
 
     async def _score_against_rubric(
         self, rubric: dict, user_content: str, assistant_content: str, feedback: float
     ) -> dict | None:
-        prompt_template = load_prompt("evaluator_scoring.md", _SCORING_FALLBACK)
-        prompt = prompt_template.format(
-            rubric=json.dumps(rubric),
-            user_content=user_content[:500],
-            assistant_content=assistant_content[:500],
-            feedback=f"{feedback:.1f}",
+        return await run_prompt(
+            self.provider,
+            "evaluator_scoring.md",
+            {
+                "rubric": json.dumps(rubric),
+                "user_content": user_content[:500],
+                "assistant_content": assistant_content[:500],
+                "feedback": f"{feedback:.1f}",
+            },
+            _SCORING_FALLBACK,
+            model=getattr(self.provider, "fallback_model", None),
+            max_tokens=300,
+            temperature=0.2,
         )
-        try:
-            response = await self.provider.complete(
-                [{"role": "user", "content": prompt}],
-                model=getattr(self.provider, "fallback_model", None),
-                max_tokens=300,
-                temperature=0.2,
-            )
-            return parse_json_response(response.content)
-        except Exception:
-            logger.warning("C.2 scoring failed", exc_info=True)
-            return None
 
     async def find_qualified_evaluator(self, task_type: str) -> dict | None:
         """Find a qualified peer to evaluate actions of this task type.

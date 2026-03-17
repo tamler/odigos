@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import tiktoken
 
+from odigos.core.queries import get_recent_tool_errors, get_user_facts, get_user_profile
 from odigos.db import Database
 from odigos.personality.section_registry import SectionRegistry
 from odigos.personality.prompt_builder import build_system_prompt
@@ -153,14 +154,10 @@ class ContextAssembler:
         error_hints = ""
         if self.db:
             try:
-                error_rows = await self.db.fetch_all(
-                    "SELECT tool_name, error_type, COUNT(*) as count "
-                    "FROM tool_errors WHERE created_at > datetime('now', '-1 day') "
-                    "GROUP BY tool_name, error_type ORDER BY count DESC LIMIT 5"
-                )
+                error_rows = await get_recent_tool_errors(self.db, days=1)
                 if error_rows:
                     lines = ["## Recent tool issues (avoid repeating)"]
-                    for row in error_rows:
+                    for row in error_rows[:5]:
                         lines.append(
                             f"- {row['tool_name']}: {row['error_type']} ({row['count']}x in last 24h)"
                         )
@@ -190,19 +187,16 @@ class ContextAssembler:
         user_profile = ""
         if self.db and not is_simple:
             try:
-                profile_row = await self.db.fetch_one(
-                    "SELECT communication_style, expertise_areas, preferences, "
-                    "recurring_topics, summary FROM user_profile WHERE id = 'owner'"
-                )
-                if profile_row and profile_row["summary"]:
+                profile_row = await get_user_profile(self.db)
+                if profile_row and profile_row.get("summary"):
                     lines = ["## About your user"]
                     if profile_row["summary"]:
                         lines.append(profile_row["summary"])
-                    if profile_row["communication_style"]:
+                    if profile_row.get("communication_style"):
                         lines.append(f"Communication style: {profile_row['communication_style']}")
-                    if profile_row["preferences"]:
+                    if profile_row.get("preferences"):
                         lines.append(f"Preferences: {profile_row['preferences']}")
-                    if profile_row["expertise_areas"]:
+                    if profile_row.get("expertise_areas"):
                         lines.append(f"Expertise: {profile_row['expertise_areas']}")
                     user_profile = "\n".join(lines)
             except Exception:
@@ -212,10 +206,7 @@ class ContextAssembler:
         user_facts = ""
         if self.db and not is_simple:
             try:
-                fact_rows = await self.db.fetch_all(
-                    "SELECT fact, category FROM user_facts "
-                    "ORDER BY confidence DESC, updated_at DESC LIMIT 20"
-                )
+                fact_rows = await get_user_facts(self.db, limit=20)
                 if fact_rows:
                     lines = ["## Known facts about your user"]
                     for row in fact_rows:

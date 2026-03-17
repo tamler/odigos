@@ -12,7 +12,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
-from odigos.core.json_utils import parse_json_response
+from odigos.core.llm_prompt import run_prompt
 from odigos.core.prompt_loader import load_prompt
 
 if TYPE_CHECKING:
@@ -134,26 +134,24 @@ class Strategist:
         failed_trials = await self.evolution.get_failed_trials(limit=10)
         directions = await self.evolution.get_recent_directions(limit=3)
 
-        # Build prompt
-        prompt = self._build_prompt(
+        # Build prompt variables
+        prompt_vars = self._build_prompt_vars(
             recent_evals, failed_trials, directions,
             query_log_summary, skill_usage_summary, skill_mining_summary,
         )
 
         # Ask LLM
-        try:
-            response = await self.provider.complete(
-                [{"role": "user", "content": prompt}],
-                model=getattr(self.provider, "fallback_model", None),
-                max_tokens=800,
-                temperature=0.4,
-            )
-            result = parse_json_response(response.content)
-            if result is None:
-                logger.warning("Strategist: failed to parse LLM response")
-                return None
-        except Exception:
-            logger.warning("Strategist: LLM call failed", exc_info=True)
+        result = await run_prompt(
+            self.provider,
+            "strategist.md",
+            prompt_vars,
+            _STRATEGIST_FALLBACK,
+            model=getattr(self.provider, "fallback_model", None),
+            max_tokens=800,
+            temperature=0.4,
+        )
+        if result is None:
+            logger.warning("Strategist: failed to get LLM response")
             return None
 
         # Record the run
@@ -324,7 +322,7 @@ class Strategist:
             "total_recent": sum(r["cnt"] for r in rows) if rows else 0,
         }
 
-    def _build_prompt(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "") -> str:
+    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "") -> dict[str, str]:
         failed_summary = ""
         if failed_trials:
             failed_summary = "\n".join(
@@ -347,16 +345,15 @@ class Strategist:
                 for t in eval_summary["by_task_type"]
             )
 
-        template = load_prompt("strategist.md", _STRATEGIST_FALLBACK)
-        return template.format(
-            agent_description=self._agent_description or 'No description set',
-            agent_tools=', '.join(self._agent_tools) if self._agent_tools else 'None listed',
-            task_summary=task_summary or 'No evaluations yet.',
-            failed_summary=failed_summary or 'None.',
-            direction_summary=direction_summary or 'No prior direction set.',
-            query_log_summary=query_log_summary or 'No query classification data yet.',
-            skill_usage_summary=skill_usage_summary or 'No skill usage data yet.',
-            skill_mining_summary=skill_mining_summary or 'No repeated patterns found yet.',
-        )
+        return {
+            "agent_description": self._agent_description or 'No description set',
+            "agent_tools": ', '.join(self._agent_tools) if self._agent_tools else 'None listed',
+            "task_summary": task_summary or 'No evaluations yet.',
+            "failed_summary": failed_summary or 'None.',
+            "direction_summary": direction_summary or 'No prior direction set.',
+            "query_log_summary": query_log_summary or 'No query classification data yet.',
+            "skill_usage_summary": skill_usage_summary or 'No skill usage data yet.',
+            "skill_mining_summary": skill_mining_summary or 'No repeated patterns found yet.',
+        }
 
 

@@ -8,6 +8,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 
 if TYPE_CHECKING:
@@ -150,7 +151,9 @@ class QueryClassifier:
                 max_tokens=512,
             )
 
-            data = json.loads(response.content)
+            data = parse_json_response(response.content)
+            if data is None:
+                return QueryAnalysis(classification="standard", confidence=0.5, tier=2)
             classification = data.get("classification", "standard")
             if classification not in _VALID_CLASSIFICATIONS:
                 classification = "standard"

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from odigos.channels.base import UniversalMessage
 from odigos.core.json_utils import parse_json_response
+from odigos.core.llm_prompt import run_prompt
 from odigos.core.prompt_loader import load_prompt
 from odigos.db import Database
 
@@ -328,17 +329,9 @@ class Heartbeat:
             logger.debug("Idle think failed", exc_info=True)
 
     async def _process_idle_response(self, content: str, goals: list[dict]) -> None:
-        try:
-            parsed = json.loads(content)
-        except (json.JSONDecodeError, TypeError):
-            # Try extracting JSON from markdown code blocks
-            match = re.search(r"\{.*\}", content, re.DOTALL)
-            if not match:
-                return
-            try:
-                parsed = json.loads(match.group())
-            except (json.JSONDecodeError, TypeError):
-                return
+        parsed = parse_json_response(content)
+        if parsed is None:
+            return
         if parsed.get("idle"):
             return
         if "todo" in parsed:
@@ -532,31 +525,20 @@ class Heartbeat:
                 f"Summary: {profile.get('summary') or '(none yet)'}"
             )
 
-            prompt_template = load_prompt("user_profile.md", _PROFILE_PROMPT_FALLBACK)
-            prompt_text = prompt_template.format(
-                current_profile=current_profile,
-                conversations="\n\n".join(conv_texts[:10]),
+            parsed = await run_prompt(
+                self.provider,
+                "user_profile.md",
+                {
+                    "current_profile": current_profile,
+                    "conversations": "\n\n".join(conv_texts[:10]),
+                },
+                _PROFILE_PROMPT_FALLBACK,
+                model=self._background_model or None,
+                max_tokens=800,
+                temperature=0.3,
             )
-
-            dream_kwargs: dict = {"max_tokens": 800, "temperature": 0.3}
-            if self._background_model:
-                dream_kwargs["model"] = self._background_model
-
-            response = await self.provider.complete(
-                [
-                    {"role": "system", "content": "You are a user profiling assistant. Respond only with valid JSON."},
-                    {"role": "user", "content": prompt_text},
-                ],
-                **dream_kwargs,
-            )
-
-            # Parse the response
-            text = response.content.strip()
-            # Strip markdown code fences if present
-            if text.startswith("```"):
-                text = re.sub(r"^```(?:json)?\s*", "", text)
-                text = re.sub(r"\s*```$", "", text)
-            parsed = json.loads(text)
+            if parsed is None:
+                return
 
             now = datetime.now(timezone.utc).isoformat()
             await self.db.execute(
@@ -655,26 +637,19 @@ class Heartbeat:
                 f"- {r['tool_name']}: {r['lesson']}" for r in existing_rows
             )
 
-            prompt_template = load_prompt("experience_extraction.md", _EXPERIENCE_FALLBACK)
-            prompt_text = prompt_template.format(
-                errors=errors_text,
-                successes=successes_text,
-                existing=existing_text,
+            experiences = await run_prompt(
+                self.provider,
+                "experience_extraction.md",
+                {
+                    "errors": errors_text,
+                    "successes": successes_text,
+                    "existing": existing_text,
+                },
+                _EXPERIENCE_FALLBACK,
+                model=self._background_model or None,
+                max_tokens=600,
+                temperature=0.3,
             )
-
-            exp_kwargs: dict = {"max_tokens": 600, "temperature": 0.3}
-            if self._background_model:
-                exp_kwargs["model"] = self._background_model
-
-            response = await self.provider.complete(
-                [
-                    {"role": "system", "content": "You extract tactical lessons from tool interactions. Respond only with valid JSON."},
-                    {"role": "user", "content": prompt_text},
-                ],
-                **exp_kwargs,
-            )
-
-            experiences = parse_json_response(response.content)
             if not experiences or not isinstance(experiences, list):
                 return
 
