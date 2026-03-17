@@ -146,9 +146,13 @@ class ContextAssembler:
             sub_q_text = "\n".join(f"- {q}" for q in query_analysis.sub_questions)
             memory_context += f"\n\n## Analysis hints\nConsider addressing these aspects:\n{sub_q_text}"
 
-        # Active task plan (keeps agent on track across tool turns)
+        # Active task plan (only inject when plan has pending steps and query isn't simple)
         active_plan = ""
-        if self.db:
+        should_show_plan = (
+            not query_analysis
+            or query_analysis.classification not in ("simple",)
+        )
+        if self.db and should_show_plan:
             try:
                 plan_row = await self.db.fetch_one(
                     "SELECT steps FROM task_plans WHERE conversation_id = ? "
@@ -157,12 +161,14 @@ class ContextAssembler:
                 )
                 if plan_row:
                     steps = json.loads(plan_row["steps"])
-                    lines = ["## Active Plan (stay on track)"]
-                    for s in steps:
-                        status = s.get("status", "pending")
-                        marker = "x" if status == "done" else " "
-                        lines.append(f"- [{marker}] Step {s['step']}: {s['task']}")
-                    active_plan = "\n".join(lines)
+                    pending = [s for s in steps if s.get("status") != "done"]
+                    if pending:  # Only inject if there are incomplete steps
+                        lines = ["## Active Plan (stay on track)"]
+                        for s in steps:
+                            status = s.get("status", "pending")
+                            marker = "x" if status == "done" else " "
+                            lines.append(f"- [{marker}] Step {s['step']}: {s['task']}")
+                        active_plan = "\n".join(lines)
             except Exception:
                 logger.debug("Could not load active plan", exc_info=True)
 
