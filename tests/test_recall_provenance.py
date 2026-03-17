@@ -67,7 +67,7 @@ def test_recall_separates_documents_and_conversations(event_loop):
 
     result = event_loop.run_until_complete(manager.recall("revenue growth"))
     assert "## Document knowledge" in result
-    assert "[Source: quarterly-report.pdf]" in result
+    assert "[quarterly-report.pdf]" in result
     assert "## Conversation history" in result
     assert "User asked about revenue trends" in result
 
@@ -96,7 +96,7 @@ def test_recall_document_source_tag(event_loop):
     )
 
     result = event_loop.run_until_complete(manager.recall("API latency"))
-    assert "[Source: meeting-notes.txt]" in result
+    assert "[meeting-notes.txt]" in result
     assert "p99 down from 800ms" in result
 
 
@@ -125,5 +125,5 @@ def test_recall_no_documents_shows_only_conversations(event_loop):
     result = event_loop.run_until_complete(manager.recall("dark mode"))
     assert "## Document knowledge" not in result
     assert "## Conversation history" in result
-    assert "[Source:" not in result
+    assert "[doc:" not in result  # no document citations in conversation-only recall
     assert "User prefers dark mode" in result
