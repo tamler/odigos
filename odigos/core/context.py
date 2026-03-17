@@ -191,6 +191,22 @@ class ContextAssembler:
             except Exception:
                 logger.debug("Could not load user profile", exc_info=True)
 
+        # User facts (discrete remembered/extracted facts)
+        user_facts = ""
+        if self.db and not is_simple:
+            try:
+                fact_rows = await self.db.fetch_all(
+                    "SELECT fact, category FROM user_facts "
+                    "ORDER BY confidence DESC, updated_at DESC LIMIT 20"
+                )
+                if fact_rows:
+                    lines = ["## Known facts about your user"]
+                    for row in fact_rows:
+                        lines.append(f"- [{row['category']}] {row['fact']}")
+                    user_facts = "\n".join(lines)
+            except Exception:
+                logger.debug("Could not load user facts", exc_info=True)
+
         system_prompt = build_system_prompt(
             sections=sections,
             memory_context=memory_context,
@@ -202,6 +218,7 @@ class ContextAssembler:
             active_plan=active_plan,
             error_hints=error_hints,
             user_profile=user_profile,
+            user_facts=user_facts,
         )
 
         messages.append({"role": "system", "content": system_prompt})

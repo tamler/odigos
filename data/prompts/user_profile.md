@@ -8,6 +8,10 @@ Recent conversations (last 20):
 
 Based on these conversations, update each section. Keep existing accurate information, add new observations, remove anything contradicted by recent behavior.
 
+Also extract discrete facts about the user. Facts are specific, concrete pieces of information
+(e.g., "Lives in Austin, TX", "Prefers Python over JavaScript", "Works as a software engineer").
+Only include facts you are reasonably confident about based on the conversations.
+
 Respond ONLY with valid JSON:
 {{
   "communication_style": "How the user communicates: formal/casual, verbose/concise, asks for explanations vs trusts the agent",
@@ -15,5 +19,8 @@ Respond ONLY with valid JSON:
   "preferences": "How the user likes things done: step-by-step vs direct answers, level of detail, etc",
   "recurring_topics": "Topics and themes that come up frequently",
   "correction_patterns": "Common corrections or adjustments the user makes",
-  "summary": "2-3 sentence overall profile of who this user is and how to best serve them"
+  "summary": "2-3 sentence overall profile of who this user is and how to best serve them",
+  "facts": [
+    {{"fact": "Example fact about the user", "category": "personal|professional|preference|technical|location|general"}}
+  ]
 }}

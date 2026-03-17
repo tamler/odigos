@@ -63,6 +63,7 @@ from odigos.api.analytics import router as analytics_router
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
+from odigos.tools.remember_fact import RememberFactTool
 from odigos.tools.settings_tool import ManageSettingsTool
 from odigos.dashboard import mount_dashboard
 
@@ -411,6 +412,10 @@ async def lifespan(app: FastAPI):
     # Register settings management tool
     tool_registry.register(ManageSettingsTool(settings=settings, config_path=config_path))
     logger.info("Settings tool registered")
+
+    # Register remember_fact tool
+    tool_registry.register(RememberFactTool(db=_db))
+    logger.info("Remember fact tool registered")
 
     # Register feed publish tool if feed is enabled
     if settings.feed.enabled:

@@ -568,6 +568,36 @@ class Heartbeat:
                 ),
             )
             logger.info("User profile updated (analyzed %d conversations)", len(conv_texts))
+
+            # Process extracted facts
+            facts = parsed.get("facts", [])
+            if facts and isinstance(facts, list):
+                inserted = 0
+                for item in facts:
+                    if not isinstance(item, dict) or not item.get("fact"):
+                        continue
+                    fact_text = item["fact"].strip()
+                    category = item.get("category", "general")
+                    if category not in (
+                        "personal", "professional", "preference",
+                        "technical", "location", "general",
+                    ):
+                        category = "general"
+                    # Skip if an identical fact already exists
+                    existing = await self.db.fetch_one(
+                        "SELECT id FROM user_facts WHERE fact = ?", (fact_text,)
+                    )
+                    if existing:
+                        continue
+                    fact_id = uuid.uuid4().hex
+                    await self.db.execute(
+                        "INSERT INTO user_facts (id, fact, category, source, confidence, created_at, updated_at) "
+                        "VALUES (?, ?, ?, 'extracted', 0.8, ?, ?)",
+                        (fact_id, fact_text, category, now, now),
+                    )
+                    inserted += 1
+                if inserted:
+                    logger.info("Extracted %d new user facts from dreaming", inserted)
         except Exception:
             logger.debug("Dream user profile analysis failed", exc_info=True)
 

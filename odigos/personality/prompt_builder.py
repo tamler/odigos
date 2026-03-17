@@ -14,6 +14,7 @@ def build_system_prompt(
     active_plan: str = "",
     error_hints: str = "",
     user_profile: str = "",
+    user_facts: str = "",
 ) -> str:
     """Compose the system prompt from file-based sections."""
     parts = []
@@ -24,6 +25,8 @@ def build_system_prompt(
     # User profile goes early -- after identity sections, before tools/skills
     if user_profile:
         parts.append(user_profile)
+    if user_facts:
+        parts.append(user_facts)
 
     if memory_context:
         parts.append(memory_context)

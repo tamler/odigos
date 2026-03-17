@@ -264,6 +264,36 @@ async def auth_me(request: Request):
     }
 
 
+@router.get("/facts")
+async def get_facts(request: Request):
+    """Return all stored user facts (session required)."""
+    secret = request.app.state.settings.session_secret
+    cookie = request.cookies.get(SESSION_COOKIE)
+    session = _validate_session(secret, cookie)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    db = request.app.state.db
+    rows = await db.fetch_all(
+        "SELECT * FROM user_facts ORDER BY updated_at DESC"
+    )
+    return {"facts": [dict(row) for row in rows]}
+
+
+@router.delete("/facts/{fact_id}")
+async def delete_fact(fact_id: str, request: Request):
+    """Delete a user fact by ID (session required)."""
+    secret = request.app.state.settings.session_secret
+    cookie = request.cookies.get(SESSION_COOKIE)
+    session = _validate_session(secret, cookie)
+    if not session:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    db = request.app.state.db
+    await db.execute("DELETE FROM user_facts WHERE id = ?", (fact_id,))
+    return {"status": "ok"}
+
+
 class ProfileUpdate(BaseModel):
     communication_style: str | None = None
     expertise_areas: str | None = None
