@@ -611,6 +611,7 @@ async def lifespan(app: FastAPI):
         agent_description=settings.agent.description,
         agent_tools=tool_names,
         evolution_config=settings.evolution,
+        skill_registry=skill_registry,
     )
     logger.info("Strategist initialized")
 

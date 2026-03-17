@@ -36,6 +36,8 @@ def _build_heartbeat(**overrides):
     hb._ws_port = 8001
     hb._dream_tick_counter = 0
     hb._dream_interval_ticks = 10
+    hb._experience_tick_counter = 0
+    hb._experience_interval_ticks = 20
     hb._fire_reminders = AsyncMock(return_value=False)
     hb._work_todos = AsyncMock(return_value=False)
     hb._deliver_subagent_results = AsyncMock(return_value=False)

@@ -168,9 +168,26 @@ class ContextAssembler:
             except Exception:
                 logger.debug("Could not load error hints", exc_info=True)
 
+        # Tactical experiences (learned from past interactions)
+        is_simple = query_analysis and query_analysis.classification == "simple"
+        experiences_section = ""
+        if self.db and not is_simple:
+            try:
+                exp_rows = await self.db.fetch_all(
+                    "SELECT tool_name, lesson FROM agent_experiences "
+                    "WHERE times_applied > 0 OR success = 0 "
+                    "ORDER BY updated_at DESC LIMIT 10"
+                )
+                if exp_rows:
+                    lines = ["## Tactical experience (learned from past interactions)"]
+                    for row in exp_rows:
+                        lines.append(f"- {row['tool_name']}: {row['lesson']}")
+                    experiences_section = "\n".join(lines)
+            except Exception:
+                logger.debug("Could not load experiences", exc_info=True)
+
         # User profile (built from conversation patterns)
         user_profile = ""
-        is_simple = query_analysis and query_analysis.classification == "simple"
         if self.db and not is_simple:
             try:
                 profile_row = await self.db.fetch_one(
@@ -217,6 +234,7 @@ class ContextAssembler:
             skill_hints=skill_hints,
             active_plan=active_plan,
             error_hints=error_hints,
+            experiences=experiences_section,
             user_profile=user_profile,
             user_facts=user_facts,
         )

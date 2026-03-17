@@ -22,10 +22,16 @@ Available tools: {agent_tools}
 
 Skills with high scores are working well. Skills with low scores may need improvement or the agent may be using them inappropriately.
 
+## Skill Mining Opportunities
+{skill_mining_summary}
+
+If you see a repeated pattern that could be a reusable skill, include it in your hypotheses with target="new_skill".
+
 When proposing hypotheses, consider:
 - Classifications with low average scores may need better routing
 - High duration classifications may benefit from pipeline optimization
 - You can propose changes to data/agent/classification_rules.md to improve heuristic routing
+- Repeated tool combinations with high scores may indicate a new skill opportunity
 
 ## Instructions
 Based on the above, produce a JSON object with:
@@ -38,6 +44,10 @@ Based on the above, produce a JSON object with:
    - "target_name": which section to modify (e.g. "voice", "identity", "meta")
    - "change": the new content for that section
    - "confidence": 0.0-1.0
+   When target="new_skill", also include:
+   - "skill_name": lowercase alphanumeric name for the skill
+   - "skill_instructions": full system prompt for the new skill
+   - "description": one-line description
 4. "specialization_proposals" -- Array of 0-1 proposals if a domain is consistently weak and would benefit from a dedicated specialist agent. Each has:
    - "role": short role name
    - "specialty": routing tag

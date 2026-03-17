@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from odigos.core.evolution import EvolutionEngine
     from odigos.db import Database
     from odigos.providers.base import LLMProvider
+    from odigos.skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +49,16 @@ Available tools: {agent_tools}
 
 Skills with high scores are working well. Skills with low scores may need improvement or the agent may be using them inappropriately.
 
+## Skill Mining Opportunities
+{skill_mining_summary}
+
+If you see a repeated pattern that could be a reusable skill, include it in your hypotheses with target="new_skill".
+
 When proposing hypotheses, consider:
 - Classifications with low average scores may need better routing
 - High duration classifications may benefit from pipeline optimization
 - You can propose changes to data/agent/classification_rules.md to improve heuristic routing
+- Repeated tool combinations with high scores may indicate a new skill opportunity
 
 ## Instructions
 Based on the above, produce a JSON object with:
@@ -64,6 +71,10 @@ Based on the above, produce a JSON object with:
    - "target_name": which section to modify (e.g. "voice", "identity", "meta")
    - "change": the new content for that section
    - "confidence": 0.0-1.0
+   When target="new_skill", also include:
+   - "skill_name": lowercase alphanumeric name for the skill
+   - "skill_instructions": full system prompt for the new skill
+   - "description": one-line description
 4. "specialization_proposals" -- Array of 0-1 proposals if a domain is consistently weak and would benefit from a dedicated specialist agent. Each has:
    - "role": short role name
    - "specialty": routing tag
@@ -90,6 +101,7 @@ class Strategist:
         agent_description: str = "",
         agent_tools: list[str] | None = None,
         evolution_config: EvolutionConfig | None = None,
+        skill_registry: SkillRegistry | None = None,
     ) -> None:
         self.db = db
         self.provider = provider
@@ -97,6 +109,7 @@ class Strategist:
         self._agent_description = agent_description
         self._agent_tools = agent_tools or []
         self._last_eval_count: int = 0
+        self.skill_registry = skill_registry
 
         if evolution_config is None:
             from odigos.config import EvolutionConfig
@@ -117,11 +130,15 @@ class Strategist:
         recent_evals = await self._get_evaluation_summary()
         query_log_summary = await self._get_query_log_summary()
         skill_usage_summary = await self._get_skill_usage_summary()
+        skill_mining_summary = await self._get_skill_mining_summary()
         failed_trials = await self.evolution.get_failed_trials(limit=10)
         directions = await self.evolution.get_recent_directions(limit=3)
 
         # Build prompt
-        prompt = self._build_prompt(recent_evals, failed_trials, directions, query_log_summary, skill_usage_summary)
+        prompt = self._build_prompt(
+            recent_evals, failed_trials, directions,
+            query_log_summary, skill_usage_summary, skill_mining_summary,
+        )
 
         # Ask LLM
         try:
@@ -168,11 +185,27 @@ class Strategist:
 
         # Act on hypotheses
         for h in result.get("hypotheses", []):
+            target = h.get("target", "prompt_section")
+
+            # Skill mining: create new skill from detected pattern
+            if target == "new_skill" and h.get("skill_name") and h.get("skill_instructions"):
+                if self.skill_registry:
+                    try:
+                        self.skill_registry.create(
+                            name=h["skill_name"],
+                            description=h.get("description", "Auto-generated skill"),
+                            system_prompt=h["skill_instructions"],
+                        )
+                        logger.info("Strategist created new skill: %s", h["skill_name"])
+                    except Exception:
+                        logger.warning("Failed to create proposed skill", exc_info=True)
+                continue
+
             if h.get("type") == "trial_hypothesis" and h.get("confidence", 0) >= self._config.auto_trial_confidence:
                 target_name = h.get("target_name", "voice")
                 await self.evolution.create_trial(
                     hypothesis=h["hypothesis"],
-                    target=h.get("target", "prompt_section"),
+                    target=target,
                     change_description=h.get("change", ""),
                     overrides={target_name: h.get("change", "")},
                     direction_log_id=direction_id,
@@ -219,6 +252,29 @@ class Strategist:
             return "\n".join(lines)
         except Exception:
             return "Skill usage data not available."
+
+    async def _get_skill_mining_summary(self) -> str:
+        """Find repeated tool combinations that could become reusable skills."""
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT tools_used, COUNT(*) as count, AVG(evaluation_score) as avg_score "
+                "FROM query_log WHERE tools_used IS NOT NULL "
+                "AND created_at > datetime('now', '-7 days') "
+                "AND evaluation_score > 0.7 "
+                "GROUP BY tools_used HAVING count >= 3 "
+                "ORDER BY count DESC LIMIT 5"
+            )
+            if not rows:
+                return "No repeated patterns found yet."
+            lines = []
+            for row in rows:
+                lines.append(
+                    f"- Tools {row['tools_used']} used {row['count']}x "
+                    f"with avg score {(row['avg_score'] or 0):.1f}"
+                )
+            return "\n".join(lines)
+        except Exception:
+            return "Skill mining data not available."
 
     async def _get_query_log_summary(self) -> str:
         """Summarize recent query classifications and their outcomes."""
@@ -268,7 +324,7 @@ class Strategist:
             "total_recent": sum(r["cnt"] for r in rows) if rows else 0,
         }
 
-    def _build_prompt(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "") -> str:
+    def _build_prompt(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "") -> str:
         failed_summary = ""
         if failed_trials:
             failed_summary = "\n".join(
@@ -300,6 +356,7 @@ class Strategist:
             direction_summary=direction_summary or 'No prior direction set.',
             query_log_summary=query_log_summary or 'No query classification data yet.',
             skill_usage_summary=skill_usage_summary or 'No skill usage data yet.',
+            skill_mining_summary=skill_mining_summary or 'No repeated patterns found yet.',
         )
 
 

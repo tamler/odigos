@@ -13,6 +13,7 @@ def build_system_prompt(
     skill_hints: str = "",
     active_plan: str = "",
     error_hints: str = "",
+    experiences: str = "",
     user_profile: str = "",
     user_facts: str = "",
 ) -> str:
@@ -38,6 +39,8 @@ def build_system_prompt(
         parts.append(active_plan)
     if error_hints:
         parts.append(error_hints)
+    if experiences:
+        parts.append(experiences)
     if doc_listing:
         parts.append(doc_listing)
     if corrections_context:

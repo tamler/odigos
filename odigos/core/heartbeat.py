@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from odigos.channels.base import UniversalMessage
+from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 from odigos.db import Database
 
@@ -90,6 +91,8 @@ class Heartbeat:
         self._ws_port = ws_port
         self._dream_tick_counter: int = 0
         self._dream_interval_ticks: int = 10
+        self._experience_tick_counter: int = 0
+        self._experience_interval_ticks: int = 20
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -153,6 +156,12 @@ class Heartbeat:
         if self._dream_tick_counter >= self._dream_interval_ticks:
             self._dream_tick_counter = 0
             await self._dream_analyze_user()
+
+        # Phase 9: Experience extraction (every N ticks)
+        self._experience_tick_counter += 1
+        if self._experience_tick_counter >= self._experience_interval_ticks:
+            self._experience_tick_counter = 0
+            await self._extract_experiences()
 
         if self.tracer:
             await self.tracer.emit("heartbeat_tick", None, {
@@ -600,6 +609,108 @@ class Heartbeat:
                     logger.info("Extracted %d new user facts from dreaming", inserted)
         except Exception:
             logger.debug("Dream user profile analysis failed", exc_info=True)
+
+    async def _extract_experiences(self) -> None:
+        """Analyze recent tool interactions and extract tactical lessons."""
+        _EXPERIENCE_FALLBACK = (
+            "Analyze recent tool interactions and extract tactical lessons. "
+            "Respond with a JSON array of objects with: tool_name, situation, outcome, lesson, success."
+        )
+        try:
+            # Gather recent errors (last 24h) grouped by tool + error type
+            error_rows = await self.db.fetch_all(
+                "SELECT tool_name, error_type, COUNT(*) as count, "
+                "GROUP_CONCAT(error_message, ' | ') as messages "
+                "FROM tool_errors WHERE created_at > datetime('now', '-1 day') "
+                "GROUP BY tool_name, error_type ORDER BY count DESC LIMIT 10"
+            )
+            errors_text = "None" if not error_rows else "\n".join(
+                f"- {r['tool_name']} ({r['error_type']}): {r['count']}x -- {(r['messages'] or '')[:200]}"
+                for r in error_rows
+            )
+
+            # Gather recent successes from query_log
+            success_rows = await self.db.fetch_all(
+                "SELECT tools_used, classification, AVG(evaluation_score) as avg_score, "
+                "COUNT(*) as count "
+                "FROM query_log WHERE evaluation_score > 0.7 "
+                "AND created_at > datetime('now', '-1 day') "
+                "AND tools_used IS NOT NULL "
+                "GROUP BY tools_used ORDER BY avg_score DESC LIMIT 10"
+            )
+            successes_text = "None" if not success_rows else "\n".join(
+                f"- {r['tools_used']} for {r['classification']}: {r['count']}x, avg score {(r['avg_score'] or 0):.1f}"
+                for r in success_rows
+            )
+
+            if errors_text == "None" and successes_text == "None":
+                return  # Nothing to analyze
+
+            # Gather existing experiences to avoid duplication
+            existing_rows = await self.db.fetch_all(
+                "SELECT tool_name, lesson FROM agent_experiences "
+                "ORDER BY updated_at DESC LIMIT 20"
+            )
+            existing_text = "None" if not existing_rows else "\n".join(
+                f"- {r['tool_name']}: {r['lesson']}" for r in existing_rows
+            )
+
+            prompt_template = load_prompt("experience_extraction.md", _EXPERIENCE_FALLBACK)
+            prompt_text = prompt_template.format(
+                errors=errors_text,
+                successes=successes_text,
+                existing=existing_text,
+            )
+
+            exp_kwargs: dict = {"max_tokens": 600, "temperature": 0.3}
+            if self._background_model:
+                exp_kwargs["model"] = self._background_model
+
+            response = await self.provider.complete(
+                [
+                    {"role": "system", "content": "You extract tactical lessons from tool interactions. Respond only with valid JSON."},
+                    {"role": "user", "content": prompt_text},
+                ],
+                **exp_kwargs,
+            )
+
+            experiences = parse_json_response(response.content)
+            if not experiences or not isinstance(experiences, list):
+                return
+
+            now = datetime.now(timezone.utc).isoformat()
+            inserted = 0
+            for exp in experiences:
+                if not isinstance(exp, dict) or not exp.get("lesson"):
+                    continue
+                tool_name = exp.get("tool_name", "unknown")
+                situation = exp.get("situation", "")
+                outcome = exp.get("outcome", "")
+                lesson = exp.get("lesson", "")
+                success = 1 if exp.get("success", True) else 0
+
+                # Skip if a very similar lesson already exists
+                existing = await self.db.fetch_one(
+                    "SELECT id FROM agent_experiences WHERE lesson = ?",
+                    (lesson,),
+                )
+                if existing:
+                    continue
+
+                exp_id = uuid.uuid4().hex
+                await self.db.execute(
+                    "INSERT INTO agent_experiences "
+                    "(id, tool_name, situation, outcome, lesson, success, times_applied, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                    (exp_id, tool_name, situation, outcome, lesson, success, now, now),
+                )
+                inserted += 1
+
+            if inserted:
+                logger.info("Extracted %d new tactical experiences", inserted)
+
+        except Exception:
+            logger.debug("Experience extraction failed", exc_info=True)
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:
         try:
