@@ -27,6 +27,11 @@ Skills with high scores are working well. Skills with low scores may need improv
 
 If you see a repeated pattern that could be a reusable skill, include it in your hypotheses with target="new_skill".
 
+## Plan Outcome Evaluations (last 7 days)
+{outcome_summary}
+
+Plans that failed to achieve their goals may indicate systemic issues with planning or execution.
+
 When proposing hypotheses, consider:
 - Classifications with low average scores may need better routing
 - High duration classifications may benefit from pipeline optimization

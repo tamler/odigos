@@ -138,6 +138,18 @@ class UpdatePlanTool(BaseTool):
             (json.dumps(steps), now, row["id"]),
         )
 
+        # Check if plan is complete
+        all_done = all(s.get("status") == "done" for s in steps)
+        if all_done and self._db:
+            try:
+                await self._db.execute(
+                    "INSERT OR IGNORE INTO plan_outcomes (plan_id, conversation_id, status, created_at) "
+                    "VALUES (?, ?, 'pending', ?)",
+                    (row["id"], conversation_id, now),
+                )
+            except Exception:
+                pass
+
         return ToolResult(
             success=True,
             data=f"Step {step_num} updated to '{new_status}'." + (f" Note: {result_note}" if result_note else ""),

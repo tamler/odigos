@@ -18,6 +18,8 @@ data/
 !data/plugins/**
 !data/prompts/
 !data/prompts/**
+!data/agent/
+!data/agent/**
 
 # IDE
 .idea/

@@ -94,6 +94,8 @@ class Heartbeat:
         self._dream_interval_ticks: int = 10
         self._experience_tick_counter: int = 0
         self._experience_interval_ticks: int = 20
+        self._outcome_tick_counter: int = 0
+        self._outcome_interval_ticks: int = 10
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -163,6 +165,12 @@ class Heartbeat:
         if self._experience_tick_counter >= self._experience_interval_ticks:
             self._experience_tick_counter = 0
             await self._extract_experiences()
+
+        # Phase 10: Outcome evaluation for completed plans (every N ticks)
+        self._outcome_tick_counter += 1
+        if self._outcome_tick_counter >= self._outcome_interval_ticks:
+            self._outcome_tick_counter = 0
+            await self._evaluate_plan_outcomes()
 
         if self.tracer:
             await self.tracer.emit("heartbeat_tick", None, {
@@ -732,6 +740,86 @@ class Heartbeat:
 
         except Exception:
             logger.debug("Experience extraction failed", exc_info=True)
+
+    async def _evaluate_plan_outcomes(self) -> None:
+        """Evaluate completed plans to determine if they achieved their goals."""
+        try:
+            pending = await self.db.fetch_all(
+                "SELECT po.plan_id, po.conversation_id "
+                "FROM plan_outcomes po "
+                "WHERE po.status = 'pending' "
+                "LIMIT 3"
+            )
+            if not pending:
+                return
+
+            for row in pending:
+                plan_id = row["plan_id"]
+                conversation_id = row["conversation_id"]
+
+                # Load the plan steps
+                plan_row = await self.db.fetch_one(
+                    "SELECT steps FROM task_plans WHERE id = ?", (plan_id,)
+                )
+                if not plan_row:
+                    await self.db.execute(
+                        "UPDATE plan_outcomes SET status = 'skipped', evaluated_at = datetime('now') "
+                        "WHERE plan_id = ?",
+                        (plan_id,),
+                    )
+                    continue
+
+                steps = json.loads(plan_row["steps"])
+                steps_text = "\n".join(
+                    f"- Step {s['step']}: {s['task']} [{s.get('status', 'pending')}]"
+                    + (f" -- {s['result']}" if s.get("result") else "")
+                    for s in steps
+                )
+
+                # Load conversation excerpt
+                msgs = await self.db.fetch_all(
+                    "SELECT role, content FROM messages "
+                    "WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 10",
+                    (conversation_id,),
+                )
+                conversation_text = "\n".join(
+                    f"{m['role']}: {(m['content'] or '')[:300]}" for m in reversed(msgs)
+                ) if msgs else "(no conversation history)"
+
+                result = await run_prompt(
+                    self.provider,
+                    "outcome_evaluation.md",
+                    {"steps": steps_text, "conversation": conversation_text},
+                    (
+                        "Evaluate whether this task plan achieved its intended goal.\n\n"
+                        "Plan steps:\n{steps}\n\nConversation excerpt:\n{conversation}\n\n"
+                        'Respond ONLY with valid JSON: {{"score": 0.0-1.0, "achieved": true/false, "summary": "one sentence"}}'
+                    ),
+                    model=self._background_model or None,
+                    max_tokens=200,
+                    temperature=0.2,
+                )
+
+                now = datetime.now(timezone.utc).isoformat()
+                if result:
+                    await self.db.execute(
+                        "UPDATE plan_outcomes SET status = 'evaluated', outcome_score = ?, "
+                        "outcome_summary = ?, evaluated_at = ? WHERE plan_id = ?",
+                        (result.get("score", 0.0), result.get("summary", ""), now, plan_id),
+                    )
+                    logger.info(
+                        "Plan %s outcome: score=%.1f, %s",
+                        plan_id[:8],
+                        result.get("score", 0.0),
+                        result.get("summary", "")[:80],
+                    )
+                else:
+                    await self.db.execute(
+                        "UPDATE plan_outcomes SET status = 'failed', evaluated_at = ? WHERE plan_id = ?",
+                        (now, plan_id),
+                    )
+        except Exception:
+            logger.debug("Plan outcome evaluation failed", exc_info=True)
 
     async def _send_notification(self, conversation_id: str, text: str) -> None:
         try:

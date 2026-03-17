@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import tiktoken
 
+from odigos.core.prompt_loader import load_prompt
 from odigos.core.queries import get_recent_tool_errors, get_user_facts, get_user_profile
 from odigos.db import Database
 from odigos.personality.section_registry import SectionRegistry
@@ -27,6 +28,22 @@ _tokenizer = tiktoken.get_encoding("cl100k_base")
 def estimate_tokens(text: str) -> int:
     """Count tokens using tiktoken (cl100k_base, used by Claude/GPT-4)."""
     return len(_tokenizer.encode(text, disallowed_special=()))
+
+
+def _load_routing_rules() -> dict:
+    """Load routing rules from data/agent/routing_rules.md."""
+    text = load_prompt("routing_rules.md", fallback="", base_dir="data/agent")
+    rules: dict[str, dict[str, bool]] = {}
+    current_section: str | None = None
+    for line in text.strip().split("\n"):
+        line = line.strip()
+        if line.startswith("[") and line.endswith("]"):
+            current_section = line[1:-1]
+            rules[current_section] = {}
+        elif ":" in line and current_section:
+            key, val = line.split(":", 1)
+            rules[current_section][key.strip()] = val.strip().lower() == "true"
+    return rules
 
 
 class ContextAssembler:
@@ -65,11 +82,15 @@ class ContextAssembler:
         """Assemble the full messages list: system + history + current."""
         messages: list[dict] = []
 
+        # Load routing rules from editable config
+        routing = _load_routing_rules()
+        route = routing.get(query_analysis.classification, {}) if query_analysis else {}
+
         # Get memory context if available
         memory_context = ""
         if self.memory_manager:
-            if query_analysis and query_analysis.classification == "simple":
-                pass  # Skip RAG for simple queries
+            if route.get("skip_rag", False):
+                pass  # Skip RAG per routing rules
             elif query_analysis and query_analysis.search_queries:
                 # Use optimized search queries from classifier
                 recall_query = " ".join(query_analysis.search_queries)
@@ -92,7 +113,7 @@ class ContextAssembler:
 
         # Document listing for code-based analysis
         doc_listing = ""
-        if self.db:
+        if self.db and not route.get("skip_documents", False):
             try:
                 doc_rows = await self.db.fetch_all(
                     "SELECT id, filename, chunk_count FROM documents WHERE status IN ('complete', 'ingested') ORDER BY filename"
@@ -166,9 +187,8 @@ class ContextAssembler:
                 logger.debug("Could not load error hints", exc_info=True)
 
         # Tactical experiences (learned from past interactions)
-        is_simple = query_analysis and query_analysis.classification == "simple"
         experiences_section = ""
-        if self.db and not is_simple:
+        if self.db and not route.get("skip_experiences", False):
             try:
                 exp_rows = await self.db.fetch_all(
                     "SELECT tool_name, lesson FROM agent_experiences "
@@ -185,7 +205,7 @@ class ContextAssembler:
 
         # User profile (built from conversation patterns)
         user_profile = ""
-        if self.db and not is_simple:
+        if self.db and not route.get("skip_profile", False):
             try:
                 profile_row = await get_user_profile(self.db)
                 if profile_row and profile_row.get("summary"):
@@ -204,7 +224,7 @@ class ContextAssembler:
 
         # User facts (discrete remembered/extracted facts)
         user_facts = ""
-        if self.db and not is_simple:
+        if self.db and not route.get("skip_profile", False):
             try:
                 fact_rows = await get_user_facts(self.db, limit=20)
                 if fact_rows:

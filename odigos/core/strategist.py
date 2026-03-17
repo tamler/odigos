@@ -54,6 +54,11 @@ Skills with high scores are working well. Skills with low scores may need improv
 
 If you see a repeated pattern that could be a reusable skill, include it in your hypotheses with target="new_skill".
 
+## Plan Outcome Evaluations (last 7 days)
+{outcome_summary}
+
+Plans that failed to achieve their goals may indicate systemic issues with planning or execution.
+
 When proposing hypotheses, consider:
 - Classifications with low average scores may need better routing
 - High duration classifications may benefit from pipeline optimization
@@ -131,6 +136,7 @@ class Strategist:
         query_log_summary = await self._get_query_log_summary()
         skill_usage_summary = await self._get_skill_usage_summary()
         skill_mining_summary = await self._get_skill_mining_summary()
+        outcome_summary = await self._get_outcome_summary()
         failed_trials = await self.evolution.get_failed_trials(limit=10)
         directions = await self.evolution.get_recent_directions(limit=3)
 
@@ -138,6 +144,7 @@ class Strategist:
         prompt_vars = self._build_prompt_vars(
             recent_evals, failed_trials, directions,
             query_log_summary, skill_usage_summary, skill_mining_summary,
+            outcome_summary,
         )
 
         # Ask LLM
@@ -307,6 +314,25 @@ class Strategist:
         except Exception:
             return "Query log not available."
 
+    async def _get_outcome_summary(self) -> str:
+        """Summarize recent plan outcome evaluations."""
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT status, COUNT(*) as count, AVG(outcome_score) as avg_score "
+                "FROM plan_outcomes WHERE created_at > datetime('now', '-7 days') "
+                "GROUP BY status"
+            )
+            if not rows:
+                return "No plan outcome data yet."
+            lines = []
+            for row in rows:
+                avg = row["avg_score"]
+                avg_text = f", avg score {avg:.1f}" if avg is not None else ""
+                lines.append(f"- {row['status']}: {row['count']} plans{avg_text}")
+            return "\n".join(lines)
+        except Exception:
+            return "Plan outcome data not available."
+
     async def _get_evaluation_summary(self) -> dict:
         """Summarize recent evaluations by task type."""
         rows = await self.db.fetch_all(
@@ -322,7 +348,7 @@ class Strategist:
             "total_recent": sum(r["cnt"] for r in rows) if rows else 0,
         }
 
-    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "") -> dict[str, str]:
+    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "", outcome_summary: str = "") -> dict[str, str]:
         failed_summary = ""
         if failed_trials:
             failed_summary = "\n".join(
@@ -354,6 +380,7 @@ class Strategist:
             "query_log_summary": query_log_summary or 'No query classification data yet.',
             "skill_usage_summary": skill_usage_summary or 'No skill usage data yet.',
             "skill_mining_summary": skill_mining_summary or 'No repeated patterns found yet.',
+            "outcome_summary": outcome_summary or 'No plan outcome data yet.',
         }
 
 
