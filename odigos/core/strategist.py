@@ -226,7 +226,9 @@ class Strategist:
             rows = await self.db.fetch_all(
                 "SELECT classification, COUNT(*) as count, "
                 "AVG(evaluation_score) as avg_score, "
-                "AVG(duration_ms) as avg_duration "
+                "AVG(duration_ms) as avg_duration, "
+                "AVG(context_tokens) as avg_context_tokens, "
+                "AVG(total_tokens) as avg_total_tokens "
                 "FROM query_log "
                 "WHERE created_at > datetime('now', '-7 days') "
                 "AND evaluation_score IS NOT NULL "
@@ -240,9 +242,12 @@ class Strategist:
             for row in rows:
                 avg_score = row["avg_score"] or 0
                 avg_dur = row["avg_duration"] or 0
+                avg_ctx = row["avg_context_tokens"] or 0
+                avg_total = row["avg_total_tokens"] or 0
                 lines.append(
                     f"- {row['classification']}: {row['count']} queries, "
-                    f"avg score {avg_score:.1f}, avg {avg_dur:.0f}ms"
+                    f"avg score {avg_score:.1f}, avg {avg_dur:.0f}ms, "
+                    f"avg {avg_ctx:.0f} context tokens, avg {avg_total:.0f} total tokens"
                 )
             return "\n".join(lines)
         except Exception:

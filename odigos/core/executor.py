@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from odigos.core.context import ContextAssembler
+from odigos.core.context import ContextAssembler, estimate_tokens
 from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
@@ -98,6 +98,9 @@ class Executor:
         tools = None
         if self.tool_registry and self.tool_registry.list():
             tools = self.tool_registry.tool_definitions()
+
+        # Count context tokens for efficiency tracking
+        context_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)
 
         # Aggregate token/cost tracking
         total_tokens_in = 0
@@ -205,12 +208,15 @@ class Executor:
                 await self.db.execute(
                     "INSERT INTO query_log (id, conversation_id, classification, classifier_tier, "
                     "classifier_confidence, entities, search_queries, sub_questions, tools_used, "
-                    "duration_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "duration_ms, context_tokens, response_tokens, total_tokens, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (str(uuid.uuid4()), conversation_id, query_analysis.classification,
                      query_analysis.tier, query_analysis.confidence,
                      json.dumps(query_analysis.entities), json.dumps(query_analysis.search_queries),
                      json.dumps(query_analysis.sub_questions), json.dumps(sorted(tools_used)),
-                     int(duration_ms), datetime.now(timezone.utc).isoformat()),
+                     int(duration_ms), context_tokens, total_tokens_out,
+                     total_tokens_in + total_tokens_out,
+                     datetime.now(timezone.utc).isoformat()),
                 )
             except Exception:
                 logger.warning("Failed to log query", exc_info=True)
