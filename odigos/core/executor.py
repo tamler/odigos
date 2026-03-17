@@ -72,7 +72,12 @@ class Executor:
         conversation_id: str,
         message_content: str,
         abort_event: asyncio.Event | None = None,
+        *,
+        query_analysis=None,
     ) -> ExecuteResult:
+        start_time = time.monotonic()
+        tools_used: set[str] = set()
+
         # Reset active skill state
         self._active_skill_name: str | None = None
         self._active_skill_tools: set[str] = set()
@@ -80,7 +85,7 @@ class Executor:
 
         # Build initial context
         messages = await self.context_assembler.build(
-            conversation_id, message_content
+            conversation_id, message_content, query_analysis=query_analysis
         )
 
         # Get tool definitions if tools are available
@@ -169,6 +174,7 @@ class Executor:
 
             # Execute each tool call and append results
             for tc in response.tool_calls:
+                tools_used.add(tc.name)
                 result_content = await self._execute_tool(conversation_id, tc)
                 messages.append({
                     "role": "tool",
@@ -185,6 +191,25 @@ class Executor:
                 self._pending_skill_prompt = None
         else:
             logger.warning("Hit max tool turns (%d) for conversation %s", self._max_tool_turns, conversation_id)
+
+        # Log query analysis to query_log
+        duration_ms = (time.monotonic() - start_time) * 1000
+        if query_analysis and self.db:
+            import uuid
+            from datetime import datetime, timezone
+            try:
+                await self.db.execute(
+                    "INSERT INTO query_log (id, conversation_id, classification, classifier_tier, "
+                    "classifier_confidence, entities, search_queries, sub_questions, tools_used, "
+                    "duration_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (str(uuid.uuid4()), conversation_id, query_analysis.classification,
+                     query_analysis.tier, query_analysis.confidence,
+                     json.dumps(query_analysis.entities), json.dumps(query_analysis.search_queries),
+                     json.dumps(query_analysis.sub_questions), json.dumps(sorted(tools_used)),
+                     int(duration_ms), datetime.now(timezone.utc).isoformat()),
+                )
+            except Exception:
+                logger.warning("Failed to log query", exc_info=True)
 
         # Append budget warning to response if triggered
         if budget_warning and last_response and last_response.content and not last_response.tool_calls:

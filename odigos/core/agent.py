@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetTracker
+    from odigos.core.classifier import QueryClassifier
     from odigos.core.trace import Tracer
     from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
@@ -46,10 +47,12 @@ class Agent:
         corrections_manager: CorrectionsManager | None = None,
         tracer: Tracer | None = None,
         approval_gate: ApprovalGate | None = None,
+        classifier: QueryClassifier | None = None,
     ) -> None:
         self.db = db
         self.budget_tracker = budget_tracker
         self.tracer = tracer
+        self.classifier = classifier
         self.heartbeat = None  # set after construction to avoid circular init
         self._max_tool_turns = max_tool_turns
         self._run_timeout = run_timeout
@@ -116,9 +119,21 @@ class Agent:
                     "Use /status to see current budget usage."
                 )
 
+        # Classify the query
+        analysis = None
+        if self.classifier:
+            try:
+                analysis = await self.classifier.classify(message.content)
+                logger.info("Query classified as '%s' (tier %d, confidence %.2f)",
+                            analysis.classification, analysis.tier, analysis.confidence)
+            except Exception:
+                logger.warning("Query classification failed, proceeding without")
+
         try:
             async with asyncio.timeout(self._run_timeout):
-                result = await self.executor.execute(conversation_id, message.content)
+                result = await self.executor.execute(
+                    conversation_id, message.content, query_analysis=analysis
+                )
         except asyncio.TimeoutError:
             logger.warning("Run timed out after %ds for %s", self._run_timeout, conversation_id)
             if self.tracer:

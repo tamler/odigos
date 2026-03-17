@@ -499,6 +499,12 @@ async def lifespan(app: FastAPI):
             ", ".join(settings.approval.tools),
         )
 
+    # Initialize query classifier
+    from odigos.core.classifier import QueryClassifier
+
+    classifier = QueryClassifier(provider=_provider, db=_db)
+    logger.info("Query classifier initialized")
+
     # Initialize agent
     agent = Agent(
         db=_db,
@@ -515,6 +521,7 @@ async def lifespan(app: FastAPI):
         corrections_manager=corrections_manager,
         tracer=tracer,
         approval_gate=approval_gate,
+        classifier=classifier,
     )
     app.state.agent = agent
 

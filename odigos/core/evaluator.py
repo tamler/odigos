@@ -169,6 +169,17 @@ class Evaluator:
 
         await self._cache_rubric(task_type, rubric)
 
+        # Link evaluation score to query_log
+        try:
+            await self.db.execute(
+                "UPDATE query_log SET evaluation_score = ?, message_id = ? "
+                "WHERE rowid = (SELECT rowid FROM query_log WHERE conversation_id = ? "
+                "AND message_id IS NULL ORDER BY created_at DESC LIMIT 1)",
+                (overall, message_id, conversation_id),
+            )
+        except Exception:
+            pass  # query_log may not exist yet
+
         return {
             "eval_id": eval_id,
             "task_type": task_type,

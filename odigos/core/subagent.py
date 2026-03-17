@@ -41,6 +41,8 @@ class _SubagentContext:
         conversation_id: str,
         current_message: str,
         max_tokens: int = 0,
+        *,
+        query_analysis=None,
     ) -> list[dict]:
         return list(self._messages)
 

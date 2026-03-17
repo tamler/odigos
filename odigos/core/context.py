@@ -56,6 +56,8 @@ class ContextAssembler:
         conversation_id: str,
         current_message: str,
         max_tokens: int = 0,
+        *,
+        query_analysis=None,
     ) -> list[dict]:
         """Assemble the full messages list: system + history + current."""
         messages: list[dict] = []
@@ -63,7 +65,14 @@ class ContextAssembler:
         # Get memory context if available
         memory_context = ""
         if self.memory_manager:
-            memory_context = await self.memory_manager.recall(current_message)
+            if query_analysis and query_analysis.classification == "simple":
+                pass  # Skip RAG for simple queries
+            elif query_analysis and query_analysis.search_queries:
+                # Use optimized search queries from classifier
+                recall_query = " ".join(query_analysis.search_queries)
+                memory_context = await self.memory_manager.recall(recall_query)
+            else:
+                memory_context = await self.memory_manager.recall(current_message)
 
         # Build skill catalog if available
         skill_catalog = ""
@@ -107,6 +116,11 @@ class ContextAssembler:
             sections = await self.checkpoint_manager.get_working_sections()
         else:
             sections = self._fallback_registry.load_all()
+
+        # Add decomposition hints for complex queries
+        if query_analysis and query_analysis.sub_questions:
+            sub_q_text = "\n".join(f"- {q}" for q in query_analysis.sub_questions)
+            memory_context += f"\n\n## Analysis hints\nConsider addressing these aspects:\n{sub_q_text}"
 
         system_prompt = build_system_prompt(
             sections=sections,
