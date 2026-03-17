@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from odigos.channels.base import UniversalMessage
@@ -87,16 +87,27 @@ class Agent:
             tracer=tracer,
         )
 
-    async def handle_message(self, message: UniversalMessage) -> str:
+    async def handle_message(
+        self,
+        message: UniversalMessage,
+        *,
+        status_callback: Callable[[str], Awaitable[None]] | None = None,
+    ) -> str:
         """Process an incoming message through the ReAct loop."""
         conversation_id = await self._get_or_create_conversation(message)
 
         # Session serialization -- one turn at a time per session
         lock = self._get_session_lock(conversation_id)
         async with lock:
-            return await self._run(conversation_id, message)
+            return await self._run(conversation_id, message, status_callback=status_callback)
 
-    async def _run(self, conversation_id: str, message: UniversalMessage) -> str:
+    async def _run(
+        self,
+        conversation_id: str,
+        message: UniversalMessage,
+        *,
+        status_callback: Callable[[str], Awaitable[None]] | None = None,
+    ) -> str:
         """Execute the agent loop with timeout."""
         await self.db.execute(
             "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
@@ -129,10 +140,14 @@ class Agent:
             except Exception:
                 logger.warning("Query classification failed, proceeding without")
 
+        if status_callback:
+            await status_callback("Thinking...")
+
         try:
             async with asyncio.timeout(self._run_timeout):
                 result = await self.executor.execute(
-                    conversation_id, message.content, query_analysis=analysis
+                    conversation_id, message.content, query_analysis=analysis,
+                    status_callback=status_callback,
                 )
         except asyncio.TimeoutError:
             logger.warning("Run timed out after %ds for %s", self._run_timeout, conversation_id)

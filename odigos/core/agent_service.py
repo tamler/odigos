@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -31,9 +32,14 @@ class AgentService:
 
     # -- Message handling --
 
-    async def handle_message(self, message: UniversalMessage) -> str:
+    async def handle_message(
+        self,
+        message: UniversalMessage,
+        *,
+        status_callback: Callable[[str], Awaitable[None]] | None = None,
+    ) -> str:
         """Send a message to the agent and return the response."""
-        return await self.agent.handle_message(message)
+        return await self.agent.handle_message(message, status_callback=status_callback)
 
     # -- Goals / Todos / Reminders --
 

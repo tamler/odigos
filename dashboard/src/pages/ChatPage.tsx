@@ -34,6 +34,7 @@ export default function ChatPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [thinking, setThinking] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean }[]>([])
   const [recording, setRecording] = useState(false)
@@ -49,8 +50,12 @@ export default function ChatPage() {
     if (!socket) return
 
     socket.onMessage = (msg) => {
+      if (msg.type === 'status') {
+        setStatus(msg.text as string)
+      }
       if (msg.type === 'chat_response') {
         setThinking(false)
+        setStatus(null)
         setMessages((prev) => [...prev, {
           role: 'assistant',
           content: msg.content as string,
@@ -314,8 +319,9 @@ export default function ChatPage() {
                 </div>
               ))}
               {thinking && (
-                <div>
+                <div className="flex items-center gap-2">
                   <Loader variant="typing" />
+                  {status && <span className="text-xs text-muted-foreground animate-pulse">{status}</span>}
                 </div>
               )}
             </div>

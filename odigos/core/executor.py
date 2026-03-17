@@ -7,6 +7,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from odigos.core.context import ContextAssembler, estimate_tokens
@@ -80,6 +81,7 @@ class Executor:
         abort_event: asyncio.Event | None = None,
         *,
         query_analysis: QueryAnalysis | None = None,
+        status_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> ExecuteResult:
         start_time = time.monotonic()
         tools_used: set[str] = set()
@@ -88,6 +90,10 @@ class Executor:
         self._active_skill_name = None
         self._active_skill_tools = set()
         self._pending_skill_prompt = None
+
+        # Emit classification status
+        if status_callback and query_analysis:
+            await status_callback(f"Classified as {query_analysis.classification}")
 
         # Build initial context
         messages = await self.context_assembler.build(
@@ -184,6 +190,8 @@ class Executor:
             # Execute each tool call and append results
             for tc in response.tool_calls:
                 tools_used.add(tc.name)
+                if status_callback:
+                    await status_callback(f"Using {tc.name}...")
                 result_content = await self._execute_tool(
                     conversation_id, tc, message_content=message_content,
                 )

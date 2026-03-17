@@ -137,8 +137,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     timestamp=datetime.now(timezone.utc),
                     metadata={"chat_id": chat_id},
                 )
+                async def send_status(text: str) -> None:
+                    await websocket.send_json({"type": "status", "text": text})
+
                 agent_service = websocket.app.state.agent_service
-                response = await agent_service.handle_message(msg)
+                response = await agent_service.handle_message(msg, status_callback=send_status)
 
                 # Notify frontend of new conversation so sidebar updates
                 if first_message:
