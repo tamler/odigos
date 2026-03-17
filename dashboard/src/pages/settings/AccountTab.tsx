@@ -2,14 +2,26 @@ import { useEffect, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { get } from '@/lib/api'
+import { Textarea } from '@/components/ui/textarea'
+import { get, put } from '@/lib/api'
 import { changePassword, logout } from '@/lib/auth'
 import { toast } from 'sonner'
 import { Copy, LogOut } from 'lucide-react'
 
+interface UserProfile {
+  communication_style: string
+  expertise_areas: string
+  preferences: string
+  recurring_topics: string
+  correction_patterns: string
+  summary: string
+  last_analyzed_at: string | null
+}
+
 interface AuthMe {
   username: string
   display_name: string
+  profile?: UserProfile | null
 }
 
 interface SettingsData {
@@ -40,10 +52,19 @@ export default function AccountTab({ active }: Props) {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [profileDraft, setProfileDraft] = useState<Partial<UserProfile>>({})
+  const [savingProfile, setSavingProfile] = useState(false)
 
   const loadData = useCallback(() => {
     get<AuthMe>('/api/auth/me')
-      .then(setMe)
+      .then((data) => {
+        setMe(data)
+        if (data.profile) {
+          setProfile(data.profile)
+          setProfileDraft({})
+        }
+      })
       .catch(() => {})
     get<SettingsData>('/api/settings')
       .then((s) => setApiKey(s.api_key || ''))
@@ -99,6 +120,40 @@ export default function AccountTab({ active }: Props) {
     }
   }
 
+  const profileFields: { key: keyof UserProfile; label: string }[] = [
+    { key: 'summary', label: 'Summary' },
+    { key: 'communication_style', label: 'Communication Style' },
+    { key: 'preferences', label: 'Preferences' },
+    { key: 'expertise_areas', label: 'Areas of Expertise' },
+    { key: 'recurring_topics', label: 'Recurring Topics' },
+    { key: 'correction_patterns', label: 'Common Corrections' },
+  ]
+
+  const mergedProfile: UserProfile | null = profile
+    ? { ...profile, ...profileDraft }
+    : null
+
+  const hasProfileContent = mergedProfile
+    ? profileFields.some((f) => f.key !== 'last_analyzed_at' && mergedProfile[f.key])
+    : false
+
+  const profileDirty = Object.keys(profileDraft).length > 0
+
+  async function handleSaveProfile() {
+    if (!profileDirty) return
+    setSavingProfile(true)
+    try {
+      await put('/api/auth/profile', profileDraft)
+      setProfile((prev) => (prev ? { ...prev, ...profileDraft } : prev))
+      setProfileDraft({})
+      toast.success('Profile saved')
+    } catch {
+      toast.error('Failed to save profile')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
   if (!me) {
     return <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Loading...</div>
   }
@@ -118,6 +173,47 @@ export default function AccountTab({ active }: Props) {
           </div>
         </div>
       </SectionCard>
+
+      {/* Learned Profile */}
+      {profile && (
+        <SectionCard title="Your Profile (learned from conversations)">
+          {hasProfileContent ? (
+            <>
+              {profileFields.map(({ key, label }) => (
+                <div key={key} className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">{label}</Label>
+                  <Textarea
+                    value={mergedProfile?.[key] ?? ''}
+                    onChange={(e) =>
+                      setProfileDraft((prev) => ({ ...prev, [key]: e.target.value }))
+                    }
+                    rows={2}
+                    className="bg-muted/50 border-border/40 text-sm resize-y"
+                  />
+                </div>
+              ))}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  {profile.last_analyzed_at
+                    ? `Last analyzed: ${new Date(profile.last_analyzed_at).toLocaleDateString()}`
+                    : 'Not yet analyzed'}
+                </span>
+                <Button
+                  onClick={handleSaveProfile}
+                  disabled={!profileDirty || savingProfile}
+                  size="sm"
+                >
+                  {savingProfile ? 'Saving...' : 'Save Profile'}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Your agent hasn&apos;t built a profile yet. It learns from your conversations over time.
+            </p>
+          )}
+        </SectionCard>
+      )}
 
       {/* Change Password */}
       <SectionCard title="Change Password">

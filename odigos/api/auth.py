@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -232,6 +233,26 @@ async def auth_me(request: Request):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    profile = None
+    try:
+        profile_row = await db.fetch_one(
+            "SELECT communication_style, expertise_areas, preferences, "
+            "recurring_topics, correction_patterns, summary, last_analyzed_at "
+            "FROM user_profile WHERE id = 'owner'"
+        )
+        if profile_row:
+            profile = {
+                "communication_style": profile_row["communication_style"] or "",
+                "expertise_areas": profile_row["expertise_areas"] or "",
+                "preferences": profile_row["preferences"] or "",
+                "recurring_topics": profile_row["recurring_topics"] or "",
+                "correction_patterns": profile_row["correction_patterns"] or "",
+                "summary": profile_row["summary"] or "",
+                "last_analyzed_at": profile_row["last_analyzed_at"],
+            }
+    except Exception:
+        pass
+
     return {
         "user_id": user["id"],
         "username": user["username"],
@@ -239,4 +260,51 @@ async def auth_me(request: Request):
         "must_change_password": bool(user["must_change_password"]),
         "created_at": user["created_at"],
         "last_login_at": user["last_login_at"],
+        "profile": profile,
     }
+
+
+class ProfileUpdate(BaseModel):
+    communication_style: str | None = None
+    expertise_areas: str | None = None
+    preferences: str | None = None
+    recurring_topics: str | None = None
+    correction_patterns: str | None = None
+    summary: str | None = None
+
+
+@router.put("/profile")
+async def update_profile(body: ProfileUpdate, request: Request):
+    """Update the owner's learned profile fields (session required)."""
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if not cookie:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    secret = request.app.state.settings.session_secret
+    session = _validate_session(secret, cookie)
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    db = request.app.state.db
+    updates = []
+    params: list[str] = []
+    for field in (
+        "communication_style",
+        "expertise_areas",
+        "preferences",
+        "recurring_topics",
+        "correction_patterns",
+        "summary",
+    ):
+        value = getattr(body, field)
+        if value is not None:
+            updates.append(f"{field} = ?")
+            params.append(value)
+
+    if updates:
+        params.append("owner")
+        await db.execute(
+            f"UPDATE user_profile SET {', '.join(updates)} WHERE id = ?",
+            tuple(params),
+        )
+
+    return {"status": "ok"}
