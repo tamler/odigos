@@ -41,9 +41,10 @@ _RUBRIC_FALLBACK = (
     "User message: {user_content}\n"
     "Assistant response: {assistant_content}\n"
     "User reaction signal: {feedback} (-1=negative, +1=positive)\n\n"
+    "Also identify key entities (people, tools, documents, concepts) mentioned.\n\n"
     "Return ONLY a JSON object:\n"
     '{{"task_type": "category", "criteria": [{{"name": "...", "weight": 0.0-1.0, '
-    '"description": "what good looks like"}}], "notes": "..."}}'
+    '"description": "what good looks like"}}], "key_entities": ["entity1", "entity2"], "notes": "..."}}'
 )
 
 _SCORING_FALLBACK = (
@@ -52,9 +53,12 @@ _SCORING_FALLBACK = (
     "User message: {user_content}\n"
     "Assistant response: {assistant_content}\n"
     "User reaction signal: {feedback}\n\n"
+    "Also provide a one-sentence improvement suggestion and assess user satisfaction.\n\n"
     "Return ONLY a JSON object:\n"
     '{{"scores": [{{"criterion": "name", "score": 0-10, "observation": "..."}}], '
-    '"overall": 0-10, "improvement_signal": "what would have been better" or null}}'
+    '"overall": 0-10, "improvement_signal": "what would have been better" or null, '
+    '"suggested_improvement": "one sentence on what to do better", '
+    '"user_satisfaction_signal": "satisfied|neutral|dissatisfied"}}'
 )
 
 
@@ -102,10 +106,12 @@ class Evaluator:
         db: Database,
         provider: LLMProvider,
         qualified_evaluator_min_score: float = 7.0,
+        entity_graph=None,
     ) -> None:
         self.db = db
         self.provider = provider
         self._qualified_evaluator_min_score = qualified_evaluator_min_score
+        self.entity_graph = entity_graph
 
     async def get_unscored_messages(self, limit: int = 5) -> list[dict]:
         """Find assistant messages that haven't been evaluated yet."""
@@ -174,6 +180,29 @@ class Evaluator:
 
         await self._cache_rubric(task_type, rubric)
 
+        # Feed extracted entities into the entity graph
+        key_entities = rubric.get("key_entities", [])
+        if key_entities and isinstance(key_entities, list) and self.entity_graph:
+            for entity_name in key_entities:
+                if isinstance(entity_name, str) and entity_name.strip():
+                    try:
+                        existing = await self.entity_graph.find_entity(entity_name.strip())
+                        if not existing:
+                            await self.entity_graph.create_entity(
+                                entity_type="extracted",
+                                name=entity_name.strip(),
+                                properties={"source_eval": eval_id},
+                                confidence=0.7,
+                                source="evaluator",
+                            )
+                    except Exception:
+                        logger.debug("Failed to store entity %s", entity_name)
+
+        # Log improvement suggestion for strategist visibility
+        suggested_improvement = scores.get("suggested_improvement")
+        if suggested_improvement:
+            logger.info("Eval improvement hint: %s", suggested_improvement[:200])
+
         # Link evaluation score to query_log
         try:
             await self.db.execute(
@@ -201,6 +230,9 @@ class Evaluator:
             "overall_score": overall,
             "implicit_feedback": feedback,
             "improvement_signal": scores.get("improvement_signal"),
+            "suggested_improvement": scores.get("suggested_improvement"),
+            "user_satisfaction_signal": scores.get("user_satisfaction_signal"),
+            "key_entities": key_entities,
         }
 
     async def _get_or_generate_rubric(

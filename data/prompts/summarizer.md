@@ -1,19 +1,14 @@
-Summarize this conversation segment using the following structured format.
-Include ONLY sections that have relevant content. Be concise.
+Summarize this conversation segment. Return ONLY valid JSON with this structure:
 
-## Goal
-What is the user trying to accomplish? (1 sentence)
+{{
+  "summary": "A structured summary of the conversation. Include Goal, Progress, Decisions, Next Steps, and Key Facts sections as relevant. Use markdown formatting within this string.",
+  "tags": ["topic-tag-1", "topic-tag-2"],
+  "key_facts": ["Factual statement 1 extracted from the conversation", "Factual statement 2"],
+  "action_items": ["Pending action 1", "Pending action 2"]
+}}
 
-## Progress
-- Done: What has been completed
-- In Progress: What is currently being worked on
-- Blocked: Any blockers or issues
-
-## Decisions
-Key decisions made during this conversation (bulleted list)
-
-## Next Steps
-What should happen next (bulleted list)
-
-## Key Facts
-Important facts, preferences, or context worth remembering (bulleted list)
+Guidelines:
+- summary: Compress the conversation into a structured overview. Include only sections with relevant content. Be concise.
+- tags: 2-5 lowercase topic tags for correlation (e.g., "code-review", "debugging", "research").
+- key_facts: Specific factual statements worth remembering (e.g., "User uploaded report.pdf", "API rate limit is 100/min").
+- action_items: Any pending actions or follow-ups mentioned. Empty array if none.

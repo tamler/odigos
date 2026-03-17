@@ -471,7 +471,8 @@ class Heartbeat:
         _PROFILE_PROMPT_FALLBACK = (
             "Analyze recent conversations and update the user profile. "
             "Respond with JSON containing: communication_style, expertise_areas, "
-            "preferences, recurring_topics, correction_patterns, summary."
+            "preferences, recurring_topics, correction_patterns, summary, "
+            "activity_pattern, engagement_trend, unmet_needs, relationship_stage."
         )
         try:
             # Fetch current profile
@@ -541,23 +542,49 @@ class Heartbeat:
                 return
 
             now = datetime.now(timezone.utc).isoformat()
-            await self.db.execute(
-                "UPDATE user_profile SET "
-                "communication_style = ?, expertise_areas = ?, preferences = ?, "
-                "recurring_topics = ?, correction_patterns = ?, summary = ?, "
-                "last_analyzed_at = ?, conversation_count = ? "
-                "WHERE id = 'owner'",
-                (
-                    parsed.get("communication_style", ""),
-                    parsed.get("expertise_areas", ""),
-                    parsed.get("preferences", ""),
-                    parsed.get("recurring_topics", ""),
-                    parsed.get("correction_patterns", ""),
-                    parsed.get("summary", ""),
-                    now,
-                    conv_count,
-                ),
-            )
+            try:
+                await self.db.execute(
+                    "UPDATE user_profile SET "
+                    "communication_style = ?, expertise_areas = ?, preferences = ?, "
+                    "recurring_topics = ?, correction_patterns = ?, summary = ?, "
+                    "activity_pattern = ?, engagement_trend = ?, unmet_needs = ?, "
+                    "relationship_stage = ?, "
+                    "last_analyzed_at = ?, conversation_count = ? "
+                    "WHERE id = 'owner'",
+                    (
+                        parsed.get("communication_style", ""),
+                        parsed.get("expertise_areas", ""),
+                        parsed.get("preferences", ""),
+                        parsed.get("recurring_topics", ""),
+                        parsed.get("correction_patterns", ""),
+                        parsed.get("summary", ""),
+                        parsed.get("activity_pattern", ""),
+                        parsed.get("engagement_trend", ""),
+                        parsed.get("unmet_needs", ""),
+                        parsed.get("relationship_stage", "new"),
+                        now,
+                        conv_count,
+                    ),
+                )
+            except Exception:
+                # New columns may not exist yet; fall back to original set
+                await self.db.execute(
+                    "UPDATE user_profile SET "
+                    "communication_style = ?, expertise_areas = ?, preferences = ?, "
+                    "recurring_topics = ?, correction_patterns = ?, summary = ?, "
+                    "last_analyzed_at = ?, conversation_count = ? "
+                    "WHERE id = 'owner'",
+                    (
+                        parsed.get("communication_style", ""),
+                        parsed.get("expertise_areas", ""),
+                        parsed.get("preferences", ""),
+                        parsed.get("recurring_topics", ""),
+                        parsed.get("correction_patterns", ""),
+                        parsed.get("summary", ""),
+                        now,
+                        conv_count,
+                    ),
+                )
             logger.info("User profile updated (analyzed %d conversations)", len(conv_texts))
 
             # Process extracted facts
@@ -596,7 +623,8 @@ class Heartbeat:
         """Analyze recent tool interactions and extract tactical lessons."""
         _EXPERIENCE_FALLBACK = (
             "Analyze recent tool interactions and extract tactical lessons. "
-            "Respond with a JSON array of objects with: tool_name, situation, outcome, lesson, success."
+            "Respond with a JSON array of objects with: tool_name, situation, outcome, lesson, success, "
+            "confidence (0-1), applicability (always|sometimes|rare)."
         )
         try:
             # Gather recent errors (last 24h) grouped by tool + error type
@@ -672,13 +700,31 @@ class Heartbeat:
                 if existing:
                     continue
 
+                confidence = exp.get("confidence", 0.8)
+                if not isinstance(confidence, (int, float)) or confidence < 0 or confidence > 1:
+                    confidence = 0.8
+                applicability = exp.get("applicability", "sometimes")
+                if applicability not in ("always", "sometimes", "rare"):
+                    applicability = "sometimes"
+
                 exp_id = uuid.uuid4().hex
-                await self.db.execute(
-                    "INSERT INTO agent_experiences "
-                    "(id, tool_name, situation, outcome, lesson, success, times_applied, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
-                    (exp_id, tool_name, situation, outcome, lesson, success, now, now),
-                )
+                try:
+                    await self.db.execute(
+                        "INSERT INTO agent_experiences "
+                        "(id, tool_name, situation, outcome, lesson, success, times_applied, "
+                        "confidence, applicability, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)",
+                        (exp_id, tool_name, situation, outcome, lesson, success,
+                         confidence, applicability, now, now),
+                    )
+                except Exception:
+                    # confidence/applicability columns may not exist yet
+                    await self.db.execute(
+                        "INSERT INTO agent_experiences "
+                        "(id, tool_name, situation, outcome, lesson, success, times_applied, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                        (exp_id, tool_name, situation, outcome, lesson, success, now, now),
+                    )
                 inserted += 1
 
             if inserted:

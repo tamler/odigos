@@ -1,6 +1,8 @@
+import json
 import logging
 import uuid
 
+from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 from odigos.db import Database
 from odigos.memory.vectors import VectorMemory
@@ -9,25 +11,9 @@ from odigos.providers.base import LLMProvider
 logger = logging.getLogger(__name__)
 
 STRUCTURED_COMPACTION_PROMPT = """\
-Summarize this conversation segment using the following structured format.
-Include ONLY sections that have relevant content. Be concise.
+Summarize this conversation segment. Return ONLY valid JSON with this structure:
 
-## Goal
-What is the user trying to accomplish? (1 sentence)
-
-## Progress
-- Done: What has been completed
-- In Progress: What is currently being worked on
-- Blocked: Any blockers or issues
-
-## Decisions
-Key decisions made during this conversation (bulleted list)
-
-## Next Steps
-What should happen next (bulleted list)
-
-## Key Facts
-Important facts, preferences, or context worth remembering (bulleted list)\
+{{"summary": "A structured summary of the conversation with Goal, Progress, Decisions, Next Steps, and Key Facts sections as relevant.", "tags": ["topic-tag-1", "topic-tag-2"], "key_facts": ["Factual statement 1", "Factual statement 2"], "action_items": ["Pending action 1"]}}\
 """
 
 
@@ -98,16 +84,66 @@ class ConversationSummarizer:
             ]
         )
 
-        summary_text = summary_response.content
+        raw_content = summary_response.content
+
+        # Parse structured JSON response; fall back to plain text summary
+        parsed = parse_json_response(raw_content)
+        if parsed and isinstance(parsed, dict) and "summary" in parsed:
+            summary_text = parsed["summary"]
+            tags = parsed.get("tags", [])
+            key_facts = parsed.get("key_facts", [])
+            action_items = parsed.get("action_items", [])
+        else:
+            summary_text = raw_content
+            tags = []
+            key_facts = []
+            action_items = []
+
+        # Append action items to summary text if present
+        if action_items and isinstance(action_items, list):
+            items_text = "\n".join(f"- {item}" for item in action_items if isinstance(item, str))
+            if items_text:
+                summary_text += f"\n\n## Action Items\n{items_text}"
+
+        tags_str = json.dumps(tags) if tags and isinstance(tags, list) else ""
 
         # Store the summary
         summary_id = str(uuid.uuid4())
-        await self.db.execute(
-            "INSERT INTO conversation_summaries "
-            "(id, conversation_id, start_message_idx, end_message_idx, summary) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (summary_id, conversation_id, already_summarized, cutoff, summary_text),
-        )
+        try:
+            await self.db.execute(
+                "INSERT INTO conversation_summaries "
+                "(id, conversation_id, start_message_idx, end_message_idx, summary, tags) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (summary_id, conversation_id, already_summarized, cutoff, summary_text, tags_str),
+            )
+        except Exception:
+            # tags column may not exist yet; fall back without it
+            await self.db.execute(
+                "INSERT INTO conversation_summaries "
+                "(id, conversation_id, start_message_idx, end_message_idx, summary) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (summary_id, conversation_id, already_summarized, cutoff, summary_text),
+            )
+
+        # Store key facts in user_facts table
+        if key_facts and isinstance(key_facts, list):
+            for fact_text in key_facts:
+                if not isinstance(fact_text, str) or not fact_text.strip():
+                    continue
+                existing = await self.db.fetch_one(
+                    "SELECT id FROM user_facts WHERE fact = ?", (fact_text.strip(),)
+                )
+                if existing:
+                    continue
+                try:
+                    fact_id = str(uuid.uuid4())
+                    await self.db.execute(
+                        "INSERT INTO user_facts (id, fact, category, source, confidence, created_at, updated_at) "
+                        "VALUES (?, ?, 'general', 'summarizer', 0.7, datetime('now'), datetime('now'))",
+                        (fact_id, fact_text.strip()),
+                    )
+                except Exception:
+                    logger.debug("Failed to store summarizer fact: %s", fact_text[:80])
 
         # Embed the summary for vector search
         await self.vector_memory.store(
@@ -119,8 +155,9 @@ class ConversationSummarizer:
         )
 
         logger.info(
-            "Summarized messages %d-%d for conversation %s",
+            "Summarized messages %d-%d for conversation %s (tags: %s)",
             already_summarized,
             cutoff,
             conversation_id,
+            tags_str[:100],
         )
