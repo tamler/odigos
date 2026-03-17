@@ -2,13 +2,13 @@
 
 from fastapi import APIRouter, Depends, Query
 
-from odigos.api.deps import get_db, get_vector_memory, require_api_key
+from odigos.api.deps import get_db, get_vector_memory, require_auth
 from odigos.db import Database
 from odigos.memory.vectors import VectorMemory
 
 router = APIRouter(
     prefix="/api/memory",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 

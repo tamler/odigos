@@ -9,13 +9,13 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from odigos.api.deps import get_config_path, get_env_path, get_plugin_manager, get_settings, require_api_key
+from odigos.api.deps import get_config_path, get_env_path, get_plugin_manager, get_settings, require_auth
 from odigos.api.settings import _update_env_file
 from odigos.config import Settings
 
 router = APIRouter(
     prefix="/api",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 

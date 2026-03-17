@@ -6,7 +6,7 @@ import logging
 import re
 import struct
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from odigos.core.prompt_loader import load_prompt
 
@@ -78,9 +78,9 @@ class QueryClassifier:
 
     def __init__(
         self,
-        provider: Optional[LLMProvider] = None,
-        db: Optional[Database] = None,
-        vector_memory: Optional[VectorMemory] = None,
+        provider: LLMProvider | None = None,
+        db: Database | None = None,
+        vector_memory: VectorMemory | None = None,
     ) -> None:
         self.provider = provider
         self.db = db

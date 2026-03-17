@@ -12,13 +12,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from odigos.api.deps import get_agent_client, get_db, require_api_key
+from odigos.api.deps import get_agent_client, get_db, require_auth
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/api/agent",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 

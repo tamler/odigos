@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from odigos.core.goal_store import GoalStore
@@ -30,12 +33,16 @@ class CreateReminderTool(BaseTool):
         recurrence = params.get("recurrence")
         conversation_id = params.get("_conversation_id")
 
-        rid = await self.goal_store.create_reminder(
-            description=description,
-            due_seconds=due_seconds,
-            recurrence=recurrence,
-            conversation_id=conversation_id,
-        )
+        try:
+            rid = await self.goal_store.create_reminder(
+                description=description,
+                due_seconds=due_seconds,
+                recurrence=recurrence,
+                conversation_id=conversation_id,
+            )
+        except Exception as e:
+            logger.error("Failed to create reminder: %s", e, exc_info=True)
+            return ToolResult(success=False, data="", error=f"Failed to create reminder: {e}")
         return ToolResult(success=True, data=f"Reminder set: {description} (id: {rid[:8]})")
 
 
@@ -59,11 +66,15 @@ class CreateTodoTool(BaseTool):
         delay = int(params.get("delay_seconds", 0))
         conversation_id = params.get("_conversation_id")
 
-        tid = await self.goal_store.create_todo(
-            description=description,
-            delay_seconds=delay,
-            conversation_id=conversation_id,
-        )
+        try:
+            tid = await self.goal_store.create_todo(
+                description=description,
+                delay_seconds=delay,
+                conversation_id=conversation_id,
+            )
+        except Exception as e:
+            logger.error("Failed to create todo: %s", e, exc_info=True)
+            return ToolResult(success=False, data="", error=f"Failed to create todo: {e}")
         return ToolResult(success=True, data=f"Todo created: {description} (id: {tid[:8]})")
 
 
@@ -83,5 +94,9 @@ class CreateGoalTool(BaseTool):
 
     async def execute(self, params: dict) -> ToolResult:
         description = params.get("description", "")
-        gid = await self.goal_store.create_goal(description=description)
+        try:
+            gid = await self.goal_store.create_goal(description=description)
+        except Exception as e:
+            logger.error("Failed to create goal: %s", e, exc_info=True)
+            return ToolResult(success=False, data="", error=f"Failed to create goal: {e}")
         return ToolResult(success=True, data=f"Goal noted: {description} (id: {gid[:8]})")

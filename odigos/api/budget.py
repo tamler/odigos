@@ -4,12 +4,12 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, Depends
 
-from odigos.api.deps import get_budget_tracker, require_api_key
+from odigos.api.deps import get_budget_tracker, require_auth
 from odigos.core.budget import BudgetTracker
 
 router = APIRouter(
     prefix="/api",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 

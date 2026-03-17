@@ -35,6 +35,9 @@ class SearchTool(BaseTool):
         if not query:
             return ToolResult(success=False, data="", error="Missing required parameter: query")
 
+        if not self._provider:
+            return ToolResult(success=False, data="", error="No search provider configured")
+
         results = await self._provider.search(query)
 
         if not results:

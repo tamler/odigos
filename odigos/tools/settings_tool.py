@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import yaml
 
@@ -64,7 +64,7 @@ class ManageSettingsTool(BaseTool):
                 return True
         return False
 
-    def _resolve(self, key: str):
+    def _resolve(self, key: str) -> Any:
         """Traverse dotted key on the settings object and return the value."""
         parts = key.split(".")
         obj = self.settings

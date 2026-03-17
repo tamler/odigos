@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from odigos.api.deps import get_checkpoint_manager, get_db, require_api_key
+from odigos.api.deps import get_checkpoint_manager, get_db, require_auth
 from odigos.db import Database
 
 router = APIRouter(
     prefix="/api",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 

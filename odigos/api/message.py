@@ -6,13 +6,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from odigos.api.deps import get_agent, require_api_key
+from odigos.api.deps import get_agent, require_auth
 from odigos.channels.base import UniversalMessage
 from odigos.core.agent import Agent
 
 router = APIRouter(
     prefix="/api",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 

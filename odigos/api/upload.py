@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 
 from odigos.tools.transcribe import AUDIO_EXTENSIONS
 
-from odigos.api.deps import get_db, get_doc_ingester, get_markitdown, get_upload_dir, require_api_key
+from odigos.api.deps import get_db, get_doc_ingester, get_markitdown, get_upload_dir, require_auth
 from odigos.db import Database
 from odigos.memory.ingester import DocumentIngester
 from odigos.providers.markitdown import MarkItDownProvider
@@ -30,7 +30,7 @@ PREVIEW_CHARS = 2000
 
 router = APIRouter(
     prefix="/api",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 

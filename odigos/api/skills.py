@@ -5,11 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from odigos.api.deps import get_skill_registry, require_api_key
+from odigos.api.deps import get_skill_registry, require_auth
 
 router = APIRouter(
     prefix="/api",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 

@@ -192,6 +192,11 @@ def get_notifier(request: Request):
     return request.app.state.notifier
 
 
+def get_card_manager(request: Request):
+    """Get the CardManager instance from app state."""
+    return request.app.state.card_manager
+
+
 def get_doc_ingester(request: Request):
     """Get the DocumentIngester instance from app state."""
     return request.app.state.doc_ingester

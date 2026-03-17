@@ -11,6 +11,7 @@ from odigos.personality.prompt_builder import build_system_prompt
 
 if TYPE_CHECKING:
     from odigos.core.checkpoint import CheckpointManager
+    from odigos.core.classifier import QueryAnalysis
     from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
     from odigos.memory.summarizer import ConversationSummarizer
@@ -57,7 +58,7 @@ class ContextAssembler:
         current_message: str,
         max_tokens: int = 0,
         *,
-        query_analysis=None,
+        query_analysis: QueryAnalysis | None = None,
     ) -> list[dict]:
         """Assemble the full messages list: system + history + current."""
         messages: list[dict] = []
@@ -104,7 +105,7 @@ class ContextAssembler:
                         lines.append(f"- [{row['id'][:8]}] {row['filename']} ({row['chunk_count']} chunks)")
                     doc_listing = "\n".join(lines)
             except Exception:
-                pass  # Documents table may not exist in tests
+                logger.debug("Failed to list documents (table may not exist)", exc_info=True)
 
         # Skill recommendations based on past usage
         skill_hints = ""
@@ -126,7 +127,7 @@ class ContextAssembler:
                         lines.append(f"- {row['skill_name']} ({row['skill_type']}, used {row['uses']}x, avg score {(row['avg_score'] or 0):.1f})")
                     skill_hints = "\n".join(lines)
             except Exception:
-                pass
+                logger.debug("Failed to query skill usage hints", exc_info=True)
 
         # Get corrections context if available
         corrections_context = ""

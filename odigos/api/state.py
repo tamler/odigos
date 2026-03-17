@@ -8,12 +8,12 @@ import time
 
 from fastapi import APIRouter, Depends, Request
 
-from odigos.api.deps import require_api_key, get_db
+from odigos.api.deps import require_auth, get_db
 from odigos.db import Database
 
 router = APIRouter(
     prefix="/api",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 _start_time = time.monotonic()

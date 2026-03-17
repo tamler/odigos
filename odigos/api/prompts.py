@@ -4,9 +4,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from odigos.api.deps import require_api_key
+from odigos.api.deps import require_auth
 
-router = APIRouter(prefix="/api/prompts", tags=["prompts"], dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/api/prompts", tags=["prompts"], dependencies=[Depends(require_auth)])
 
 # Mutable for test patching
 _PROMPT_DIRS: dict[str, str] = {

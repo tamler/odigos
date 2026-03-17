@@ -4,7 +4,9 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from odigos.core.context import ContextAssembler
@@ -14,6 +16,7 @@ from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 if TYPE_CHECKING:
     from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetStatus, BudgetTracker
+    from odigos.core.classifier import QueryAnalysis
     from odigos.core.trace import Tracer
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
@@ -66,6 +69,9 @@ class Executor:
         self.budget_tracker = budget_tracker
         self.tracer = tracer
         self.approval_gate = approval_gate
+        self._active_skill_name: str | None = None
+        self._active_skill_tools: set[str] = set()
+        self._pending_skill_prompt: str | None = None
 
     async def execute(
         self,
@@ -73,15 +79,15 @@ class Executor:
         message_content: str,
         abort_event: asyncio.Event | None = None,
         *,
-        query_analysis=None,
+        query_analysis: QueryAnalysis | None = None,
     ) -> ExecuteResult:
         start_time = time.monotonic()
         tools_used: set[str] = set()
 
         # Reset active skill state
-        self._active_skill_name: str | None = None
-        self._active_skill_tools: set[str] = set()
-        self._pending_skill_prompt: str | None = None
+        self._active_skill_name = None
+        self._active_skill_tools = set()
+        self._pending_skill_prompt = None
 
         # Build initial context
         messages = await self.context_assembler.build(
@@ -195,8 +201,6 @@ class Executor:
         # Log query analysis to query_log
         duration_ms = (time.monotonic() - start_time) * 1000
         if query_analysis and self.db:
-            import uuid
-            from datetime import datetime, timezone
             try:
                 await self.db.execute(
                     "INSERT INTO query_log (id, conversation_id, classification, classifier_tier, "
@@ -213,8 +217,6 @@ class Executor:
 
         # Log skill usage
         if self.db:
-            import uuid
-            from datetime import datetime, timezone
             for tool_name in tools_used:
                 skill_name = None
                 skill_type = "text"
@@ -234,7 +236,7 @@ class Executor:
                              datetime.now(timezone.utc).isoformat()),
                         )
                     except Exception:
-                        pass
+                        logger.debug("Failed to log skill usage for %s", skill_name, exc_info=True)
 
         # Append budget warning to response if triggered
         if budget_warning and last_response and last_response.content and not last_response.tool_calls:

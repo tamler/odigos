@@ -2,12 +2,12 @@
 
 from fastapi import APIRouter, Depends, Query
 
-from odigos.api.deps import get_goal_store, require_api_key
+from odigos.api.deps import get_goal_store, require_auth
 from odigos.core.goal_store import GoalStore
 
 router = APIRouter(
     prefix="/api",
-    dependencies=[Depends(require_api_key)],
+    dependencies=[Depends(require_auth)],
 )
 
 
