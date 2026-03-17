@@ -93,7 +93,7 @@ class SandboxProvider:
         )
         return "ulimit"
 
-    async def execute(self, code: str, language: str = "python") -> SandboxResult:
+    async def execute(self, code: str, language: str = "python", pre_files: dict[str, str] | None = None) -> SandboxResult:
         """Run code in an isolated subprocess."""
         if language not in ("python", "shell"):
             return SandboxResult(
@@ -104,6 +104,14 @@ class SandboxProvider:
             )
 
         with tempfile.TemporaryDirectory(prefix="odigos_sandbox_") as tmpdir:
+            # Write pre-files to sandbox dir
+            if pre_files:
+                from pathlib import Path
+                for rel_path, content in pre_files.items():
+                    file_path = Path(tmpdir) / rel_path
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    file_path.write_text(content)
+
             env = {
                 "PATH": "/usr/local/bin:/usr/bin:/bin",
                 "HOME": tmpdir,

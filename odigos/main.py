@@ -317,7 +317,7 @@ async def lifespan(app: FastAPI):
         max_memory_mb=settings.sandbox.max_memory_mb,
         allow_network=settings.sandbox.allow_network,
     )
-    code_tool = CodeTool(sandbox=sandbox)
+    code_tool = CodeTool(sandbox=sandbox, db=_db)
     tool_registry.register(code_tool)
     logger.info("Code tool initialized (sandbox)")
 

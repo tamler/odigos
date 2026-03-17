@@ -25,8 +25,9 @@ class CodeTool(BaseTool):
         "required": ["code"],
     }
 
-    def __init__(self, sandbox: SandboxProvider) -> None:
+    def __init__(self, sandbox: SandboxProvider, db=None) -> None:
         self.sandbox = sandbox
+        self._db = db
 
     async def execute(self, params: dict) -> ToolResult:
         code = params.get("code", "")
@@ -34,8 +35,17 @@ class CodeTool(BaseTool):
             return ToolResult(success=False, data="", error="No code provided")
 
         language = params.get("language", "python")
+        pre_files = None
 
-        result = await self.sandbox.execute(code, language=language)
+        # Prepare document helpers for Python execution
+        if language == "python" and self._db:
+            from odigos.tools.doc_helpers import prepare_doc_files, DOC_PREAMBLE
+            files, has_docs = await prepare_doc_files(self._db)
+            if has_docs:
+                pre_files = files
+                code = DOC_PREAMBLE + "\n" + code
+
+        result = await self.sandbox.execute(code, language=language, pre_files=pre_files)
 
         if result.timed_out:
             return ToolResult(

@@ -29,20 +29,20 @@ async def test_execute_python(code_tool, mock_sandbox):
     result = await code_tool.execute({"code": "print(42)", "language": "python"})
     assert result.success is True
     assert "42" in result.data
-    mock_sandbox.execute.assert_called_once_with("print(42)", language="python")
+    mock_sandbox.execute.assert_called_once_with("print(42)", language="python", pre_files=None)
 
 
 @pytest.mark.asyncio
 async def test_execute_shell(code_tool, mock_sandbox):
     result = await code_tool.execute({"code": "echo hi", "language": "shell"})
     assert result.success is True
-    mock_sandbox.execute.assert_called_once_with("echo hi", language="shell")
+    mock_sandbox.execute.assert_called_once_with("echo hi", language="shell", pre_files=None)
 
 
 @pytest.mark.asyncio
 async def test_defaults_to_python(code_tool, mock_sandbox):
     await code_tool.execute({"code": "print(1)"})
-    mock_sandbox.execute.assert_called_once_with("print(1)", language="python")
+    mock_sandbox.execute.assert_called_once_with("print(1)", language="python", pre_files=None)
 
 
 @pytest.mark.asyncio
