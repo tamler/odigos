@@ -40,9 +40,12 @@ Odigos is a self-hosted AI agent that connects to any OpenAI-compatible LLM and 
 - Corrections manager for learning from mistakes
 - Editable prompt files: agent identity and infrastructure prompts stored as Markdown, editable via dashboard or API
 - Document-aware code sandbox: agent can write Python to search, filter, and cross-reference across uploaded documents programmatically
-- Adaptive query classification: automatically routes simple, standard, document, complex, and planning queries through optimized pipelines
+- Adaptive query classification: automatically routes simple, standard, document, complex, and planning queries through optimized pipelines with evolvable rules
+- Query decomposition: breaks complex multi-part requests into sequential sub-tasks
+- Skill usage tracking and task similarity: learns which tools and skills work for which query types
 - Executable skills: agent saves working code as reusable tools that persist across conversations (SAGE-inspired)
 - Cross-encoder reranking for improved document retrieval accuracy
+- Push notifications: agent can send toast messages across all channels when something important happens
 - Prompts API for listing, reading, and updating prompt files programmatically
 
 **Scheduling and Notifications**
