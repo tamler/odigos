@@ -1,0 +1,11 @@
+name: Google NotebookLM
+id: notebooklm
+description: Generate podcasts, quizzes, and mind maps from documents using Google NotebookLM
+category: tools
+requires:
+  - notebooklm-py
+config_keys:
+  - key: notebooklm_cookie
+    required: true
+    description: Google authentication cookie for NotebookLM API access
+    type: secret

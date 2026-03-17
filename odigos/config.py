@@ -152,6 +152,7 @@ class Settings(BaseSettings):
     brave_api_key: str = ""
     google_search_api_key: str = ""
     google_search_cx: str = ""
+    notebooklm_cookie: str = ""
 
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()
