@@ -40,6 +40,14 @@ Available tools: {agent_tools}
 ## Recent Direction Log
 {direction_summary}
 
+## Query Classification Performance (last 7 days)
+{query_log_summary}
+
+When proposing hypotheses, consider:
+- Classifications with low average scores may need better routing
+- High duration classifications may benefit from pipeline optimization
+- You can propose changes to data/agent/classification_rules.md to improve heuristic routing
+
 ## Instructions
 Based on the above, produce a JSON object with:
 1. "analysis" -- 1-2 sentence summary of current performance
@@ -96,11 +104,12 @@ class Strategist:
         """Run the full strategist cycle: analyze, hypothesize, act."""
         # Gather context
         recent_evals = await self._get_evaluation_summary()
+        query_log_summary = await self._get_query_log_summary()
         failed_trials = await self.evolution.get_failed_trials(limit=10)
         directions = await self.evolution.get_recent_directions(limit=3)
 
         # Build prompt
-        prompt = self._build_prompt(recent_evals, failed_trials, directions)
+        prompt = self._build_prompt(recent_evals, failed_trials, directions, query_log_summary)
 
         # Ask LLM
         try:
@@ -178,6 +187,34 @@ class Strategist:
 
         return result
 
+    async def _get_query_log_summary(self) -> str:
+        """Summarize recent query classifications and their outcomes."""
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT classification, COUNT(*) as count, "
+                "AVG(evaluation_score) as avg_score, "
+                "AVG(duration_ms) as avg_duration "
+                "FROM query_log "
+                "WHERE created_at > datetime('now', '-7 days') "
+                "AND evaluation_score IS NOT NULL "
+                "GROUP BY classification "
+                "ORDER BY count DESC"
+            )
+            if not rows:
+                return "No query classification data yet."
+
+            lines = []
+            for row in rows:
+                avg_score = row["avg_score"] or 0
+                avg_dur = row["avg_duration"] or 0
+                lines.append(
+                    f"- {row['classification']}: {row['count']} queries, "
+                    f"avg score {avg_score:.1f}, avg {avg_dur:.0f}ms"
+                )
+            return "\n".join(lines)
+        except Exception:
+            return "Query log not available."
+
     async def _get_evaluation_summary(self) -> dict:
         """Summarize recent evaluations by task type."""
         rows = await self.db.fetch_all(
@@ -193,7 +230,7 @@ class Strategist:
             "total_recent": sum(r["cnt"] for r in rows) if rows else 0,
         }
 
-    def _build_prompt(self, eval_summary: dict, failed_trials: list, directions: list) -> str:
+    def _build_prompt(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "") -> str:
         failed_summary = ""
         if failed_trials:
             failed_summary = "\n".join(
@@ -223,6 +260,7 @@ class Strategist:
             task_summary=task_summary or 'No evaluations yet.',
             failed_summary=failed_summary or 'None.',
             direction_summary=direction_summary or 'No prior direction set.',
+            query_log_summary=query_log_summary or 'No query classification data yet.',
         )
 
 

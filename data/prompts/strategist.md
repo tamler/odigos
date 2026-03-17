@@ -14,6 +14,14 @@ Available tools: {agent_tools}
 ## Recent Direction Log
 {direction_summary}
 
+## Query Classification Performance (last 7 days)
+{query_log_summary}
+
+When proposing hypotheses, consider:
+- Classifications with low average scores may need better routing
+- High duration classifications may benefit from pipeline optimization
+- You can propose changes to data/agent/classification_rules.md to improve heuristic routing
+
 ## Instructions
 Based on the above, produce a JSON object with:
 1. "analysis" -- 1-2 sentence summary of current performance
