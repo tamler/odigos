@@ -12,7 +12,7 @@ Deploy it anywhere, connect any LLM, and get an assistant that remembers everyth
 
 Most AI assistants are stateless -- every conversation starts from scratch. Odigos is different:
 
-- **It remembers.** Long-term memory across all conversations. Vector search, entity graphs, and automatic summarization mean your agent knows who you are, what you've discussed, and what matters to you.
+- **It remembers.** Three-layer memory: explicit facts you tell it ("I prefer Python"), a user profile it builds by analyzing your conversations while idle, and long-term conversation memory with vector search and entity graphs. It knows who you are, not just what you said.
 - **It improves itself.** A built-in evolution engine evaluates every response, runs experiments on its own behavior, and promotes changes that work. No manual prompt tuning.
 - **It builds its own tools.** When the agent writes code that solves a problem, it can save it as a reusable executable skill. Next time a similar problem comes up, the tool is already there.
 - **It understands complex requests.** An adaptive classifier routes simple questions fast and decomposes complex ones into sub-tasks. The agent tracks its plan, learns from errors, and gets better at routing over time.
@@ -41,7 +41,7 @@ Open **http://localhost:8000**, create your account, and start chatting.
 ## What Can It Do?
 
 ### Talk and remember
-Chat through the web dashboard (mobile-friendly), Telegram, or the API. The agent maintains memory across every conversation -- it knows what you discussed last week.
+Chat through the web dashboard (mobile-friendly), Telegram, or the API. The agent builds a profile of you over time -- your communication style, expertise, preferences -- by analyzing conversations in the background. Tell it "remember that I prefer concise answers" and it stores that as an explicit fact. Everything persists across conversations.
 
 ### Search and research
 Web search (SearXNG, Brave, or Google), web scraping, RSS feeds. Upload documents and the agent indexes them for retrieval. Ask questions across all your documents -- the agent writes code to search them programmatically when simple retrieval isn't enough.
@@ -145,6 +145,7 @@ cd dashboard && npm run dev    # Dashboard dev server
 - Executable skills inspired by [SAGE](https://arxiv.org/html/2512.17102v2) (Skill Augmented GRPO for Self-Evolution)
 - Document analysis inspired by [RLM](https://arxiv.org/html/2512.24601v2) (Recursive Language Models)
 - Plan persistence inspired by [planning-with-files](https://github.com/OthmanAdi/planning-with-files)
+- User profiling and fact extraction inspired by [ChatGPT's memory architecture](https://manthanguptaa.in/posts/chatgpt_memory/) and [Honcho](https://github.com/plastic-labs/honcho)
 
 ## License
 
