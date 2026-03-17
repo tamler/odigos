@@ -59,6 +59,7 @@ from odigos.api.audio import router as audio_router
 from odigos.api.auth import router as auth_router
 from odigos.api.prompts import router as prompts_router
 from odigos.api.documents import router as documents_router
+from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
 from odigos.tools.settings_tool import ManageSettingsTool
@@ -653,6 +654,10 @@ async def lifespan(app: FastAPI):
     # Register notification tool
     tool_registry.register(NotifyTool(notifier=notifier))
     logger.info("Notification tool registered")
+
+    # Register decompose query tool
+    tool_registry.register(DecomposeQueryTool(provider=_provider))
+    logger.info("Decompose query tool registered")
 
     # Initialize heartbeat
     _heartbeat = Heartbeat(
