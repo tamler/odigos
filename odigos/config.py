@@ -14,6 +14,7 @@ class AgentConfig(BaseModel):
     allow_external_evaluation: bool = False
     max_tool_turns: int = 25
     run_timeout_seconds: int = 300
+    cite_sources: bool = True
 
 
 class DatabaseConfig(BaseModel):

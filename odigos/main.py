@@ -258,6 +258,7 @@ async def lifespan(app: FastAPI):
         resolver=resolver,
         summarizer=summarizer,
         chunking_service=chunking_service,
+        cite_sources=settings.agent.cite_sources,
     )
     logger.info("Memory system initialized")
 

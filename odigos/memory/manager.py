@@ -32,11 +32,13 @@ class MemoryManager:
         resolver: EntityResolver,
         summarizer: ConversationSummarizer,
         chunking_service: ChunkingService | None = None,
+        cite_sources: bool = True,
     ) -> None:
         self.vector_memory = vector_memory
         self.graph = graph
         self.resolver = resolver
         self.summarizer = summarizer
+        self._cite_sources = cite_sources
         self.chunking = chunking_service or ChunkingService()
 
     async def _hybrid_search(
@@ -103,13 +105,12 @@ class MemoryManager:
             source_hint = ""
             if result.when_to_use and "from '" in result.when_to_use:
                 source_hint = result.when_to_use.split("from '")[1].split("'")[0]
-            if source_hint:
-                doc_lines.append(f"- [Source: {source_hint}] {result.content_preview}")
-            else:
-                doc_lines.append(f"- {result.content_preview}")
+            citation = f"[{source_hint}]" if source_hint else f"[doc:{result.source_id[:8]}]"
+            doc_lines.append(f"- {citation} {result.content_preview}")
 
         if doc_lines:
-            sections.append("## Document knowledge\n" + "\n".join(doc_lines))
+            header = "## Document knowledge (cite sources in your response)" if self._cite_sources else "## Document knowledge"
+            sections.append(header + "\n" + "\n".join(doc_lines))
 
         # 2. Conversation memory (from past user messages)
         conv_results = await self._hybrid_search(
