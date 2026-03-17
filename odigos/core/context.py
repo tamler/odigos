@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -145,6 +146,45 @@ class ContextAssembler:
             sub_q_text = "\n".join(f"- {q}" for q in query_analysis.sub_questions)
             memory_context += f"\n\n## Analysis hints\nConsider addressing these aspects:\n{sub_q_text}"
 
+        # Active task plan (keeps agent on track across tool turns)
+        active_plan = ""
+        if self.db:
+            try:
+                plan_row = await self.db.fetch_one(
+                    "SELECT steps FROM task_plans WHERE conversation_id = ? "
+                    "ORDER BY updated_at DESC LIMIT 1",
+                    (conversation_id,),
+                )
+                if plan_row:
+                    steps = json.loads(plan_row["steps"])
+                    lines = ["## Active Plan (stay on track)"]
+                    for s in steps:
+                        status = s.get("status", "pending")
+                        marker = "x" if status == "done" else " "
+                        lines.append(f"- [{marker}] Step {s['step']}: {s['task']}")
+                    active_plan = "\n".join(lines)
+            except Exception:
+                logger.debug("Could not load active plan", exc_info=True)
+
+        # Recent tool errors (helps agent avoid repeating mistakes)
+        error_hints = ""
+        if self.db:
+            try:
+                error_rows = await self.db.fetch_all(
+                    "SELECT tool_name, error_type, COUNT(*) as count "
+                    "FROM tool_errors WHERE created_at > datetime('now', '-1 day') "
+                    "GROUP BY tool_name, error_type ORDER BY count DESC LIMIT 5"
+                )
+                if error_rows:
+                    lines = ["## Recent tool issues (avoid repeating)"]
+                    for row in error_rows:
+                        lines.append(
+                            f"- {row['tool_name']}: {row['error_type']} ({row['count']}x in last 24h)"
+                        )
+                    error_hints = "\n".join(lines)
+            except Exception:
+                logger.debug("Could not load error hints", exc_info=True)
+
         system_prompt = build_system_prompt(
             sections=sections,
             memory_context=memory_context,
@@ -153,6 +193,8 @@ class ContextAssembler:
             doc_listing=doc_listing,
             agent_name=self.agent_name,
             skill_hints=skill_hints,
+            active_plan=active_plan,
+            error_hints=error_hints,
         )
 
         messages.append({"role": "system", "content": system_prompt})

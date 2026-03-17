@@ -11,6 +11,8 @@ def build_system_prompt(
     doc_listing: str = "",
     agent_name: str = "",
     skill_hints: str = "",
+    active_plan: str = "",
+    error_hints: str = "",
 ) -> str:
     """Compose the system prompt from file-based sections."""
     parts = []
@@ -24,6 +26,10 @@ def build_system_prompt(
         parts.append(skill_catalog)
     if skill_hints:
         parts.append(skill_hints)
+    if active_plan:
+        parts.append(active_plan)
+    if error_hints:
+        parts.append(error_hints)
     if doc_listing:
         parts.append(doc_listing)
     if corrections_context:

@@ -86,7 +86,15 @@ class DecomposeQueryTool(BaseTool):
                 return self._single_step_fallback(query)
 
             formatted = format_steps(steps)
-            return ToolResult(success=True, data=formatted)
+            steps_list = [
+                {"step": i + 1, "task": s.get("task", ""), "status": "pending", "result": None}
+                for i, s in enumerate(steps)
+            ]
+            return ToolResult(
+                success=True,
+                data=formatted,
+                side_effect={"plan_steps": steps_list},
+            )
 
         except Exception:
             logger.warning("Decomposition failed, returning single-step fallback", exc_info=True)

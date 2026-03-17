@@ -184,7 +184,9 @@ class Executor:
             # Execute each tool call and append results
             for tc in response.tool_calls:
                 tools_used.add(tc.name)
-                result_content = await self._execute_tool(conversation_id, tc)
+                result_content = await self._execute_tool(
+                    conversation_id, tc, message_content=message_content,
+                )
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc.id,
@@ -283,7 +285,9 @@ class Executor:
 
         return ExecuteResult(response=aggregated)
 
-    async def _execute_tool(self, conversation_id: str, tool_call: ToolCall) -> str:
+    async def _execute_tool(
+        self, conversation_id: str, tool_call: ToolCall, *, message_content: str = "",
+    ) -> str:
         """Execute a single tool call and return the result string."""
         if not self.tool_registry:
             return "Error: No tool registry available"
@@ -331,6 +335,48 @@ class Executor:
                 self._active_skill_tools = set(result.side_effect.get("skill_tools", []))
                 self._pending_skill_prompt = result.side_effect["skill_prompt"]
                 return result.data
+
+            # Persist decomposed plan
+            if (
+                tool_call.name == "decompose_query"
+                and result.side_effect
+                and "plan_steps" in result.side_effect
+                and self.db
+            ):
+                try:
+                    now = datetime.now(timezone.utc).isoformat()
+                    await self.db.execute(
+                        "INSERT INTO task_plans (id, conversation_id, steps, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (str(uuid.uuid4()), conversation_id,
+                         json.dumps(result.side_effect["plan_steps"]), now, now),
+                    )
+                except Exception:
+                    logger.debug("Could not persist task plan", exc_info=True)
+
+            # Log tool errors for cross-conversation learning
+            if not result.success and self.db:
+                try:
+                    error_type = "unknown"
+                    error_msg = result.error or ""
+                    lower_err = error_msg.lower()
+                    if "timeout" in lower_err:
+                        error_type = "timeout"
+                    elif "not found" in lower_err or "not_found" in lower_err:
+                        error_type = "not_found"
+                    elif "permission" in lower_err:
+                        error_type = "permission"
+                    elif "validation" in lower_err or "invalid" in lower_err:
+                        error_type = "validation"
+                    await self.db.execute(
+                        "INSERT INTO tool_errors (id, tool_name, error_type, error_message, query_context, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        (str(uuid.uuid4()), tool_call.name, error_type,
+                         error_msg[:500], message_content[:200],
+                         datetime.now(timezone.utc).isoformat()),
+                    )
+                except Exception:
+                    logger.debug("Could not log tool error", exc_info=True)
 
             if result.success:
                 return result.data
