@@ -6,11 +6,12 @@ Built-in markdown notebook with agent integration. Users create notebooks for di
 
 ## Architecture
 
-Self-contained module, guarded by `notebooks.enabled` config flag.
+Self-contained module, guarded by `notebooks.enabled` config flag. Storage uses a generic `ResourceStore` that any feature can reuse. Feature gating uses a generic `require_feature()` FastAPI dependency.
 
 ```
-odigos/core/notebook_store.py    # CRUD for notebooks and entries
-odigos/api/notebooks.py          # REST endpoints (follows existing api/ convention)
+odigos/core/resource_store.py    # Generic CRUD store (used by notebooks, future kanban, etc.)
+odigos/api/notebooks.py          # REST endpoints (uses require_feature("notebooks") dependency)
+odigos/api/deps.py               # Add require_feature() generic dependency
 
 dashboard/src/pages/
     NotebookPage.tsx             # Split view: BlockNote editor + contextual chat
@@ -21,6 +22,75 @@ skills/
 data/notebooks/                  # Disk backup (markdown files)
 migrations/038_notebooks.sql
 ```
+
+### Generic ResourceStore
+
+`odigos/core/resource_store.py` provides a reusable CRUD layer over SQLite tables. Any feature (notebooks, kanban, analytics) instantiates it with a table name and schema definition rather than writing bespoke store classes.
+
+```python
+class ResourceStore:
+    """Generic CRUD store for any SQLite-backed resource."""
+
+    def __init__(self, db, table: str, *, parent_key: str | None = None):
+        self.db = db
+        self.table = table
+        self.parent_key = parent_key  # e.g. "notebook_id" for child tables
+
+    async def create(self, **fields) -> str:
+        """Insert a row with auto-generated id and timestamps."""
+        ...
+
+    async def get(self, id: str) -> dict | None:
+        """Fetch a single row by id."""
+        ...
+
+    async def list(self, *, order_by: str = "created_at DESC",
+                   limit: int | None = None, **filters) -> list[dict]:
+        """List rows with optional filters (exact match on column values)."""
+        ...
+
+    async def update(self, id: str, **fields) -> bool:
+        """Update specific fields, auto-set updated_at. Returns True if row existed."""
+        ...
+
+    async def delete(self, id: str) -> bool:
+        """Delete a row by id. Returns True if row existed."""
+        ...
+```
+
+The notebook system creates two store instances:
+
+```python
+notebooks = ResourceStore(db, "notebooks")
+entries = ResourceStore(db, "notebook_entries", parent_key="notebook_id")
+```
+
+Notebook-specific logic (disk backup, entry type validation) lives in `odigos/api/notebooks.py` as thin functions that call into the stores -- not in a subclass.
+
+### Generic require_feature()
+
+`odigos/api/deps.py` gets a factory function that returns a FastAPI dependency for any feature flag:
+
+```python
+def require_feature(feature_name: str):
+    """FastAPI dependency that gates an endpoint behind a config flag.
+
+    Usage: router.get("/", dependencies=[Depends(require_feature("notebooks"))])
+    """
+    def check(request: Request):
+        feature_config = getattr(request.app.state.settings, feature_name, None)
+        if feature_config is not None and not getattr(feature_config, "enabled", True):
+            raise HTTPException(status_code=404, detail=f"{feature_name} is not enabled")
+    return check
+```
+
+Applied at the router level so every endpoint in the notebook router is gated with one line:
+
+```python
+router = APIRouter(prefix="/api/notebooks", dependencies=[Depends(require_feature("notebooks"))])
+```
+
+Future features (kanban, analytics) use the same pattern -- no per-endpoint guards needed.
 
 ## Data Model
 
@@ -203,7 +273,7 @@ notebooks:
   enabled: true
 ```
 
-When disabled: API endpoints return 404 (guard inside handler, matching feed.py pattern), no tab in dashboard, no notebook-related context in agent. Router is always registered (consistent with existing pattern), endpoints check the flag internally.
+When disabled: API endpoints return 404 via `require_feature("notebooks")` router-level dependency, no tab in dashboard, no notebook-related context in agent. Router is always registered (consistent with existing pattern). The guard is generic -- same pattern for kanban, analytics, etc.
 
 ## Content Isolation
 
@@ -219,10 +289,11 @@ The heartbeat dreaming respects this boundary -- when analyzing notebooks for pa
 | File | Change |
 |---|---|
 | `migrations/038_notebooks.sql` | New: notebooks + notebook_entries tables |
-| `odigos/core/notebook_store.py` | New: NotebookStore CRUD + disk backup |
-| `odigos/api/notebooks.py` | New: REST endpoints (guard inside handler) |
+| `odigos/core/resource_store.py` | New: generic ResourceStore CRUD (reusable by any feature) |
+| `odigos/api/deps.py` | Add `require_feature()` generic dependency factory |
+| `odigos/api/notebooks.py` | New: REST endpoints using ResourceStore + require_feature |
 | `odigos/config.py` | Add NotebooksConfig with enabled flag |
-| `odigos/main.py` | Register notebooks router (always, guard inside) |
+| `odigos/main.py` | Register notebooks router (always, gated by require_feature) |
 | `odigos/core/context.py` | Add generic context_metadata kwarg to build(), notebook checks for its key |
 | `odigos/core/executor.py` | Pass message metadata through to context_assembler.build() |
 | `odigos/api/ws.py` | Copy context dict from WS payload into message metadata |
