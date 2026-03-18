@@ -32,7 +32,7 @@ class EvolutionEngine:
         evolution_config: EvolutionConfig | None = None,
     ) -> None:
         self.db = db
-        self.checkpoint = checkpoint_manager
+        self.checkpoint_manager = checkpoint_manager
         self.evaluator = evaluator
         self.provider = provider
 
@@ -56,12 +56,12 @@ class EvolutionEngine:
         if min_evaluations is None:
             min_evaluations = self._config.min_evaluations
 
-        active = await self.checkpoint.get_active_trial()
+        active = await self.checkpoint_manager.get_active_trial()
         if active:
             logger.warning("Cannot create trial: trial %s already active", active["id"][:8])
             return active["id"]
 
-        cp_id = await self.checkpoint.create_checkpoint(label="pre-trial")
+        cp_id = await self.checkpoint_manager.create_checkpoint(label="pre-trial")
         baseline = await self._get_baseline_score()
 
         trial_id = str(uuid.uuid4())
@@ -93,8 +93,8 @@ class EvolutionEngine:
         return trial_id
 
     async def check_active_trial(self) -> str | None:
-        await self.checkpoint.expire_stale_trials()
-        trial = await self.checkpoint.get_active_trial()
+        await self.checkpoint_manager.expire_stale_trials()
+        trial = await self.checkpoint_manager.get_active_trial()
         if trial is None:
             return None
 
@@ -110,7 +110,7 @@ class EvolutionEngine:
         delta = avg - baseline
 
         if delta >= self._config.promote_threshold:
-            await self.checkpoint.promote_trial(trial_id)
+            await self.checkpoint_manager.promote_trial(trial_id)
             logger.info(
                 "Promoted trial %s: score %.1f vs baseline %.1f (+%.1f)",
                 trial_id[:8], avg, baseline, delta,
@@ -124,7 +124,7 @@ class EvolutionEngine:
         return "continue"
 
     async def score_past_actions(self, limit: int = 3) -> int:
-        trial = await self.checkpoint.get_active_trial()
+        trial = await self.checkpoint_manager.get_active_trial()
         trial_id = trial["id"] if trial else None
 
         unscored = await self.evaluator.get_unscored_messages(limit=limit)
@@ -182,7 +182,7 @@ class EvolutionEngine:
                 lessons,
             ),
         )
-        await self.checkpoint.revert_trial(trial_id, reason=reason)
+        await self.checkpoint_manager.revert_trial(trial_id, reason=reason)
         logger.info("Reverted trial %s: %s", trial_id[:8], reason)
 
     async def _generate_lessons(self, trial: dict) -> str:

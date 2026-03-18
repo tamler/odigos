@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from pydantic import BaseModel
@@ -10,7 +11,7 @@ class AgentConfig(BaseModel):
     name: str = "Odigos"
     role: str = "personal_assistant"
     description: str = ""
-    parent: Optional[str] = None
+    parent: str | None = None
     allow_external_evaluation: bool = False
     max_tool_turns: int = 25
     run_timeout_seconds: int = 300

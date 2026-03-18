@@ -373,10 +373,10 @@ class Heartbeat:
                     f"Status: {r['status']}\n"
                     f"Result: {r['result']}"
                 )
-                conv_id = r["parent_conversation_id"]
-                await self._send_notification(conv_id, summary[:4000])
+                conversation_id = r["parent_conversation_id"]
+                await self._send_notification(conversation_id, summary[:4000])
                 await self.subagent_manager.mark_delivered(r["id"])
-                logger.info("Delivered subagent result %s to %s", r["id"], conv_id)
+                logger.info("Delivered subagent result %s to %s", r["id"], conversation_id)
             except Exception:
                 logger.exception("Failed to deliver subagent result %s", r["id"])
         return True

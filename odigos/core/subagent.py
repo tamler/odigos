@@ -39,7 +39,7 @@ class _SubagentContext:
     async def build(
         self,
         conversation_id: str,
-        current_message: str,
+        message_content: str,
         max_tokens: int = 0,
         *,
         query_analysis=None,

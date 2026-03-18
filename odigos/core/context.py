@@ -69,12 +69,12 @@ class ContextAssembler:
         self.skill_registry = skill_registry
         self.corrections_manager = corrections_manager
         self.checkpoint_manager = checkpoint_manager
-        self._fallback_registry = SectionRegistry(sections_dir)
+        self.fallback_registry = SectionRegistry(sections_dir)
 
     async def build(
         self,
         conversation_id: str,
-        current_message: str,
+        message_content: str,
         max_tokens: int = 0,
         *,
         query_analysis: QueryAnalysis | None = None,
@@ -96,7 +96,7 @@ class ContextAssembler:
                 recall_query = " ".join(query_analysis.search_queries)
                 memory_context = await self.memory_manager.recall(recall_query)
             else:
-                memory_context = await self.memory_manager.recall(current_message)
+                memory_context = await self.memory_manager.recall(message_content)
 
         # Build skill catalog if available
         skill_catalog = ""
@@ -155,13 +155,13 @@ class ContextAssembler:
         # Get corrections context if available
         corrections_context = ""
         if self.corrections_manager:
-            corrections_context = await self.corrections_manager.relevant(current_message)
+            corrections_context = await self.corrections_manager.relevant(message_content)
 
         # Load dynamic prompt sections
         if self.checkpoint_manager:
             sections = await self.checkpoint_manager.get_working_sections()
         else:
-            sections = self._fallback_registry.load_all()
+            sections = self.fallback_registry.load_all()
 
         # Add decomposition hints for complex queries
         if query_analysis and query_analysis.sub_questions:
@@ -284,7 +284,7 @@ class ContextAssembler:
             messages.append({"role": row["role"], "content": row["content"]})
 
         # Current message
-        messages.append({"role": "user", "content": current_message})
+        messages.append({"role": "user", "content": message_content})
 
         if max_tokens > 0:
             messages = self._trim_to_budget(messages, max_tokens)

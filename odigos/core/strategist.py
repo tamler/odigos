@@ -113,7 +113,7 @@ class Strategist:
         self.evolution = evolution_engine
         self._agent_description = agent_description
         self._agent_tools = agent_tools or []
-        self._last_eval_count: int = 0
+        self.last_eval_count: int = 0
         self.skill_registry = skill_registry
 
         if evolution_config is None:
@@ -127,7 +127,7 @@ class Strategist:
             "SELECT COUNT(*) as cnt FROM evaluations"
         )
         total = row["cnt"] if row else 0
-        return (total - self._last_eval_count) >= self._config.strategist_min_evals
+        return (total - self.last_eval_count) >= self._config.strategist_min_evals
 
     async def analyze(self) -> dict | None:
         """Run the full strategist cycle: analyze, hypothesize, act."""
@@ -164,7 +164,7 @@ class Strategist:
         # Record the run
         run_id = str(uuid.uuid4())
         row = await self.db.fetch_one("SELECT COUNT(*) as cnt FROM evaluations")
-        self._last_eval_count = row["cnt"] if row else 0
+        self.last_eval_count = row["cnt"] if row else 0
 
         # Log direction
         direction_id = await self.evolution.log_direction(
@@ -173,7 +173,7 @@ class Strategist:
             opportunities=[],
             hypotheses=result.get("hypotheses", []),
             confidence=0.5,
-            based_on_evaluations=self._last_eval_count,
+            based_on_evaluations=self.last_eval_count,
         )
 
         await self.db.execute(
@@ -181,7 +181,7 @@ class Strategist:
             "specialization_proposals, direction_log_id) VALUES (?, ?, ?, ?, ?)",
             (
                 run_id,
-                self._last_eval_count,
+                self.last_eval_count,
                 json.dumps(result.get("hypotheses", [])),
                 json.dumps(result.get("specialization_proposals", [])),
                 direction_id,
