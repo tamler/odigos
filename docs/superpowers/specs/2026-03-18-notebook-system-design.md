@@ -87,7 +87,13 @@ Prefix: `/api/notebooks`
 
 ### Context assembly
 
-When the user is chatting from the notebook page, the contextual chat passes `notebook_id` in the WebSocket message payload: `{type: "chat", content: "...", notebook_id: "..."}`. This flows through: ws.py → agent_service.handle_message(msg) → agent._run() → executor.execute() → context_assembler.build(). The `notebook_id` is carried on the `UniversalMessage.metadata` dict (existing field). `ContextAssembler.build()` reads `notebook_id` from a new keyword parameter and queries notebook content. The agent's context includes:
+When the user is chatting from the notebook page, the contextual chat passes metadata in the WebSocket message payload: `{type: "chat", content: "...", context: {"notebook_id": "abc"}}`. This metadata is stored on `UniversalMessage.metadata` (existing dict field) and flows through the entire chain unchanged.
+
+`ContextAssembler.build()` gains a generic `context_metadata: dict | None = None` keyword parameter (not feature-specific). Any feature can check this dict for its keys. The notebook system checks `context_metadata.get("notebook_id")`. Future features (kanban, analytics) use the same mechanism with their own keys -- no new parameters needed.
+
+The threading: ws.py copies `msg.context` into `message.metadata` → agent passes `message.metadata` → executor passes to `context_assembler.build(context_metadata=metadata)`. One change to each file, works for all future contextual features.
+
+The agent's context includes:
 
 - The notebook's title, mode, and recent entries (last 10)
 - The mode-appropriate skill is available (agent decides whether to activate)
@@ -217,9 +223,9 @@ The heartbeat dreaming respects this boundary -- when analyzing notebooks for pa
 | `odigos/api/notebooks.py` | New: REST endpoints (guard inside handler) |
 | `odigos/config.py` | Add NotebooksConfig with enabled flag |
 | `odigos/main.py` | Register notebooks router (always, guard inside) |
-| `odigos/core/context.py` | Add notebook_id kwarg to build(), include notebook content |
-| `odigos/core/executor.py` | Pass notebook_id from message metadata to context |
-| `odigos/api/ws.py` | Pass notebook_id from WS payload to message metadata |
+| `odigos/core/context.py` | Add generic context_metadata kwarg to build(), notebook checks for its key |
+| `odigos/core/executor.py` | Pass message metadata through to context_assembler.build() |
+| `odigos/api/ws.py` | Copy context dict from WS payload into message metadata |
 | `dashboard/src/pages/NotebookPage.tsx` | New: split view BlockNote editor + contextual chat |
 | `dashboard/src/App.tsx` | Add notebook route |
 | `dashboard/src/layouts/AppLayout.tsx` | Add notebook nav icon (when enabled) |
