@@ -117,6 +117,7 @@ class Executor:
         last_response: LLMResponse | None = None
         run_estimated_cost = 0.0
         budget_warning: BudgetStatus | None = None
+        prev_turn_calls: set[str] = set()
 
         for turn in range(self._max_tool_turns):
             # Check abort flag
@@ -205,6 +206,28 @@ class Executor:
                     "role": "tool",
                     "tool_call_id": tc.id,
                     "content": result_content,
+                })
+
+            # Stuck detection: warn if identical tool calls as previous turn
+            current_turn_calls = {
+                f"{tc.name}:{json.dumps(tc.arguments, sort_keys=True)}"
+                for tc in response.tool_calls
+            }
+            if current_turn_calls and current_turn_calls == prev_turn_calls:
+                messages.append({
+                    "role": "system",
+                    "content": "You are repeating the same tool calls. Try a different approach.",
+                })
+                logger.warning("Stuck detection triggered at turn %d", turn)
+            prev_turn_calls = current_turn_calls
+
+            # Dual-loop reasoning: verify after plan step updates
+            plan_tools = {"decompose_query", "check_plan", "update_plan"}
+            used_plan_tools = {tc.name for tc in response.tool_calls} & plan_tools
+            if used_plan_tools and "update_plan" in used_plan_tools:
+                messages.append({
+                    "role": "system",
+                    "content": "Before proceeding to the next step, verify the result of the current step is correct and complete.",
                 })
 
             # Check for skill activation -- inject system message
@@ -350,21 +373,36 @@ class Executor:
                 self._pending_skill_prompt = result.side_effect["skill_prompt"]
                 return result.data
 
-            # Persist decomposed plan
-            if (
-                tool_call.name == "decompose_query"
-                and result.side_effect
-                and "plan_steps" in result.side_effect
-                and self.db
-            ):
+            # Persist decomposed plan or attach substeps to parent
+            if tool_call.name == "decompose_query" and result.side_effect and self.db:
                 try:
                     now = datetime.now(timezone.utc).isoformat()
-                    await self.db.execute(
-                        "INSERT INTO task_plans (id, conversation_id, steps, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?)",
-                        (str(uuid.uuid4()), conversation_id,
-                         json.dumps(result.side_effect["plan_steps"]), now, now),
-                    )
+                    if "plan_steps" in result.side_effect:
+                        await self.db.execute(
+                            "INSERT INTO task_plans (id, conversation_id, steps, created_at, updated_at) "
+                            "VALUES (?, ?, ?, ?, ?)",
+                            (str(uuid.uuid4()), conversation_id,
+                             json.dumps(result.side_effect["plan_steps"]), now, now),
+                        )
+                    elif "substeps" in result.side_effect and "parent_step" in result.side_effect:
+                        # Attach substeps to an existing parent step
+                        parent_step = str(result.side_effect["parent_step"])
+                        substeps = result.side_effect["substeps"]
+                        row = await self.db.fetch_one(
+                            "SELECT id, steps FROM task_plans WHERE conversation_id = ? "
+                            "ORDER BY updated_at DESC LIMIT 1",
+                            (conversation_id,),
+                        )
+                        if row:
+                            steps = json.loads(row["steps"])
+                            for s in steps:
+                                if str(s["step"]) == parent_step:
+                                    s["substeps"] = substeps
+                                    break
+                            await self.db.execute(
+                                "UPDATE task_plans SET steps = ?, updated_at = ? WHERE id = ?",
+                                (json.dumps(steps), now, row["id"]),
+                            )
                 except Exception:
                     logger.debug("Could not persist task plan", exc_info=True)
 

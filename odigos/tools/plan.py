@@ -63,6 +63,17 @@ class CheckPlanTool(BaseTool):
             result_note = f" -- {s['result']}" if s.get("result") else ""
             lines.append(f"- [{marker}] Step {s['step']}: {s['task']}{result_note}")
 
+            # Display substeps if present
+            for sub in s.get("substeps", []):
+                sub_status = sub.get("status", "pending")
+                sub_marker = "x" if sub_status == "done" else " "
+                sub_result = f" -- {sub['result']}" if sub.get("result") else ""
+                lines.append(f"    - [{sub_marker}] Step {sub['step']}: {sub['task']}{sub_result}")
+                if sub_status == "done":
+                    done_count += 1
+                else:
+                    pending_count += 1
+
         lines.append(f"\nProgress: {done_count}/{done_count + pending_count} steps complete")
         return ToolResult(success=True, data="\n".join(lines))
 
@@ -79,8 +90,8 @@ class UpdatePlanTool(BaseTool):
         "type": "object",
         "properties": {
             "step": {
-                "type": "integer",
-                "description": "The step number to update.",
+                "type": "string",
+                "description": "Step number (e.g., '1', '1.1', '2.3').",
             },
             "status": {
                 "type": "string",
@@ -100,12 +111,15 @@ class UpdatePlanTool(BaseTool):
 
     async def execute(self, params: dict) -> ToolResult:
         conversation_id = params.get("_conversation_id", "")
-        step_num = params.get("step")
+        step_raw = params.get("step")
         new_status = params.get("status", "done")
         result_note = params.get("result")
 
-        if not conversation_id or not step_num:
+        if not conversation_id or not step_raw:
             return ToolResult(success=False, data="", error="Missing step number or conversation context")
+
+        # Normalise step identifier to string for comparison
+        step_num = str(step_raw)
 
         try:
             row = await self._db.fetch_one(
@@ -121,13 +135,28 @@ class UpdatePlanTool(BaseTool):
 
         steps = json.loads(row["steps"])
         updated = False
-        for s in steps:
-            if s["step"] == step_num:
-                s["status"] = new_status
-                if result_note:
-                    s["result"] = result_note
-                updated = True
-                break
+
+        # Check for substep format (e.g. "1.2")
+        if "." in step_num:
+            parent_num, sub_num = step_num.split(".", 1)
+            for s in steps:
+                if str(s["step"]) == parent_num:
+                    for sub in s.get("substeps", []):
+                        if str(sub["step"]) == step_num:
+                            sub["status"] = new_status
+                            if result_note:
+                                sub["result"] = result_note
+                            updated = True
+                            break
+                    break
+        else:
+            for s in steps:
+                if str(s["step"]) == step_num:
+                    s["status"] = new_status
+                    if result_note:
+                        s["result"] = result_note
+                    updated = True
+                    break
 
         if not updated:
             return ToolResult(success=False, data="", error=f"Step {step_num} not found in plan")

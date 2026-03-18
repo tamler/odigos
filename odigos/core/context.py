@@ -86,6 +86,28 @@ class ContextAssembler:
         routing = _load_routing_rules()
         route = routing.get(query_analysis.classification, {}) if query_analysis else {}
 
+        # Recovery briefing for interrupted plans
+        recovery_briefing = ""
+        if self.db and not route.get("skip_rag", False):
+            try:
+                plan_row = await self.db.fetch_one(
+                    "SELECT steps, updated_at FROM task_plans WHERE conversation_id = ? "
+                    "ORDER BY updated_at DESC LIMIT 1",
+                    (conversation_id,),
+                )
+                if plan_row:
+                    steps = json.loads(plan_row["steps"])
+                    pending = [s for s in steps if s.get("status") != "done"]
+                    done = [s for s in steps if s.get("status") == "done"]
+                    if pending and done:  # partially complete plan
+                        lines = ["## Recovery: you have an unfinished plan"]
+                        lines.append(f"Completed: {len(done)} steps. Remaining: {len(pending)} steps.")
+                        for s in pending:
+                            lines.append(f"- Pending: Step {s['step']}: {s['task']}")
+                        recovery_briefing = "\n".join(lines)
+            except Exception:
+                logger.debug("Could not load recovery briefing", exc_info=True)
+
         # Get memory context if available
         memory_context = ""
         if self.memory_manager:
@@ -248,6 +270,7 @@ class ContextAssembler:
             experiences=experiences_section,
             user_profile=user_profile,
             user_facts=user_facts,
+            recovery_briefing=recovery_briefing,
         )
 
         messages.append({"role": "system", "content": system_prompt})

@@ -177,6 +177,20 @@ class Heartbeat:
                 "did_work": did_work,
             })
 
+    async def _dispatch_as_subagent(self, instruction: str, conversation_id: str = "") -> str | None:
+        """Run a heartbeat task as an internal subagent for multi-step reasoning."""
+        if not self.subagent_manager:
+            return None
+        try:
+            subagent_id = await self.subagent_manager.spawn(
+                instruction=instruction,
+                parent_conversation_id=conversation_id or "heartbeat",
+            )
+            return subagent_id
+        except Exception:
+            logger.warning("Subagent dispatch failed", exc_info=True)
+            return None
+
     async def _fire_reminders(self) -> bool:
         now = datetime.now(timezone.utc).isoformat()
         reminders = await self.db.fetch_all(

@@ -16,6 +16,7 @@ def build_system_prompt(
     experiences: str = "",
     user_profile: str = "",
     user_facts: str = "",
+    recovery_briefing: str = "",
 ) -> str:
     """Compose the system prompt from file-based sections."""
     parts = []
@@ -37,6 +38,8 @@ def build_system_prompt(
         parts.append(skill_hints)
     if active_plan:
         parts.append(active_plan)
+    if recovery_briefing:
+        parts.append(recovery_briefing)
     if error_hints:
         parts.append(error_hints)
     if experiences:

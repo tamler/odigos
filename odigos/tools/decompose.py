@@ -56,6 +56,10 @@ class DecomposeQueryTool(BaseTool):
                 "type": "string",
                 "description": "The complex query or task to decompose.",
             },
+            "parent_step": {
+                "type": "integer",
+                "description": "Optional parent step number. When provided, the decomposition creates substeps under this parent step instead of a new top-level plan.",
+            },
         },
         "required": ["query"],
     }
@@ -65,6 +69,7 @@ class DecomposeQueryTool(BaseTool):
 
     async def execute(self, params: dict) -> ToolResult:
         query = params.get("query", "").strip()
+        parent_step = params.get("parent_step")
         if not query:
             return ToolResult(success=False, data="", error="No query provided")
 
@@ -86,6 +91,24 @@ class DecomposeQueryTool(BaseTool):
                 return self._single_step_fallback(query)
 
             formatted = format_steps(steps)
+
+            if parent_step is not None:
+                # Create substeps under a parent step
+                substeps = [
+                    {
+                        "step": f"{parent_step}.{i + 1}",
+                        "task": s.get("task", ""),
+                        "status": "pending",
+                        "result": None,
+                    }
+                    for i, s in enumerate(steps)
+                ]
+                return ToolResult(
+                    success=True,
+                    data=formatted,
+                    side_effect={"parent_step": parent_step, "substeps": substeps},
+                )
+
             steps_list = [
                 {"step": i + 1, "task": s.get("task", ""), "status": "pending", "result": None}
                 for i, s in enumerate(steps)
