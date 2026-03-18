@@ -24,6 +24,8 @@ No new core module needed -- ResourceStore handles all storage. Notebook-specifi
 ### Migration (039)
 
 ```sql
+-- Kanban board system: boards, columns, and cards.
+
 CREATE TABLE IF NOT EXISTS kanban_boards (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -96,6 +98,10 @@ Prefix: `/api/kanban`
 | POST | `/boards/{id}/cards/{card_id}/move` | Move card to column + position (convenience endpoint for drag-drop) |
 | PATCH | `/boards/{id}/reorder` | Bulk reorder columns and/or cards (batch position updates) |
 
+### Position auto-calculation
+
+When creating a card or column without an explicit `position`, auto-calculate: `SELECT COALESCE(MAX(position), -1) + 1` from siblings. This ensures new items append to the end. The `POST /boards/{id}/cards` endpoint requires `column_id` in the request body (the card is nested under board for URL simplicity, but belongs to a column).
+
 ### Move endpoint
 
 `POST /boards/{id}/cards/{card_id}/move` accepts `{column_id, position}`. Updates the card's `column_id` and `position`, then reorders sibling cards in both the source and target columns to fill gaps. This is the primary endpoint the drag-and-drop frontend calls.
@@ -106,17 +112,16 @@ Prefix: `/api/kanban`
 
 ## Agent Integration
 
-The agent gets two tools:
+Separate tools following the existing `BaseTool` pattern (one class per action):
 
-**KanbanTool** -- A single tool with actions:
-- `list_boards` -- list all boards
-- `get_board {board_id}` -- get board with all columns and cards
-- `create_card {board_id, column_id, title, description?, priority?}` -- add a card
-- `move_card {board_id, card_id, column_id, position?}` -- move a card between columns
-- `update_card {board_id, card_id, ...fields}` -- update card fields
-- `delete_card {board_id, card_id}` -- remove a card
+- **`kanban_list_boards`** -- List all boards with column/card counts
+- **`kanban_get_board`** `{board_id}` -- Get board with all columns and cards
+- **`kanban_create_card`** `{board_id, column_id, title, description?, priority?}` -- Add a card
+- **`kanban_move_card`** `{board_id, card_id, column_id, position?}` -- Move a card between columns
+- **`kanban_update_card`** `{board_id, card_id, ...fields}` -- Update card fields
+- **`kanban_delete_card`** `{board_id, card_id}` -- Remove a card
 
-The tool calls the same ResourceStore layer that the API uses. No separate code path.
+All tools live in `odigos/tools/kanban.py` and use the same ResourceStore instances that the API uses. No separate code path.
 
 ### Context assembly
 
@@ -154,7 +159,12 @@ kanban:
   enabled: true
 ```
 
-Same pattern as notebooks: `require_feature("kanban")` on the router, `KanbanConfig` in config.py.
+```python
+class KanbanConfig(BaseModel):
+    enabled: bool = True
+```
+
+Added to `Settings` class: `kanban: KanbanConfig = KanbanConfig()`. Router uses `require_feature("kanban")`. Auth follows the same pattern as notebooks (feature gate on router, auth handled at app level).
 
 ## Files Modified/Created
 
@@ -166,6 +176,7 @@ Same pattern as notebooks: `require_feature("kanban")` on the router, `KanbanCon
 | `odigos/config.py` | Add KanbanConfig with enabled flag |
 | `odigos/main.py` | Register kanban router, register KanbanTool |
 | `odigos/core/context.py` | Add board_id check in context_metadata block |
+| `odigos/personality/prompt_builder.py` | Rename `notebook_context` to `page_context` (generic for any contextual page) |
 | `dashboard/src/pages/KanbanPage.tsx` | New: board list + board detail with drag-drop |
 | `dashboard/src/App.tsx` | Add kanban routes |
 | `dashboard/src/layouts/AppLayout.tsx` | Add kanban nav icon |
