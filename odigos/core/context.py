@@ -63,6 +63,7 @@ class ContextAssembler:
         max_tokens: int = 0,
         *,
         query_analysis: QueryAnalysis | None = None,
+        context_metadata: dict | None = None,
     ) -> list[dict]:
         """Assemble the full messages list: system + history + current."""
         messages: list[dict] = []
@@ -268,6 +269,35 @@ class ContextAssembler:
             except Exception:
                 logger.debug("Could not load user facts", exc_info=True)
 
+        # Notebook context (when user is on a notebook page)
+        notebook_context = ""
+        if context_metadata and context_metadata.get("notebook_id") and self.db:
+            try:
+                nb_id = context_metadata["notebook_id"]
+                nb_row = await self.db.fetch_one(
+                    "SELECT title, mode, collaboration FROM notebooks WHERE id = ?",
+                    (nb_id,),
+                )
+                if nb_row:
+                    lines = [
+                        f"## Active notebook: \"{nb_row['title']}\" (mode: {nb_row['mode']}, collaboration: {nb_row['collaboration']})",
+                        "Recent entries:",
+                    ]
+                    entry_rows = await self.db.fetch_all(
+                        "SELECT content, entry_type, mood, created_at FROM notebook_entries "
+                        "WHERE notebook_id = ? AND status = 'active' "
+                        "ORDER BY created_at DESC LIMIT 10",
+                        (nb_id,),
+                    )
+                    for row in reversed(entry_rows):  # chronological order
+                        prefix = f"[{row['entry_type']}]"
+                        if row.get("mood"):
+                            prefix += f" ({row['mood']})"
+                        lines.append(f"- {prefix} {row['content'][:200]}")
+                    notebook_context = "\n".join(lines)
+            except Exception:
+                logger.debug("Could not load notebook context", exc_info=True)
+
         system_prompt = build_system_prompt(
             sections=sections,
             memory_context=memory_context,
@@ -283,6 +313,7 @@ class ContextAssembler:
             user_profile=user_profile,
             user_facts=user_facts,
             recovery_briefing=recovery_briefing,
+            notebook_context=notebook_context,
         )
 
         messages.append({"role": "system", "content": system_prompt})

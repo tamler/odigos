@@ -98,10 +98,17 @@ class Agent:
         """Process an incoming message through the ReAct loop."""
         conversation_id = await self._get_or_create_conversation(message)
 
+        # Extract context_metadata from message metadata (set by ws.py)
+        context_metadata = message.metadata.get("context") if message.metadata else None
+
         # Session serialization -- one turn at a time per session
         lock = self._get_session_lock(conversation_id)
         async with lock:
-            return await self._run(conversation_id, message, status_callback=status_callback)
+            return await self._run(
+                conversation_id, message,
+                status_callback=status_callback,
+                context_metadata=context_metadata,
+            )
 
     async def _run(
         self,
@@ -109,6 +116,7 @@ class Agent:
         message: UniversalMessage,
         *,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
+        context_metadata: dict | None = None,
     ) -> str:
         """Execute the agent loop with timeout."""
         await self.db.execute(
@@ -150,6 +158,7 @@ class Agent:
                 result = await self.executor.execute(
                     conversation_id, message.content, query_analysis=analysis,
                     status_callback=status_callback,
+                    context_metadata=context_metadata,
                 )
         except asyncio.TimeoutError:
             logger.warning("Run timed out after %ds for %s", self._run_timeout, conversation_id)

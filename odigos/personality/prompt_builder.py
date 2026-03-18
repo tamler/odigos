@@ -18,6 +18,7 @@ def build_system_prompt(
     user_profile: str = "",
     user_facts: str = "",
     recovery_briefing: str = "",
+    notebook_context: str = "",
 ) -> str:
     """Compose the system prompt from file-based sections."""
     parts = []
@@ -52,5 +53,7 @@ def build_system_prompt(
         parts.append(doc_listing)
     if corrections_context:
         parts.append(corrections_context)
+    if notebook_context:
+        parts.append(notebook_context)
 
     return "\n\n".join(parts)

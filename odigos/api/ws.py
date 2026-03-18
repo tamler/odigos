@@ -129,13 +129,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     conversation_id = client_conv_id
 
                 chat_id = conversation_id.split(":", 1)[1] if ":" in conversation_id else conversation_id
+                msg_metadata = {"chat_id": chat_id}
+                if data.get("context"):
+                    msg_metadata["context"] = data["context"]
                 msg = UniversalMessage(
                     id=uuid.uuid4().hex,
                     channel="web",
                     sender=session_id,
                     content=data.get("content", ""),
                     timestamp=datetime.now(timezone.utc),
-                    metadata={"chat_id": chat_id},
+                    metadata=msg_metadata,
                 )
                 async def send_status(text: str) -> None:
                     await websocket.send_json({"type": "status", "text": text})

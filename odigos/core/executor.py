@@ -84,6 +84,7 @@ class Executor:
         *,
         query_analysis: QueryAnalysis | None = None,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
+        context_metadata: dict | None = None,
     ) -> ExecuteResult:
         start_time = time.monotonic()
         tools_used: set[str] = set()
@@ -99,7 +100,9 @@ class Executor:
 
         # Build initial context
         messages = await self.context_assembler.build(
-            conversation_id, message_content, query_analysis=query_analysis
+            conversation_id, message_content,
+            query_analysis=query_analysis,
+            context_metadata=context_metadata,
         )
 
         # Load routing rules once for this execute() call

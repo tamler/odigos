@@ -43,6 +43,7 @@ class _SubagentContext:
         max_tokens: int = 0,
         *,
         query_analysis=None,
+        context_metadata: dict | None = None,
     ) -> list[dict]:
         return list(self._messages)
 
