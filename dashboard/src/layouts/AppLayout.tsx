@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare, BookOpen, Columns3 } from 'lucide-react'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare, BookOpen, Columns3, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -269,6 +269,21 @@ export default function AppLayout() {
 
           {/* Bottom: Toggle between Chat and Settings */}
           <div className="p-3 mt-auto">
+            <Tooltip>
+              <TooltipTrigger>
+                <button
+                  onClick={() => { setSidebarOpen(false); navigate('/analytics') }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
+                    location.pathname.startsWith('/analytics')
+                      ? 'bg-accent text-foreground'
+                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                  }`}
+                >
+                  <BarChart3 className="h-4 w-4 shrink-0" />{!collapsed && 'Analytics'}
+                </button>
+              </TooltipTrigger>
+              {collapsed && <TooltipContent side="right">Analytics</TooltipContent>}
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger>
                 <button

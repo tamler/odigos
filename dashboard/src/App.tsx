@@ -7,6 +7,7 @@ import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
 import NotebookPage from './pages/NotebookPage'
 import KanbanPage from './pages/KanbanPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 import LoginPrompt from './components/LoginPrompt'
 
 interface AuthState {
@@ -51,6 +52,7 @@ export default function App() {
               <Route path="/notebooks/:id" element={<NotebookPage />} />
               <Route path="/kanban" element={<KanbanPage />} />
               <Route path="/kanban/:id" element={<KanbanPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
