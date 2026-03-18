@@ -210,3 +210,19 @@ def get_doc_ingester(request: Request):
 def get_markitdown(request: Request):
     """Get the MarkItDownProvider instance from app state."""
     return request.app.state.markitdown_provider
+
+
+def require_feature(feature_name: str):
+    """FastAPI dependency that gates endpoints behind a config flag.
+
+    Checks settings.{feature_name}.enabled. If the feature config doesn't
+    exist or has no 'enabled' attribute, access is allowed (safe default).
+
+    Usage: router = APIRouter(dependencies=[Depends(require_feature("notebooks"))])
+    """
+    def check(request: Request):
+        settings = request.app.state.settings
+        feature_config = getattr(settings, feature_name, None)
+        if feature_config is not None and not getattr(feature_config, "enabled", True):
+            raise HTTPException(status_code=404, detail=f"{feature_name} is not enabled")
+    return check

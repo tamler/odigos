@@ -142,6 +142,10 @@ class PeerConfig(BaseModel):
     api_key: str = ""
 
 
+class NotebooksConfig(BaseModel):
+    enabled: bool = True
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str = ""
     llm_api_key: str = ""
@@ -177,6 +181,7 @@ class Settings(BaseSettings):
     tts: TTSConfig = TTSConfig()
     templates: TemplatesConfig = TemplatesConfig()
     peers: list[PeerConfig] = []
+    notebooks: NotebooksConfig = NotebooksConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
