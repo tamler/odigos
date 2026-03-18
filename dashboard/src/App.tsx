@@ -5,6 +5,7 @@ import { getAuthStatus } from './lib/auth'
 import AppLayout from './layouts/AppLayout'
 import ChatPage from './pages/ChatPage'
 import SettingsPage from './pages/SettingsPage'
+import NotebookPage from './pages/NotebookPage'
 import LoginPrompt from './components/LoginPrompt'
 
 interface AuthState {
@@ -45,6 +46,8 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<ChatPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/notebooks" element={<NotebookPage />} />
+              <Route path="/notebooks/:id" element={<NotebookPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
