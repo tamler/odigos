@@ -298,6 +298,41 @@ class ContextAssembler:
             except Exception:
                 logger.debug("Could not load notebook context", exc_info=True)
 
+        # Board context (when user is on a kanban board page)
+        if context_metadata and context_metadata.get("board_id") and self.db:
+            try:
+                board_id = context_metadata["board_id"]
+                board_row = await self.db.fetch_one(
+                    "SELECT title, description FROM kanban_boards WHERE id = ?",
+                    (board_id,),
+                )
+                if board_row:
+                    lines = [
+                        f"## Active kanban board: \"{board_row['title']}\"",
+                    ]
+                    if board_row.get("description"):
+                        lines.append(f"Description: {board_row['description']}")
+                    col_rows = await self.db.fetch_all(
+                        "SELECT id, title FROM kanban_columns WHERE board_id = ? ORDER BY position ASC",
+                        (board_id,),
+                    )
+                    card_rows = await self.db.fetch_all(
+                        "SELECT title, column_id, priority FROM kanban_cards "
+                        "WHERE board_id = ? ORDER BY position ASC",
+                        (board_id,),
+                    )
+                    cards_by_col = {}
+                    for card in card_rows:
+                        cards_by_col.setdefault(card["column_id"], []).append(card)
+                    for col in col_rows:
+                        col_cards = cards_by_col.get(col["id"], [])
+                        lines.append(f"\n**{col['title']}** ({len(col_cards)} cards)")
+                        for card in col_cards[:10]:
+                            lines.append(f"- {card['title']}")
+                    notebook_context = "\n".join(lines)
+            except Exception:
+                logger.debug("Could not load board context", exc_info=True)
+
         system_prompt = build_system_prompt(
             sections=sections,
             memory_context=memory_context,
@@ -313,7 +348,7 @@ class ContextAssembler:
             user_profile=user_profile,
             user_facts=user_facts,
             recovery_briefing=recovery_briefing,
-            notebook_context=notebook_context,
+            page_context=notebook_context,
         )
 
         messages.append({"role": "system", "content": system_prompt})
