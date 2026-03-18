@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { get, post, patch, del } from '@/lib/api'
+import { get, post, del } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,9 @@ import { Plus, ArrowLeft, Send, Trash2 } from 'lucide-react'
 interface Notebook {
   id: string
   title: string
+  mode: string
+  collaboration: string
+  share_with_agent: number
   created_at: string
   updated_at: string
 }
@@ -18,7 +21,9 @@ interface NotebookEntry {
   id: string
   notebook_id: string
   content: string
-  entry_type: 'note' | 'agent_suggestion'
+  entry_type: string
+  status: string
+  mood: string | null
   created_at: string
 }
 
@@ -29,15 +34,11 @@ interface ChatMessage {
 
 export default function NotebookPage() {
   const { id } = useParams<{ id?: string }>()
-  const navigate = useNavigate()
 
   if (id) {
     return <NotebookEditor notebookId={id} />
   }
   return <NotebookList />
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  void navigate
 }
 
 function NotebookList() {
@@ -62,9 +63,9 @@ function NotebookList() {
     if (!title) return
     setCreating(true)
     try {
-      const data = await post<{ notebook: Notebook }>('/api/notebooks', { title })
+      const nb = await post<Notebook>('/api/notebooks', { title })
       setNewTitle('')
-      navigate(`/notebooks/${data.notebook.id}`)
+      navigate(`/notebooks/${nb.id}`)
     } catch {
       toast.error('Failed to create notebook')
     } finally {
@@ -87,7 +88,6 @@ function NotebookList() {
     <div className="flex flex-col h-full max-w-2xl mx-auto w-full px-4 py-8">
       <h1 className="text-2xl font-semibold mb-6">Notebooks</h1>
 
-      {/* Create new notebook */}
       <div className="flex gap-2 mb-6">
         <Input
           value={newTitle}
@@ -101,7 +101,6 @@ function NotebookList() {
         </Button>
       </div>
 
-      {/* Notebook list */}
       {loading ? (
         <div className="text-muted-foreground text-sm">Loading...</div>
       ) : notebooks.length === 0 ? (
@@ -117,6 +116,7 @@ function NotebookList() {
               <div>
                 <div className="text-sm font-medium">{n.title}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
+                  {n.mode} &middot; {n.collaboration} &middot;{' '}
                   {new Date(n.updated_at + 'Z').toLocaleDateString(undefined, {
                     month: 'short', day: 'numeric', year: 'numeric',
                   })}
@@ -151,21 +151,16 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
   const entriesEndRef = useRef<HTMLDivElement>(null)
 
   const loadNotebook = useCallback(() => {
-    get<{ notebook: Notebook }>(`/api/notebooks/${notebookId}`)
-      .then((data) => setNotebook(data.notebook))
+    get<Notebook & { entries: NotebookEntry[] }>(`/api/notebooks/${notebookId}`)
+      .then((data) => {
+        const { entries: loadedEntries, ...nb } = data
+        setNotebook(nb)
+        setEntries(loadedEntries)
+      })
       .catch(() => toast.error('Failed to load notebook'))
   }, [notebookId])
 
-  const loadEntries = useCallback(() => {
-    get<{ entries: NotebookEntry[] }>(`/api/notebooks/${notebookId}/entries`)
-      .then((data) => setEntries(data.entries))
-      .catch(() => toast.error('Failed to load entries'))
-  }, [notebookId])
-
-  useEffect(() => {
-    loadNotebook()
-    loadEntries()
-  }, [loadNotebook, loadEntries])
+  useEffect(() => { loadNotebook() }, [loadNotebook])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -180,11 +175,11 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
     if (!content) return
     setAdding(true)
     try {
-      const data = await post<{ entry: NotebookEntry }>(`/api/notebooks/${notebookId}/entries`, {
+      const entry = await post<NotebookEntry>(`/api/notebooks/${notebookId}/entries`, {
         content,
-        entry_type: 'note',
+        entry_type: 'user',
       })
-      setEntries((prev) => [...prev, data.entry])
+      setEntries((prev) => [...prev, entry])
       setNewEntry('')
     } catch {
       toast.error('Failed to add entry')
@@ -202,11 +197,11 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
     }
   }
 
-  async function handleAcceptSuggestion(entry: NotebookEntry) {
+  async function handleAcceptSuggestion(entryId: string) {
     try {
-      await patch(`/api/notebooks/${notebookId}/entries/${entry.id}`, { entry_type: 'note' })
+      const updated = await post<NotebookEntry>(`/api/notebooks/${notebookId}/entries/${entryId}/accept`, {})
       setEntries((prev) =>
-        prev.map((e) => e.id === entry.id ? { ...e, entry_type: 'note' } : e)
+        prev.map((e) => e.id === entryId ? updated : e)
       )
     } catch {
       toast.error('Failed to accept suggestion')
@@ -215,7 +210,7 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
 
   async function handleRejectSuggestion(entryId: string) {
     try {
-      await del(`/api/notebooks/${notebookId}/entries/${entryId}`)
+      await post(`/api/notebooks/${notebookId}/entries/${entryId}/reject`, {})
       setEntries((prev) => prev.filter((e) => e.id !== entryId))
     } catch {
       toast.error('Failed to reject suggestion')
@@ -249,7 +244,6 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
     <div className="flex h-full overflow-hidden">
       {/* Main editor panel (70%) */}
       <div className="flex flex-col flex-1 min-w-0 border-r border-border/40">
-        {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0">
           <Button variant="ghost" size="icon" onClick={() => navigate('/notebooks')} className="shrink-0">
             <ArrowLeft className="h-4 w-4" />
@@ -257,9 +251,13 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
           <h1 className="text-base font-semibold truncate">
             {notebook ? notebook.title : 'Loading...'}
           </h1>
+          {notebook && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              {notebook.mode} &middot; {notebook.collaboration}
+            </span>
+          )}
         </div>
 
-        {/* Entries */}
         <ScrollArea className="flex-1 px-4">
           <div className="py-4 space-y-3 max-w-2xl">
             {entries.length === 0 && (
@@ -271,11 +269,19 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
                 className={`group relative rounded-md border px-4 py-3 text-sm ${
                   entry.entry_type === 'agent_suggestion'
                     ? 'border-blue-500/40 bg-blue-500/5'
+                    : entry.entry_type === 'agent'
+                    ? 'border-primary/30 bg-primary/5'
                     : 'border-border/50'
                 }`}
               >
                 {entry.entry_type === 'agent_suggestion' && (
                   <div className="text-xs text-blue-400 mb-1 font-medium">Agent suggestion</div>
+                )}
+                {entry.entry_type === 'agent' && (
+                  <div className="text-xs text-primary/60 mb-1 font-medium">Agent</div>
+                )}
+                {entry.mood && (
+                  <div className="text-xs text-muted-foreground mb-1">{entry.mood}</div>
                 )}
                 <div className="whitespace-pre-wrap leading-relaxed">{entry.content}</div>
                 <div className="text-xs text-muted-foreground mt-2">
@@ -283,13 +289,13 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
                     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
                   })}
                 </div>
-                {entry.entry_type === 'agent_suggestion' ? (
+                {entry.entry_type === 'agent_suggestion' && entry.status === 'pending' ? (
                   <div className="flex gap-2 mt-2">
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-7 text-xs"
-                      onClick={() => handleAcceptSuggestion(entry)}
+                      onClick={() => handleAcceptSuggestion(entry.id)}
                     >
                       Accept
                     </Button>
@@ -318,7 +324,6 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
           </div>
         </ScrollArea>
 
-        {/* Add entry input */}
         <div className="px-4 py-3 border-t border-border/40 shrink-0">
           <div className="flex gap-2 max-w-2xl">
             <Input

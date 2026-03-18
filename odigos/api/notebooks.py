@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -24,17 +25,21 @@ BACKUP_DIR = Path("data/notebooks")
 
 # -- Request models --
 
+_MODES = Literal["general", "journal", "research", "creative", "meetings"]
+_COLLAB = Literal["read", "suggest", "active"]
+
+
 class CreateNotebookRequest(BaseModel):
     title: str
-    mode: str = "general"
-    collaboration: str = "read"
+    mode: _MODES = "general"
+    collaboration: _COLLAB = "read"
     share_with_agent: int = 0
 
 
 class UpdateNotebookRequest(BaseModel):
     title: str | None = None
-    mode: str | None = None
-    collaboration: str | None = None
+    mode: _MODES | None = None
+    collaboration: _COLLAB | None = None
     share_with_agent: int | None = None
 
 
@@ -61,6 +66,14 @@ def _notebooks_store(db) -> ResourceStore:
 
 def _entries_store(db) -> ResourceStore:
     return ResourceStore(db, "notebook_entries", parent_key="notebook_id")
+
+
+async def _get_entry_or_404(entry_store: ResourceStore, notebook_id: str, entry_id: str) -> dict:
+    """Fetch an entry and verify it belongs to the specified notebook."""
+    entry = await entry_store.get(entry_id)
+    if not entry or entry["notebook_id"] != notebook_id:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return entry
 
 
 async def _backup_to_disk(db, notebook_id: str) -> None:
@@ -188,12 +201,11 @@ async def update_entry(
     notebook_id: str, entry_id: str, body: UpdateEntryRequest, db=Depends(get_db),
 ):
     entry_store = _entries_store(db)
+    await _get_entry_or_404(entry_store, notebook_id, entry_id)
     fields = body.model_dump(exclude_none=True)
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
-    updated = await entry_store.update(entry_id, **fields)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Entry not found")
+    await entry_store.update(entry_id, **fields)
     await _backup_to_disk(db, notebook_id)
     return await entry_store.get(entry_id)
 
@@ -201,9 +213,8 @@ async def update_entry(
 @router.delete("/{notebook_id}/entries/{entry_id}")
 async def delete_entry(notebook_id: str, entry_id: str, db=Depends(get_db)):
     entry_store = _entries_store(db)
-    deleted = await entry_store.delete(entry_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Entry not found")
+    await _get_entry_or_404(entry_store, notebook_id, entry_id)
+    await entry_store.delete(entry_id)
     await _backup_to_disk(db, notebook_id)
     return {"deleted": True}
 
@@ -211,9 +222,7 @@ async def delete_entry(notebook_id: str, entry_id: str, db=Depends(get_db)):
 @router.post("/{notebook_id}/entries/{entry_id}/accept")
 async def accept_suggestion(notebook_id: str, entry_id: str, db=Depends(get_db)):
     entry_store = _entries_store(db)
-    entry = await entry_store.get(entry_id)
-    if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
+    entry = await _get_entry_or_404(entry_store, notebook_id, entry_id)
     if entry["entry_type"] != "agent_suggestion":
         raise HTTPException(status_code=400, detail="Entry is not an agent suggestion")
     await entry_store.update(entry_id, status="accepted", entry_type="agent")
@@ -224,9 +233,7 @@ async def accept_suggestion(notebook_id: str, entry_id: str, db=Depends(get_db))
 @router.post("/{notebook_id}/entries/{entry_id}/reject")
 async def reject_suggestion(notebook_id: str, entry_id: str, db=Depends(get_db)):
     entry_store = _entries_store(db)
-    entry = await entry_store.get(entry_id)
-    if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
+    entry = await _get_entry_or_404(entry_store, notebook_id, entry_id)
     if entry["entry_type"] != "agent_suggestion":
         raise HTTPException(status_code=400, detail="Entry is not an agent suggestion")
     await entry_store.update(entry_id, status="rejected")

@@ -26,6 +26,16 @@ def _validate_identifier(name: str) -> str:
     return name
 
 
+def _validate_order_by(clause: str) -> str:
+    """Validate an ORDER BY clause (column + optional ASC/DESC)."""
+    parts = clause.strip().split()
+    col = _validate_identifier(parts[0])
+    direction = "ASC"
+    if len(parts) > 1 and parts[1].upper() in ("ASC", "DESC"):
+        direction = parts[1].upper()
+    return f"{col} {direction}"
+
+
 class ResourceStore:
     """Generic CRUD store for any SQLite-backed resource.
 
@@ -82,7 +92,7 @@ class ResourceStore:
                 params.append(val)
             query += " WHERE " + " AND ".join(clauses)
 
-        query += f" ORDER BY {order_by}"
+        query += f" ORDER BY {_validate_order_by(order_by)}"
 
         if limit is not None:
             query += " LIMIT ?"
