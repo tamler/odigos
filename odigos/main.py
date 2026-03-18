@@ -62,6 +62,7 @@ from odigos.api.prompts import router as prompts_router
 from odigos.api.documents import router as documents_router
 from odigos.api.analytics import router as analytics_router
 from odigos.api.notebooks import router as notebooks_router
+from odigos.api.kanban import router as kanban_router
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
@@ -825,6 +826,7 @@ app.include_router(prompts_router)
 app.include_router(documents_router)
 app.include_router(analytics_router)
 app.include_router(notebooks_router)
+app.include_router(kanban_router)
 
 
 @app.get("/health")
