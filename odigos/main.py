@@ -83,6 +83,206 @@ _heartbeat: Heartbeat | None = None
 _mcp_servers: list = []
 
 
+async def _register_tools(
+    settings, db, provider, vector_memory, chunking_service, memory_manager,
+    goal_store, skill_registry, card_manager, agent_client, mesh_enabled,
+    config_path, mcp_servers,
+):
+    """Create the tool registry and register all core tools.
+
+    Returns (tool_registry, scraper, doc_tool, doc_ingester, markitdown_provider,
+             subagent_manager, notifier).
+    """
+    from odigos.providers.scraper import ScraperProvider
+    from odigos.tools.registry import ToolRegistry
+    from odigos.tools.scrape import ScrapeTool
+
+    scraper = ScraperProvider()
+    tool_registry = ToolRegistry()
+
+    scrape_tool = ScrapeTool(scraper=scraper)
+    tool_registry.register(scrape_tool)
+    logger.info("Scrape tool initialized")
+
+    # RSS feed tool
+    from odigos.tools.feed import FeedTool
+
+    feed_tool = FeedTool()
+    tool_registry.register(feed_tool)
+    logger.info("Feed tool initialized (feedparser)")
+
+    # Document processing
+    from odigos.providers.markitdown import MarkItDownProvider
+    from odigos.tools.document import DocTool
+
+    markitdown_provider = MarkItDownProvider()
+    docling_provider = None  # Loaded via plugin if available
+
+    from odigos.memory.ingester import DocumentIngester
+
+    doc_ingester = DocumentIngester(db=db, vector_memory=vector_memory, chunking_service=chunking_service)
+    doc_tool = DocTool(
+        markitdown_provider=markitdown_provider,
+        ingester=doc_ingester,
+        docling_provider=docling_provider,
+    )
+    tool_registry.register(doc_tool)
+    logger.info("Document tool initialized (MarkItDown default, Docling %s)", "available" if docling_provider else "not installed")
+
+    # Code execution sandbox
+    from odigos.tools.code import CodeTool
+
+    sandbox = SandboxProvider(
+        timeout=settings.sandbox.timeout_seconds,
+        max_memory_mb=settings.sandbox.max_memory_mb,
+        allow_network=settings.sandbox.allow_network,
+    )
+    code_tool = CodeTool(sandbox=sandbox, db=db)
+    tool_registry.register(code_tool)
+    logger.info("Code tool initialized (sandbox)")
+
+    # File tool
+    from odigos.tools.file import FileTool
+
+    file_tool = FileTool(allowed_paths=settings.file_access.allowed_paths)
+    tool_registry.register(file_tool)
+    logger.info("File tool initialized (allowed: %s)", settings.file_access.allowed_paths)
+
+    # Goal tools
+    from odigos.tools.goals import CreateReminderTool, CreateTodoTool, CreateGoalTool
+
+    tool_registry.register(CreateReminderTool(goal_store=goal_store))
+    tool_registry.register(CreateTodoTool(goal_store=goal_store))
+    tool_registry.register(CreateGoalTool(goal_store=goal_store))
+    logger.info("Goal tools initialized")
+
+    # Skill tools
+    from pathlib import Path as _SkillPath
+    try:
+        _SkillPath("skills/code").mkdir(parents=True, exist_ok=True)
+    except OSError:
+        logger.warning("Could not create skills/code/ (read-only filesystem)")
+
+    code_skill_count = skill_registry.register_code_skills(tool_registry)
+    if code_skill_count:
+        logger.info("Registered %d code skill tools", code_skill_count)
+
+    from odigos.tools.skill_tool import ActivateSkillTool
+    from odigos.tools.skill_manage import CreateSkillTool, UpdateSkillTool
+
+    tool_registry.register(ActivateSkillTool(skill_registry=skill_registry))
+    tool_registry.register(CreateSkillTool(skill_registry=skill_registry, tool_registry=tool_registry))
+    tool_registry.register(UpdateSkillTool(skill_registry=skill_registry, tool_registry=tool_registry))
+    logger.info("Skill tools registered (activate, create, update)")
+
+    # Subagent manager (internal use only -- no user-facing spawn tool)
+    tracer_ref = None  # Will be set by caller after return
+    subagent_manager = SubagentManager(
+        db=db,
+        provider=provider,
+        tool_registry=tool_registry,
+        tracer=None,
+        memory_manager=memory_manager,
+    )
+    logger.info("Subagent manager initialized")
+
+    # Peer messaging tool (skip in hermit mode)
+    if mesh_enabled:
+        tool_registry.register(MessagePeerTool(peer_client=agent_client))
+        if agent_client.list_peer_names():
+            logger.info("Peer messaging tool registered with pre-configured peers: %s", ", ".join(agent_client.list_peer_names()))
+        else:
+            logger.info("Peer messaging tool registered (discovery via announce)")
+
+    # Card tools
+    from odigos.tools.card_tools import GenerateCardTool, ImportCardTool
+    tool_registry.register(GenerateCardTool(card_manager=card_manager))
+    tool_registry.register(ImportCardTool(card_manager=card_manager))
+    logger.info("Card tools registered")
+
+    # Settings management tool
+    tool_registry.register(ManageSettingsTool(settings=settings, config_path=config_path))
+    logger.info("Settings tool registered")
+
+    # Remember fact tool
+    tool_registry.register(RememberFactTool(db=db))
+    logger.info("Remember fact tool registered")
+
+    # Feed publish tool
+    if settings.feed.enabled:
+        from odigos.tools.feed_publish import PublishToFeedTool
+        feed_publish = PublishToFeedTool(
+            db=db,
+            feed_base_url=f"http://{settings.server.host}:{settings.server.port}",
+        )
+        tool_registry.register(feed_publish)
+        logger.info("Feed publish tool registered")
+
+    # MCP server bridges
+    if settings.mcp.servers:
+        from odigos.tools.mcp_bridge import MCPServer, MCPToolBridge, StdioTransport
+
+        for server_name, server_cfg in settings.mcp.servers.items():
+            transport = StdioTransport(
+                command=server_cfg.command,
+                args=server_cfg.args,
+                env=server_cfg.env,
+            )
+            server = MCPServer(name=server_name, transport=transport)
+            try:
+                await server.connect()
+                mcp_tools = await server.list_tools()
+                for mcp_tool in mcp_tools:
+                    bridge = MCPToolBridge(
+                        server=server, server_name=server_name, mcp_tool=mcp_tool
+                    )
+                    if tool_registry.get(bridge.name):
+                        logger.warning(
+                            "MCP tool name collision: '%s' overwrites existing tool",
+                            bridge.name,
+                        )
+                    tool_registry.register(bridge)
+                    logger.info("Registered MCP tool: %s", bridge.name)
+                mcp_servers.append(server)
+                logger.info(
+                    "MCP server '%s' connected (%d tools)",
+                    server_name,
+                    len(mcp_tools),
+                )
+            except Exception:
+                logger.exception("Failed to connect MCP server: %s", server_name)
+
+    return tool_registry, scraper, doc_tool, doc_ingester, markitdown_provider, subagent_manager
+
+
+async def _init_plugins(settings, tool_registry, channel_registry, tracer, doc_tool):
+    """Load plugins and wire post-plugin providers.
+
+    Returns (plugin_context, plugin_manager).
+    """
+    plugin_context = PluginContext(
+        tool_registry=tool_registry,
+        channel_registry=channel_registry,
+        tracer=tracer,
+        config={"settings": settings}
+    )
+
+    plugin_manager = PluginManager(plugin_context=plugin_context)
+    plugin_manager.load_all("plugins")
+
+    # Also load legacy event-hook plugins from data/plugins
+    plugin_manager.load_all("data/plugins")
+    logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
+
+    # Check if docling plugin registered a provider
+    docling_from_plugin = plugin_context.get_provider("docling")
+    if docling_from_plugin:
+        doc_tool.docling = docling_from_plugin
+        logger.info("Docling provider loaded from plugin")
+
+    return plugin_context, plugin_manager
+
+
 def _persist_generated_api_key(config_path: str, api_key: str) -> None:
     """Append generated api_key to config.yaml so it survives restarts."""
     try:
@@ -277,77 +477,10 @@ async def lifespan(app: FastAPI):
     corrections_manager = CorrectionsManager(db=_db, vector_memory=vector_memory)
     logger.info("Corrections manager initialized")
 
-    # Initialize tool registry and tools
-    from odigos.providers.scraper import ScraperProvider
-    from odigos.tools.registry import ToolRegistry
-    from odigos.tools.scrape import ScrapeTool
-
-    _scraper = ScraperProvider()
-    tool_registry = ToolRegistry()
-
-    scrape_tool = ScrapeTool(scraper=_scraper)
-    tool_registry.register(scrape_tool)
-    logger.info("Scrape tool initialized")
-
-    # Initialize RSS feed tool
-    from odigos.tools.feed import FeedTool
-
-    feed_tool = FeedTool()
-    tool_registry.register(feed_tool)
-    logger.info("Feed tool initialized (feedparser)")
-
-    # Initialize document processing
-    from odigos.providers.markitdown import MarkItDownProvider
-    from odigos.tools.document import DocTool
-
-    markitdown_provider = MarkItDownProvider()
-
-    docling_provider = None  # Loaded via plugin if available
-
-    from odigos.memory.ingester import DocumentIngester
-
-    doc_ingester = DocumentIngester(db=_db, vector_memory=vector_memory, chunking_service=chunking_service)
-    app.state.doc_ingester = doc_ingester
-    app.state.markitdown_provider = markitdown_provider
-    doc_tool = DocTool(
-        markitdown_provider=markitdown_provider,
-        ingester=doc_ingester,
-        docling_provider=docling_provider,
-    )
-    tool_registry.register(doc_tool)
-    logger.info("Document tool initialized (MarkItDown default, Docling %s)", "available" if docling_provider else "not installed")
-
-    # Initialize code execution sandbox
-    from odigos.tools.code import CodeTool
-
-    sandbox = SandboxProvider(
-        timeout=settings.sandbox.timeout_seconds,
-        max_memory_mb=settings.sandbox.max_memory_mb,
-        allow_network=settings.sandbox.allow_network,
-    )
-    code_tool = CodeTool(sandbox=sandbox, db=_db)
-    tool_registry.register(code_tool)
-    logger.info("Code tool initialized (sandbox)")
-
-    # Initialize file tool with configured allowed paths
-    from odigos.tools.file import FileTool
-
-    file_tool = FileTool(allowed_paths=settings.file_access.allowed_paths)
-    tool_registry.register(file_tool)
-    logger.info("File tool initialized (allowed: %s)", settings.file_access.allowed_paths)
-
     # Initialize goal store
     goal_store = GoalStore(db=_db)
     app.state.goal_store = goal_store
     logger.info("Goal store initialized")
-
-    # Register goal tools
-    from odigos.tools.goals import CreateReminderTool, CreateTodoTool, CreateGoalTool
-
-    tool_registry.register(CreateReminderTool(goal_store=goal_store))
-    tool_registry.register(CreateTodoTool(goal_store=goal_store))
-    tool_registry.register(CreateGoalTool(goal_store=goal_store))
-    logger.info("Goal tools initialized")
 
     # Initialize skill registry
     skill_registry = SkillRegistry()
@@ -355,144 +488,43 @@ async def lifespan(app: FastAPI):
     logger.info("Loaded %d skills", len(skill_registry.list()))
     app.state.skill_registry = skill_registry
 
-    # Ensure skills/code directory exists for executable code skills
-    from pathlib import Path as _SkillPath
-    try:
-        _SkillPath("skills/code").mkdir(parents=True, exist_ok=True)
-    except OSError:
-        logger.warning("Could not create skills/code/ (read-only filesystem)")
-
-    # Register code skill tools from loaded skills
-    code_skill_count = skill_registry.register_code_skills(tool_registry)
-    if code_skill_count:
-        logger.info("Registered %d code skill tools", code_skill_count)
-
-    # Register skill tools (activation, creation, update)
-    from odigos.tools.skill_tool import ActivateSkillTool
-    from odigos.tools.skill_manage import CreateSkillTool, UpdateSkillTool
-
-    activate_skill_tool = ActivateSkillTool(skill_registry=skill_registry)
-    tool_registry.register(activate_skill_tool)
-
-    create_skill_tool = CreateSkillTool(skill_registry=skill_registry, tool_registry=tool_registry)
-    tool_registry.register(create_skill_tool)
-
-    update_skill_tool = UpdateSkillTool(skill_registry=skill_registry, tool_registry=tool_registry)
-    tool_registry.register(update_skill_tool)
-
-    logger.info("Skill tools registered (activate, create, update)")
-
-    # Initialize subagent manager
-    subagent_manager = SubagentManager(
+    # Register all core tools
+    (
+        tool_registry, _scraper, doc_tool, doc_ingester, markitdown_provider,
+        subagent_manager,
+    ) = await _register_tools(
+        settings=settings,
         db=_db,
         provider=_provider,
-        tool_registry=tool_registry,
-        tracer=tracer,
+        vector_memory=vector_memory,
+        chunking_service=chunking_service,
         memory_manager=memory_manager,
+        goal_store=goal_store,
+        skill_registry=skill_registry,
+        card_manager=card_manager,
+        agent_client=agent_client,
+        mesh_enabled=mesh_enabled,
+        config_path=config_path,
+        mcp_servers=_mcp_servers,
     )
-    logger.info("Subagent manager initialized")
+    # Wire tracer into subagent manager (available now)
+    subagent_manager.tracer = tracer
+    app.state.doc_ingester = doc_ingester
+    app.state.markitdown_provider = markitdown_provider
 
-    # Register subagent tool
-    from odigos.tools.subagent_tool import SpawnSubagentTool
-
-    spawn_tool = SpawnSubagentTool(subagent_manager=subagent_manager)
-    tool_registry.register(spawn_tool)
-    logger.info("Subagent tool registered")
-
-    # Register peer messaging tool (skip in hermit mode)
-    if mesh_enabled:
-        tool_registry.register(MessagePeerTool(peer_client=agent_client))
-        if agent_client.list_peer_names():
-            logger.info("Peer messaging tool registered with pre-configured peers: %s", ", ".join(agent_client.list_peer_names()))
-        else:
-            logger.info("Peer messaging tool registered (discovery via announce)")
-
-    # Register card tools
-    from odigos.tools.card_tools import GenerateCardTool, ImportCardTool
-    tool_registry.register(GenerateCardTool(card_manager=card_manager))
-    tool_registry.register(ImportCardTool(card_manager=card_manager))
-    logger.info("Card tools registered")
-
-    # Register settings management tool
-    tool_registry.register(ManageSettingsTool(settings=settings, config_path=config_path))
-    logger.info("Settings tool registered")
-
-    # Register remember_fact tool
-    tool_registry.register(RememberFactTool(db=_db))
-    logger.info("Remember fact tool registered")
-
-    # Register feed publish tool if feed is enabled
-    if settings.feed.enabled:
-        from odigos.tools.feed_publish import PublishToFeedTool
-        feed_tool = PublishToFeedTool(
-            db=_db,
-            feed_base_url=f"http://{settings.server.host}:{settings.server.port}",
-        )
-        tool_registry.register(feed_tool)
-        logger.info("Feed publish tool registered")
-
-    # Connect MCP servers and register bridged tools
-    if settings.mcp.servers:
-        from odigos.tools.mcp_bridge import MCPServer, MCPToolBridge, StdioTransport
-
-        for server_name, server_cfg in settings.mcp.servers.items():
-            transport = StdioTransport(
-                command=server_cfg.command,
-                args=server_cfg.args,
-                env=server_cfg.env,
-            )
-            server = MCPServer(name=server_name, transport=transport)
-            try:
-                await server.connect()
-                mcp_tools = await server.list_tools()
-                for mcp_tool in mcp_tools:
-                    bridge = MCPToolBridge(
-                        server=server, server_name=server_name, mcp_tool=mcp_tool
-                    )
-                    if tool_registry.get(bridge.name):
-                        logger.warning(
-                            "MCP tool name collision: '%s' overwrites existing tool",
-                            bridge.name,
-                        )
-                    tool_registry.register(bridge)
-                    logger.info("Registered MCP tool: %s", bridge.name)
-                _mcp_servers.append(server)
-                logger.info(
-                    "MCP server '%s' connected (%d tools)",
-                    server_name,
-                    len(mcp_tools),
-                )
-            except Exception:
-                logger.exception("Failed to connect MCP server: %s", server_name)
-
-    # Initialize channel registry
+    # Initialize channel registry and load plugins
     channel_registry = ChannelRegistry()
     app.state.channel_registry = channel_registry
 
-    # Create plugin context with all registries
-    plugin_context = PluginContext(
+    plugin_context, plugin_manager = await _init_plugins(
+        settings=settings,
         tool_registry=tool_registry,
         channel_registry=channel_registry,
         tracer=tracer,
-        config={"settings": settings}
+        doc_tool=doc_tool,
     )
-
-    # Load plugins — new register(ctx) pattern + legacy hooks
-    plugin_manager = PluginManager(plugin_context=plugin_context)
-    plugin_manager.load_all("plugins")
-
-    # Also load legacy event-hook plugins from data/plugins
-    plugin_manager.load_all("data/plugins")
-    logger.info("Loaded %d plugins", len(plugin_manager.loaded_plugins))
     app.state.plugin_manager = plugin_manager
     app.state.plugin_context = plugin_context
-
-    # Check if docling plugin registered a provider
-    docling_from_plugin = plugin_context.get_provider("docling")
-    if docling_from_plugin:
-        # Update the doc tool with the plugin-provided docling
-        doc_tool.docling = docling_from_plugin
-        logger.info("Docling provider loaded from plugin")
 
     # Initialize approval gate if enabled
     approval_gate = None
@@ -622,8 +654,6 @@ async def lifespan(app: FastAPI):
 
     # Initialize agent template index and tools
     from odigos.core.template_index import AgentTemplateIndex
-    from odigos.tools.template_tools import BrowseTemplates, AdoptTemplate
-
     template_index = AgentTemplateIndex(
         db=_db,
         repo_url=settings.templates.repo_url,
@@ -631,15 +661,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.template_index = template_index
 
-    browse_templates_tool = BrowseTemplates(template_index=template_index)
-    tool_registry.register(browse_templates_tool)
-
-    adopt_template_tool = AdoptTemplate(
-        template_index=template_index,
-        skill_registry=skill_registry,
-    )
-    tool_registry.register(adopt_template_tool)
-    logger.info("Agent template index initialized with browse/adopt tools")
+    logger.info("Agent template index initialized")
 
     # Initialize spawner
     spawner = Spawner(
