@@ -146,6 +146,10 @@ class NotebooksConfig(BaseModel):
     enabled: bool = True
 
 
+class KanbanConfig(BaseModel):
+    enabled: bool = True
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str = ""
     llm_api_key: str = ""
@@ -182,6 +186,7 @@ class Settings(BaseSettings):
     templates: TemplatesConfig = TemplatesConfig()
     peers: list[PeerConfig] = []
     notebooks: NotebooksConfig = NotebooksConfig()
+    kanban: KanbanConfig = KanbanConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
