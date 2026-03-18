@@ -109,23 +109,19 @@ class ContextAssembler:
         memory_index = ""
         if self.db and not route.get("skip_rag", False):
             try:
-                counts = {}
-                row = await self.db.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM memory_entries WHERE source_type = 'document_chunk'"
-                )
-                counts["doc_chunks"] = row["cnt"] if row else 0
-                row = await self.db.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM memory_entries WHERE source_type = 'user_message'"
-                )
-                counts["conversations"] = row["cnt"] if row else 0
-                row = await self.db.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM entities WHERE status = 'active'"
-                )
-                counts["entities"] = row["cnt"] if row else 0
-                row = await self.db.fetch_one(
-                    "SELECT COUNT(*) as cnt FROM documents"
-                )
-                counts["documents"] = row["cnt"] if row else 0
+                row = await self.db.fetch_one("""
+                    SELECT
+                        (SELECT COUNT(*) FROM memory_entries WHERE source_type = 'document_chunk') as doc_chunks,
+                        (SELECT COUNT(*) FROM memory_entries WHERE source_type = 'user_message') as conversations,
+                        (SELECT COUNT(*) FROM entities WHERE status = 'active') as entities,
+                        (SELECT COUNT(*) FROM documents) as documents
+                """)
+                counts = {
+                    "doc_chunks": row["doc_chunks"] if row else 0,
+                    "conversations": row["conversations"] if row else 0,
+                    "entities": row["entities"] if row else 0,
+                    "documents": row["documents"] if row else 0,
+                }
 
                 if any(counts.values()):
                     memory_index = (

@@ -14,8 +14,14 @@ def load_routing_rules() -> dict:
     text = load_prompt("routing_rules.md", fallback="", base_dir="data/agent")
     rules: dict[str, dict] = {}
     current_section: str | None = None
+    in_frontmatter = False
     for line in text.strip().split("\n"):
         line = line.strip()
+        if line == "---":
+            in_frontmatter = not in_frontmatter
+            continue
+        if in_frontmatter:
+            continue
         if line.startswith("[") and line.endswith("]"):
             current_section = line[1:-1]
             rules[current_section] = {}

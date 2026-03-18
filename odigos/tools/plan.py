@@ -43,7 +43,8 @@ class CheckPlanTool(BaseTool):
                 (conversation_id,),
             )
         except Exception:
-            return ToolResult(success=True, data="No active plan.")
+            logger.debug("Failed to query plan", exc_info=True)
+            return ToolResult(success=False, data="", error="Could not load plan")
 
         if not row:
             return ToolResult(success=True, data="No active plan for this conversation.")
@@ -138,7 +139,7 @@ class UpdatePlanTool(BaseTool):
 
         # Check for substep format (e.g. "1.2")
         if "." in step_num:
-            parent_num, sub_num = step_num.split(".", 1)
+            parent_num, _ = step_num.split(".", 1)
             for s in steps:
                 if str(s["step"]) == parent_num:
                     for sub in s.get("substeps", []):
@@ -168,7 +169,16 @@ class UpdatePlanTool(BaseTool):
         )
 
         # Check if plan is complete
-        all_done = all(s.get("status") == "done" for s in steps)
+        def _all_steps_done(steps):
+            for s in steps:
+                if s.get("status") != "done":
+                    return False
+                substeps = s.get("substeps", [])
+                if substeps and not _all_steps_done(substeps):
+                    return False
+            return True
+
+        all_done = _all_steps_done(steps)
         if all_done and self._db:
             try:
                 await self._db.execute(

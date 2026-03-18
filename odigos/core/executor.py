@@ -102,6 +102,11 @@ class Executor:
             conversation_id, message_content, query_analysis=query_analysis
         )
 
+        # Load routing rules once for this execute() call
+        from odigos.core.routing import load_routing_rules
+        routing = load_routing_rules()
+        route = routing.get(query_analysis.classification, {}) if query_analysis else {}
+
         # Get tool definitions if tools are available
         tools = None
         if self.tool_registry and self.tool_registry.list():
@@ -109,9 +114,6 @@ class Executor:
 
         # Filter tools based on classification routing rules
         if query_analysis and tools:
-            from odigos.core.routing import load_routing_rules
-            routing = load_routing_rules()
-            route = routing.get(query_analysis.classification, {})
             allowed_tools = route.get("tools", "all")
             if allowed_tools != "all" and isinstance(allowed_tools, str):
                 allowed_set = {t.strip() for t in allowed_tools.split(",")}
@@ -398,21 +400,24 @@ class Executor:
                         # Attach substeps to an existing parent step
                         parent_step = str(result.side_effect["parent_step"])
                         substeps = result.side_effect["substeps"]
-                        row = await self.db.fetch_one(
-                            "SELECT id, steps FROM task_plans WHERE conversation_id = ? "
-                            "ORDER BY updated_at DESC LIMIT 1",
-                            (conversation_id,),
-                        )
-                        if row:
-                            steps = json.loads(row["steps"])
-                            for s in steps:
-                                if str(s["step"]) == parent_step:
-                                    s["substeps"] = substeps
-                                    break
-                            await self.db.execute(
-                                "UPDATE task_plans SET steps = ?, updated_at = ? WHERE id = ?",
-                                (json.dumps(steps), now, row["id"]),
+                        # Validate substep structure
+                        substeps = [s for s in substeps if isinstance(s, dict) and "step" in s and "task" in s]
+                        if substeps:
+                            row = await self.db.fetch_one(
+                                "SELECT id, steps FROM task_plans WHERE conversation_id = ? "
+                                "ORDER BY updated_at DESC LIMIT 1",
+                                (conversation_id,),
                             )
+                            if row:
+                                steps = json.loads(row["steps"])
+                                for s in steps:
+                                    if str(s["step"]) == parent_step:
+                                        s["substeps"] = substeps
+                                        break
+                                await self.db.execute(
+                                    "UPDATE task_plans SET steps = ?, updated_at = ? WHERE id = ?",
+                                    (json.dumps(steps), now, row["id"]),
+                                )
                 except Exception:
                     logger.debug("Could not persist task plan", exc_info=True)
 
