@@ -160,6 +160,19 @@ async def _register_tools(
     tool_registry.register(CreateGoalTool(goal_store=goal_store))
     logger.info("Goal tools initialized")
 
+    # Kanban tools
+    from odigos.tools.kanban import (
+        KanbanListBoardsTool, KanbanGetBoardTool, KanbanCreateCardTool,
+        KanbanMoveCardTool, KanbanUpdateCardTool, KanbanDeleteCardTool,
+    )
+    tool_registry.register(KanbanListBoardsTool(db=db))
+    tool_registry.register(KanbanGetBoardTool(db=db))
+    tool_registry.register(KanbanCreateCardTool(db=db))
+    tool_registry.register(KanbanMoveCardTool(db=db))
+    tool_registry.register(KanbanUpdateCardTool(db=db))
+    tool_registry.register(KanbanDeleteCardTool(db=db))
+    logger.info("Kanban tools initialized")
+
     # Skill tools
     from pathlib import Path as _SkillPath
     try:
