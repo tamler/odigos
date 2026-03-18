@@ -20,6 +20,8 @@ data/
 !data/prompts/**
 !data/agent/
 !data/agent/**
+!data/notebooks/
+!data/notebooks/.gitkeep
 
 # IDE
 .idea/
