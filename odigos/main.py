@@ -50,6 +50,7 @@ from odigos.channels.web import WebChannel
 from odigos.core.agent_client import AgentClient
 from odigos.core.cron import CronManager
 from odigos.core.notifier import Notifier
+from odigos.core.scheduler import Scheduler
 from odigos.core.spawner import Spawner
 from odigos.api.cron import router as cron_router
 from odigos.api.agent_ws import router as agent_ws_router
@@ -151,6 +152,7 @@ async def _register_tools(
     # Goal tools
     from odigos.tools.goals import CreateReminderTool, CreateTodoTool, CreateGoalTool
 
+    # scheduler may not exist yet during _register_tools; injected post-init
     tool_registry.register(CreateReminderTool(goal_store=goal_store))
     tool_registry.register(CreateTodoTool(goal_store=goal_store))
     tool_registry.register(CreateGoalTool(goal_store=goal_store))
@@ -675,10 +677,20 @@ async def lifespan(app: FastAPI):
     app.state.spawner = spawner
     logger.info("Spawner initialized")
 
-    # Initialize cron manager
+    # Initialize cron manager (legacy, kept for backward compat)
     cron_manager = CronManager(db=_db)
     app.state.cron_manager = cron_manager
     logger.info("Cron manager initialized")
+
+    # Initialize unified scheduler
+    scheduler = Scheduler(db=_db)
+    app.state.scheduler = scheduler
+    logger.info("Unified scheduler initialized")
+
+    # Wire scheduler into CreateReminderTool (registered during _register_tools)
+    reminder_tool = tool_registry.get("create_reminder")
+    if reminder_tool:
+        reminder_tool.scheduler = scheduler
 
     # Initialize notifier
     notifier = Notifier(channel_registry=channel_registry)
@@ -717,6 +729,7 @@ async def lifespan(app: FastAPI):
         background_model=settings.llm.background_model,
         cron_manager=cron_manager,
         notifier=notifier,
+        scheduler=scheduler,
         ws_port=settings.server.ws_port,
     )
 

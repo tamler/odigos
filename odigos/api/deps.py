@@ -187,6 +187,11 @@ def get_cron_manager(request: Request):
     return request.app.state.cron_manager
 
 
+def get_scheduler(request: Request):
+    """Get the Scheduler instance from app state."""
+    return request.app.state.scheduler
+
+
 def get_notifier(request: Request):
     """Get the Notifier instance from app state."""
     return request.app.state.notifier

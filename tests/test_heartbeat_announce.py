@@ -33,6 +33,7 @@ def _build_heartbeat(**overrides):
 
     hb.cron_manager = None
     hb.notifier = None
+    hb.scheduler = None
     hb._ws_port = 8001
     hb._dream_tick_counter = 0
     hb._dream_interval_ticks = 10

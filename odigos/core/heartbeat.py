@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from odigos.core.goal_store import GoalStore
     from odigos.core.evolution import EvolutionEngine
     from odigos.core.notifier import Notifier
+    from odigos.core.scheduler import Scheduler
     from odigos.core.strategist import Strategist
     from odigos.core.subagent import SubagentManager
     from odigos.core.trace import Tracer
@@ -64,6 +65,7 @@ class Heartbeat:
         background_model: str = "",
         cron_manager: CronManager | None = None,
         notifier: Notifier | None = None,
+        scheduler: Scheduler | None = None,
         ws_port: int = 8001,
     ) -> None:
         self.db = db
@@ -89,6 +91,7 @@ class Heartbeat:
         self._last_announce: float = 0
         self.cron_manager = cron_manager
         self.notifier = notifier
+        self.scheduler = scheduler
         self._ws_port = ws_port
         self._dream_tick_counter: int = 0
         self._dream_interval_ticks: int = 10
@@ -126,7 +129,10 @@ class Heartbeat:
 
         did_work = False
 
-        # Phase 1: Fire due reminders
+        # Phase 1: Process scheduled tasks (unified reminders + cron)
+        did_work |= await self._process_scheduled_tasks()
+
+        # Phase 1b: Fire legacy reminders (old table, for backward compat)
         did_work |= await self._fire_reminders()
 
         # Phase 2: Work on pending todos
@@ -135,7 +141,7 @@ class Heartbeat:
         # Phase 3: Deliver subagent results
         did_work |= await self._deliver_subagent_results()
 
-        # Phase 3b: Run due cron jobs
+        # Phase 3b: Run legacy cron jobs (old table, for backward compat)
         did_work |= await self._run_cron_jobs()
 
         # Phase 4: Process inbound peer messages
@@ -190,6 +196,72 @@ class Heartbeat:
         except Exception:
             logger.warning("Subagent dispatch failed", exc_info=True)
             return None
+
+    async def _process_scheduled_tasks(self) -> bool:
+        """Process due tasks from the unified scheduled_tasks table."""
+        if not self.scheduler:
+            return False
+        due_tasks = await self.scheduler.get_due_tasks()
+        if not due_tasks:
+            return False
+
+        for task in due_tasks:
+            try:
+                action_type = task.get("action_type", "remind")
+                if action_type == "remind":
+                    if self.notifier:
+                        await self.notifier.notify(
+                            title="Reminder",
+                            body=task["action"],
+                            conversation_id=task.get("conversation_id"),
+                        )
+                    elif task.get("conversation_id"):
+                        await self._send_notification(
+                            task["conversation_id"],
+                            f"Reminder: {task['action']}",
+                        )
+                elif action_type == "execute":
+                    message = UniversalMessage(
+                        id=str(uuid.uuid4()),
+                        channel="scheduler",
+                        sender="system",
+                        content=task["action"],
+                        timestamp=datetime.now(timezone.utc),
+                        metadata={
+                            "scheduled_task_id": task["id"],
+                            "scheduled_task_name": task["name"],
+                        },
+                    )
+                    result = await self.agent.handle_message(message)
+                    if self.notifier:
+                        await self.notifier.notify(
+                            title=f"Scheduled: {task['name']}",
+                            body=result[:4000] if result else "(no output)",
+                            conversation_id=task.get("conversation_id"),
+                        )
+                elif action_type == "notify":
+                    if self.notifier:
+                        await self.notifier.notify(
+                            title="Scheduled",
+                            body=task["action"],
+                            conversation_id=task.get("conversation_id"),
+                        )
+                    elif task.get("conversation_id"):
+                        await self._send_notification(
+                            task["conversation_id"],
+                            task["action"],
+                        )
+            except Exception:
+                logger.exception(
+                    "Scheduled task '%s' (%s) failed", task["name"], task["id"][:8]
+                )
+
+            await self.scheduler.mark_completed(task["id"])
+            logger.info(
+                "Processed scheduled task '%s' (type=%s, action_type=%s)",
+                task["name"], task["type"], task.get("action_type", "remind"),
+            )
+        return True
 
     async def _fire_reminders(self) -> bool:
         now = datetime.now(timezone.utc).isoformat()

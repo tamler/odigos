@@ -32,6 +32,7 @@ async def test_tick_runs_strategist_when_should_run():
     heartbeat.agent_client = None
     heartbeat.cron_manager = None
     heartbeat.notifier = None
+    heartbeat.scheduler = None
     heartbeat._dream_tick_counter = 0
     heartbeat._dream_interval_ticks = 10
     heartbeat._experience_tick_counter = 0

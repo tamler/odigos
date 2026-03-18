@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from odigos.core.goal_store import GoalStore
+    from odigos.core.scheduler import Scheduler
 
 
 class CreateReminderTool(BaseTool):
@@ -24,8 +26,9 @@ class CreateReminderTool(BaseTool):
         "required": ["description", "due_seconds"],
     }
 
-    def __init__(self, goal_store: GoalStore) -> None:
+    def __init__(self, goal_store: GoalStore, scheduler: Scheduler | None = None) -> None:
         self.goal_store = goal_store
+        self.scheduler = scheduler
 
     async def execute(self, params: dict) -> ToolResult:
         description = params.get("description", "")
@@ -34,12 +37,23 @@ class CreateReminderTool(BaseTool):
         conversation_id = params.get("_conversation_id")
 
         try:
-            rid = await self.goal_store.create_reminder(
-                description=description,
-                due_seconds=due_seconds,
-                recurrence=recurrence,
-                conversation_id=conversation_id,
-            )
+            if self.scheduler:
+                scheduled_time = datetime.now(timezone.utc) + timedelta(seconds=due_seconds)
+                rid = await self.scheduler.schedule_once(
+                    name=f"Reminder: {description[:50]}",
+                    action=description,
+                    scheduled_time=scheduled_time,
+                    action_type="remind",
+                    conversation_id=conversation_id,
+                )
+            else:
+                # Fallback to legacy goal_store reminders
+                rid = await self.goal_store.create_reminder(
+                    description=description,
+                    due_seconds=due_seconds,
+                    recurrence=recurrence,
+                    conversation_id=conversation_id,
+                )
         except Exception as e:
             logger.error("Failed to create reminder: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=f"Failed to create reminder: {e}")
