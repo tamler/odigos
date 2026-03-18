@@ -60,6 +60,17 @@ def search_documents(query):
         if matches:
             results.append({"filename": d["filename"], "id": d["id"], "matches": matches})
     return results
+
+def analyze_text(text, question):
+    """Request LLM analysis of a text passage.
+
+    Prints an ANALYSIS_REQUEST marker that the agent will see in the code output
+    and address in its next reasoning turn. This enables recursive LLM reasoning
+    (RLM) from within sandboxed code without direct parent-process callbacks.
+    """
+    print(f"ANALYSIS_REQUEST: {question}")
+    print(f"CONTEXT: {text[:2000]}")
+    return "[Analysis will be provided by the agent]"
 '''
 
 _MAX_TOTAL_TEXT_BYTES = 1_000_000  # 1 MB

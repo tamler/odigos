@@ -8,6 +8,7 @@ import tiktoken
 
 from odigos.core.prompt_loader import load_prompt
 from odigos.core.queries import get_recent_tool_errors, get_user_facts, get_user_profile
+from odigos.core.routing import load_routing_rules
 from odigos.db import Database
 from odigos.personality.section_registry import SectionRegistry
 from odigos.personality.prompt_builder import build_system_prompt
@@ -28,22 +29,6 @@ _tokenizer = tiktoken.get_encoding("cl100k_base")
 def estimate_tokens(text: str) -> int:
     """Count tokens using tiktoken (cl100k_base, used by Claude/GPT-4)."""
     return len(_tokenizer.encode(text, disallowed_special=()))
-
-
-def _load_routing_rules() -> dict:
-    """Load routing rules from data/agent/routing_rules.md."""
-    text = load_prompt("routing_rules.md", fallback="", base_dir="data/agent")
-    rules: dict[str, dict[str, bool]] = {}
-    current_section: str | None = None
-    for line in text.strip().split("\n"):
-        line = line.strip()
-        if line.startswith("[") and line.endswith("]"):
-            current_section = line[1:-1]
-            rules[current_section] = {}
-        elif ":" in line and current_section:
-            key, val = line.split(":", 1)
-            rules[current_section][key.strip()] = val.strip().lower() == "true"
-    return rules
 
 
 class ContextAssembler:
@@ -83,7 +68,7 @@ class ContextAssembler:
         messages: list[dict] = []
 
         # Load routing rules from editable config
-        routing = _load_routing_rules()
+        routing = load_routing_rules()
         route = routing.get(query_analysis.classification, {}) if query_analysis else {}
 
         # Recovery briefing for interrupted plans
@@ -119,6 +104,36 @@ class ContextAssembler:
                 memory_context = await self.memory_manager.recall(recall_query)
             else:
                 memory_context = await self.memory_manager.recall(message_content)
+
+        # Memory index summary (lightweight awareness of what's in memory)
+        memory_index = ""
+        if self.db and not route.get("skip_rag", False):
+            try:
+                counts = {}
+                row = await self.db.fetch_one(
+                    "SELECT COUNT(*) as cnt FROM memory_entries WHERE source_type = 'document_chunk'"
+                )
+                counts["doc_chunks"] = row["cnt"] if row else 0
+                row = await self.db.fetch_one(
+                    "SELECT COUNT(*) as cnt FROM memory_entries WHERE source_type = 'user_message'"
+                )
+                counts["conversations"] = row["cnt"] if row else 0
+                row = await self.db.fetch_one(
+                    "SELECT COUNT(*) as cnt FROM entities WHERE status = 'active'"
+                )
+                counts["entities"] = row["cnt"] if row else 0
+                row = await self.db.fetch_one(
+                    "SELECT COUNT(*) as cnt FROM documents"
+                )
+                counts["documents"] = row["cnt"] if row else 0
+
+                if any(counts.values()):
+                    memory_index = (
+                        f"## Memory index: {counts['documents']} documents ({counts['doc_chunks']} chunks), "
+                        f"{counts['conversations']} conversation memories, {counts['entities']} entities"
+                    )
+            except Exception:
+                logger.debug("Could not build memory index", exc_info=True)
 
         # Build skill catalog if available
         skill_catalog = ""
@@ -260,6 +275,7 @@ class ContextAssembler:
         system_prompt = build_system_prompt(
             sections=sections,
             memory_context=memory_context,
+            memory_index=memory_index,
             skill_catalog=skill_catalog,
             corrections_context=corrections_context,
             doc_listing=doc_listing,

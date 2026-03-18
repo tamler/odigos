@@ -760,7 +760,7 @@ class TestContextCompaction:
             ("msg-1", "conv-trim", "user", "Keep me"),
         )
 
-        messages = await assembler.build("conv-trim", "Hello", max_tokens=1500)
+        messages = await assembler.build("conv-trim", "Hello", max_tokens=1600)
 
         contents = [m["content"] for m in messages]
         assert any("Keep me" in c for c in contents)

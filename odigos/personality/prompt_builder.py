@@ -6,6 +6,7 @@ from odigos.personality.section_registry import PromptSection
 def build_system_prompt(
     sections: list[PromptSection],
     memory_context: str = "",
+    memory_index: str = "",
     skill_catalog: str = "",
     corrections_context: str = "",
     doc_listing: str = "",
@@ -30,6 +31,9 @@ def build_system_prompt(
     if user_facts:
         parts.append(user_facts)
 
+    # Memory index before detailed memory context -- lightweight awareness
+    if memory_index:
+        parts.append(memory_index)
     if memory_context:
         parts.append(memory_context)
     if skill_catalog:
