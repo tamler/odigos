@@ -454,6 +454,67 @@ The dashboard server mounts dist/ at runtime -- it just shouldn't be in version 
 
 ---
 
+### Task G17: Artifact Download Cards in Chat
+
+**Priority:** High
+
+The backend now supports artifacts -- files the agent creates for the user to download. When the agent uses `create_artifact`, the tool returns a `side_effect` with artifact metadata. The agent's text response will mention the file, but the frontend needs to render a download card.
+
+**How it works:**
+
+1. Agent calls `create_artifact` tool with `{filename: "report.csv", content: "..."}`
+2. Tool creates the file, registers it in DB, returns side_effect with:
+   ```json
+   {"artifact": {"id": "uuid", "filename": "report.csv", "content_type": "text/csv", "file_size": 1234, "download_url": "/api/artifacts/uuid/download"}}
+   ```
+3. The agent's text response says something like "I've created report.csv for you"
+4. The frontend should show a download card below the assistant message
+
+**API endpoints (already built):**
+- `GET /api/artifacts?conversation_id=X` -- list artifacts for a conversation
+- `GET /api/artifacts/{id}/download` -- download the file (returns FileResponse)
+- `GET /api/artifacts/{id}` -- get artifact metadata
+- `DELETE /api/artifacts/{id}` -- delete artifact
+
+**Frontend implementation:**
+
+1. After each assistant message, check for artifacts in the current conversation
+2. Option A (simpler): After loading messages for a conversation, also fetch `GET /api/artifacts?conversation_id=X` and render artifact cards below the chat
+3. Option B (richer): Parse artifact references from message content using a pattern
+
+**Recommended: Option A** -- fetch artifacts per conversation and show them as download cards.
+
+**Artifact card design:**
+- Small card with file icon, filename, file size, and download button
+- Download button triggers `window.open('/api/artifacts/{id}/download')` or `<a href=... download>`
+- Show content type icon (spreadsheet icon for CSV, doc icon for MD, etc.)
+- Use lucide-react icons: `FileSpreadsheet`, `FileText`, `FileJson`, `FileCode`
+
+**Files to modify:**
+- `dashboard/src/components/ChatPanel.tsx` -- add artifact loading and card rendering after messages
+- Optionally create `dashboard/src/components/ArtifactCard.tsx` for the download card
+
+**Example card layout:**
+```
+[FileSpreadsheet icon] report.csv (1.2 KB)  [Download button]
+```
+
+---
+
+### Task G18: Artifact List in Settings or Sidebar
+
+**Priority:** Low
+
+Add a way to see all artifacts across conversations. Could be:
+- A section in SettingsPage (new "Files" or "Artifacts" tab)
+- Or a small section in the sidebar below conversations
+
+Show: filename, size, date, conversation link, download button, delete button.
+
+API: `GET /api/artifacts` (no conversation_id filter = all artifacts, last 50)
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
