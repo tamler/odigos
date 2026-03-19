@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import { get } from '@/lib/api'
 import { toast } from 'sonner'
 
@@ -102,8 +103,20 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        Loading analytics...
+      <div className="max-w-5xl mx-auto px-4 py-8 space-y-8 h-full">
+        <Skeleton className="h-8 w-32" />
+        <section>
+          <Skeleton className="h-4 w-24 mb-3" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-28 w-full rounded-xl" />
+            ))}
+          </div>
+        </section>
+        <section>
+          <Skeleton className="h-4 w-40 mb-3" />
+          <Skeleton className="h-[260px] w-full rounded-xl" />
+        </section>
       </div>
     )
   }
@@ -140,7 +153,14 @@ export default function AnalyticsPage() {
           </div>
         </section>
 
-        {/* Section 2: Query Classifications */}
+        {overview?.total_queries_7d === 0 ? (
+          <div className="flex flex-col items-center justify-center p-12 text-center rounded-xl border border-dashed border-border/60 bg-muted/20">
+            <h3 className="text-lg font-medium text-foreground mb-1">No activity</h3>
+            <p className="text-sm text-muted-foreground">No activity in the last 7 days</p>
+          </div>
+        ) : (
+          <>
+            {/* Section 2: Query Classifications */}
         <section>
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">Query Classifications</h2>
           <Card>
@@ -304,6 +324,8 @@ export default function AnalyticsPage() {
             </div>
           )}
         </section>
+          </>
+        )}
       </div>
     </ScrollArea>
   )

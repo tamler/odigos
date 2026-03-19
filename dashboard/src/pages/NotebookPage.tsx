@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, ArrowLeft, Trash2 } from 'lucide-react'
 
 interface Notebook {
@@ -99,9 +100,16 @@ function NotebookList() {
       </div>
 
       {loading ? (
-        <div className="text-muted-foreground text-sm">Loading...</div>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-[74px] w-full rounded-md" />
+          ))}
+        </div>
       ) : notebooks.length === 0 ? (
-        <div className="text-muted-foreground text-sm">No notebooks yet. Create one above.</div>
+        <div className="flex flex-col items-center justify-center p-12 text-center rounded-xl border border-dashed border-border/60 bg-muted/20">
+          <h3 className="text-lg font-medium text-foreground mb-1">No notebooks</h3>
+          <p className="text-sm text-muted-foreground">Create your first notebook above</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {notebooks.map((n) => (
@@ -122,6 +130,7 @@ function NotebookList() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Delete notebook"
                 className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                 onClick={(e) => handleDelete(n.id, e)}
               >
@@ -141,10 +150,12 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
   const [entries, setEntries] = useState<NotebookEntry[]>([])
   const [newEntry, setNewEntry] = useState('')
   const [adding, setAdding] = useState(false)
+  const [loading, setLoading] = useState(true)
   const { setChatPanelOpen, setChatContext } = useOutletContext<any>()
   const entriesEndRef = useRef<HTMLDivElement>(null)
 
   const loadNotebook = useCallback(() => {
+    setLoading(true)
     get<Notebook & { entries: NotebookEntry[] }>(`/api/notebooks/${notebookId}`)
       .then((data) => {
         const { entries: loadedEntries, ...nb } = data
@@ -152,6 +163,7 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
         setEntries(loadedEntries)
       })
       .catch(() => toast.error('Failed to load notebook'))
+      .finally(() => setLoading(false))
   }, [notebookId])
 
   useEffect(() => { loadNotebook() }, [loadNotebook])
@@ -212,7 +224,7 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
       {/* Main editor panel (70%) */}
       <div className="flex flex-col flex-1 min-w-0 border-r border-border/40">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/notebooks')} className="shrink-0">
+          <Button variant="ghost" size="icon" aria-label="Back to notebooks" onClick={() => navigate('/notebooks')} className="shrink-0">
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <h1 className="text-base font-semibold truncate">
@@ -233,12 +245,16 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
 
         <ScrollArea className="flex-1 px-4">
           <div className="py-4 space-y-3 max-w-2xl">
-            {entries.length === 0 && (
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-md" />
+              ))
+            ) : entries.length === 0 ? (
               <div className="text-muted-foreground text-sm">No entries yet. Add one below.</div>
-            )}
-            {entries.map((entry) => (
-              <div
-                key={entry.id}
+            ) : (
+              entries.map((entry) => (
+                <div
+                  key={entry.id}
                 className={`group relative rounded-md border px-4 py-3 text-sm ${
                   entry.entry_type === 'agent_suggestion'
                     ? 'border-blue-500/40 bg-blue-500/5'
@@ -285,6 +301,7 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label="Delete entry"
                     className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                     onClick={() => handleDeleteEntry(entry.id)}
                   >
@@ -292,7 +309,7 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
                   </Button>
                 )}
               </div>
-            ))}
+            )))}
             <div ref={entriesEndRef} />
           </div>
         </ScrollArea>
@@ -306,7 +323,7 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleAddEntry() }}
               className="flex-1"
             />
-            <Button onClick={handleAddEntry} disabled={adding || !newEntry.trim()} size="icon">
+            <Button onClick={handleAddEntry} disabled={adding || !newEntry.trim()} size="icon" aria-label="Add entry">
               <Plus className="h-4 w-4" />
             </Button>
           </div>

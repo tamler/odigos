@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { get, post } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Users, Wifi, WifiOff, Clock, Plus, Server } from 'lucide-react'
 
 interface Agent {
@@ -92,37 +94,36 @@ export default function AgentsPage() {
           <div className="p-4 rounded-lg border border-border/40 bg-muted/30 space-y-3">
             <h2 className="text-sm font-medium">Create Specialist Agent</h2>
             <div className="grid grid-cols-2 gap-3">
-              <input
-                className="px-3 py-2 text-sm rounded border border-border/40 bg-background"
+              <Input
                 placeholder="Agent name"
                 value={spawnForm.agent_name}
                 onChange={(e) => setSpawnForm({ ...spawnForm, agent_name: e.target.value })}
               />
-              <input
-                className="px-3 py-2 text-sm rounded border border-border/40 bg-background"
+              <Input
                 placeholder="Role (e.g. backend_dev)"
                 value={spawnForm.role}
                 onChange={(e) => setSpawnForm({ ...spawnForm, role: e.target.value })}
               />
-              <input
-                className="px-3 py-2 text-sm rounded border border-border/40 bg-background"
+              <Input
                 placeholder="Specialty tag"
                 value={spawnForm.specialty}
                 onChange={(e) => setSpawnForm({ ...spawnForm, specialty: e.target.value })}
               />
-              <select
-                className="px-3 py-2 text-sm rounded border border-border/40 bg-background"
+              <Select
                 value={spawnForm.deploy_target}
-                onChange={(e) => setSpawnForm({ ...spawnForm, deploy_target: e.target.value })}
+                onValueChange={(val) => setSpawnForm({ ...spawnForm, deploy_target: val as string })}
               >
-                <option value="">Deploy target...</option>
-                {targets.map((t) => (
-                  <option key={t.name} value={t.name}>{t.name} ({t.host})</option>
-                ))}
-              </select>
+                <SelectTrigger className="bg-background">
+                  <SelectValue placeholder="Deploy target..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {targets.map((t) => (
+                    <SelectItem key={t.name} value={t.name}>{t.name} ({t.host})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <input
-              className="w-full px-3 py-2 text-sm rounded border border-border/40 bg-background"
+            <Input
               placeholder="Description (1-2 sentences)"
               value={spawnForm.description}
               onChange={(e) => setSpawnForm({ ...spawnForm, description: e.target.value })}

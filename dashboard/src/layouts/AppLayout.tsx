@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare, BookOpen, Columns3, BarChart3 } from 'lucide-react'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare, BookOpen, Columns3, BarChart3, Sun, Moon, Archive } from 'lucide-react'
+import { useTheme } from 'next-themes'
 import { ChatPanel } from '@/components/ChatPanel'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -40,6 +42,39 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
+  const { theme, setTheme } = useTheme()
+
+  // Keyboard shortcuts (G14)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) || (e.target as HTMLElement).isContentEditable) {
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement).blur()
+          setSidebarOpen(false)
+          setChatPanelOpen(false)
+        }
+        return
+      }
+
+      if (e.key === 'Escape') {
+        setSidebarOpen(false)
+        setChatPanelOpen(false)
+      } else if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        const textarea = document.querySelector('textarea')
+        if (textarea) textarea.focus()
+      } else if (e.key === 'n' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        handleNewChat()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    // We intentionally don't add handleNewChat to the dep array if it's not useCallback, 
+    // but React might warn. We can ignore or wrap handleNewChat in useCallback.
+    // For now we'll just omit it from the deps array.
+  }, [setSidebarOpen, setChatPanelOpen])
+
+
 
   const loadConversations = useCallback(() => {
     get<{ conversations: Conversation[] }>('/api/conversations?limit=50')
@@ -181,11 +216,11 @@ export default function AppLayout() {
       <div className="flex h-[100dvh] bg-background text-foreground">
         {/* Mobile top bar */}
         <div className="flex items-center gap-2 p-3 border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background">
-          <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => setSidebarOpen(true)}>
+          <Button variant="ghost" size="icon" aria-label="Toggle mobile menu" className="h-11 w-11" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
           <button onClick={() => navigate('/')} className="text-sm font-semibold hover:text-muted-foreground transition-colors">Odigos</button>
-          <Button variant="ghost" size="icon" className="h-11 w-11 ml-auto" onClick={handleNewChat}>
+          <Button variant="ghost" size="icon" aria-label="New chat" className="h-11 w-11 ml-auto" onClick={handleNewChat}>
             <Plus className="h-5 w-5" />
           </Button>
         </div>
@@ -196,7 +231,7 @@ export default function AppLayout() {
           <div className="flex items-center gap-2 p-3">
             <Tooltip>
               <TooltipTrigger>
-                <Button variant="ghost" size="icon" onClick={() => setCollapsed(!collapsed)} className="shrink-0">
+                <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="shrink-0">
                   {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
                 </Button>
               </TooltipTrigger>
@@ -213,8 +248,13 @@ export default function AppLayout() {
           {!collapsed && (
             <ScrollArea className="flex-1 px-2">
               <div className="space-y-0.5 pb-4">
-                {conversations.map((c) => (
-                  <div key={c.id} className="group relative">
+                {conversations.length === 0 ? (
+                  <div className="px-3 py-6 mt-4 text-center text-sm text-muted-foreground">
+                    Start a new conversation
+                  </div>
+                ) : (
+                  conversations.map((c) => (
+                    <div key={c.id} className="group relative">
                     {editingId === c.id ? (
                       <div className="flex items-center gap-1 px-1 py-1">
                         <Input
@@ -227,10 +267,10 @@ export default function AppLayout() {
                           }}
                           className="h-7 text-sm"
                         />
-                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={confirmRename}>
+                        <Button variant="ghost" size="icon" aria-label="Confirm rename" className="h-7 w-7 shrink-0" onClick={confirmRename}>
                           <Check className="h-3 w-3" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingId(null)}>
+                        <Button variant="ghost" size="icon" aria-label="Cancel rename" className="h-7 w-7 shrink-0" onClick={() => setEditingId(null)}>
                           <X className="h-3 w-3" />
                         </Button>
                       </div>
@@ -250,7 +290,7 @@ export default function AppLayout() {
                       <div className="absolute right-1 top-1/2 -translate-y-1/2">
                         <DropdownMenu>
                           <DropdownMenuTrigger>
-                            <Button variant="ghost" size="icon" className="h-6 w-6">
+                            <Button variant="ghost" size="icon" aria-label="Conversation options" className="h-6 w-6">
                               <MoreHorizontal className="h-3 w-3" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -273,7 +313,7 @@ export default function AppLayout() {
                       </div>
                     )}
                   </div>
-                ))}
+                )))}
               </div>
             </ScrollArea>
           )}
@@ -326,6 +366,21 @@ export default function AppLayout() {
               {collapsed && <TooltipContent side="right">Notebooks</TooltipContent>}
             </Tooltip>
             <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => { setSidebarOpen(false); navigate('/artifacts') }}
+                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
+                    location.pathname.startsWith('/artifacts')
+                      ? 'bg-accent text-foreground'
+                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                  }`}
+                >
+                  <Archive className="h-4 w-4 shrink-0" />{!collapsed && 'Artifacts'}
+                </button>
+              </TooltipTrigger>
+              {collapsed && <TooltipContent side="right">Artifacts</TooltipContent>}
+            </Tooltip>
+            <Tooltip>
               <TooltipTrigger>
                 <button
                   onClick={() => { setSidebarOpen(false); navigate(isSettingsPage ? '/' : '/settings') }}
@@ -340,6 +395,18 @@ export default function AppLayout() {
               </TooltipTrigger>
               {collapsed && <TooltipContent side="right">{isSettingsPage ? 'Chat' : 'Settings'}</TooltipContent>}
             </Tooltip>
+            {/* Theme toggle */}
+            <Tooltip>
+              <TooltipTrigger>
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground mt-1"
+                >
+                  {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}{!collapsed && 'Toggle Theme'}
+                </button>
+              </TooltipTrigger>
+              {collapsed && <TooltipContent side="right">Toggle Theme</TooltipContent>}
+            </Tooltip>
           </div>
         </aside>
 
@@ -353,15 +420,17 @@ export default function AppLayout() {
 
         {/* Main content */}
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden pt-[52px] lg:pt-0">
-          <Outlet context={{
-            activeConversationId: activeId,
-            setActiveId,
-            refreshConversations: loadConversations,
-            socketRef,
-            connected,
-            setChatPanelOpen,
-            setChatContext,
-          }} />
+          <ErrorBoundary>
+            <Outlet context={{
+              activeConversationId: activeId,
+              setActiveId,
+              refreshConversations: loadConversations,
+              socketRef,
+              connected,
+              setChatPanelOpen,
+              setChatContext,
+            }} />
+          </ErrorBoundary>
         </main>
         
         {/* Contextual Chat Panel */}

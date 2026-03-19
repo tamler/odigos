@@ -13,6 +13,7 @@ import {
   ChatContainerScrollAnchor,
 } from '@/components/ui/chat-container'
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
+import { Artifact, ArtifactCard } from '@/components/ArtifactCard'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -44,6 +45,7 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [thinking, setThinking] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
@@ -119,22 +121,35 @@ export function ChatPanel({
     setThinking(false)
     setStatus(null)
 
-    get<{ messages: { role: string; content: string; timestamp: string }[] }>(
-      `/api/conversations/${cid}/messages`
-    )
-      .then((data) => {
-        if (data?.messages) {
-          setMessages(
-            data.messages.map((m) => ({
-              role: m.role as 'user' | 'assistant',
-              content: m.content,
-              timestamp: m.timestamp,
-            }))
-          )
-        }
-      })
-      .catch(() => {})
+    Promise.allSettled([
+      get<{ messages: { role: string; content: string; timestamp: string }[] }>(`/api/conversations/${cid}/messages`),
+      get<{ artifacts: Artifact[] }>(`/api/artifacts?conversation_id=${cid}`)
+    ]).then(([msgRes, artRes]) => {
+      if (msgRes.status === 'fulfilled' && msgRes.value?.messages) {
+        setMessages(
+          msgRes.value.messages.map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            timestamp: m.timestamp,
+          }))
+        )
+      }
+      if (artRes.status === 'fulfilled' && artRes.value?.artifacts) {
+        setArtifacts(artRes.value.artifacts)
+      }
+    }).catch(() => {})
   }, [activeConversationId, searchParams])
+
+  // Fetch artifacts when thinking completes
+  useEffect(() => {
+    if (!thinking && loadedConvRef.current) {
+      get<{ artifacts: Artifact[] }>(`/api/artifacts?conversation_id=${loadedConvRef.current}`)
+        .then(res => {
+          if (res?.artifacts) setArtifacts(res.artifacts)
+        })
+        .catch(() => {})
+    }
+  }, [thinking])
 
   // Auto-resize textarea
   useEffect(() => {
@@ -310,7 +325,7 @@ export function ChatPanel({
               )}
             </div>
             {onClose && (
-              <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0 h-8 w-8 hover:bg-muted">
+              <Button variant="ghost" size="icon" aria-label="Close chat panel" onClick={onClose} className="shrink-0 h-8 w-8 hover:bg-muted">
                 <PanelRightClose className="h-4 w-4" />
               </Button>
             )}
@@ -364,6 +379,7 @@ export function ChatPanel({
                           onClick={() => playTTS(msg.content)}
                           className="mt-1 opacity-0 group-hover/msg:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
                           title="Read aloud"
+                          aria-label="Read aloud"
                         >
                           <Volume2 className="h-4 w-4" />
                         </button>
@@ -378,6 +394,16 @@ export function ChatPanel({
                   <span className="text-xs text-muted-foreground animate-pulse">
                     {status || 'Thinking...'}
                   </span>
+                </div>
+              )}
+              {artifacts.length > 0 && (
+                <div className="pt-4 mt-6 border-t border-border/40">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Generated Artifacts</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {artifacts.map(a => (
+                      <ArtifactCard key={a.id} artifact={a} />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -400,7 +426,7 @@ export function ChatPanel({
                     <span className="truncate flex-shrink">{p.file.name}</span>
                     <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(p.file.size)}</span>
                     {p.uploading && <Loader variant="typing" size="sm" />}
-                    <button onClick={() => removeFile(p.file)} className="shrink-0 text-muted-foreground hover:text-foreground">
+                    <button onClick={() => removeFile(p.file)} aria-label="Remove file" className="shrink-0 text-muted-foreground hover:text-foreground">
                       <X className="h-3 w-3" />
                     </button>
                   </div>
@@ -425,6 +451,7 @@ export function ChatPanel({
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label="Attach file"
                     className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
                     disabled={!connected}
                   >
@@ -436,6 +463,7 @@ export function ChatPanel({
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label={recording ? "Stop dictation" : "Start dictation"}
                       className={`h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground ${recording ? 'text-red-500 animate-pulse' : ''}`}
                       disabled={!connected}
                       onClick={recording ? stopRecording : startRecording}
@@ -445,6 +473,7 @@ export function ChatPanel({
                   )}
                   <Button
                     size="icon"
+                    aria-label="Send message"
                     className="h-8 w-8 rounded-lg"
                     disabled={!canSend}
                     onClick={handleSend}

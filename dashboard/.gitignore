@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Build Output
+dist/
+
 # Logs
 *.log
 

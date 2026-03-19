@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { get, post } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Link2, Copy, X, Clock } from 'lucide-react'
 
 interface IssuedCard {
@@ -141,17 +143,20 @@ export default function ConnectionsPage({ active }: { active?: boolean }) {
           <div className="p-4 rounded-lg border border-border/40 bg-muted/30 space-y-3">
             <h2 className="text-sm font-medium">Generate Contact Card</h2>
             <div className="grid grid-cols-2 gap-3">
-              <select
-                className="px-3 py-2 text-sm rounded border border-border/40 bg-background"
+              <Select
                 value={generateForm.type}
-                onChange={(e) => setGenerateForm({ ...generateForm, type: e.target.value })}
+                onValueChange={(val) => setGenerateForm({ ...generateForm, type: val as string })}
               >
-                <option value="connect">Connect</option>
-                <option value="subscribe">Subscribe</option>
-                <option value="invite">Invite</option>
-              </select>
-              <input
-                className="px-3 py-2 text-sm rounded border border-border/40 bg-background"
+                <SelectTrigger className="bg-background">
+                  <SelectValue placeholder="Card type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="connect">Connect</SelectItem>
+                  <SelectItem value="subscribe">Subscribe</SelectItem>
+                  <SelectItem value="invite">Invite</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
                 placeholder="Expiry (days, optional)"
                 type="number"
                 min="1"
@@ -171,7 +176,7 @@ export default function ConnectionsPage({ active }: { active?: boolean }) {
           <div className="p-4 rounded-lg border border-border/40 bg-muted/30 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium">Card Generated</h2>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setGenerated(null); setShowGenerate(false) }}>
+              <Button variant="ghost" size="icon" aria-label="Dismiss card" className="h-6 w-6" onClick={() => { setGenerated(null); setShowGenerate(false) }}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -183,6 +188,7 @@ export default function ConnectionsPage({ active }: { active?: boolean }) {
                   variant="ghost" size="icon"
                   className="absolute top-2 right-2 h-6 w-6"
                   onClick={() => copyToClipboard(generated.yaml)}
+                  aria-label="Copy YAML"
                 >
                   <Copy className="h-3 w-3" />
                 </Button>
@@ -196,6 +202,7 @@ export default function ConnectionsPage({ active }: { active?: boolean }) {
                   variant="ghost" size="icon"
                   className="absolute top-2 right-2 h-6 w-6"
                   onClick={() => copyToClipboard(generated.compact)}
+                  aria-label="Copy compact string"
                 >
                   <Copy className="h-3 w-3" />
                 </Button>

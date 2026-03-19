@@ -4,6 +4,7 @@ import { get, post, del } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, ArrowLeft, Trash2 } from 'lucide-react'
 import {
   KanbanBoardProvider,
@@ -122,9 +123,16 @@ function BoardList() {
       </div>
 
       {loading ? (
-        <div className="text-muted-foreground text-sm">Loading...</div>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-[74px] w-full rounded-md" />
+          ))}
+        </div>
       ) : boards.length === 0 ? (
-        <div className="text-muted-foreground text-sm">No boards yet. Create one above.</div>
+        <div className="flex flex-col items-center justify-center p-12 text-center rounded-xl border border-dashed border-border/60 bg-muted/20">
+          <h3 className="text-lg font-medium text-foreground mb-1">No boards</h3>
+          <p className="text-sm text-muted-foreground mb-4">Create your first board above</p>
+        </div>
       ) : (
         <div className="space-y-2">
           {boards.map((b) => (
@@ -144,6 +152,7 @@ function BoardList() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Delete board"
                 className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
                 onClick={(e) => handleDelete(b.id, e)}
               >
@@ -295,7 +304,7 @@ function BoardDetailInner({ boardId, board, setBoard }: {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/kanban')} className="shrink-0">
+        <Button variant="ghost" size="icon" aria-label="Back to boards" onClick={() => navigate('/kanban')} className="shrink-0">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-base font-semibold truncate">{board.title}</h1>
@@ -334,6 +343,7 @@ function BoardDetailInner({ boardId, board, setBoard }: {
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label="Delete column"
                     className="h-6 w-6 text-muted-foreground hover:text-destructive"
                     onClick={() => handleDeleteColumn(col.id)}
                   >
@@ -385,6 +395,7 @@ function BoardDetailInner({ boardId, board, setBoard }: {
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Add card"
                       className="h-7 w-7 shrink-0"
                       onClick={() => handleAddCard(col.id)}
                       disabled={!(newCardTexts[col.id] || '').trim()}
@@ -444,8 +455,16 @@ function BoardDetail({ boardId }: { boardId: string }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-        Loading...
+      <div className="flex flex-col h-full overflow-hidden px-4">
+        <div className="flex items-center gap-3 py-3 border-b border-border/40 shrink-0">
+          <Skeleton className="h-8 w-8 rounded-md" />
+          <Skeleton className="h-6 w-48" />
+        </div>
+        <div className="flex-1 py-4 flex gap-4 overflow-hidden">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-full w-64 rounded-xl shrink-0" />
+          ))}
+        </div>
       </div>
     )
   }

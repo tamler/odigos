@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { get, post } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Users, Wifi, WifiOff, Clock, Plus, Server } from 'lucide-react'
 
 interface Agent {
@@ -82,27 +83,23 @@ export default function AgentsTab({ active }: { active?: boolean }) {
         <div className="p-4 rounded-lg border border-border/40 bg-card space-y-3">
           <h3 className="text-sm font-medium">Create Specialist Agent</h3>
           <div className="grid grid-cols-2 gap-3">
-            <input
-              className="px-3 py-2 text-sm rounded-md border border-border/40 bg-muted/50"
+            <Input
               placeholder="Agent name"
               value={spawnForm.agent_name}
               onChange={(e) => setSpawnForm({ ...spawnForm, agent_name: e.target.value })}
             />
-            <input
-              className="px-3 py-2 text-sm rounded-md border border-border/40 bg-muted/50"
+            <Input
               placeholder="Role (e.g. backend_dev)"
               value={spawnForm.role}
               onChange={(e) => setSpawnForm({ ...spawnForm, role: e.target.value })}
             />
-            <input
-              className="px-3 py-2 text-sm rounded-md border border-border/40 bg-muted/50"
+            <Input
               placeholder="Specialty tag"
               value={spawnForm.specialty}
               onChange={(e) => setSpawnForm({ ...spawnForm, specialty: e.target.value })}
             />
           </div>
-          <input
-            className="w-full px-3 py-2 text-sm rounded-md border border-border/40 bg-muted/50"
+          <Input
             placeholder="Description (1-2 sentences)"
             value={spawnForm.description}
             onChange={(e) => setSpawnForm({ ...spawnForm, description: e.target.value })}
