@@ -270,8 +270,12 @@ class AgentClient:
                 "matched_patterns": filter_result.matched_patterns,
             }
 
+        # Skip recording system-level messages (announce, ping, pong) in peer_messages
+        _SYSTEM_TYPES = {MSG_REGISTRY_ANNOUNCE, MSG_STATUS_PING, "status_pong"}
+        is_system_msg = msg.type in _SYSTEM_TYPES
+
         # Deduplicate
-        if self._db:
+        if self._db and not is_system_msg:
             existing = await self._db.fetch_one(
                 "SELECT 1 FROM peer_messages WHERE message_id = ? AND direction = 'inbound'",
                 (msg.id,),
@@ -289,11 +293,17 @@ class AgentClient:
                  json.dumps(msg.to_dict()), msg.correlation_id),
             )
 
-        # Built-in handlers
+        # Built-in handlers (system messages -- never forwarded to agent)
         if msg.type == MSG_REGISTRY_ANNOUNCE:
             await self._handle_announce(msg, peer_ip)
+            return
         elif msg.type == MSG_STATUS_PING:
             await self._handle_ping(msg)
+            return
+        elif msg.type == "status_pong":
+            # Pong is just an ack -- update last_seen, don't process further
+            await self._handle_ping(msg)
+            return
 
         # Custom handlers
         for handler in self._handlers.get(msg.type, []):
@@ -477,7 +487,7 @@ class AgentClient:
             "SELECT message_id, peer_name, message_type, content, created_at, response_to "
             "FROM peer_messages "
             "WHERE direction = 'inbound' AND status = 'received' "
-            "AND message_type NOT IN ('registry_announce', 'status_ping') "
+            "AND message_type NOT IN ('registry_announce', 'status_ping', 'status_pong') "
             "ORDER BY created_at ASC LIMIT ?",
             (limit,),
         )
