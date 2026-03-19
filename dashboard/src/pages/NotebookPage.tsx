@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, ArrowLeft, Trash2 } from 'lucide-react'
+import { Plus, Trash2, BookOpen } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 interface Notebook {
   id: string
@@ -36,123 +37,43 @@ export default function NotebookPage() {
   if (id) {
     return <NotebookEditor notebookId={id} />
   }
-  return <NotebookList />
+  return <NotebookAutoRedirect />
 }
 
-function NotebookList() {
+function NotebookAutoRedirect() {
   const navigate = useNavigate()
-  const [notebooks, setNotebooks] = useState<Notebook[]>([])
-  const [loading, setLoading] = useState(true)
-  const [newTitle, setNewTitle] = useState('')
-  const [creating, setCreating] = useState(false)
-
-  const loadNotebooks = useCallback(() => {
-    setLoading(true)
+  useEffect(() => {
     get<{ notebooks: Notebook[] }>('/api/notebooks')
-      .then((data) => setNotebooks(data.notebooks))
-      .catch(() => toast.error('Failed to load notebooks'))
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => { loadNotebooks() }, [loadNotebooks])
-
-  async function handleCreate() {
-    const title = newTitle.trim()
-    if (!title) return
-    setCreating(true)
-    try {
-      const nb = await post<Notebook>('/api/notebooks', { title })
-      setNewTitle('')
-      navigate(`/notebooks/${nb.id}`)
-    } catch {
-      toast.error('Failed to create notebook')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  async function handleDelete(id: string, e: React.MouseEvent) {
-    e.stopPropagation()
-    try {
-      await del(`/api/notebooks/${id}`)
-      setNotebooks((prev) => prev.filter((n) => n.id !== id))
-      toast.success('Notebook deleted')
-    } catch {
-      toast.error('Failed to delete notebook')
-    }
-  }
-
-  return (
-    <div className="flex flex-col h-full max-w-2xl mx-auto w-full px-4 py-8">
-      <h1 className="text-2xl font-semibold mb-6">Notebooks</h1>
-
-      <div className="flex gap-2 mb-6">
-        <Input
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          placeholder="New notebook title..."
-          onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
-          className="flex-1"
-        />
-        <Button onClick={handleCreate} disabled={creating || !newTitle.trim()}>
-          <Plus className="h-4 w-4 mr-1" /> Create
-        </Button>
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[74px] w-full rounded-md" />
-          ))}
-        </div>
-      ) : notebooks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 text-center rounded-xl border border-dashed border-border/60 bg-muted/20">
-          <h3 className="text-lg font-medium text-foreground mb-1">No notebooks</h3>
-          <p className="text-sm text-muted-foreground">Create your first notebook above</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {notebooks.map((n) => (
-            <div
-              key={n.id}
-              onClick={() => navigate(`/notebooks/${n.id}`)}
-              className="flex items-center justify-between px-4 py-3 rounded-md border border-border/50 hover:bg-accent/50 cursor-pointer transition-colors group"
-            >
-              <div>
-                <div className="text-sm font-medium">{n.title}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {n.mode} &middot; {n.collaboration} &middot;{' '}
-                  {new Date(n.updated_at + 'Z').toLocaleDateString(undefined, {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                  })}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Delete notebook"
-                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                onClick={(e) => handleDelete(n.id, e)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
+      .then((data) => {
+        if (data.notebooks.length === 0) {
+          post<Notebook>('/api/notebooks', { title: 'My Notebook' })
+            .then(nb => navigate(`/notebooks/${nb.id}`, { replace: true }))
+        } else {
+          const latest = data.notebooks.sort((a,b) => new Date(b.updated_at + 'Z').getTime() - new Date(a.updated_at + 'Z').getTime())[0]
+          navigate(`/notebooks/${latest.id}`, { replace: true })
+        }
+      })
+      .catch(() => {})
+  }, [navigate])
+  return <div className="p-8 text-sm text-muted-foreground animate-pulse">Loading workspace...</div>
 }
 
 function NotebookEditor({ notebookId }: { notebookId: string }) {
   const navigate = useNavigate()
   const [notebook, setNotebook] = useState<Notebook | null>(null)
+  const [notebooksList, setNotebooksList] = useState<Notebook[]>([])
   const [entries, setEntries] = useState<NotebookEntry[]>([])
   const [newEntry, setNewEntry] = useState('')
   const [adding, setAdding] = useState(false)
   const [loading, setLoading] = useState(true)
   const { setChatPanelOpen, setChatContext } = useOutletContext<any>()
   const entriesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    get<{ notebooks: Notebook[] }>('/api/notebooks').then(data => {
+      setNotebooksList(data.notebooks.sort((a,b) => new Date(b.updated_at + 'Z').getTime() - new Date(a.updated_at + 'Z').getTime()))
+    }).catch(() => {})
+  }, [notebookId])
 
   const loadNotebook = useCallback(() => {
     setLoading(true)
@@ -224,12 +145,51 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
       {/* Main editor panel (70%) */}
       <div className="flex flex-col flex-1 min-w-0 border-r border-border/40">
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0">
-          <Button variant="ghost" size="icon" aria-label="Back to notebooks" onClick={() => navigate('/notebooks')} className="shrink-0">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-base font-semibold truncate">
-            {notebook ? notebook.title : 'Loading...'}
-          </h1>
+          <DropdownMenu>
+            <DropdownMenuTrigger>
+              <Button variant="ghost" className="h-8 px-2 flex items-center gap-2 max-w-[200px] sm:max-w-[300px]">
+                <BookOpen className="h-4 w-4 shrink-0" />
+                <span className="truncate">{notebook ? notebook.title : 'Loading...'}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <ScrollArea className="max-h-[300px]">
+                {notebooksList.map(nb => (
+                  <DropdownMenuItem key={nb.id} onClick={() => navigate(`/notebooks/${nb.id}`)}>
+                    {nb.title}
+                  </DropdownMenuItem>
+                ))}
+              </ScrollArea>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={async () => {
+                try {
+                  const nb = await post<Notebook>('/api/notebooks', { title: 'New Notebook' })
+                  navigate(`/notebooks/${nb.id}`)
+                } catch {
+                  toast.error('Failed to create notebook')
+                }
+              }}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Notebook
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Delete Button */}
+          {notebook && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={async () => {
+              try {
+                await del(`/api/notebooks/${notebookId}`)
+                toast.success('Notebook deleted')
+                navigate('/notebooks')
+              } catch {
+                toast.error('Failed to delete notebook')
+              }
+            }}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+
           {notebook && (
             <span className="text-xs text-muted-foreground ml-auto">
               {notebook.mode} &middot; {notebook.collaboration}

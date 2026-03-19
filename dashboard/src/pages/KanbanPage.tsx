@@ -5,7 +5,9 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, ArrowLeft, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Columns3 } from 'lucide-react'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
   KanbanBoardProvider,
   KanbanBoard,
@@ -59,112 +61,28 @@ export default function KanbanPage() {
   if (id) {
     return <BoardDetail boardId={id} />
   }
-  return <BoardList />
+  return <KanbanAutoRedirect />
 }
 
-function BoardList() {
+function KanbanAutoRedirect() {
   const navigate = useNavigate()
-  const [boards, setBoards] = useState<Board[]>([])
-  const [loading, setLoading] = useState(true)
-  const [newTitle, setNewTitle] = useState('')
-  const [creating, setCreating] = useState(false)
-
-  const loadBoards = useCallback(() => {
-    setLoading(true)
+  useEffect(() => {
     get<{ boards: Board[] }>('/api/kanban/boards')
-      .then((data) => setBoards(data.boards))
-      .catch(() => toast.error('Failed to load boards'))
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => { loadBoards() }, [loadBoards])
-
-  async function handleCreate() {
-    const title = newTitle.trim()
-    if (!title) return
-    setCreating(true)
-    try {
-      const board = await post<Board>('/api/kanban/boards', { title })
-      setNewTitle('')
-      navigate(`/kanban/${board.id}`)
-    } catch {
-      toast.error('Failed to create board')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  async function handleDelete(id: string, e: React.MouseEvent) {
-    e.stopPropagation()
-    try {
-      await del(`/api/kanban/boards/${id}`)
-      setBoards((prev) => prev.filter((b) => b.id !== id))
-      toast.success('Board deleted')
-    } catch {
-      toast.error('Failed to delete board')
-    }
-  }
-
-  return (
-    <div className="flex flex-col h-full max-w-2xl mx-auto w-full px-4 py-8">
-      <h1 className="text-2xl font-semibold mb-6">Kanban Boards</h1>
-
-      <div className="flex gap-2 mb-6">
-        <Input
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          placeholder="New board title..."
-          onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
-          className="flex-1"
-        />
-        <Button onClick={handleCreate} disabled={creating || !newTitle.trim()}>
-          <Plus className="h-4 w-4 mr-1" /> Create
-        </Button>
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[74px] w-full rounded-md" />
-          ))}
-        </div>
-      ) : boards.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-12 text-center rounded-xl border border-dashed border-border/60 bg-muted/20">
-          <h3 className="text-lg font-medium text-foreground mb-1">No boards</h3>
-          <p className="text-sm text-muted-foreground mb-4">Create your first board above</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {boards.map((b) => (
-            <div
-              key={b.id}
-              onClick={() => navigate(`/kanban/${b.id}`)}
-              className="flex items-center justify-between px-4 py-3 rounded-md border border-border/50 hover:bg-accent/50 cursor-pointer transition-colors group"
-            >
-              <div>
-                <div className="text-sm font-medium">{b.title}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">
-                  {new Date(b.updated_at + 'Z').toLocaleDateString(undefined, {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                  })}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Delete board"
-                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                onClick={(e) => handleDelete(b.id, e)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
+      .then((data) => {
+        if (data.boards.length === 0) {
+          post<Board>('/api/kanban/boards', { title: 'My Board' })
+            .then(b => navigate(`/kanban/${b.id}`, { replace: true }))
+        } else {
+          const latest = data.boards.sort((a,b) => new Date(b.updated_at + 'Z').getTime() - new Date(a.updated_at + 'Z').getTime())[0]
+          navigate(`/kanban/${latest.id}`, { replace: true })
+        }
+      })
+      .catch(() => {})
+  }, [navigate])
+  return <div className="p-8 text-sm text-muted-foreground animate-pulse">Loading board...</div>
 }
+
+
 
 function BoardDetailInner({ boardId, board, setBoard }: {
   boardId: string
@@ -177,6 +95,13 @@ function BoardDetailInner({ boardId, board, setBoard }: {
   const [newColumnTitle, setNewColumnTitle] = useState('')
   const [addingColumn, setAddingColumn] = useState(false)
   const { onDragEnd } = useDndEvents()
+  const [boardsList, setBoardsList] = useState<Board[]>([])
+
+  useEffect(() => {
+    get<{ boards: Board[] }>('/api/kanban/boards').then(data => {
+      setBoardsList(data.boards.sort((a,b) => new Date(b.updated_at + 'Z').getTime() - new Date(a.updated_at + 'Z').getTime()))
+    }).catch(() => {})
+  }, [boardId])
 
   // Group cards by column_id, sorted by position
   const cardsByColumn = useMemo(() => {
@@ -304,10 +229,51 @@ function BoardDetailInner({ boardId, board, setBoard }: {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0">
-        <Button variant="ghost" size="icon" aria-label="Back to boards" onClick={() => navigate('/kanban')} className="shrink-0">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <h1 className="text-base font-semibold truncate">{board.title}</h1>
+        <DropdownMenu>
+          <DropdownMenuTrigger>
+            <Button variant="ghost" className="h-8 px-2 flex items-center gap-2 max-w-[200px] sm:max-w-[300px]">
+              <Columns3 className="h-4 w-4 shrink-0" />
+              <span className="truncate">{board ? board.title : 'Loading...'}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <ScrollArea className="max-h-[300px]">
+              {boardsList.map(b => (
+                <DropdownMenuItem key={b.id} onClick={() => navigate(`/kanban/${b.id}`)}>
+                  {b.title}
+                </DropdownMenuItem>
+              ))}
+            </ScrollArea>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={async () => {
+              try {
+                const b = await post<Board>('/api/kanban/boards', { title: 'New Board' })
+                navigate(`/kanban/${b.id}`)
+              } catch {
+                toast.error('Failed to create board')
+              }
+            }}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Board
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Delete Button */}
+        {board && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={async () => {
+             try {
+               await del(`/api/kanban/boards/${boardId}`)
+               toast.success('Board deleted')
+               navigate('/kanban')
+             } catch {
+               toast.error('Failed to delete board')
+             }
+          }}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+
         <Button variant="outline" size="sm" className="ml-auto" onClick={() => {
           setChatContext({ board_id: boardId })
           setChatPanelOpen(true)

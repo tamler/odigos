@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
@@ -44,6 +44,8 @@ export function ChatPanel({
   onClose,
 }: ChatPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [streamingContent, setStreamingContent] = useState('')
@@ -363,7 +365,14 @@ export function ChatPanel({
                   What can I help you with?
                 </div>
               )}
-              {messages.map((msg, i) => (
+              {messages.length > messageDisplayLimit && (
+                <div className="flex justify-center pb-2">
+                  <Button variant="outline" size="sm" onClick={() => setMessageDisplayLimit(l => l + 100)} className="text-xs h-7">
+                    Load earlier messages
+                  </Button>
+                </div>
+              )}
+              {messages.slice(-messageDisplayLimit).map((msg, i) => (
                 <div key={i}>
                   {msg.role === 'user' ? (
                     <div className="flex justify-end">
@@ -519,6 +528,17 @@ export function ChatPanel({
                 </div>
               </div>
             </div>
+
+            {/* Quick Links */}
+            {!isSidePanel && (
+              <div className="flex justify-center gap-4 mt-3 text-xs text-muted-foreground/70 sm:text-[11px] font-medium tracking-wide">
+                <button onClick={() => navigate('/notebooks')} className="hover:text-foreground transition-colors">Journal</button>
+                <span>&middot;</span>
+                <button onClick={() => navigate('/kanban')} className="hover:text-foreground transition-colors">Board</button>
+                <span>&middot;</span>
+                <button onClick={() => navigate('/settings')} className="hover:text-foreground transition-colors">Documents</button>
+              </div>
+            )}
           </div>
         </div>
       </div>

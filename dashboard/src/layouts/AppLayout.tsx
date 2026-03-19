@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare, BookOpen, Columns3, BarChart3, Sun, Moon, Archive, Network } from 'lucide-react'
-import { useTheme } from 'next-themes'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
@@ -43,7 +42,6 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { theme, setTheme } = useTheme()
 
   // Keyboard shortcuts (G14)
   useEffect(() => {
@@ -107,7 +105,6 @@ export default function AppLayout() {
           setConversations((prev) =>
             prev.map((c) => (c.id === cid ? { ...c, title } : c))
           )
-          loadConversations()
         }
       },
       (isConnected) => {
@@ -340,82 +337,7 @@ export default function AppLayout() {
           {/* Bottom: Toggle between Chat and Settings */}
           <div className="p-3 mt-auto">
             <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/analytics') }}
-                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
-                    location.pathname.startsWith('/analytics')
-                      ? 'bg-accent text-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <BarChart3 className="h-4 w-4 shrink-0" />{!collapsed && 'Analytics'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Analytics</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/kanban') }}
-                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
-                    location.pathname.startsWith('/kanban')
-                      ? 'bg-accent text-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <Columns3 className="h-4 w-4 shrink-0" />{!collapsed && 'Kanban'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Kanban</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/notebooks') }}
-                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
-                    location.pathname.startsWith('/notebooks')
-                      ? 'bg-accent text-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <BookOpen className="h-4 w-4 shrink-0" />{!collapsed && 'Notebooks'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Notebooks</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
               <TooltipTrigger asChild>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/artifacts') }}
-                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
-                    location.pathname.startsWith('/artifacts')
-                      ? 'bg-accent text-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <Archive className="h-4 w-4 shrink-0" />{!collapsed && 'Artifacts'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Artifacts</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => { setSidebarOpen(false); navigate('/mesh') }}
-                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
-                    location.pathname.startsWith('/mesh')
-                      ? 'bg-accent text-foreground'
-                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                  }`}
-                >
-                  <Network className="h-4 w-4 shrink-0" />{!collapsed && 'Agent Mesh'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Agent Mesh</TooltipContent>}
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger>
                 <button
                   onClick={() => { setSidebarOpen(false); setSearchQuery(''); navigate(isSettingsPage ? '/' : '/settings') }}
                   className="flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -428,18 +350,6 @@ export default function AppLayout() {
                 </button>
               </TooltipTrigger>
               {collapsed && <TooltipContent side="right">{isSettingsPage ? 'Chat' : 'Settings'}</TooltipContent>}
-            </Tooltip>
-            {/* Theme toggle */}
-            <Tooltip>
-              <TooltipTrigger>
-                <button
-                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  className="flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground mt-1"
-                >
-                  {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}{!collapsed && 'Toggle Theme'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">Toggle Theme</TooltipContent>}
             </Tooltip>
           </div>
         </aside>

@@ -194,4 +194,13 @@ Key endpoints for these tasks:
 ### Notes for Claude review
 _Gemini: leave notes here about completed work, questions, or blockers._
 
+**Completed G28-G35:**
+- G28: Auto-titles directly state-bound via WS intercept.
+- G29: Sidebar nav strictly purged down to logo, thread map, and lower settings gear.
+- G30/G31: Redirect matrices deployed for Notebooks and Kanban; immediate doc entry with header-based selectors. Zero-state list overlays eliminated.
+- G32/G33: Virtualized chat map bounds sliced to 100 with sequential load up-scroll boundary. Contextual route drop links stitched directly under chat composer.
+- G34/G35: Analytics and Mesh settings tabs fully shifted.
+
+Build pipeline passing completely. No downstream regressions. Ready for manual review and staging deployment.
+
 ---
