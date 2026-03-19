@@ -552,6 +552,123 @@ The backend now streams response tokens via WebSocket. ChatPanel needs to render
 
 ---
 
+## Tasks G20-G25: Mesh Dashboard + UX Improvements
+
+### Task G20: Peer/Mesh Status Page
+
+**Priority:** High (but backend API may evolve -- build with current data)
+
+Create a page or settings tab showing agent mesh status. The data comes from existing endpoints.
+
+**Current API:**
+- `GET /api/state` returns `tools`, `plugins`, and other agent state. Peer info isn't exposed yet, but will be.
+- For now, build the page shell with the existing connections page pattern (`dashboard/src/pages/ConnectionsPage.tsx`) and prepare for a `GET /api/mesh/peers` endpoint that will return:
+```json
+{
+  "peers": [
+    {"name": "Odigos Sales", "status": "online", "last_seen": "2026-03-19T...", "messages_sent": 5, "messages_received": 3}
+  ]
+}
+```
+
+**Build:**
+- A `MeshPage.tsx` at `/mesh` route
+- Show peer cards with: name, status badge (online/offline/connecting), last seen time, message counts
+- "Send Message" button per peer (opens a dialog with text input, POSTs to `/api/mesh/peers/{name}/message` -- endpoint coming)
+- Add route to App.tsx, nav icon (Network from lucide-react) to AppLayout
+
+**Files:** Create `dashboard/src/pages/MeshPage.tsx`, modify App.tsx, AppLayout.tsx
+
+---
+
+### Task G21: Message History View
+
+**Priority:** Medium
+
+Add a section to MeshPage showing recent peer messages (inbound + outbound).
+
+**API (coming):** `GET /api/mesh/messages?limit=50` returning:
+```json
+{
+  "messages": [
+    {"id": "...", "direction": "outbound", "peer_name": "Odigos Sales", "message_type": "message", "content": "...", "status": "delivered", "created_at": "..."}
+  ]
+}
+```
+
+For now, build the UI with mock data and wire it up when the endpoint exists. Show messages in a timeline/list with direction indicators (sent/received), timestamps, and delivery status badges.
+
+---
+
+### Task G22: Peer Configuration in Settings
+
+**Priority:** Medium
+
+Add a "Mesh" or "Peers" tab to SettingsPage where users can:
+- See configured peers (name, IP, port, API key masked)
+- Add a new peer (form: name, IP/hostname, port, API key)
+- Remove a peer
+- Test connection (ping button)
+
+**API (coming):**
+- `GET /api/settings` already returns peer config
+- `PATCH /api/settings` can update peer list
+- `POST /api/mesh/peers/{name}/ping` -- connection test
+
+Build the UI now, wire to existing settings endpoint for read, prepare for mesh endpoints.
+
+---
+
+### Task G23: Document Upload Progress Improvements
+
+**Priority:** Medium
+
+The file upload in ChatPanel works but feedback is minimal. Improve:
+- Show upload progress percentage (use XMLHttpRequest or fetch with ReadableStream)
+- Better drag-and-drop visual feedback (larger drop zone, animated border)
+- File type icons in the pending files area (use the `getFileIcon` function from ArtifactCard)
+- Show file size while uploading
+
+**Files:** Modify `dashboard/src/components/ChatPanel.tsx`, reuse `getFileIcon` from `ArtifactCard.tsx`
+
+---
+
+### Task G24: Conversation Search
+
+**Priority:** Medium
+
+The sidebar conversation list has no search. Add a search input at the top of the conversation list that filters conversations by title. Client-side filtering is fine for V1 (we load 50 conversations already).
+
+**Implementation:**
+- Add a search Input above the conversation list in AppLayout
+- Filter `conversations` array by title match (case-insensitive includes)
+- Clear search on new conversation or navigation
+- Show "No matching conversations" when filter returns empty
+
+**Files:** Modify `dashboard/src/layouts/AppLayout.tsx`
+
+---
+
+### Task G25: Settings Page Tab Cleanup
+
+**Priority:** Low
+
+The SettingsPage mounts all tabs at once using `hidden` class toggling. This means all tabs fetch data on mount even when not visible. Refactor to only render the active tab:
+
+```tsx
+// Instead of:
+<div className={activeTab === 'account' ? '' : 'hidden'}><AccountTab /></div>
+
+// Use:
+{activeTab === 'account' && <AccountTab />}
+```
+
+This improves initial load performance and prevents unnecessary API calls.
+
+**Files:** Modify `dashboard/src/pages/SettingsPage.tsx`
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
