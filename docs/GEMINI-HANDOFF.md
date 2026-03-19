@@ -669,6 +669,168 @@ This improves initial load performance and prevents unnecessary API calls.
 
 ---
 
+## Tasks G26-G27: Mesh Backend (Python)
+
+These are **backend Python tasks**, not frontend. Follow the same conventions: real tests, TypeScript N/A, run `python -m pytest tests/` to verify.
+
+### Task G26: WebSocket Connection Manager
+
+**Priority:** High
+
+Create `odigos/core/ws_connector.py` -- a class that manages **outgoing** WebSocket connections to configured peers. Currently agents only accept incoming connections (via `agent_ws.py`). This class initiates connections on startup and maintains them.
+
+**Protocol (connecting to a peer):**
+
+1. Connect to `ws://{peer.netbird_ip}:{peer.ws_port}/ws/agent`
+2. Send auth message: `{"type": "auth", "token": "{peer.api_key}"}`
+3. Send identify message: `{"type": "registry_announce", "from_agent": "{our_name}", "to_agent": "*", "payload": {...}}`
+4. Connection is now live -- the peer registers us in their `_ws_connections`
+
+**Class design:**
+
+```python
+class WSConnector:
+    """Manages outgoing WebSocket connections to configured peers."""
+
+    def __init__(self, agent_client: AgentClient, agent_name: str, peers: list[PeerConfig]):
+        self._agent_client = agent_client
+        self._agent_name = agent_name
+        self._peers = peers
+        self._tasks: dict[str, asyncio.Task] = {}  # peer_name -> connection task
+        self._running = False
+
+    async def start(self):
+        """Start connection tasks for all peers."""
+        self._running = True
+        for peer in self._peers:
+            if peer.netbird_ip:
+                self._tasks[peer.name] = asyncio.create_task(
+                    self._connect_loop(peer)
+                )
+
+    async def stop(self):
+        """Cancel all connection tasks."""
+        self._running = False
+        for task in self._tasks.values():
+            task.cancel()
+        self._tasks.clear()
+
+    async def _connect_loop(self, peer: PeerConfig):
+        """Connect to a peer, reconnect on failure with exponential backoff."""
+        backoff = 1.0  # seconds, doubles on failure, caps at 60
+        while self._running:
+            try:
+                await self._connect_to_peer(peer)
+                backoff = 1.0  # reset on successful connection
+            except Exception as e:
+                logger.warning("Connection to %s failed: %s. Retry in %.0fs", peer.name, e, backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60.0)
+
+    async def _connect_to_peer(self, peer: PeerConfig):
+        """Establish and maintain a single WebSocket connection."""
+        import websockets
+        uri = f"ws://{peer.netbird_ip}:{peer.ws_port}/ws/agent"
+        async with websockets.connect(uri) as ws:
+            # Step 1: Authenticate
+            await ws.send(json.dumps({"type": "auth", "token": peer.api_key}))
+
+            # Step 2: Identify ourselves
+            announce = self._agent_client.build_announce()
+            await ws.send(json.dumps(announce.to_dict()))
+
+            # Step 3: Register connection for sending
+            self._agent_client._ws_connections[peer.name] = ws
+            logger.info("Connected to peer %s at %s:%d", peer.name, peer.netbird_ip, peer.ws_port)
+
+            # Step 4: Listen for messages + send heartbeats
+            try:
+                while self._running:
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=30.0)
+                        data = json.loads(raw)
+                        msg = PeerEnvelope.from_dict(data)
+                        await self._agent_client.handle_incoming(msg, peer_ip=peer.netbird_ip)
+                    except asyncio.TimeoutError:
+                        # Send heartbeat ping
+                        ping = PeerEnvelope(
+                            from_agent=self._agent_name,
+                            to_agent=peer.name,
+                            type="status_ping",
+                            payload={},
+                        )
+                        await ws.send(json.dumps(ping.to_dict()))
+            finally:
+                if peer.name in self._agent_client._ws_connections:
+                    del self._agent_client._ws_connections[peer.name]
+```
+
+**Dependencies:** Install `websockets` package: `pip install websockets` (add to pyproject.toml)
+
+**Wire into main.py:** After `agent_client` is created and mesh is enabled, create and start the WSConnector:
+
+```python
+if mesh_enabled:
+    from odigos.core.ws_connector import WSConnector
+    ws_connector = WSConnector(
+        agent_client=agent_client,
+        agent_name=settings.agent.name,
+        peers=settings.peers,
+    )
+    await ws_connector.start()
+    # Store for cleanup
+    app.state.ws_connector = ws_connector
+```
+
+In shutdown, add `await ws_connector.stop()`.
+
+**Test file:** `tests/test_ws_connector.py` -- test the backoff logic, test that start/stop works without actual connections (mock the websockets.connect or use a test server).
+
+**Files:**
+- Create: `odigos/core/ws_connector.py`
+- Create: `tests/test_ws_connector.py`
+- Modify: `odigos/main.py` (wire in startup/shutdown)
+- Modify: `pyproject.toml` (add websockets dependency)
+
+---
+
+### Task G27: Mesh API Endpoints
+
+**Priority:** High
+
+Create `odigos/api/mesh.py` with REST endpoints for the mesh dashboard:
+
+```python
+router = APIRouter(prefix="/api/mesh", dependencies=[Depends(require_auth)])
+
+# GET /api/mesh/peers -- list peers with status
+# Returns configured peers + their online/offline status from agent_registry table
+# Fields: name, status, netbird_ip, ws_port, last_seen, messages_sent, messages_received
+
+# POST /api/mesh/peers/{name}/message -- send a message to a peer
+# Body: {"content": "..."}
+# Calls agent_client.send() and returns the result
+
+# POST /api/mesh/peers/{name}/ping -- test connection to a peer
+# Sends a status_ping and waits briefly for pong
+# Returns: {"reachable": true/false, "latency_ms": 42}
+
+# GET /api/mesh/messages -- recent peer messages
+# Returns last 50 from peer_messages table
+# Fields: id, direction, peer_name, message_type, content, status, created_at
+```
+
+**Database tables already exist:** `peer_messages` and `agent_registry` are created in earlier migrations.
+
+**Pattern:** Follow `odigos/api/kanban.py` -- use `get_db` dependency, auth via `require_auth`.
+
+**Files:**
+- Create: `odigos/api/mesh.py`
+- Create: `tests/test_mesh_api.py`
+- Modify: `odigos/main.py` (register router)
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
