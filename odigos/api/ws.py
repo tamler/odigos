@@ -143,8 +143,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 async def send_status(text: str) -> None:
                     await websocket.send_json({"type": "status", "text": text})
 
+                async def send_chunk(text: str) -> None:
+                    await websocket.send_json({
+                        "type": "chat_chunk",
+                        "content": text,
+                        "conversation_id": conversation_id,
+                    })
+
                 agent_service = websocket.app.state.agent_service
-                response = await agent_service.handle_message(msg, status_callback=send_status)
+                response = await agent_service.handle_message(
+                    msg, status_callback=send_status, stream_callback=send_chunk,
+                )
 
                 # Notify frontend of new conversation so sidebar updates
                 if first_message:

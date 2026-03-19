@@ -28,6 +28,16 @@ class LLMProvider(ABC):
         """Send messages to the LLM and get a response."""
         ...
 
+    async def stream_complete(self, messages: list[dict], **kwargs):
+        """Stream response tokens. Yields (chunk_text, None) for content chunks,
+        then (None, LLMResponse) for the final complete response.
+
+        Default implementation falls back to non-streaming complete().
+        Override in subclasses that support streaming.
+        """
+        response = await self.complete(messages, **kwargs)
+        yield response.content, response
+
     async def close(self) -> None:
         """Clean up resources."""
         pass

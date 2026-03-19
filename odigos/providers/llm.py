@@ -103,5 +103,116 @@ class LLMClient(LLMProvider):
             tool_calls=tool_calls,
         )
 
+    async def stream_complete(self, messages: list[dict], **kwargs):
+        """Stream response tokens from the OpenAI-compatible API.
+
+        Yields (chunk_text, None) for content, then (None, LLMResponse) at the end.
+        Falls back to non-streaming if the model returns tool_calls (can't stream tools).
+        """
+        model = kwargs.pop("model", self.default_model)
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+            "temperature": kwargs.get("temperature", self.temperature),
+            "stream": True,
+        }
+        tools = kwargs.get("tools")
+        if tools:
+            payload["tools"] = tools
+
+        url = f"{self.base_url}/chat/completions"
+        try:
+            async with self._client.stream("POST", url, json=payload) as response:
+                if response.status_code != 200:
+                    # Fall back to non-streaming on error
+                    resp = await self.complete(messages, model=model, **kwargs)
+                    yield resp.content, resp
+                    return
+
+                full_content = ""
+                response_model = model
+                generation_id = None
+                tool_calls_data: list = []
+
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json_module.loads(data_str)
+                    except json_module.JSONDecodeError:
+                        continue
+
+                    if not generation_id:
+                        generation_id = chunk.get("id")
+                    if chunk.get("model"):
+                        response_model = chunk["model"]
+
+                    choices = chunk.get("choices", [])
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta", {})
+
+                    # Content chunk
+                    content = delta.get("content")
+                    if content:
+                        full_content += content
+                        yield content, None
+
+                    # Tool call chunks (accumulate, don't stream)
+                    if delta.get("tool_calls"):
+                        for tc_delta in delta["tool_calls"]:
+                            idx = tc_delta.get("index", 0)
+                            while len(tool_calls_data) <= idx:
+                                tool_calls_data.append({"id": "", "name": "", "arguments": ""})
+                            if tc_delta.get("id"):
+                                tool_calls_data[idx]["id"] = tc_delta["id"]
+                            fn = tc_delta.get("function", {})
+                            if fn.get("name"):
+                                tool_calls_data[idx]["name"] = fn["name"]
+                            if fn.get("arguments"):
+                                tool_calls_data[idx]["arguments"] += fn["arguments"]
+
+                    # Usage in final chunk
+                    usage = chunk.get("usage") or choices[0].get("usage", {})
+                    if usage:
+                        tokens_in = usage.get("prompt_tokens", 0)
+                        tokens_out = usage.get("completion_tokens", 0)
+
+                # Build tool calls if present
+                parsed_tool_calls = None
+                if tool_calls_data:
+                    parsed_tool_calls = []
+                    for tc in tool_calls_data:
+                        args = tc["arguments"]
+                        if isinstance(args, str):
+                            try:
+                                args = json_module.loads(args)
+                            except json_module.JSONDecodeError:
+                                args = {}
+                        parsed_tool_calls.append(ToolCall(
+                            id=tc["id"], name=tc["name"], arguments=args,
+                        ))
+
+                final = LLMResponse(
+                    content=full_content,
+                    model=response_model,
+                    tokens_in=locals().get("tokens_in", 0),
+                    tokens_out=locals().get("tokens_out", 0),
+                    cost_usd=0.0,
+                    generation_id=generation_id,
+                    tool_calls=parsed_tool_calls,
+                )
+                yield None, final
+
+        except Exception as e:
+            logger.warning("Streaming failed, falling back to non-streaming: %s", e)
+            resp = await self.complete(messages, model=model, **kwargs)
+            yield resp.content, resp
+
     async def close(self) -> None:
         await self._client.aclose()

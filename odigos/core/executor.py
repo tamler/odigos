@@ -85,6 +85,7 @@ class Executor:
         query_analysis: QueryAnalysis | None = None,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
         context_metadata: dict | None = None,
+        stream_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> ExecuteResult:
         start_time = time.monotonic()
         tools_used: set[str] = set()
@@ -171,7 +172,20 @@ class Executor:
                 if self._reasoning_model:
                     model_kwargs["model"] = self._reasoning_model
             try:
-                response = await self.provider.complete(messages, tools=tools, **model_kwargs)
+                # Use streaming when a stream_callback is provided
+                if stream_callback and hasattr(self.provider, "stream_complete"):
+                    response = None
+                    async for chunk_text, final_response in self.provider.stream_complete(
+                        messages, tools=tools, **model_kwargs
+                    ):
+                        if chunk_text is not None:
+                            await stream_callback(chunk_text)
+                        if final_response is not None:
+                            response = final_response
+                    if response is None:
+                        raise RuntimeError("Streaming completed without final response")
+                else:
+                    response = await self.provider.complete(messages, tools=tools, **model_kwargs)
             except Exception as e:
                 logger.error("LLM call failed at turn %d: %s", turn, e)
                 if last_response is not None:

@@ -37,9 +37,12 @@ class AgentService:
         message: UniversalMessage,
         *,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
+        stream_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> str:
         """Send a message to the agent and return the response."""
-        return await self.agent.handle_message(message, status_callback=status_callback)
+        return await self.agent.handle_message(
+            message, status_callback=status_callback, stream_callback=stream_callback,
+        )
 
     # -- Goals / Todos / Reminders --
 

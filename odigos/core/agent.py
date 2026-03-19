@@ -94,6 +94,7 @@ class Agent:
         message: UniversalMessage,
         *,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
+        stream_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> str:
         """Process an incoming message through the ReAct loop."""
         conversation_id = await self._get_or_create_conversation(message)
@@ -108,6 +109,7 @@ class Agent:
                 conversation_id, message,
                 status_callback=status_callback,
                 context_metadata=context_metadata,
+                stream_callback=stream_callback,
             )
 
     async def _run(
@@ -117,6 +119,7 @@ class Agent:
         *,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
         context_metadata: dict | None = None,
+        stream_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> str:
         """Execute the agent loop with timeout."""
         await self.db.execute(
@@ -159,6 +162,7 @@ class Agent:
                     conversation_id, message.content, query_analysis=analysis,
                     status_callback=status_callback,
                     context_metadata=context_metadata,
+                    stream_callback=stream_callback,
                 )
         except asyncio.TimeoutError:
             logger.warning("Run timed out after %ds for %s", self._run_timeout, conversation_id)
