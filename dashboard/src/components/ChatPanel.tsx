@@ -46,6 +46,7 @@ export function ChatPanel({
   const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const [streamingContent, setStreamingContent] = useState('')
   const [thinking, setThinking] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
@@ -67,12 +68,21 @@ export function ChatPanel({
       if (msg.type === 'status') {
         setStatus(msg.text as string)
       }
+      if (msg.type === 'chat_chunk') {
+        if (msg.conversation_id && loadedConvRef.current && msg.conversation_id !== loadedConvRef.current) {
+          return // Ignore chunks for inactive conversations
+        }
+        setThinking(false)
+        setStatus(null)
+        setStreamingContent((prev) => prev + (msg.content as string))
+      }
       if (msg.type === 'chat_response') {
         if (msg.conversation_id && loadedConvRef.current && msg.conversation_id !== loadedConvRef.current) {
           return // Ignore responses for inactive conversations
         }
         setThinking(false)
         setStatus(null)
+        setStreamingContent('')
         setMessages((prev) => [...prev, {
           role: 'assistant',
           content: msg.content as string,
@@ -388,6 +398,13 @@ export function ChatPanel({
                   )}
                 </div>
               ))}
+              {streamingContent && (
+                <div className="group/msg w-full overflow-hidden">
+                  <div className="text-sm text-foreground leading-relaxed break-words prose dark:prose-invert max-w-none">
+                    <Markdown>{streamingContent}</Markdown>
+                  </div>
+                </div>
+              )}
               {thinking && (
                 <div className="flex items-center gap-2">
                   <Loader variant="typing" />
