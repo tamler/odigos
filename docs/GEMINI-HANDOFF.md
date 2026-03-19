@@ -515,6 +515,43 @@ API: `GET /api/artifacts` (no conversation_id filter = all artifacts, last 50)
 
 ---
 
+### Task G19: Streaming Response Rendering
+
+**Priority:** High
+
+The backend now streams response tokens via WebSocket. ChatPanel needs to render them incrementally instead of waiting for the full response.
+
+**New WebSocket message type:**
+```json
+{"type": "chat_chunk", "content": "partial text", "conversation_id": "..."}
+```
+
+**Flow:**
+1. User sends message -> `thinking` state shown
+2. Backend streams tokens -> `chat_chunk` messages arrive with text fragments
+3. Frontend accumulates chunks and renders incrementally (token by token)
+4. Backend sends final `chat_response` with complete text when done
+
+**Implementation in ChatPanel:**
+
+1. Add a `streamingContent` state (string) that accumulates chunks
+2. On `chat_chunk`: append `msg.content` to `streamingContent`, hide thinking indicator, show the accumulating text
+3. On `chat_response`: clear `streamingContent`, add the complete message to `messages` array as before
+4. Render `streamingContent` as a temporary assistant message while streaming is active
+
+**Key details:**
+- `chat_chunk` messages include `conversation_id` -- ignore chunks for inactive conversations (same pattern as G2)
+- The `chat_response` still arrives at the end with the complete text -- this is the message that gets persisted
+- During streaming, hide the "Thinking..." indicator and show the accumulating text instead
+- The Markdown component should render the partial text (it handles incomplete markdown gracefully)
+
+**Files to modify:**
+- `dashboard/src/components/ChatPanel.tsx` -- add chunk handling and streaming render
+
+**Test:** Send a message and verify text appears word-by-word instead of all at once.
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
