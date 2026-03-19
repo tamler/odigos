@@ -72,7 +72,7 @@ async def maybe_auto_title(
             "SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = ?",
             (conversation_id,),
         )
-        if msg_count and msg_count["cnt"] > 2:
+        if msg_count and msg_count["cnt"] > 4:
             return
 
         title = await generate_title(provider, user_message, assistant_response)
@@ -80,6 +80,6 @@ async def maybe_auto_title(
             "UPDATE conversations SET title = ? WHERE id = ?",
             (title, conversation_id),
         )
-        logger.debug("Auto-titled conversation %s: %s", conversation_id[:8], title)
+        logger.info("Auto-titled conversation %s: %s", conversation_id[:8], title)
     except Exception:
         logger.warning("Auto-title failed for %s", conversation_id, exc_info=True)
