@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import { get, post, del } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Plus, ArrowLeft, Send, Trash2 } from 'lucide-react'
+import { Plus, ArrowLeft, Trash2 } from 'lucide-react'
 
 interface Notebook {
   id: string
@@ -27,10 +27,7 @@ interface NotebookEntry {
   created_at: string
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
+
 
 export default function NotebookPage() {
   const { id } = useParams<{ id?: string }>()
@@ -144,10 +141,7 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
   const [entries, setEntries] = useState<NotebookEntry[]>([])
   const [newEntry, setNewEntry] = useState('')
   const [adding, setAdding] = useState(false)
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
-  const [chatInput, setChatInput] = useState('')
-  const [chatLoading, setChatLoading] = useState(false)
-  const chatEndRef = useRef<HTMLDivElement>(null)
+  const { setChatPanelOpen, setChatContext } = useOutletContext<any>()
   const entriesEndRef = useRef<HTMLDivElement>(null)
 
   const loadNotebook = useCallback(() => {
@@ -161,10 +155,6 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
   }, [notebookId])
 
   useEffect(() => { loadNotebook() }, [loadNotebook])
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMessages])
 
   useEffect(() => {
     entriesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -217,29 +207,6 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
     }
   }
 
-  async function handleChatSend() {
-    const message = chatInput.trim()
-    if (!message) return
-    setChatInput('')
-    setChatMessages((prev) => [...prev, { role: 'user', content: message }])
-    setChatLoading(true)
-    try {
-      const data = await post<{ response?: string; message?: string }>('/api/agent', {
-        message,
-        context: { notebook_id: notebookId },
-      })
-      const reply = data.response || data.message || 'Done.'
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: reply }])
-    } catch {
-      setChatMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'Could not reach agent. Please try again.' },
-      ])
-    } finally {
-      setChatLoading(false)
-    }
-  }
-
   return (
     <div className="flex h-full overflow-hidden">
       {/* Main editor panel (70%) */}
@@ -256,6 +223,12 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
               {notebook.mode} &middot; {notebook.collaboration}
             </span>
           )}
+          <Button variant="outline" size="sm" className="ml-2" onClick={() => {
+            setChatContext({ notebook_id: notebookId })
+            setChatPanelOpen(true)
+          }}>
+            Ask Agent
+          </Button>
         </div>
 
         <ScrollArea className="flex-1 px-4">
@@ -335,62 +308,6 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
             />
             <Button onClick={handleAddEntry} disabled={adding || !newEntry.trim()} size="icon">
               <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Contextual chat panel (30%), hidden on mobile */}
-      <div className="hidden md:flex flex-col w-[30%] min-w-[240px] max-w-xs">
-        <div className="px-4 py-3 border-b border-border/40 shrink-0">
-          <div className="text-sm font-medium">Contextual Chat</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Ask about this notebook</div>
-        </div>
-
-        <ScrollArea className="flex-1 px-3">
-          <div className="py-3 space-y-3">
-            {chatMessages.length === 0 && (
-              <div className="text-xs text-muted-foreground">
-                Ask the agent anything about this notebook.
-              </div>
-            )}
-            {chatMessages.map((msg, i) => (
-              <div
-                key={i}
-                className={`rounded-md px-3 py-2 text-sm ${
-                  msg.role === 'user'
-                    ? 'bg-accent ml-4'
-                    : 'bg-muted/50 mr-4'
-                }`}
-              >
-                {msg.content}
-              </div>
-            ))}
-            {chatLoading && (
-              <div className="rounded-md px-3 py-2 text-sm bg-muted/50 mr-4 text-muted-foreground animate-pulse">
-                Thinking...
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-        </ScrollArea>
-
-        <div className="px-3 py-3 border-t border-border/40 shrink-0">
-          <div className="flex gap-2">
-            <Input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Ask agent..."
-              onKeyDown={(e) => { if (e.key === 'Enter') handleChatSend() }}
-              className="flex-1 text-sm h-8"
-            />
-            <Button
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={handleChatSend}
-              disabled={chatLoading || !chatInput.trim()}
-            >
-              <Send className="h-3 w-3" />
             </Button>
           </div>
         </div>

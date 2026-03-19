@@ -144,12 +144,13 @@ export default function AnalyticsPage() {
         <section>
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">Query Classifications</h2>
           <Card>
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 overflow-x-auto">
               {classifications.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No classification data available.</p>
               ) : (
-                <ResponsiveContainer width="100%" height={Math.max(classifications.length * 40, 120)}>
-                  <BarChart data={classifications} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+                <div className="min-w-[400px]">
+                  <ResponsiveContainer width="100%" height={Math.max(classifications.length * 40, 120)}>
+                    <BarChart data={classifications} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
                     <XAxis type="number" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
                     <YAxis
                       type="category"
@@ -169,6 +170,7 @@ export default function AnalyticsPage() {
                     <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -178,12 +180,13 @@ export default function AnalyticsPage() {
         <section>
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">Skill Usage</h2>
           <Card>
-            <CardContent className="pt-4">
+            <CardContent className="pt-4 overflow-x-auto">
               {skills.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No skill usage data available.</p>
               ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={skills} margin={{ top: 0, right: 16, left: 8, bottom: 40 }}>
+                <div className="min-w-[400px]">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={skills} margin={{ top: 0, right: 16, left: 8, bottom: 40 }}>
                     <XAxis
                       dataKey="skill_name"
                       tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
@@ -211,6 +214,7 @@ export default function AnalyticsPage() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+                </div>
               )}
             </CardContent>
           </Card>

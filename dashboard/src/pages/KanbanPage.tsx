@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import { get, post, del } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -163,6 +163,7 @@ function BoardDetailInner({ boardId, board, setBoard }: {
   setBoard: React.Dispatch<React.SetStateAction<BoardDetail | null>>
 }) {
   const navigate = useNavigate()
+  const { setChatPanelOpen, setChatContext } = useOutletContext<any>()
   const [newCardTexts, setNewCardTexts] = useState<Record<string, string>>({})
   const [newColumnTitle, setNewColumnTitle] = useState('')
   const [addingColumn, setAddingColumn] = useState(false)
@@ -298,10 +299,16 @@ function BoardDetailInner({ boardId, board, setBoard }: {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-base font-semibold truncate">{board.title}</h1>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => {
+          setChatContext({ board_id: boardId })
+          setChatPanelOpen(true)
+        }}>
+          Ask Agent
+        </Button>
       </div>
 
       {/* Board */}
-      <div className="flex-1 overflow-hidden px-4 py-4">
+      <div className="flex-1 overflow-x-auto lg:overflow-hidden px-4 py-4 touch-pan-x">
         <KanbanBoard>
           {sortedColumns.map((col) => {
             const cards = cardsByColumn[col.id] ?? []

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare, BookOpen, Columns3, BarChart3 } from 'lucide-react'
+import { ChatPanel } from '@/components/ChatPanel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -32,6 +33,8 @@ export default function AppLayout() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [connected, setConnected] = useState(false)
+  const [chatPanelOpen, setChatPanelOpen] = useState(false)
+  const [chatContext, setChatContext] = useState<Record<string, string> | undefined>(undefined)
   const editInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
   const navigate = useNavigate()
@@ -175,20 +178,20 @@ export default function AppLayout() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen bg-background text-foreground">
+      <div className="flex h-[100dvh] bg-background text-foreground">
         {/* Mobile top bar */}
         <div className="flex items-center gap-2 p-3 border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background">
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)}>
+          <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
           <button onClick={() => navigate('/')} className="text-sm font-semibold hover:text-muted-foreground transition-colors">Odigos</button>
-          <Button variant="ghost" size="icon" className="ml-auto" onClick={handleNewChat}>
+          <Button variant="ghost" size="icon" className="h-11 w-11 ml-auto" onClick={handleNewChat}>
             <Plus className="h-5 w-5" />
           </Button>
         </div>
 
         {/* Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed ? 'lg:w-14' : 'lg:w-64'}`}>
+        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed ? 'lg:w-14' : 'lg:w-64'}`}>
           {/* Top: Toggle + New Chat */}
           <div className="flex items-center gap-2 p-3">
             <Tooltip>
@@ -234,7 +237,7 @@ export default function AppLayout() {
                     ) : (
                       <button
                         onClick={() => handleSelectConversation(c.id)}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors pr-8 ${
+                        className={`w-full text-left px-3 py-2 min-h-[44px] rounded-md text-sm truncate transition-colors pr-8 ${
                           activeId === c.id
                             ? 'bg-accent text-accent-foreground'
                             : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
@@ -281,7 +284,7 @@ export default function AppLayout() {
               <TooltipTrigger>
                 <button
                   onClick={() => { setSidebarOpen(false); navigate('/analytics') }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
+                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
                     location.pathname.startsWith('/analytics')
                       ? 'bg-accent text-foreground'
                       : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
@@ -296,7 +299,7 @@ export default function AppLayout() {
               <TooltipTrigger>
                 <button
                   onClick={() => { setSidebarOpen(false); navigate('/kanban') }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
+                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
                     location.pathname.startsWith('/kanban')
                       ? 'bg-accent text-foreground'
                       : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
@@ -311,7 +314,7 @@ export default function AppLayout() {
               <TooltipTrigger>
                 <button
                   onClick={() => { setSidebarOpen(false); navigate('/notebooks') }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full ${
+                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
                     location.pathname.startsWith('/notebooks')
                       ? 'bg-accent text-foreground'
                       : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
@@ -326,7 +329,7 @@ export default function AppLayout() {
               <TooltipTrigger>
                 <button
                   onClick={() => { setSidebarOpen(false); navigate(isSettingsPage ? '/' : '/settings') }}
-                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  className="flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                 >
                   {isSettingsPage ? (
                     <><MessageSquare className="h-4 w-4 shrink-0" />{!collapsed && 'Chat'}</>
@@ -343,21 +346,39 @@ export default function AppLayout() {
         {/* Backdrop for mobile sidebar */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+            className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm transition-all duration-200 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
 
         {/* Main content */}
-        <main className="flex-1 flex flex-col overflow-hidden pt-[52px] lg:pt-0">
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden pt-[52px] lg:pt-0">
           <Outlet context={{
             activeConversationId: activeId,
             setActiveId,
             refreshConversations: loadConversations,
             socketRef,
             connected,
+            setChatPanelOpen,
+            setChatContext,
           }} />
         </main>
+        
+        {/* Contextual Chat Panel */}
+        {chatPanelOpen && (
+          <aside className="fixed inset-0 z-50 lg:static lg:border-l lg:border-border/40 lg:w-[400px] lg:min-w-[400px] bg-background flex flex-col overflow-hidden">
+            <ChatPanel
+              activeConversationId={activeId}
+              setActiveId={setActiveId}
+              refreshConversations={loadConversations}
+              socketRef={socketRef}
+              connected={connected}
+              chatContext={chatContext}
+              isSidePanel={true}
+              onClose={() => setChatPanelOpen(false)}
+            />
+          </aside>
+        )}
       </div>
     </TooltipProvider>
   )
