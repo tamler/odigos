@@ -159,7 +159,34 @@ class AgentClient:
                 logger.warning("WebSocket send to %s failed, message queued", peer_name)
                 del self._ws_connections[peer_name]
 
-        # No WS connection — message stays queued in outbox
+        # No WS connection — try HTTP fallback for localhost peers
+        if peer.netbird_ip:
+            try:
+                import httpx
+                port = peer.ws_port or 8001
+                url = f"http://{peer.netbird_ip}:{port}/api/message"
+                headers = {"Content-Type": "application/json"}
+                if peer.api_key:
+                    headers["Authorization"] = f"Bearer {peer.api_key}"
+                msg_content = payload.get("content", json.dumps(payload))
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(url, json={"content": msg_content}, headers=headers)
+                if resp.status_code == 200:
+                    if self._db:
+                        await self._db.execute(
+                            "UPDATE peer_messages SET status = 'delivered', delivered_at = datetime('now') "
+                            "WHERE message_id = ?",
+                            (envelope.id,),
+                        )
+                    result = resp.json()
+                    logger.info("HTTP fallback delivered message to %s", peer_name)
+                    return {"status": "delivered", "message_id": envelope.id, "peer_response": result.get("response", "")}
+                else:
+                    logger.warning("HTTP fallback to %s returned %d", peer_name, resp.status_code)
+            except Exception as e:
+                logger.warning("HTTP fallback to %s failed: %s", peer_name, e)
+
+        # Message stays queued in outbox
         return {"status": "queued", "message_id": envelope.id}
 
     async def send_response(
