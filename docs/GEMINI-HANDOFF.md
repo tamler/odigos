@@ -320,6 +320,140 @@ Custom components: Loader (11 variants), Markdown, CodeBlock, ChatContainer, Fil
 
 ---
 
+## Tasks G6-G16: Polish and Production Readiness
+
+These tasks can be done in any order. Each is independent. Prioritize G6, G7, G16 first (high priority).
+
+### Task G6: 404 Page
+
+**Priority:** High
+
+App.tsx has no catch-all route. Invalid URLs show a blank page. Create a simple `NotFoundPage.tsx` and add `<Route path="*" element={<NotFoundPage />} />` inside the AppLayout route group. Show a friendly message with a link back to `/`.
+
+**Files:** Create `dashboard/src/pages/NotFoundPage.tsx`, modify `dashboard/src/App.tsx`
+
+---
+
+### Task G7: Error Boundary
+
+**Priority:** High
+
+No React ErrorBoundary wraps the app. If any page crashes, the entire app goes blank. Create an ErrorBoundary component (class component -- React error boundaries require `componentDidCatch`). Wrap `<Outlet />` in AppLayout with it. Show a "Something went wrong" message with a reload button.
+
+**Files:** Create `dashboard/src/components/ErrorBoundary.tsx`, modify `dashboard/src/layouts/AppLayout.tsx`
+
+---
+
+### Task G8: Loading Skeletons
+
+**Priority:** Medium
+
+Pages show "Loading..." text instead of skeleton loaders. The `Skeleton` component exists at `dashboard/src/components/ui/skeleton.tsx` but is barely used.
+
+Replace loading states with skeletons in:
+- `AnalyticsPage.tsx` (currently "Loading analytics..." text)
+- `KanbanPage.tsx` (currently "Loading..." text)
+- `NotebookPage.tsx` (no loading state for entries)
+
+Pattern: When `loading` is true, render Skeleton elements matching the shape of the real content.
+
+---
+
+### Task G9: Empty States
+
+**Priority:** Medium
+
+Every list/page needs a good empty state for first-time users:
+- Kanban with no boards -- "Create your first board" + button
+- Notebooks with no notebooks -- similar
+- Analytics with no data -- "No activity in the last 7 days"
+- Conversation list empty -- "Start a new conversation"
+
+Keep it simple -- text + call-to-action button. No illustrations.
+
+---
+
+### Task G10: Quick Theme Toggle
+
+**Priority:** Low
+
+Dark/light mode works (GeneralSettings has the toggle) but there's no quick-access toggle. Add a sun/moon icon button in the sidebar bottom area. Use `useTheme()` from `next-themes`.
+
+**Files:** Modify `dashboard/src/layouts/AppLayout.tsx`
+
+---
+
+### Task G11: Standardize Form Inputs
+
+**Priority:** Medium
+
+Several settings pages use raw `<input>` and `<select>` instead of shadcn components:
+- `dashboard/src/pages/AgentsPage.tsx` (lines 95-129)
+- `dashboard/src/pages/settings/AgentsTab.tsx` (lines 85-107)
+- `dashboard/src/pages/ConnectionsPage.tsx` (lines 144-160)
+
+Replace with `Input` and `Select` from `@/components/ui/`.
+
+---
+
+### Task G12: Accessibility Pass
+
+**Priority:** Medium
+
+Add `aria-label` to all icon-only buttons across the app. Many buttons render only an icon with no accessible label. Check all pages: ChatPanel, NotebookPage, KanbanPage, AnalyticsPage, AppLayout.
+
+Pattern: `<Button aria-label="Delete"><Trash2 /></Button>`
+
+---
+
+### Task G13: Remove Unused UI Components
+
+**Priority:** Low
+
+These components in `dashboard/src/components/ui/` appear unused:
+`alert.tsx`, `avatar.tsx`, `badge.tsx`, `chain-of-thought.tsx`, `code-block.tsx`, `collapsible.tsx`, `feedback-bar.tsx`, `hover-card.tsx`, `image.tsx`, `prompt-input.tsx`, `prompt-suggestion.tsx`, `reasoning.tsx`, `response-stream.tsx`, `scroll-button.tsx`, `separator.tsx`, `system-message.tsx`, `text-shimmer.tsx`
+
+Before deleting, grep to confirm they're truly unused. Keep `source.tsx` (needed later for citation UI).
+
+---
+
+### Task G14: Keyboard Shortcuts
+
+**Priority:** Low
+
+Add standard shortcuts:
+- `Escape` -- Close mobile sidebar, close chat panel
+- `Ctrl/Cmd + K` -- Focus chat input from any page
+- `Ctrl/Cmd + N` -- New conversation
+
+Use `useEffect` with `keydown` listener in AppLayout. Don't capture when user is in input/textarea (check `e.target`).
+
+---
+
+### Task G15: Responsive Charts
+
+**Priority:** Medium
+
+AnalyticsPage charts use hardcoded heights. Ensure all charts use `ResponsiveContainer` from Recharts, remove fixed heights, and test at mobile widths.
+
+**Files:** `dashboard/src/pages/AnalyticsPage.tsx`
+
+---
+
+### Task G16: Dist Gitignore
+
+**Priority:** High
+
+`dashboard/dist/` is committed to git but shouldn't be (build output). Fix:
+1. Remove `!dashboard/dist/` from root `.gitignore` (line 6)
+2. Run `git rm -r --cached dashboard/dist/`
+3. Add `dist/` to `dashboard/.gitignore`
+4. Commit
+
+The dashboard server mounts dist/ at runtime -- it just shouldn't be in version control.
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
@@ -328,6 +462,8 @@ Custom components: Loader (11 variants), Markdown, CodeBlock, ChatContainer, Fil
 - Frontend queue handling added to ChatPage
 - Created this handoff document
 - Tasks G1-G5 defined above for Gemini
+- Reviewed and committed G1-G5 work. All clean.
+- Added G6-G16 (11 more tasks) for production readiness
 
 ### Notes for Claude review
 _Gemini: leave notes here about completed work, questions, or blockers. Claude will review._
