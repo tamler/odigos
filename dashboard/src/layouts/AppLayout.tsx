@@ -38,6 +38,12 @@ export default function AppLayout() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
 
+  const loadConversations = useCallback(() => {
+    get<{ conversations: Conversation[] }>('/api/conversations?limit=50')
+      .then((data) => setConversations(data.conversations))
+      .catch(() => {})
+  }, [])
+
   // Persistent WebSocket — lives at layout level, survives page navigation
   useEffect(() => {
     const socket = new ChatSocket(
@@ -56,6 +62,14 @@ export default function AppLayout() {
             toast.info(label)
           }
         }
+        if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
+          const cid = msg.conversation_id as string
+          const title = msg.title as string
+          setConversations((prev) =>
+            prev.map((c) => (c.id === cid ? { ...c, title } : c))
+          )
+          loadConversations()
+        }
       },
       (isConnected) => {
         setConnected(isConnected)
@@ -67,13 +81,7 @@ export default function AppLayout() {
     socket.connect()
     socketRef.current = socket
     return () => socket.disconnect()
-  }, [])
-
-  const loadConversations = useCallback(() => {
-    get<{ conversations: Conversation[] }>('/api/conversations?limit=50')
-      .then((data) => setConversations(data.conversations))
-      .catch(() => {})
-  }, [])
+  }, [loadConversations])
 
   useEffect(() => {
     loadConversations()

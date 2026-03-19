@@ -55,6 +55,9 @@ export default function ChatPage() {
         setStatus(msg.text as string)
       }
       if (msg.type === 'chat_response') {
+        if (msg.conversation_id && loadedConvRef.current && msg.conversation_id !== loadedConvRef.current) {
+          return // Ignore responses for inactive conversations
+        }
         setThinking(false)
         setStatus(null)
         setMessages((prev) => [...prev, {
@@ -67,9 +70,6 @@ export default function ChatPage() {
         const cid = msg.conversation_id as string
         setActiveId(cid)
         setSearchParams({ c: cid })
-        refreshConversations()
-      }
-      if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
         refreshConversations()
       }
       if (msg.type === 'queue_update') {
@@ -105,6 +105,9 @@ export default function ChatPage() {
     if (cid === loadedConvRef.current) return
     loadedConvRef.current = cid
 
+    setThinking(false)
+    setStatus(null)
+
     get<{ messages: { role: string; content: string; timestamp: string }[] }>(
       `/api/conversations/${cid}/messages`
     )
@@ -129,6 +132,16 @@ export default function ChatPage() {
     ta.style.height = 'auto'
     ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'
   }, [inputValue])
+
+  // Timeout fallback for thinking state
+  useEffect(() => {
+    if (!thinking) return
+    const timer = setTimeout(() => {
+      setThinking(false)
+      setStatus(null)
+    }, 60000)
+    return () => clearTimeout(timer)
+  }, [thinking, status])
 
   // Check voice settings
   useEffect(() => {
@@ -335,7 +348,9 @@ export default function ChatPage() {
               {thinking && (
                 <div className="flex items-center gap-2">
                   <Loader variant="typing" />
-                  {status && <span className="text-xs text-muted-foreground animate-pulse">{status}</span>}
+                  <span className="text-xs text-muted-foreground animate-pulse">
+                    {status || 'Thinking...'}
+                  </span>
                 </div>
               )}
             </div>

@@ -332,4 +332,6 @@ Custom components: Loader (11 variants), Markdown, CodeBlock, ChatContainer, Fil
 ### Notes for Claude review
 _Gemini: leave notes here about completed work, questions, or blockers. Claude will review._
 
+- 2026-03-19 (Gemini): Completed Tasks G1, G2, and G3. Verified that the dashboard builds successfully.
+
 ---
