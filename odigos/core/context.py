@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -72,9 +73,17 @@ class ContextAssembler:
         routing = load_routing_rules()
         route = routing.get(query_analysis.classification, {}) if query_analysis else {}
 
-        # Recovery briefing for interrupted plans
-        recovery_briefing = ""
-        if self.db and not route.get("skip_rag", False):
+        # -- Parallel context assembly --
+        # All these queries are independent. Run them concurrently.
+
+        skip_rag = route.get("skip_rag", False)
+        skip_profile = route.get("skip_profile", False)
+        skip_experiences = route.get("skip_experiences", False)
+        skip_documents = route.get("skip_documents", False)
+
+        async def _recovery_briefing():
+            if not self.db or skip_rag:
+                return ""
             try:
                 plan_row = await self.db.fetch_one(
                     "SELECT steps, updated_at FROM task_plans WHERE conversation_id = ? "
@@ -85,30 +94,31 @@ class ContextAssembler:
                     steps = json.loads(plan_row["steps"])
                     pending = [s for s in steps if s.get("status") != "done"]
                     done = [s for s in steps if s.get("status") == "done"]
-                    if pending and done:  # partially complete plan
+                    if pending and done:
                         lines = ["## Recovery: you have an unfinished plan"]
                         lines.append(f"Completed: {len(done)} steps. Remaining: {len(pending)} steps.")
                         for s in pending:
                             lines.append(f"- Pending: Step {s['step']}: {s['task']}")
-                        recovery_briefing = "\n".join(lines)
+                        return "\n".join(lines)
             except Exception:
                 logger.debug("Could not load recovery briefing", exc_info=True)
+            return ""
 
-        # Get memory context if available
-        memory_context = ""
-        if self.memory_manager:
-            if route.get("skip_rag", False):
-                pass  # Skip RAG per routing rules
-            elif query_analysis and query_analysis.search_queries:
-                # Use optimized search queries from classifier
-                recall_query = " ".join(query_analysis.search_queries)
-                memory_context = await self.memory_manager.recall(recall_query)
-            else:
-                memory_context = await self.memory_manager.recall(message_content)
+        async def _memory_context():
+            if not self.memory_manager or skip_rag:
+                return ""
+            try:
+                if query_analysis and query_analysis.search_queries:
+                    recall_query = " ".join(query_analysis.search_queries)
+                    return await self.memory_manager.recall(recall_query)
+                return await self.memory_manager.recall(message_content)
+            except Exception:
+                logger.debug("Memory recall failed", exc_info=True)
+                return ""
 
-        # Memory index summary (lightweight awareness of what's in memory)
-        memory_index = ""
-        if self.db and not route.get("skip_rag", False):
+        async def _memory_index():
+            if not self.db or skip_rag:
+                return ""
             try:
                 row = await self.db.fetch_one("""
                     SELECT
@@ -123,31 +133,18 @@ class ContextAssembler:
                     "entities": row["entities"] if row else 0,
                     "documents": row["documents"] if row else 0,
                 }
-
                 if any(counts.values()):
-                    memory_index = (
+                    return (
                         f"## Memory index: {counts['documents']} documents ({counts['doc_chunks']} chunks), "
                         f"{counts['conversations']} conversation memories, {counts['entities']} entities"
                     )
             except Exception:
                 logger.debug("Could not build memory index", exc_info=True)
+            return ""
 
-        # Build skill catalog if available
-        skill_catalog = ""
-        if self.skill_registry:
-            skills = self.skill_registry.list()
-            if skills:
-                lines = [
-                    "## Available skills",
-                    "Use activate_skill to load a skill's full instructions before starting the task.",
-                ]
-                for s in skills:
-                    lines.append(f"- **{s.name}**: {s.description}")
-                skill_catalog = "\n".join(lines)
-
-        # Document listing for code-based analysis
-        doc_listing = ""
-        if self.db and not route.get("skip_documents", False):
+        async def _doc_listing():
+            if not self.db or skip_documents:
+                return ""
             try:
                 doc_rows = await self.db.fetch_all(
                     "SELECT id, filename, chunk_count FROM documents WHERE status IN ('complete', 'ingested') ORDER BY filename"
@@ -160,13 +157,14 @@ class ContextAssembler:
                     ]
                     for row in doc_rows:
                         lines.append(f"- [{row['id'][:8]}] {row['filename']} ({row['chunk_count']} chunks)")
-                    doc_listing = "\n".join(lines)
+                    return "\n".join(lines)
             except Exception:
-                logger.debug("Failed to list documents (table may not exist)", exc_info=True)
+                logger.debug("Failed to list documents", exc_info=True)
+            return ""
 
-        # Skill recommendations based on past usage
-        skill_hints = ""
-        if query_analysis and self.db:
+        async def _skill_hints():
+            if not query_analysis or not self.db:
+                return ""
             try:
                 classification = query_analysis.classification
                 rows = await self.db.fetch_all(
@@ -182,32 +180,23 @@ class ContextAssembler:
                     lines = ["## Relevant skills for this type of query"]
                     for row in rows:
                         lines.append(f"- {row['skill_name']} ({row['skill_type']}, used {row['uses']}x, avg score {(row['avg_score'] or 0):.1f})")
-                    skill_hints = "\n".join(lines)
+                    return "\n".join(lines)
             except Exception:
                 logger.debug("Failed to query skill usage hints", exc_info=True)
+            return ""
 
-        # Get corrections context if available
-        corrections_context = ""
-        if self.corrections_manager:
-            corrections_context = await self.corrections_manager.relevant(message_content)
+        async def _corrections():
+            if not self.corrections_manager:
+                return ""
+            try:
+                return await self.corrections_manager.relevant(message_content)
+            except Exception:
+                logger.debug("Corrections lookup failed", exc_info=True)
+                return ""
 
-        # Load dynamic prompt sections
-        if self.checkpoint_manager:
-            sections = await self.checkpoint_manager.get_working_sections()
-        else:
-            sections = self.fallback_registry.load_all()
-
-        # Add decomposition hints for complex queries
-        if query_analysis and query_analysis.sub_questions:
-            sub_q_text = "\n".join(f"- {q}" for q in query_analysis.sub_questions)
-            memory_context += f"\n\n## Analysis hints\nConsider addressing these aspects:\n{sub_q_text}"
-
-        # Active task plan -- NOT auto-injected. Agent uses check_plan tool when needed.
-        active_plan = ""
-
-        # Recent tool errors (helps agent avoid repeating mistakes)
-        error_hints = ""
-        if self.db:
+        async def _error_hints():
+            if not self.db:
+                return ""
             try:
                 error_rows = await get_recent_tool_errors(self.db, days=1)
                 if error_rows:
@@ -216,13 +205,14 @@ class ContextAssembler:
                         lines.append(
                             f"- {row['tool_name']}: {row['error_type']} ({row['count']}x in last 24h)"
                         )
-                    error_hints = "\n".join(lines)
+                    return "\n".join(lines)
             except Exception:
                 logger.debug("Could not load error hints", exc_info=True)
+            return ""
 
-        # Tactical experiences (learned from past interactions)
-        experiences_section = ""
-        if self.db and not route.get("skip_experiences", False):
+        async def _experiences():
+            if not self.db or skip_experiences:
+                return ""
             try:
                 exp_rows = await self.db.fetch_all(
                     "SELECT tool_name, lesson FROM agent_experiences "
@@ -233,13 +223,14 @@ class ContextAssembler:
                     lines = ["## Tactical experience (learned from past interactions)"]
                     for row in exp_rows:
                         lines.append(f"- {row['tool_name']}: {row['lesson']}")
-                    experiences_section = "\n".join(lines)
+                    return "\n".join(lines)
             except Exception:
                 logger.debug("Could not load experiences", exc_info=True)
+            return ""
 
-        # User profile (built from conversation patterns)
-        user_profile = ""
-        if self.db and not route.get("skip_profile", False):
+        async def _user_profile():
+            if not self.db or skip_profile:
+                return ""
             try:
                 profile_row = await get_user_profile(self.db)
                 if profile_row and profile_row.get("summary"):
@@ -252,22 +243,61 @@ class ContextAssembler:
                         lines.append(f"Preferences: {profile_row['preferences']}")
                     if profile_row.get("expertise_areas"):
                         lines.append(f"Expertise: {profile_row['expertise_areas']}")
-                    user_profile = "\n".join(lines)
+                    return "\n".join(lines)
             except Exception:
                 logger.debug("Could not load user profile", exc_info=True)
+            return ""
 
-        # User facts (discrete remembered/extracted facts)
-        user_facts = ""
-        if self.db and not route.get("skip_profile", False):
+        async def _user_facts():
+            if not self.db or skip_profile:
+                return ""
             try:
                 fact_rows = await get_user_facts(self.db, limit=20)
                 if fact_rows:
                     lines = ["## Known facts about your user"]
                     for row in fact_rows:
                         lines.append(f"- [{row['category']}] {row['fact']}")
-                    user_facts = "\n".join(lines)
+                    return "\n".join(lines)
             except Exception:
                 logger.debug("Could not load user facts", exc_info=True)
+            return ""
+
+        async def _sections():
+            if self.checkpoint_manager:
+                return await self.checkpoint_manager.get_working_sections()
+            return self.fallback_registry.load_all()
+
+        # Run all context queries in parallel
+        (
+            recovery_briefing, memory_context, memory_index, doc_listing,
+            skill_hints, corrections_context, error_hints, experiences_section,
+            user_profile, user_facts, sections,
+        ) = await asyncio.gather(
+            _recovery_briefing(), _memory_context(), _memory_index(), _doc_listing(),
+            _skill_hints(), _corrections(), _error_hints(), _experiences(),
+            _user_profile(), _user_facts(), _sections(),
+        )
+
+        # Build skill catalog (sync, no DB call)
+        skill_catalog = ""
+        if self.skill_registry:
+            skills = self.skill_registry.list()
+            if skills:
+                lines = [
+                    "## Available skills",
+                    "Use activate_skill to load a skill's full instructions before starting the task.",
+                ]
+                for s in skills:
+                    lines.append(f"- **{s.name}**: {s.description}")
+                skill_catalog = "\n".join(lines)
+
+        # Add decomposition hints for complex queries
+        if query_analysis and query_analysis.sub_questions:
+            sub_q_text = "\n".join(f"- {q}" for q in query_analysis.sub_questions)
+            memory_context += f"\n\n## Analysis hints\nConsider addressing these aspects:\n{sub_q_text}"
+
+        # Active task plan -- NOT auto-injected. Agent uses check_plan tool when needed.
+        active_plan = ""
 
         # Notebook context (when user is on a notebook page)
         notebook_context = ""
