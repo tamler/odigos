@@ -41,6 +41,11 @@ def test_agent_ws_rejects_without_auth(app):
 def test_agent_ws_accepts_with_auth(app):
     client = TestClient(app)
     with client.websocket_connect("/ws/agent?token=test-key") as ws:
+        # Server sends auth_ok with its identity after accepting
+        auth_ok = ws.receive_json()
+        assert auth_ok["type"] == "auth_ok"
+        assert auth_ok["agent_name"] == "TestAgent"
+
         ws.send_json({
             "type": "status_ping",
             "from_agent": "Archie",
