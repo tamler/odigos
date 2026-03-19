@@ -1,29 +1,49 @@
-# Odigos Project Context
+# Odigos -- Gemini Agent Instructions
 
-**Project:** Odigos
-**Type:** Self-hosted Personal AI Agent
-**Status:** Early Development (v0.1)
-**Goal:** A self-hosted personal AI agent that lives on a VPS, learns about its owner over time, and acts as a full virtual assistant.
+## Project
 
-## Overview
+Self-hosted AI agent platform. Python/FastAPI backend, React/TypeScript dashboard, SQLite database.
 
-Odigos is a Python-based personal AI assistant accessed primarily via Telegram. It is designed to be modular, resilient, memory-first, and privacy-respecting.
+## Your Role
 
-**Key Technical Decisions:**
-*   **Core Language:** Python
-*   **Database:** SQLite for structured data and graph data (entity-relationship tables); ChromaDB for vector memory.
-*   **LLM Routing:** OpenRouter for heavy reasoning; local models for embeddings (EmbeddingGemma-300M), STT (Moonshine), and TTS (KittenTTS).
-*   **Architecture:** Core "Plan -> Execute -> Reflect" loop with tiered context loading to prevent "context rot".
-*   **Deployment:** VPS (Target: 4 vCPU, 16GB RAM, no GPU), running as a systemd service.
+Frontend engineer. You own the dashboard UI at `dashboard/`. Claude handles backend, integration, and code review.
 
-## Core Components
-1.  **Agent Core**: Planner, Executor, Reflector, Context Assembler.
-2.  **Memory Layer**: Working Memory, Episodic Memory (Graph + Vector in SQLite), Core Identity (YAML).
-3.  **Tool System**: Python classes with standard execute/health-check interfaces.
-4.  **Proactive Engine**: Background monitors (email, calendar, triggers) and a self-programming heartbeat.
+## Current Assignment
 
-## Important Notes for AI Agents
-*   **Do NOT** reference old "odigosWriter" (Tauri/Vanilla JS) architecture. This project has pivoted to a Python-based VPS agent.
-*   **Database:** Use SQLite for structured and graph data, and ChromaDB for vector embeddings. Do not introduce other external databases.
-*   **Context:** Keep agent core lean (<2,000 lines). Complexity belongs in plugins and specialized "sniper agents".
-*   Respect explicit cost controls and context overhead limits (strict bounds on tokens injected).
+Read `docs/GEMINI-HANDOFF.md` for your full task list, architecture reference, and API documentation. Start with tasks G1-G3 (bug fixes), then G4 (mobile polish), then G5 (cowork layout).
+
+## How We Work
+
+1. Read the handoff doc before starting any work
+2. Leave notes in the "Communication Log" section at the bottom of the handoff doc when you complete tasks or hit blockers
+3. Commit your work with descriptive messages
+4. After completing each task, run: `cd dashboard && npx tsc --noEmit && npm run build`
+
+## Rules
+
+- TypeScript must compile with zero errors
+- Dashboard must build successfully
+- Follow existing patterns in the codebase
+- Use shadcn/ui components from `dashboard/src/components/ui/`
+- Use `get/post/patch/del` from `@/lib/api` for HTTP calls
+- Use `lucide-react` for icons
+- Use `sonner` toast for notifications
+- No hardcoded colors -- use CSS variables (`hsl(var(--primary))`)
+- Primary responsive breakpoint is `lg` (1024px)
+- API responses are flat objects (not nested under a key)
+
+## Key Files
+
+| File | What |
+|---|---|
+| `docs/GEMINI-HANDOFF.md` | Your task list and full reference |
+| `dashboard/src/App.tsx` | Routes |
+| `dashboard/src/layouts/AppLayout.tsx` | Layout, sidebar, WebSocket, navigation |
+| `dashboard/src/pages/ChatPage.tsx` | Main chat interface |
+| `dashboard/src/lib/api.ts` | HTTP helpers |
+| `dashboard/src/lib/ws.ts` | WebSocket client |
+| `dashboard/src/components/ui/` | All UI components |
+
+## Tech Stack
+
+React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui, react-router-dom v7, Recharts, lucide-react, Sonner
