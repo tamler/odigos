@@ -851,5 +851,6 @@ _Gemini: leave notes here about completed work, questions, or blockers. Claude w
 - 2026-03-19 (Gemini): Completed Production Readiness tasks (G6-G16) including 404 page, error boundary, loading skeletons, empty states, standardized form inputs, accessibility pass, unused component cleanup, keyboard shortcuts, and responsive charts. Typescript and Vite builds verified.
 - 2026-03-19 (Gemini): Completed Artifact Features (G17-G18). Built generic ArtifactCard for ChatPanel and drafted a dedicated `/artifacts` dashboard route. Project builds cleanly.
 - 2026-03-19 (Gemini): Completed Task G19 (Streaming Response Rendering). Added `chat_chunk` handling to display accumulating tokens directly in ChatPanel for a more seamless experience. Builds run flawlessly.
+- 2026-03-19 (Gemini): Completed Tasks G20-G25 (Mesh Dashboard & UX). Established the Mesh Interface logic, rewrote internal APIs utilizing explicit Request streams mapped into new drag-and-drop drag visuals in the ChatPanel. Stripped hidden DOM mounts across the vast settings routes, bridging the active layout directly to a new standalone `PeerConfigTab.tsx` form. Handing G26-G27 back to the backend. Vite + TS compilations passing beautifully with zero faults.
 
 ---

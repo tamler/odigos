@@ -13,7 +13,7 @@ import {
   ChatContainerScrollAnchor,
 } from '@/components/ui/chat-container'
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
-import { Artifact, ArtifactCard } from '@/components/ArtifactCard'
+import { Artifact, ArtifactCard, getFileIcon } from '@/components/ArtifactCard'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -50,7 +50,7 @@ export function ChatPanel({
   const [thinking, setThinking] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
-  const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean }[]>([])
+  const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean; progress?: number }[]>([])
   const [recording, setRecording] = useState(false)
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [queuedCount, setQueuedCount] = useState(0)
@@ -258,15 +258,19 @@ export function ChatPanel({
   }, [])
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
-    const newEntries = files.map((file) => ({ file, uploading: true }))
+    const newEntries = files.map((file) => ({ file, uploading: true, progress: 0 }))
     setPendingFiles((prev) => [...prev, ...newEntries])
 
     for (let i = 0; i < files.length; i++) {
       try {
-        const result = await uploadFile(files[i])
+        const result = await uploadFile(files[i], (progress) => {
+          setPendingFiles((prev) =>
+            prev.map((p) => p.file === files[i] ? { ...p, progress } : p)
+          )
+        })
         setPendingFiles((prev) =>
           prev.map((p) =>
-            p.file === files[i] ? { ...p, id: result.id, uploading: false } : p
+            p.file === files[i] ? { ...p, id: result.id, uploading: false, progress: 100 } : p
           )
         )
       } catch {
@@ -433,19 +437,34 @@ export function ChatPanel({
           <div className={`w-full mx-auto ${!isSidePanel ? 'max-w-[52rem]' : ''}`}>
             {/* Pending files */}
             {pendingFiles.length > 0 && (
-              <div className="flex flex-wrap gap-2 pb-2">
+              <div className="flex flex-wrap gap-2 pb-3">
                 {pendingFiles.map((p, i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-sm max-w-full"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-muted border border-border/50 text-sm max-w-[240px] shadow-sm relative overflow-hidden group"
                   >
-                    <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    <span className="truncate flex-shrink">{p.file.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">{formatFileSize(p.file.size)}</span>
-                    {p.uploading && <Loader variant="typing" size="sm" />}
-                    <button onClick={() => removeFile(p.file)} aria-label="Remove file" className="shrink-0 text-muted-foreground hover:text-foreground">
-                      <X className="h-3 w-3" />
-                    </button>
+                    <div className="text-muted-foreground shrink-0 flex items-center justify-center p-1 bg-background rounded-md">
+                      {getFileIcon(p.file.type || 'application/octet-stream', p.file.name)}
+                    </div>
+                    <div className="flex flex-col min-w-0 flex-1 py-0.5">
+                      <span className="truncate text-xs font-semibold">{p.file.name}</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[10px] text-muted-foreground">{formatFileSize(p.file.size)}</span>
+                        {p.uploading && (
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            <div className="h-1 flex-1 bg-background rounded-full overflow-hidden w-10">
+                              <div className="h-full bg-primary transition-all duration-300" style={{ width: `${p.progress || 0}%` }} />
+                            </div>
+                            <span className="text-[9px] text-muted-foreground font-medium w-5 text-right">{p.progress || 0}%</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {!p.uploading && (
+                      <button onClick={() => removeFile(p.file)} aria-label="Remove file" className="shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-sm hover:bg-background transition-colors absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100">
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

@@ -10,6 +10,7 @@ import DocumentsTab from './settings/DocumentsTab'
 import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
 import InspectorTab from './StatePage'
+import PeerConfigTab from './settings/PeerConfigTab'
 
 const TABS = [
   { id: 'account', label: 'Account' },
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'plugins', label: 'Plugins' },
   { id: 'documents', label: 'Documents' },
   { id: 'connections', label: 'Connections' },
+  { id: 'peers', label: 'Peers' },
   { id: 'feed', label: 'Feed' },
   { id: 'inspector', label: 'Inspector' },
 ] as const
@@ -54,19 +56,20 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Tab content — all tabs stay mounted; active prop triggers background refetch */}
+      {/* Tab content — conditionally remounted per G25 */}
       <div className="flex-1 overflow-y-auto">
-        <div className={activeTab === 'account' ? '' : 'hidden'}><AccountTab active={activeTab === 'account'} /></div>
-        <div className={activeTab === 'general' ? '' : 'hidden'}><GeneralSettings active={activeTab === 'general'} /></div>
-        <div className={activeTab === 'skills' ? '' : 'hidden'}><SkillsTab active={activeTab === 'skills'} /></div>
-        <div className={activeTab === 'prompts' ? '' : 'hidden'}><PromptsTab active={activeTab === 'prompts'} /></div>
-        <div className={activeTab === 'evolution' ? '' : 'hidden'}><EvolutionTab active={activeTab === 'evolution'} /></div>
-        <div className={activeTab === 'agents' ? '' : 'hidden'}><AgentsTab active={activeTab === 'agents'} /></div>
-        <div className={activeTab === 'plugins' ? '' : 'hidden'}><PluginsTab active={activeTab === 'plugins'} /></div>
-        <div className={activeTab === 'documents' ? '' : 'hidden'}><DocumentsTab active={activeTab === 'documents'} /></div>
-        <div className={activeTab === 'connections' ? '' : 'hidden'}><ConnectionsTab active={activeTab === 'connections'} /></div>
-        <div className={activeTab === 'feed' ? '' : 'hidden'}><FeedTab active={activeTab === 'feed'} /></div>
-        <div className={activeTab === 'inspector' ? '' : 'hidden'}><InspectorTab active={activeTab === 'inspector'} /></div>
+        {activeTab === 'account' && <AccountTab active={true} />}
+        {activeTab === 'general' && <GeneralSettings active={true} />}
+        {activeTab === 'skills' && <SkillsTab active={true} />}
+        {activeTab === 'prompts' && <PromptsTab active={true} />}
+        {activeTab === 'evolution' && <EvolutionTab active={true} />}
+        {activeTab === 'agents' && <AgentsTab active={true} />}
+        {activeTab === 'plugins' && <PluginsTab active={true} />}
+        {activeTab === 'documents' && <DocumentsTab active={true} />}
+        {activeTab === 'connections' && <ConnectionsTab active={true} />}
+        {activeTab === 'peers' && <PeerConfigTab />}
+        {activeTab === 'feed' && <FeedTab active={true} />}
+        {activeTab === 'inspector' && <InspectorTab active={true} />}
       </div>
     </div>
   )

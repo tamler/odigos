@@ -64,15 +64,38 @@ export async function del<T>(path: string): Promise<T> {
   return res.json()
 }
 
-export async function uploadFile(file: File): Promise<{
-  id: string; filename: string; size: number
-}> {
-  const form = new FormData()
-  form.append('file', file)
-  const res = await fetch(`${BASE}/api/upload`, {
-    method: 'POST',
-    body: form,
+export async function uploadFile(
+  file: File, 
+  onProgress?: (progress: number) => void
+): Promise<{ id: string; filename: string; size: number }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${BASE}/api/upload`)
+    
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      }
+    }
+    
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText))
+        } catch {
+          reject(new Error('Invalid JSON response'))
+        }
+      } else {
+        reject(new Error(`Upload error: ${xhr.status}`))
+      }
+    }
+    
+    xhr.onerror = () => reject(new Error('Network error during upload'))
+    
+    const form = new FormData()
+    form.append('file', file)
+    xhr.send(form)
   })
-  if (!res.ok) throw new Error(`Upload error: ${res.status}`)
-  return res.json()
 }

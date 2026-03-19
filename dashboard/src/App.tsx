@@ -11,6 +11,7 @@ import AnalyticsPage from './pages/AnalyticsPage'
 import LoginPrompt from './components/LoginPrompt'
 import NotFoundPage from './pages/NotFoundPage'
 import ArtifactsPage from './pages/ArtifactsPage'
+import MeshPage from './pages/MeshPage'
 
 interface AuthState {
   setup_required: boolean
@@ -56,6 +57,7 @@ export default function App() {
               <Route path="/kanban/:id" element={<KanbanPage />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/artifacts" element={<ArtifactsPage />} />
+              <Route path="/mesh" element={<MeshPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

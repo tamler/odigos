@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare, BookOpen, Columns3, BarChart3, Sun, Moon, Archive } from 'lucide-react'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare, BookOpen, Columns3, BarChart3, Sun, Moon, Archive, Network } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { ChatPanel } from '@/components/ChatPanel'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -30,6 +30,7 @@ interface Conversation {
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -137,12 +138,14 @@ export default function AppLayout() {
   function handleNewChat() {
     setActiveId(null)
     setSidebarOpen(false)
+    setSearchQuery('')
     navigate('/')
   }
 
   function handleSelectConversation(id: string) {
     setActiveId(id)
     setSidebarOpen(false)
+    setSearchQuery('')
     navigate(`/?c=${id}`)
   }
 
@@ -209,6 +212,10 @@ export default function AppLayout() {
     return `Chat ${short}`
   }
 
+  const filteredConversations = conversations.filter(c => 
+    !searchQuery || displayTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   const isSettingsPage = location.pathname === '/settings'
 
   return (
@@ -244,16 +251,28 @@ export default function AppLayout() {
             )}
           </div>
 
+          {/* Conversation Search */}
+          {!collapsed && (
+            <div className="px-3 pb-2 pt-1 border-b border-border/40 mb-2">
+              <Input 
+                placeholder="Search conversations..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 text-xs bg-muted/50 focus-visible:ring-1"
+              />
+            </div>
+          )}
+
           {/* Conversation list */}
           {!collapsed && (
             <ScrollArea className="flex-1 px-2">
               <div className="space-y-0.5 pb-4">
-                {conversations.length === 0 ? (
+                {filteredConversations.length === 0 ? (
                   <div className="px-3 py-6 mt-4 text-center text-sm text-muted-foreground">
-                    Start a new conversation
+                    {searchQuery ? 'No matching conversations' : 'Start a new conversation'}
                   </div>
                 ) : (
-                  conversations.map((c) => (
+                  filteredConversations.map((c) => (
                     <div key={c.id} className="group relative">
                     {editingId === c.id ? (
                       <div className="flex items-center gap-1 px-1 py-1">
@@ -381,9 +400,24 @@ export default function AppLayout() {
               {collapsed && <TooltipContent side="right">Artifacts</TooltipContent>}
             </Tooltip>
             <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => { setSidebarOpen(false); navigate('/mesh') }}
+                  className={`flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full ${
+                    location.pathname.startsWith('/mesh')
+                      ? 'bg-accent text-foreground'
+                      : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                  }`}
+                >
+                  <Network className="h-4 w-4 shrink-0" />{!collapsed && 'Agent Mesh'}
+                </button>
+              </TooltipTrigger>
+              {collapsed && <TooltipContent side="right">Agent Mesh</TooltipContent>}
+            </Tooltip>
+            <Tooltip>
               <TooltipTrigger>
                 <button
-                  onClick={() => { setSidebarOpen(false); navigate(isSettingsPage ? '/' : '/settings') }}
+                  onClick={() => { setSidebarOpen(false); setSearchQuery(''); navigate(isSettingsPage ? '/' : '/settings') }}
                   className="flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground"
                 >
                   {isSettingsPage ? (
