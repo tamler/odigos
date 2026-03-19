@@ -177,21 +177,24 @@ async def test_handle_incoming_validates_to_agent(db, mock_peers):
 
 @pytest.mark.asyncio
 async def test_handle_incoming_accepts_broadcast(db, mock_peers):
-    """Messages addressed to '*' (broadcast) are accepted."""
+    """Broadcast announce messages are handled by the built-in handler."""
     client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
-
-    handler = AsyncMock()
-    client.on_message("registry_announce", handler)
 
     msg = PeerEnvelope(
         from_agent="Archie",
         to_agent="*",
         type="registry_announce",
-        payload={"role": "backend_dev"},
+        payload={"role": "backend_dev", "ws_port": 8001},
     )
     await client.handle_incoming(msg, peer_ip="100.64.0.2")
 
-    handler.assert_called_once()
+    # Built-in handler registers the peer in agent_registry
+    row = await db.fetch_one(
+        "SELECT agent_name, role FROM agent_registry WHERE agent_name = ?",
+        ("Archie",),
+    )
+    assert row is not None
+    assert row["role"] == "backend_dev"
 
 
 @pytest.mark.asyncio

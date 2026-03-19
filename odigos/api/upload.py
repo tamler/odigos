@@ -19,6 +19,36 @@ from odigos.providers.markitdown import MarkItDownProvider
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
+# Dangerous file extensions that should never be uploaded
+_BLOCKED_EXTENSIONS = {
+    ".exe", ".bat", ".cmd", ".com", ".msi", ".scr", ".pif",  # Windows executables
+    ".sh", ".bash", ".csh",  # Shell scripts
+    ".php", ".jsp", ".asp", ".aspx",  # Server-side scripts
+    ".dll", ".so", ".dylib",  # Libraries
+}
+
+# Magic bytes for common dangerous file types
+_DANGEROUS_MAGIC = [
+    (b"MZ", "PE executable"),  # Windows EXE/DLL
+    (b"\x7fELF", "ELF binary"),  # Linux binaries
+    (b"\xfe\xed\xfa", "Mach-O binary"),  # macOS binaries
+    (b"\xcf\xfa\xed\xfe", "Mach-O binary"),  # macOS binaries (reverse)
+]
+
+
+def _check_file_safety(filename: str, content: bytes) -> str | None:
+    """Return an error message if the file is dangerous, None if safe."""
+    ext = os.path.splitext(filename.lower())[1]
+    if ext in _BLOCKED_EXTENSIONS:
+        return f"File type {ext} is not allowed"
+
+    # Check magic bytes
+    for magic, desc in _DANGEROUS_MAGIC:
+        if content[:len(magic)] == magic:
+            return f"File appears to be a {desc} and is not allowed"
+
+    return None
+
 
 def is_audio_file(filename: str) -> bool:
     """Check if a filename has an audio extension."""
@@ -50,9 +80,15 @@ async def upload_file(
     safe_name = os.path.basename(file.filename or "upload")
     dest = os.path.join(upload_dir, f"{file_id}_{safe_name}")
 
+    # Read with strict size enforcement
     content = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large (50 MB max)")
+
+    # Validate file safety before writing to disk
+    safety_error = _check_file_safety(safe_name, content)
+    if safety_error:
+        raise HTTPException(status_code=400, detail=safety_error)
 
     with open(dest, "wb") as f:
         f.write(content)

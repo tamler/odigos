@@ -71,7 +71,7 @@ async def test_maybe_auto_title_skips_after_first_exchange(db, mock_provider):
     await db.execute(
         "INSERT INTO conversations (id, channel) VALUES (?, ?)", (conv_id, "web")
     )
-    for i in range(4):
+    for i in range(6):
         await db.execute(
             "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
             (str(uuid.uuid4()), conv_id, "user" if i % 2 == 0 else "assistant", f"msg {i}"),
