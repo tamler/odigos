@@ -39,6 +39,7 @@ export default function ChatPage() {
   const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean }[]>([])
   const [recording, setRecording] = useState(false)
   const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [queuedCount, setQueuedCount] = useState(0)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -70,6 +71,19 @@ export default function ChatPage() {
       }
       if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
         refreshConversations()
+      }
+      if (msg.type === 'queue_update') {
+        const queued = msg.queued as number
+        setQueuedCount(queued)
+        if (queued === 0) {
+          setThinking(false)
+        }
+      }
+      if (msg.type === 'message_queued') {
+        setStatus(`Queued (${msg.queued as number} pending)`)
+      }
+      if (msg.type === 'queue_full') {
+        toast.warning('Message queue is full. Please wait.')
       }
     }
 
@@ -256,7 +270,7 @@ export default function ChatPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const canSend = connected && (inputValue.trim() || pendingFiles.length > 0)
+  const canSend = connected && (inputValue.trim() || pendingFiles.length > 0) && queuedCount < 3
 
   return (
     <FileUpload onFilesAdded={handleFilesAdded}>

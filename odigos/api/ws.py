@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+MAX_QUEUED_MESSAGES = 3
+
 
 async def _auto_title_and_notify(ws: WebSocket, db, provider, conversation_id: str,
                                   user_msg: str, assistant_resp: str):
@@ -90,7 +92,12 @@ async def _authenticate_ws(websocket: WebSocket) -> tuple[bool, bool]:
 
 @router.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint with auth, chat, and subscribe support."""
+    """WebSocket endpoint with auth, chat, and subscribe support.
+
+    Chat messages are queued and processed sequentially. If a message
+    arrives while the agent is processing, it is queued and the user
+    is notified. The queue has a max size to prevent runaway input.
+    """
     authenticated, already_accepted = await _authenticate_ws(websocket)
     if not authenticated:
         return
@@ -106,23 +113,15 @@ async def websocket_endpoint(websocket: WebSocket):
     web_channel.register_connection(conversation_id, websocket)
 
     first_message = True
+    chat_queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_QUEUED_MESSAGES)
+    processor_task: asyncio.Task | None = None
 
-    try:
-        await websocket.send_json({
-            "type": "connected",
-            "session_id": session_id,
-            "conversation_id": conversation_id,
-        })
-
+    async def _process_chat_queue():
+        """Process queued chat messages one at a time."""
+        nonlocal conversation_id, first_message
         while True:
-            data = await websocket.receive_json()
-            msg_type = data.get("type")
-
-            # Ignore duplicate auth messages after initial auth
-            if msg_type == "auth":
-                continue
-
-            if msg_type == "chat":
+            data = await chat_queue.get()
+            try:
                 # Use client-provided conversation_id if resuming
                 client_conv_id = data.get("conversation_id")
                 if client_conv_id:
@@ -140,6 +139,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     timestamp=datetime.now(timezone.utc),
                     metadata=msg_metadata,
                 )
+
                 async def send_status(text: str) -> None:
                     await websocket.send_json({"type": "status", "text": text})
 
@@ -164,6 +164,59 @@ async def websocket_endpoint(websocket: WebSocket):
                     websocket, agent.db, agent.executor.provider,
                     conversation_id, data.get("content", ""), response,
                 ))
+            except Exception:
+                logger.exception("Error processing queued chat message")
+                try:
+                    await websocket.send_json({
+                        "type": "chat_response",
+                        "content": "Something went wrong processing your message. Please try again.",
+                        "conversation_id": conversation_id,
+                    })
+                except Exception:
+                    pass
+            finally:
+                chat_queue.task_done()
+                # Tell frontend how many messages remain queued
+                await websocket.send_json({
+                    "type": "queue_update",
+                    "queued": chat_queue.qsize(),
+                })
+
+    try:
+        await websocket.send_json({
+            "type": "connected",
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+        })
+
+        # Start the chat message processor
+        processor_task = asyncio.create_task(_process_chat_queue())
+
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            # Ignore duplicate auth messages after initial auth
+            if msg_type == "auth":
+                continue
+
+            if msg_type == "chat":
+                if chat_queue.full():
+                    await websocket.send_json({
+                        "type": "queue_full",
+                        "message": "Message queue is full. Please wait for current messages to be processed.",
+                        "queued": chat_queue.qsize(),
+                    })
+                else:
+                    chat_queue.put_nowait(data)
+                    queued = chat_queue.qsize()
+                    # If there are messages ahead, tell the user theirs is queued
+                    if queued > 1:
+                        await websocket.send_json({
+                            "type": "message_queued",
+                            "queued": queued,
+                            "message": f"Message queued ({queued} pending). I'll get to it shortly.",
+                        })
 
             elif msg_type == "peer_connect":
                 # Peer agent identifying itself
@@ -203,4 +256,10 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
+        if processor_task:
+            processor_task.cancel()
+            try:
+                await processor_task
+            except asyncio.CancelledError:
+                pass
         web_channel.unregister_connection(conversation_id, websocket)
