@@ -32,6 +32,12 @@ Example: `results = search_documents("Trafalgar"); print(results)`
 RAG gives you relevant chunks automatically. Use code when you need to dig deeper,
 verify across multiple documents, or find specific passages.
 
+**Artifacts:** When the user asks you to create a file they can download (spreadsheet,
+report, document, data export), use create_artifact with a filename and content.
+Supported formats: CSV, Markdown, JSON, HTML, TXT, XML, YAML.
+The file will be available for download in the chat. Use this instead of pasting
+large data into the conversation -- create a proper file the user can save.
+
 **Notifications:** You can push notifications to the user via send_notification.
 Use for timely, actionable information: task completions, reminders, warnings.
 Don't overuse -- only notify when the user would want to be interrupted.

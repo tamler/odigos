@@ -63,6 +63,7 @@ from odigos.api.documents import router as documents_router
 from odigos.api.analytics import router as analytics_router
 from odigos.api.notebooks import router as notebooks_router
 from odigos.api.kanban import router as kanban_router
+from odigos.api.artifacts import router as artifacts_router
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
@@ -172,6 +173,11 @@ async def _register_tools(
     tool_registry.register(KanbanUpdateCardTool(db=db))
     tool_registry.register(KanbanDeleteCardTool(db=db))
     logger.info("Kanban tools initialized")
+
+    # Artifact tool
+    from odigos.tools.artifact import CreateArtifactTool
+    tool_registry.register(CreateArtifactTool(db=db))
+    logger.info("Artifact tool initialized")
 
     # Skill tools
     from pathlib import Path as _SkillPath
@@ -840,6 +846,7 @@ app.include_router(documents_router)
 app.include_router(analytics_router)
 app.include_router(notebooks_router)
 app.include_router(kanban_router)
+app.include_router(artifacts_router)
 
 
 @app.get("/health")
