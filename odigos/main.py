@@ -64,6 +64,7 @@ from odigos.api.analytics import router as analytics_router
 from odigos.api.notebooks import router as notebooks_router
 from odigos.api.kanban import router as kanban_router
 from odigos.api.artifacts import router as artifacts_router
+from odigos.api.mesh import router as mesh_router
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
@@ -766,6 +767,19 @@ async def lifespan(app: FastAPI):
     await _heartbeat.start()
     logger.info("Heartbeat started (interval=%ds)", settings.heartbeat.interval_seconds)
 
+    # Start WebSocket connector for mesh peers
+    _ws_connector = None
+    if mesh_enabled and settings.peers:
+        from odigos.core.ws_connector import WSConnector
+        _ws_connector = WSConnector(
+            agent_client=agent_client,
+            agent_name=settings.agent.name,
+            peers=settings.peers,
+        )
+        await _ws_connector.start()
+        app.state.ws_connector = _ws_connector
+        logger.info("WebSocket connector started for %d peer(s)", len(settings.peers))
+
     # Warn if binding to all interfaces without TLS
     if settings.server.host == "0.0.0.0":
         logger.warning(
@@ -779,6 +793,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down Odigos...")
+    if _ws_connector:
+        await _ws_connector.stop()
     if _heartbeat:
         await _heartbeat.stop()
     for ch in channel_registry.all():
@@ -847,6 +863,7 @@ app.include_router(analytics_router)
 app.include_router(notebooks_router)
 app.include_router(kanban_router)
 app.include_router(artifacts_router)
+app.include_router(mesh_router)
 
 
 @app.get("/health")
