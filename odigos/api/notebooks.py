@@ -9,7 +9,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from odigos.api.deps import get_db, require_feature
+from odigos.api.deps import get_db, require_auth, require_feature
 from odigos.core.resource_store import ResourceStore
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/notebooks",
     tags=["notebooks"],
-    dependencies=[Depends(require_feature("notebooks"))],
+    dependencies=[Depends(require_auth), Depends(require_feature("notebooks"))],
 )
 
 BACKUP_DIR = Path("data/notebooks")

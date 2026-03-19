@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from odigos.api.deps import get_db, require_feature
+from odigos.api.deps import get_db, require_auth, require_feature
 from odigos.core.resource_store import ResourceStore
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/kanban",
     tags=["kanban"],
-    dependencies=[Depends(require_feature("kanban"))],
+    dependencies=[Depends(require_auth), Depends(require_feature("kanban"))],
 )
 
 _PRIORITY = Literal["low", "medium", "high", "urgent"]

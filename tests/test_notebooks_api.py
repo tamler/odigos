@@ -19,7 +19,7 @@ async def db(tmp_db_path: str) -> Database:
 @pytest.fixture
 def app(db: Database) -> FastAPI:
     app = FastAPI()
-    settings = Settings(notebooks=NotebooksConfig(enabled=True))
+    settings = Settings(notebooks=NotebooksConfig(enabled=True), api_key="test-key")
     app.state.settings = settings
     app.state.db = db
     app.include_router(router)
@@ -28,7 +28,9 @@ def app(db: Database) -> FastAPI:
 
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
-    return TestClient(app)
+    c = TestClient(app)
+    c.headers["Authorization"] = "Bearer test-key"
+    return c
 
 
 class TestNotebooksCRUD:
@@ -137,9 +139,10 @@ class TestNotebookEntries:
 class TestDisabledFeature:
     def test_disabled_returns_404(self, db):
         app = FastAPI()
-        app.state.settings = Settings(notebooks=NotebooksConfig(enabled=False))
+        app.state.settings = Settings(notebooks=NotebooksConfig(enabled=False), api_key="test-key")
         app.state.db = db
         app.include_router(router)
         client = TestClient(app)
+        client.headers["Authorization"] = "Bearer test-key"
         resp = client.get("/api/notebooks")
         assert resp.status_code == 404

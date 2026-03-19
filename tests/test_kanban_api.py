@@ -18,7 +18,7 @@ async def db(tmp_db_path: str) -> Database:
 @pytest.fixture
 def app(db: Database) -> FastAPI:
     app = FastAPI()
-    settings = Settings(kanban=KanbanConfig(enabled=True))
+    settings = Settings(kanban=KanbanConfig(enabled=True), api_key="test-key")
     app.state.settings = settings
     app.state.db = db
     app.include_router(router)
@@ -27,7 +27,9 @@ def app(db: Database) -> FastAPI:
 
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
-    return TestClient(app)
+    c = TestClient(app)
+    c.headers["Authorization"] = "Bearer test-key"
+    return c
 
 
 class TestBoardCRUD:
@@ -172,8 +174,9 @@ class TestCardCRUD:
 class TestDisabledFeature:
     def test_disabled_returns_404(self, db):
         app = FastAPI()
-        app.state.settings = Settings(kanban=KanbanConfig(enabled=False))
+        app.state.settings = Settings(kanban=KanbanConfig(enabled=False), api_key="test-key")
         app.state.db = db
         app.include_router(router)
         client = TestClient(app)
+        client.headers["Authorization"] = "Bearer test-key"
         assert client.get("/api/kanban/boards").status_code == 404
