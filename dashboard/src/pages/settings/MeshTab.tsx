@@ -30,7 +30,7 @@ interface PeerMessage {
   created_at: string
 }
 
-export default function MeshPage() {
+export default function MeshTab() {
   const [peers, setPeers] = useState<Peer[]>([])
   const [messages, setMessages] = useState<PeerMessage[]>([])
   const [loading, setLoading] = useState(true)

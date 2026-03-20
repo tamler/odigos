@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import GeneralSettings from './settings/GeneralSettings'
 import AccountTab from './settings/AccountTab'
 import EvolutionTab from './settings/EvolutionTab'
@@ -7,6 +8,8 @@ import PluginsTab from './settings/PluginsTab'
 import SkillsTab from './settings/SkillsTab'
 import PromptsTab from './settings/PromptsTab'
 import DocumentsTab from './settings/DocumentsTab'
+import AnalyticsTab from './settings/AnalyticsTab'
+import MeshTab from './settings/MeshTab'
 import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
 import InspectorTab from './StatePage'
@@ -21,6 +24,8 @@ const TABS = [
   { id: 'agents', label: 'Agents' },
   { id: 'plugins', label: 'Plugins' },
   { id: 'documents', label: 'Documents' },
+  { id: 'analytics', label: 'Analytics' },
+  { id: 'mesh', label: 'Mesh' },
   { id: 'connections', label: 'Connections' },
   { id: 'peers', label: 'Peers' },
   { id: 'feed', label: 'Feed' },
@@ -30,7 +35,20 @@ const TABS = [
 type TabId = typeof TABS[number]['id']
 
 export default function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabId>('general')
+
+  useEffect(() => {
+    const tab = searchParams.get('tab') as TabId
+    if (tab && TABS.some(t => t.id === tab)) {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
+
+  const handleTabChange = (id: TabId) => {
+    setActiveTab(id)
+    setSearchParams({ tab: id })
+  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -40,7 +58,7 @@ export default function SettingsPage() {
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`px-3 py-3 text-xs sm:text-sm font-medium transition-colors relative shrink-0 ${
                 activeTab === tab.id
                   ? 'text-foreground'
@@ -66,6 +84,8 @@ export default function SettingsPage() {
         {activeTab === 'agents' && <AgentsTab active={true} />}
         {activeTab === 'plugins' && <PluginsTab active={true} />}
         {activeTab === 'documents' && <DocumentsTab active={true} />}
+        {activeTab === 'analytics' && <AnalyticsTab />}
+        {activeTab === 'mesh' && <MeshTab />}
         {activeTab === 'connections' && <ConnectionsTab active={true} />}
         {activeTab === 'peers' && <PeerConfigTab />}
         {activeTab === 'feed' && <FeedTab active={true} />}

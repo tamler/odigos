@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu, MessageSquare } from 'lucide-react'
+import { Outlet, useNavigate, useSearchParams } from 'react-router-dom'
+import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
@@ -35,13 +35,14 @@ export default function AppLayout() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [connected, setConnected] = useState(false)
+  const [hasNewEmail, setHasNewEmail] = useState(false)
   const [chatPanelOpen, setChatPanelOpen] = useState(false)
   const [chatContext, setChatContext] = useState<Record<string, string> | undefined>(undefined)
   const editInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
   const navigate = useNavigate()
-  const location = useLocation()
   const [searchParams] = useSearchParams()
+  const pendingTitles = useRef<Record<string, string>>({})
 
   // Keyboard shortcuts (G14)
   useEffect(() => {
@@ -77,7 +78,12 @@ export default function AppLayout() {
 
   const loadConversations = useCallback(() => {
     get<{ conversations: Conversation[] }>('/api/conversations?limit=50')
-      .then((data) => setConversations(data.conversations))
+      .then((data) => {
+        setConversations(data.conversations.map(c => ({
+          ...c,
+          title: pendingTitles.current[c.id] || c.title
+        })))
+      })
       .catch(() => {})
   }, [])
 
@@ -91,6 +97,11 @@ export default function AppLayout() {
           const title = msg.title as string | undefined
           const label = title ? `${title}: ${body}` : body
           const priority = (msg.priority || 'info') as string
+
+          if (title?.toLowerCase().includes('email')) {
+            setHasNewEmail(true)
+          }
+
           if (priority === 'urgent') {
             toast.error(label)
           } else if (priority === 'warning') {
@@ -102,6 +113,7 @@ export default function AppLayout() {
         if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
           const cid = msg.conversation_id as string
           const title = msg.title as string
+          pendingTitles.current[cid] = title
           setConversations((prev) =>
             prev.map((c) => (c.id === cid ? { ...c, title } : c))
           )
@@ -213,8 +225,6 @@ export default function AppLayout() {
     !searchQuery || displayTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const isSettingsPage = location.pathname === '/settings'
-
   return (
     <TooltipProvider>
       <div className="flex h-[100dvh] bg-background text-foreground">
@@ -231,21 +241,31 @@ export default function AppLayout() {
 
         {/* Sidebar */}
         <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed ? 'lg:w-14' : 'lg:w-64'}`}>
-          {/* Top: Toggle + New Chat */}
-          <div className="flex items-center gap-2 p-3">
-            <Tooltip>
-              <TooltipTrigger>
-                <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="shrink-0">
-                  {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
-            </Tooltip>
+          {/* Top: Logo + New Chat */}
+          <div className="flex flex-col gap-2 p-3 border-b border-border/40 mb-2">
             {!collapsed && (
-              <Button variant="ghost" size="sm" className="flex-1 justify-start gap-2" onClick={handleNewChat}>
-                <Plus className="h-4 w-4" /> New Chat
-              </Button>
+              <button 
+                onClick={() => navigate('/')} 
+                className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors"
+              >
+                Odigos
+              </button>
             )}
+            <div className="flex items-center gap-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="shrink-0 h-8 w-8">
+                    {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
+              </Tooltip>
+              {!collapsed && (
+                <Button variant="secondary" size="sm" className="flex-1 justify-start gap-2 h-8" onClick={handleNewChat}>
+                  <Plus className="h-4 w-4" /> New Chat
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Conversation Search */}
@@ -334,22 +354,19 @@ export default function AppLayout() {
             </ScrollArea>
           )}
 
-          {/* Bottom: Toggle between Chat and Settings */}
+          {/* Bottom: Settings Gear Icon (G29) */}
           <div className="p-3 mt-auto">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => { setSidebarOpen(false); setSearchQuery(''); navigate(isSettingsPage ? '/' : '/settings') }}
-                  className="flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-md text-sm transition-colors w-full text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  onClick={() => { setSidebarOpen(false); setSearchQuery(''); navigate('/settings') }}
+                  className={`flex items-center gap-2 p-2 rounded-md transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground ${collapsed ? 'justify-center' : 'w-10'}`}
+                  aria-label="Settings"
                 >
-                  {isSettingsPage ? (
-                    <><MessageSquare className="h-4 w-4 shrink-0" />{!collapsed && 'Chat'}</>
-                  ) : (
-                    <><Settings className="h-4 w-4 shrink-0" />{!collapsed && 'Settings'}</>
-                  )}
+                  <Settings className="h-4 w-4 shrink-0" />
                 </button>
               </TooltipTrigger>
-              {collapsed && <TooltipContent side="right">{isSettingsPage ? 'Chat' : 'Settings'}</TooltipContent>}
+              <TooltipContent side="right">Settings</TooltipContent>
             </Tooltip>
           </div>
         </aside>
@@ -371,6 +388,8 @@ export default function AppLayout() {
               refreshConversations: loadConversations,
               socketRef,
               connected,
+              hasNewEmail,
+              setHasNewEmail,
               setChatPanelOpen,
               setChatContext,
             }} />

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
@@ -45,6 +45,7 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { hasNewEmail, setHasNewEmail } = useOutletContext<any>()
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -286,8 +287,8 @@ export function ChatPanel({
     setPendingFiles((prev) => prev.filter((p) => p.file !== file))
   }
 
-  const handleSend = useCallback(() => {
-    const content = inputValue.trim()
+  const handleSend = useCallback((overrideContent?: string) => {
+    const content = (overrideContent ?? inputValue).trim()
     if (!content && pendingFiles.length === 0) return
 
     const attachments = pendingFiles
@@ -521,7 +522,7 @@ export function ChatPanel({
                     aria-label="Send message"
                     className="h-8 w-8 rounded-lg"
                     disabled={!canSend}
-                    onClick={handleSend}
+                    onClick={() => handleSend()}
                   >
                     <ArrowUp className="h-4 w-4" />
                   </Button>
@@ -536,7 +537,20 @@ export function ChatPanel({
                 <span>&middot;</span>
                 <button onClick={() => navigate('/kanban')} className="hover:text-foreground transition-colors">Board</button>
                 <span>&middot;</span>
-                <button onClick={() => navigate('/settings')} className="hover:text-foreground transition-colors">Documents</button>
+                <button onClick={() => navigate('/settings?tab=documents')} className="hover:text-foreground transition-colors">Documents</button>
+                <span>&middot;</span>
+                <button 
+                  onClick={() => {
+                    setHasNewEmail(false)
+                    handleSend('Check my email')
+                  }} 
+                  className="hover:text-foreground transition-colors relative"
+                >
+                  Email
+                  {hasNewEmail && (
+                    <span className="absolute -top-1 -right-2 h-2 w-2 bg-red-500 rounded-full border border-background shadow-sm animate-pulse" />
+                  )}
+                </button>
               </div>
             )}
           </div>

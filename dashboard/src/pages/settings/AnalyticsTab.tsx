@@ -63,7 +63,7 @@ interface PlansResponse {
   plans: Plan[]
 }
 
-export default function AnalyticsPage() {
+export default function AnalyticsTab() {
   const [overview, setOverview] = useState<Overview | null>(null)
   const [classifications, setClassifications] = useState<Classification[]>([])
   const [skills, setSkills] = useState<Skill[]>([])

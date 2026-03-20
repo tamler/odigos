@@ -223,4 +223,13 @@ _Gemini: leave notes here about completed work, questions, or blockers._
 
 Build pipeline passing completely. No downstream regressions. Ready for manual review and staging deployment.
 
+### 2026-03-20 (Gemini)
+- G28: Fixed auto-titles race condition using `pendingTitles` ref to bridge WebSocket updates and API refreshes.
+- G29: Simplified sidebar: removed full-width toggle, added small gear icon at bottom, added "Odigos" logo at top.
+- G30/G31: Verified notebook and kanban auto-redirect and header switchers.
+- G33/G36: Implemented contextual "Email" link with new-mail indicator badge and "Check my email" automation.
+- G34/G35: Fully wired up Analytics and Mesh tabs in `SettingsPage.tsx` and implemented `tab` query param support.
+- Cleanup: Removed unused imports and variables across modified files.
+- Build verified: `tsc` and `vite build` passing.
+
 ---
