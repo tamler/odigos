@@ -98,6 +98,90 @@ async def infer_implicit_feedback(
     return FEEDBACK_NEUTRAL
 
 
+# -- AREW-inspired critique signals (arxiv.org/abs/2603.12109) --
+# Action Selection: did the agent use appropriate tools?
+# Belief Tracking: did the agent use the information it retrieved?
+
+_DOCUMENT_TOOLS = {"process_document", "run_code", "activate_skill"}
+_SEARCH_TOOLS = {"web_search", "read_page", "read_feed"}
+_MEMORY_TOOLS = {"remember_fact"}
+
+# Tool categories that indicate active information gathering
+_ACTIVE_TOOLS = _DOCUMENT_TOOLS | _SEARCH_TOOLS | {"run_code", "read_page", "scrape_page"}
+
+
+async def compute_as_critique(
+    db: Database, conversation_id: str, classification: str, tools_used: list[str],
+) -> int:
+    """Action Selection critique: did the agent use appropriate tools?
+
+    Returns +1 (good tool use), -1 (should have used tools but didn't), or 0 (neutral).
+    """
+    has_active_tools = bool(set(tools_used) & _ACTIVE_TOOLS)
+
+    # Document queries should use document-related tools
+    if classification == "document_query" and not has_active_tools:
+        return -1
+
+    # Complex queries should use tools to gather information
+    if classification == "complex" and not tools_used:
+        return -1
+
+    # If active tools were used, that's good regardless of classification
+    if has_active_tools:
+        return 1
+
+    # Standard queries without tools -- neutral (might be fine for simple chat)
+    return 0
+
+
+async def compute_bt_critique(
+    db: Database, conversation_id: str, assistant_content: str, tools_used: list[str],
+) -> int:
+    """Belief Tracking critique: did the agent use the information it retrieved?
+
+    Returns +1 (integrated tool results), -1 (ignored tool results), or 0 (no tools used).
+    """
+    if not tools_used:
+        return 0
+
+    # Check if any tool results exist in this conversation's recent messages
+    tool_results = await db.fetch_all(
+        "SELECT content FROM messages WHERE conversation_id = ? AND role = 'tool' "
+        "ORDER BY timestamp DESC LIMIT 5",
+        (conversation_id,),
+    )
+
+    if not tool_results:
+        return 0
+
+    # Check if the assistant response references content from tool results
+    # Simple heuristic: do any significant words from tool results appear in the response?
+    response_lower = assistant_content.lower()
+    tool_content = " ".join(r["content"][:500] for r in tool_results).lower()
+
+    # Extract significant words from tool results (>5 chars, not common words)
+    _COMMON = {"that", "this", "with", "from", "have", "been", "will", "would", "could",
+               "should", "about", "their", "there", "which", "other", "error", "result",
+               "units", "think", "answer", "please", "something", "anything", "everything",
+               "information", "question", "response", "message"}
+    tool_words = {w for w in tool_content.split() if len(w) > 5 and w not in _COMMON}
+
+    if not tool_words:
+        return 0
+
+    # Count how many significant tool words appear in the response
+    overlap = sum(1 for w in tool_words if w in response_lower)
+    overlap_ratio = overlap / len(tool_words) if tool_words else 0
+
+    if overlap_ratio > 0.1:
+        return 1  # Agent used the information
+    elif overlap_ratio < 0.02 and len(tools_used) > 0:
+        return -1  # Agent had tool results but didn't reference them
+
+    return 0
+
+
 class Evaluator:
     """Scores past agent actions via rubric generation (C.1) and scoring (C.2)."""
 
@@ -159,6 +243,33 @@ class Evaluator:
         eval_id = str(uuid.uuid4())
         task_type = rubric.get("task_type", "unknown")
         overall = scores.get("overall", 0.0)
+
+        # AREW critique: compute AS and BT signals from tool usage
+        as_score = 0
+        bt_score = 0
+        try:
+            query_row = await self.db.fetch_one(
+                "SELECT classification, tools_used FROM query_log "
+                "WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1",
+                (conversation_id,),
+            )
+            if query_row:
+                classification = query_row["classification"] or "standard"
+                tools_used = json.loads(query_row["tools_used"]) if query_row["tools_used"] else []
+                as_score = await compute_as_critique(
+                    self.db, conversation_id, classification, tools_used,
+                )
+                bt_score = await compute_bt_critique(
+                    self.db, conversation_id, asst_msg["content"], tools_used,
+                )
+                scores["as_critique"] = as_score
+                scores["bt_critique"] = bt_score
+                if as_score == -1:
+                    logger.info("AS critique: agent should have used tools for %s query", classification)
+                if bt_score == -1:
+                    logger.info("BT critique: agent ignored tool results in conversation %s", conversation_id[:8])
+        except Exception:
+            logger.debug("Could not compute AREW critiques", exc_info=True)
 
         await self.db.execute(
             "INSERT INTO evaluations (id, message_id, conversation_id, task_type, "
@@ -233,6 +344,8 @@ class Evaluator:
             "suggested_improvement": scores.get("suggested_improvement"),
             "user_satisfaction_signal": scores.get("user_satisfaction_signal"),
             "key_entities": key_entities,
+            "as_critique": as_score,
+            "bt_critique": bt_score,
         }
 
     async def _get_or_generate_rubric(
