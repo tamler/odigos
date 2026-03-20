@@ -150,6 +150,18 @@ class KanbanConfig(BaseModel):
     enabled: bool = True
 
 
+class EmailConfig(BaseModel):
+    enabled: bool = False
+    address: str = ""
+    imap_host: str = ""
+    imap_port: int = 993
+    smtp_host: str = ""
+    smtp_port: int = 587
+    username: str = ""
+    password: str = ""
+    check_interval_ticks: int = 10  # heartbeat ticks between inbox checks (0 = agent decides)
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str = ""
     llm_api_key: str = ""
@@ -187,6 +199,7 @@ class Settings(BaseSettings):
     peers: list[PeerConfig] = []
     notebooks: NotebooksConfig = NotebooksConfig()
     kanban: KanbanConfig = KanbanConfig()
+    email: EmailConfig = EmailConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

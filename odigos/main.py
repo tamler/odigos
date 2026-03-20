@@ -180,6 +180,13 @@ async def _register_tools(
     tool_registry.register(CreateArtifactTool(db=db))
     logger.info("Artifact tool initialized")
 
+    # Email tools (only if configured)
+    if settings.email.enabled and settings.email.imap_host:
+        from odigos.tools.email import CheckEmailTool, SendEmailTool
+        tool_registry.register(CheckEmailTool(email_config=settings.email))
+        tool_registry.register(SendEmailTool(email_config=settings.email))
+        logger.info("Email tools initialized (%s)", settings.email.address)
+
     # Skill tools
     from pathlib import Path as _SkillPath
     try:
@@ -757,6 +764,11 @@ async def lifespan(app: FastAPI):
 
     # Set heartbeat on agent so any channel can access it
     agent.heartbeat = _heartbeat
+
+    # Wire email config into heartbeat for periodic inbox checking
+    if settings.email.enabled:
+        _heartbeat._email_config = settings.email
+        logger.info("Email heartbeat enabled (check every %d ticks)", settings.email.check_interval_ticks)
 
     # Start all registered channels
     for ch in channel_registry.all():

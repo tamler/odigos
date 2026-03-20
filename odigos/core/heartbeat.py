@@ -99,6 +99,8 @@ class Heartbeat:
         self._experience_interval_ticks: int = 20
         self._outcome_tick_counter: int = 0
         self._outcome_interval_ticks: int = 10
+        self._email_tick_counter: int = 0
+        self._email_config = None  # Set from main.py if email is configured
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -148,6 +150,17 @@ class Heartbeat:
         if self.agent_client:
             did_work |= await self._process_peer_messages()
 
+        # Phase 4b: Check email inbox (if configured)
+        _email_cfg = getattr(self, "_email_config", None)
+        if _email_cfg and _email_cfg.enabled:
+            if not hasattr(self, "_email_tick_counter"):
+                self._email_tick_counter = 0
+            self._email_tick_counter += 1
+            interval = _email_cfg.check_interval_ticks or 10
+            if self._email_tick_counter >= interval:
+                self._email_tick_counter = 0
+                did_work |= await self._check_email()
+
         # Phase 5: Idle thoughts (only if nothing ran above)
         if not did_work:
             await self._idle_think()
@@ -182,6 +195,33 @@ class Heartbeat:
             await self.tracer.emit("heartbeat_tick", None, {
                 "did_work": did_work,
             })
+
+    async def _check_email(self) -> bool:
+        """Check inbox for new emails and notify the user."""
+        try:
+            from odigos.tools.email import CheckEmailTool
+            tool = CheckEmailTool(email_config=self._email_config)
+            result = await tool.execute({"limit": 5, "unread_only": True})
+            if not result.success:
+                return False
+            if "No new emails" in result.data:
+                return False
+
+            # Notify user about new emails
+            if self.notifier:
+                # Count emails from the result
+                email_count = result.data.count("From:")
+                if email_count > 0:
+                    await self.notifier.notify(
+                        title="New Email",
+                        body=f"You have {email_count} new email(s). Ask me to read them.",
+                        priority="normal",
+                    )
+                    logger.info("Email check: %d new message(s)", email_count)
+                    return True
+        except Exception:
+            logger.debug("Email check failed", exc_info=True)
+        return False
 
     async def _dispatch_as_subagent(self, instruction: str, conversation_id: str = "") -> str | None:
         """Run a heartbeat task as an internal subagent for multi-step reasoning."""
