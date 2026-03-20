@@ -184,6 +184,26 @@ Key endpoints for these tasks:
 
 ---
 
+### Task G36: Email Indicator in Contextual Links
+
+**Priority:** Medium
+
+The backend now has email tools (`check_email`, `send_email`) and the heartbeat sends notifications via WebSocket when new mail arrives. The notification message type is `notification` with `title: "New Email"`.
+
+**What to build:**
+
+1. Add "Email" to the contextual links below the chat input (alongside Journal, Board, Documents). Clicking it types "Check my email" into the chat input and sends it -- the agent handles the rest.
+
+2. When a `notification` WebSocket message arrives with title containing "Email", show a subtle badge/dot on the "Email" link to indicate new mail.
+
+3. The badge clears when the user clicks the Email link (since they're asking the agent to check).
+
+**Keep it simple.** The agent is the email client. The UI just provides a quick-access link and a new-mail indicator. No inbox page, no compose form.
+
+**Files:** `dashboard/src/components/ChatPanel.tsx`
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
