@@ -59,11 +59,20 @@ If you see a repeated pattern that could be a reusable skill, include it in your
 
 Plans that failed to achieve their goals may indicate systemic issues with planning or execution.
 
+## Active Reasoning Critique (AS/BT analysis)
+{arew_summary}
+
+AS (Action Selection) measures whether the agent uses appropriate tools. Negative AS means the agent answered without gathering information when it should have.
+BT (Belief Tracking) measures whether the agent uses the information it retrieved. Negative BT means the agent called tools but ignored the results.
+
 When proposing hypotheses, consider:
 - Classifications with low average scores may need better routing
 - High duration classifications may benefit from pipeline optimization
 - You can propose changes to data/agent/classification_rules.md to improve heuristic routing
 - Repeated tool combinations with high scores may indicate a new skill opportunity
+- Negative AS scores → propose routing rule changes to force tool use for that classification
+- Negative BT scores → propose prompt modifications emphasizing "use the information you retrieved"
+- If AS is consistently negative for a classification, that classification's routing may need skip_rag=false or additional tools
 
 ## Instructions
 Based on the above, produce a JSON object with:
@@ -137,6 +146,7 @@ class Strategist:
         skill_usage_summary = await self._get_skill_usage_summary()
         skill_mining_summary = await self._get_skill_mining_summary()
         outcome_summary = await self._get_outcome_summary()
+        arew_summary = await self._get_arew_summary()
         failed_trials = await self.evolution.get_failed_trials(limit=10)
         directions = await self.evolution.get_recent_directions(limit=3)
 
@@ -144,7 +154,7 @@ class Strategist:
         prompt_vars = self._build_prompt_vars(
             recent_evals, failed_trials, directions,
             query_log_summary, skill_usage_summary, skill_mining_summary,
-            outcome_summary,
+            outcome_summary, arew_summary,
         )
 
         # Ask LLM
@@ -333,6 +343,58 @@ class Strategist:
         except Exception:
             return "Plan outcome data not available."
 
+    async def _get_arew_summary(self) -> str:
+        """Summarize AREW AS/BT critique signals from recent evaluations."""
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT scores FROM evaluations "
+                "WHERE created_at > datetime('now', '-7 days') "
+                "AND scores IS NOT NULL "
+                "ORDER BY created_at DESC LIMIT 50"
+            )
+            if not rows:
+                return "No AREW critique data yet."
+
+            as_pos = as_neg = as_neutral = 0
+            bt_pos = bt_neg = bt_neutral = 0
+
+            for row in rows:
+                try:
+                    scores = json.loads(row["scores"]) if isinstance(row["scores"], str) else row["scores"]
+                    as_val = scores.get("as_critique", 0)
+                    bt_val = scores.get("bt_critique", 0)
+
+                    if as_val > 0: as_pos += 1
+                    elif as_val < 0: as_neg += 1
+                    else: as_neutral += 1
+
+                    if bt_val > 0: bt_pos += 1
+                    elif bt_val < 0: bt_neg += 1
+                    else: bt_neutral += 1
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    continue
+
+            total = as_pos + as_neg + as_neutral
+            if total == 0:
+                return "No AREW critique data yet (evaluations exist but no AS/BT scores)."
+
+            lines = [
+                f"Analyzed {total} recent evaluations:",
+                f"- Action Selection: {as_pos} good (+1), {as_neg} bad (-1), {as_neutral} neutral (0)",
+                f"- Belief Tracking: {bt_pos} good (+1), {bt_neg} bad (-1), {bt_neutral} neutral (0)",
+            ]
+
+            if as_neg > total * 0.3:
+                lines.append("WARNING: Agent frequently fails to use tools when it should (AS score negative >30%)")
+            if bt_neg > total * 0.2:
+                lines.append("WARNING: Agent frequently ignores tool results (BT score negative >20%)")
+            if as_pos > total * 0.5:
+                lines.append("POSITIVE: Agent actively uses tools in majority of interactions")
+
+            return "\n".join(lines)
+        except Exception:
+            return "AREW critique data not available."
+
     async def _get_evaluation_summary(self) -> dict:
         """Summarize recent evaluations by task type."""
         rows = await self.db.fetch_all(
@@ -348,7 +410,7 @@ class Strategist:
             "total_recent": sum(r["cnt"] for r in rows) if rows else 0,
         }
 
-    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "", outcome_summary: str = "") -> dict[str, str]:
+    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "", outcome_summary: str = "", arew_summary: str = "") -> dict[str, str]:
         failed_summary = ""
         if failed_trials:
             failed_summary = "\n".join(
@@ -381,6 +443,7 @@ class Strategist:
             "skill_usage_summary": skill_usage_summary or 'No skill usage data yet.',
             "skill_mining_summary": skill_mining_summary or 'No repeated patterns found yet.',
             "outcome_summary": outcome_summary or 'No plan outcome data yet.',
+            "arew_summary": arew_summary or 'No AREW critique data yet.',
         }
 
 
