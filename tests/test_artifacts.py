@@ -96,3 +96,21 @@ class TestCreateArtifactTool:
         })
         assert result.success
         assert result.side_effect["artifact"]["content_type"] == "text/html"
+
+    async def test_docx_artifact(self, db, tmp_path, monkeypatch):
+        monkeypatch.setattr("odigos.tools.artifact.ARTIFACTS_DIR", tmp_path)
+        tool = CreateArtifactTool(db=db)
+        result = await tool.execute({
+            "filename": "report.docx",
+            "content": "# Quarterly Report\n\n## Summary\n\nRevenue was strong.\n\n- Item one\n- Item two",
+        })
+        assert result.success
+        assert result.side_effect["artifact"]["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        # Verify the file is a valid DOCX
+        artifact_id = result.side_effect["artifact"]["id"]
+        file_path = tmp_path / artifact_id / "report.docx"
+        assert file_path.exists()
+        assert file_path.stat().st_size > 0
+        # Verify it's a valid zip (DOCX is a zip)
+        import zipfile
+        assert zipfile.is_zipfile(file_path)

@@ -25,7 +25,29 @@ _CONTENT_TYPES = {
     ".xml": "application/xml",
     ".yaml": "application/x-yaml",
     ".yml": "application/x-yaml",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
+
+
+def _write_docx(file_path: Path, content: str) -> None:
+    """Convert markdown-ish text to a DOCX file."""
+    from docx import Document
+    doc = Document()
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("### "):
+            doc.add_heading(stripped[4:], level=3)
+        elif stripped.startswith("## "):
+            doc.add_heading(stripped[3:], level=2)
+        elif stripped.startswith("# "):
+            doc.add_heading(stripped[2:], level=1)
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            doc.add_paragraph(stripped[2:], style="List Bullet")
+        else:
+            doc.add_paragraph(stripped)
+    doc.save(str(file_path))
 
 
 class CreateArtifactTool(BaseTool):
@@ -34,7 +56,9 @@ class CreateArtifactTool(BaseTool):
         "Create a downloadable file for the user. Use this when the user asks you to "
         "generate a spreadsheet, document, report, data export, or any file they can download. "
         "Provide the filename (with extension) and the file content as a string. "
-        "Supported formats: CSV, Markdown, JSON, HTML, TXT, XML, YAML."
+        "Supported formats: CSV, Markdown, JSON, HTML, TXT, XML, YAML, DOCX. "
+        "For DOCX: content is plain text, each paragraph separated by newlines. "
+        "Lines starting with # become headings."
     )
     parameters_schema = {
         "type": "object",
@@ -77,7 +101,12 @@ class CreateArtifactTool(BaseTool):
         artifact_dir.mkdir(parents=True, exist_ok=True)
 
         file_path = artifact_dir / filename
-        file_path.write_text(content, encoding="utf-8")
+
+        if ext == ".docx":
+            _write_docx(file_path, content)
+        else:
+            file_path.write_text(content, encoding="utf-8")
+
         file_size = file_path.stat().st_size
 
         # Register in database

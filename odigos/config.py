@@ -140,6 +140,19 @@ class PeerConfig(BaseModel):
     netbird_ip: str = ""
     ws_port: int = 8001
     api_key: str = ""
+    url: str = ""  # Legacy field -- auto-converted to netbird_ip + ws_port
+
+    def model_post_init(self, __context) -> None:
+        """Normalize legacy 'url' field into netbird_ip + ws_port."""
+        if self.url and not self.netbird_ip:
+            import re
+            m = re.search(r"://([^:/]+)", self.url)
+            if m:
+                self.netbird_ip = m.group(1)
+            m = re.search(r":(\d+)$", self.url.rstrip("/"))
+            if m:
+                self.ws_port = int(m.group(1))
+            self.url = ""  # Clear after conversion
 
 
 class NotebooksConfig(BaseModel):
