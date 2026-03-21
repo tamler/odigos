@@ -213,6 +213,16 @@ if [[ "$enable_voice" =~ ^[Yy]$ ]]; then
     fi
 fi
 
+# ── Build Dashboard ──────────────────────────────────────────────
+if command -v node &> /dev/null && command -v npm &> /dev/null; then
+    info "Building dashboard..."
+    (cd dashboard && npm ci --no-audit --no-fund && npm run build) 2>&1 | tail -3
+    info "Dashboard built"
+else
+    warn "Node.js not found. Dashboard will not be built."
+    warn "Install Node.js 18+ and run: cd dashboard && npm ci && npm run build"
+fi
+
 # ── Account Setup (optional) ──────────────────────────────────────
 echo ""
 read -rp "$(echo -e "${BOLD}Create owner account now? [Y/n]:${NC} ")" create_account
