@@ -85,7 +85,7 @@ llm:
   base_url: "https://openrouter.ai/api/v1"
   default_model: "deepseek/deepseek-v3.2"
   fallback_model: "inception/mercury-2"
-  background_model: "google/gemini-2.0-flash-001"
+  background_model: "google/gemini-2.5-flash"
   max_tokens: 4096
   temperature: 0.7
 

@@ -76,8 +76,8 @@ class Spawner:
             },
             "llm": {
                 "base_url": llm.base_url if llm else "https://openrouter.ai/api/v1",
-                "default_model": llm.default_model if llm else "anthropic/claude-sonnet-4",
-                "fallback_model": llm.fallback_model if llm else "google/gemini-2.0-flash-001",
+                "default_model": llm.default_model if llm else "deepseek/deepseek-v3.2",
+                "fallback_model": llm.fallback_model if llm else "google/gemini-2.5-flash",
             },
             "peers": [
                 {

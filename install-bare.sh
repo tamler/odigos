@@ -135,8 +135,8 @@ else
 
     case $provider_choice in
         1) base_url="https://openrouter.ai/api/v1"
-           default_model="anthropic/claude-sonnet-4"
-           fallback_model="openai/gpt-4.1-mini" ;;
+           default_model="deepseek/deepseek-v3.2"
+           fallback_model="google/gemini-2.5-flash" ;;
         2) base_url="https://api.openai.com/v1"
            default_model="gpt-4o"
            fallback_model="gpt-4o-mini" ;;
@@ -151,8 +151,8 @@ else
            read -rp "  Enter fallback model (or same): " fallback_model
            fallback_model=${fallback_model:-$default_model} ;;
         *) base_url="https://openrouter.ai/api/v1"
-           default_model="anthropic/claude-sonnet-4"
-           fallback_model="openai/gpt-4.1-mini" ;;
+           default_model="deepseek/deepseek-v3.2"
+           fallback_model="google/gemini-2.5-flash" ;;
     esac
 
     echo ""
