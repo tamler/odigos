@@ -388,12 +388,24 @@ class Heartbeat:
         for msg in messages:
             peer = msg["peer_name"]
             msg_type = msg["message_type"]
+
+            # Skip system messages that slipped through
+            if msg_type in ("registry_announce", "status_ping", "status_pong"):
+                await self.agent_client.mark_processed(msg["message_id"])
+                continue
+
             try:
                 content_raw = msg["content"]
                 payload = json.loads(content_raw) if isinstance(content_raw, str) else content_raw
                 message_text = payload.get("content", "") if isinstance(payload, dict) else str(payload)
             except (json.JSONDecodeError, TypeError):
                 message_text = str(msg["content"])
+
+            # Skip empty or JSON-only messages (likely system data)
+            if not message_text.strip() or (message_text.strip().startswith("{") and message_text.strip().endswith("}")):
+                await self.agent_client.mark_processed(msg["message_id"])
+                logger.debug("Skipped non-content peer message from %s: %s", peer, msg_type)
+                continue
 
             logger.info(
                 "Processing inbound %s from peer %s: %s",
