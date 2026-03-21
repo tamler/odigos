@@ -25,17 +25,28 @@ Or connect without query param and send auth as first message:
 ```json
 {"type": "connected", "session_id": "...", "conversation_id": "web:..."}
 {"type": "status", "text": "Thinking..."}
-{"type": "status", "text": "Using search_documents..."}
-{"type": "chat_response", "content": "The answer is...", "conversation_id": "web:..."}
+{"type": "chat_chunk", "content": "partial ", "conversation_id": "web:..."}
+{"type": "chat_response", "content": "Full response text", "conversation_id": "web:..."}
+{"type": "queue_update", "queued": 0}
+{"type": "message_queued", "queued": 2, "message": "Message queued (2 pending)"}
+{"type": "queue_full", "queued": 3, "message": "Queue is full"}
 {"type": "notification", "title": "Update", "body": "Task completed", "priority": "info"}
 {"type": "title_updated", "conversation_id": "web:...", "title": "Auto-generated title"}
+{"type": "conversation_started", "conversation_id": "web:..."}
 ```
+
+**Streaming:** `chat_chunk` messages arrive with incremental text while the agent is generating. The final `chat_response` contains the complete text. Clients should accumulate chunks for display, then replace with the final response.
+
+**Message queue:** Up to 3 messages can be queued while the agent is processing. `queue_update` reports remaining count after each response. `queue_full` is sent if you exceed the limit. Messages are never dropped.
 
 **Outgoing messages (client → server):**
 ```json
 {"type": "chat", "content": "Hello, what can you do?"}
 {"type": "chat", "content": "Tell me about Odigos", "conversation_id": "web:abc123"}
+{"type": "chat", "content": "About this notebook", "context": {"notebook_id": "abc"}}
 ```
+
+The optional `context` field passes page context (notebook_id, board_id) so the agent knows what you're looking at.
 
 ### REST (simple, one-shot)
 
@@ -68,11 +79,19 @@ Authorization: Bearer <api_key>
 | `/api/auth/status` | GET | Check auth state (no auth) |
 | `/api/auth/login` | POST | Login with username/password |
 | `/api/conversations` | GET | List conversations |
-| `/api/conversations/{id}` | GET | Get conversation with messages |
+| `/api/conversations/{id}/messages` | GET | Get conversation messages |
 | `/api/documents` | GET | List uploaded documents |
 | `/api/upload` | POST | Upload a file (multipart) |
+| `/api/notebooks` | GET | List notebooks |
+| `/api/kanban/boards` | GET | List kanban boards |
+| `/api/kanban/boards/{id}` | GET | Get board with columns and cards |
+| `/api/artifacts` | GET | List generated artifacts |
+| `/api/artifacts/{id}/download` | GET | Download an artifact file |
 | `/api/analytics/overview` | GET | Agent analytics summary |
-| `/api/settings` | GET | Current settings (masked secrets) |
+| `/api/mesh/peers` | GET | Mesh peer status |
+| `/api/mesh/messages` | GET | Peer message history |
+| `/api/state` | GET | Full agent state inspection |
+| `/api/settings` | GET | Current settings |
 
 ## Full API Reference
 

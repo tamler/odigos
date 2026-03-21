@@ -2,7 +2,7 @@
 # Copy this to config.yaml and fill in your values.
 
 # API key for authenticating dashboard and API requests.
-# If not set, a random key is generated on each startup and logged.
+# If not set, a random key is generated on first startup and saved.
 # api_key: "your-secret-api-key-here"
 
 agent:
@@ -22,8 +22,8 @@ database:
 #   vLLM:        http://localhost:8000/v1
 llm:
   base_url: "https://openrouter.ai/api/v1"
-  default_model: "anthropic/claude-sonnet-4"
-  fallback_model: "google/gemini-2.0-flash-001"
+  default_model: "deepseek/deepseek-v3.2"
+  fallback_model: "google/gemini-2.5-flash"
   max_tokens: 4096
   temperature: 0.7
 
@@ -33,42 +33,67 @@ budget:
   monthly_limit_usd: 50.0
   warn_threshold: 0.8
 
-# Telegram bot
-telegram:
-  mode: "polling"
-  webhook_url: ""
-
 # Web server
 server:
   host: "0.0.0.0"
   port: 8000
 
-# Heartbeat (autonomous loop)
+# Heartbeat (autonomous background loop)
 heartbeat:
-  interval_seconds: 300
+  interval_seconds: 30
   max_todos_per_tick: 3
-  idle_think_interval: 0
+  idle_think_interval: 900
 
-# Peer agents (agent-to-agent messaging)
+# Features (all enabled by default, disable with enabled: false)
+notebooks:
+  enabled: true
+
+kanban:
+  enabled: true
+
+# Agent mesh networking
+mesh:
+  enabled: false
+
+# Peer agents (requires mesh.enabled: true)
 # peers:
 #   - name: "researcher"
-#     url: "http://researcher:8000"
+#     netbird_ip: "100.64.0.2"
+#     ws_port: 8001
 #     api_key: "peer-secret"
+
+# Email integration (optional)
+# email:
+#   enabled: true
+#   address: "agent@yourdomain.com"
+#   imap_host: "mail.yourdomain.com"
+#   imap_port: 993
+#   smtp_host: "mail.yourdomain.com"
+#   smtp_port: 587
+#   username: "agent@yourdomain.com"
+#   password: "from-env-var"
+#   check_interval_ticks: 10
+
+# Telegram bot (optional)
+# telegram:
+#   mode: "polling"
 
 # SearXNG search (optional)
 # searxng_url: "http://searxng:8080"
-# searxng_username: ""
-# searxng_password: ""
 
-# Google Workspace CLI (optional)
+# Google Workspace CLI (optional, requires gcloud setup)
 gws:
   enabled: false
-  timeout: 30
 
 # Agent Browser CLI (optional)
 browser:
   enabled: false
-  timeout: 120
+
+# Voice (optional, requires moonshine-voice and pocket-tts)
+stt:
+  enabled: false
+tts:
+  enabled: false
 
 # File tool sandbox
 file_access:
@@ -81,6 +106,12 @@ approval:
   timeout: 300
   tools: []
 
+# Code sandbox
+sandbox:
+  timeout_seconds: 5
+  max_memory_mb: 512
+  allow_network: false
+
 # MCP servers (optional)
 # mcp:
 #   servers:
@@ -92,7 +123,9 @@ approval:
 skills:
   path: "skills"
 
-# Model router free pool (optional, for cost savings)
-# router:
-#   free_pool: ["google/gemini-2.0-flash-001"]
-#   rate_limit_rpm: 10
+# Evolution engine
+evolution:
+  trial_duration_hours: 48
+  min_evaluations: 5
+  promote_threshold: 0.5
+  revert_threshold: -0.3
