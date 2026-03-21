@@ -18,6 +18,15 @@ RUN if [ "$(uname -m)" = "aarch64" ]; then \
       cp /tmp/vec0.so "$(find /install -path '*/sqlite_vec/vec0.so' -print -quit)"; \
     fi
 
+# --- Dashboard build stage ---
+FROM node:22-slim AS dashboard-builder
+
+WORKDIR /dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY dashboard/ .
+RUN npm run build
+
 # --- Runtime stage ---
 FROM python:3.12-slim
 
@@ -34,7 +43,7 @@ COPY --from=builder /install /usr/local
 
 # Copy application code
 COPY odigos/ odigos/
-COPY dashboard/ dashboard/
+COPY --from=dashboard-builder /dashboard/dist/ dashboard/dist/
 COPY migrations/ migrations/
 COPY plugins/ plugins/
 COPY skills/ skills/

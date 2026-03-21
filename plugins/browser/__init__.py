@@ -15,7 +15,7 @@ def register(ctx):
         return {"status": "available", "error_message": "Browser not enabled in settings"}
 
     if not shutil.which("agent-browser"):
-        return {"status": "error", "error_message": "agent-browser CLI not found. Install it: npm install -g @anthropic-ai/agent-browser"}
+        return {"status": "available", "error_message": "agent-browser CLI not installed. Run: npm install -g @anthropic-ai/agent-browser"}
 
     from odigos.tools.browser import BrowserTool
 

@@ -16,7 +16,7 @@ def register(ctx):
     try:
         from moonshine_voice.transcriber import Transcriber  # noqa: F401
     except ImportError:
-        return {"status": "error", "error_message": "moonshine-voice package not installed. Run: pip install moonshine-voice"}
+        return {"status": "available", "error_message": "moonshine-voice package not installed. Run: pip install moonshine-voice"}
 
     from plugins.stt.provider import MoonshineSTT
     from odigos.tools.transcribe import TranscribeAudioTool

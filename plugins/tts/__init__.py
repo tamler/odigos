@@ -16,7 +16,7 @@ def register(ctx):
     try:
         from pocket_tts import TTSModel  # noqa: F401
     except ImportError:
-        return {"status": "error", "error_message": "pocket-tts package not installed. Run: pip install pocket-tts scipy"}
+        return {"status": "available", "error_message": "pocket-tts package not installed. Run: pip install pocket-tts scipy"}
 
     from plugins.tts.provider import PocketTTSProvider
     from odigos.tools.speak import SpeakTool
