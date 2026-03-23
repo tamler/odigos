@@ -177,6 +177,32 @@ def _settings(**overrides):
                 "cache_ttl_days": 7,
             },
         ),
+        telegram_bot_token="",
+        telegram=SimpleNamespace(
+            mode="polling",
+            webhook_url="",
+            model_dump=lambda: {"mode": "polling", "webhook_url": ""},
+        ),
+        email=SimpleNamespace(
+            enabled=False,
+            address="",
+            imap_host="",
+            imap_port=993,
+            smtp_host="",
+            smtp_port=587,
+            username="",
+            password="",
+            check_interval_ticks=10,
+            model_dump=lambda: {"enabled": False, "address": "", "imap_host": "", "imap_port": 993, "smtp_host": "", "smtp_port": 587, "username": "", "password": "", "check_interval_ticks": 10},
+        ),
+        stt=SimpleNamespace(
+            enabled=False,
+            model_dump=lambda: {"enabled": False},
+        ),
+        tts=SimpleNamespace(
+            enabled=False,
+            model_dump=lambda: {"enabled": False},
+        ),
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

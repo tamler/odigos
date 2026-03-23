@@ -204,6 +204,37 @@ The backend now has email tools (`check_email`, `send_email`) and the heartbeat 
 
 ---
 
+### Task G37: Telegram & Email Setup in Settings
+
+**Priority:** High
+
+Users need to configure Telegram and email from the Settings UI, not by editing files on the server.
+
+**Backend is ready.** The settings API now includes:
+- `GET /api/settings` returns `telegram_bot_token` (masked), `telegram_configured` (boolean), `telegram` config, `email` config
+- `POST /api/settings` accepts `telegram_bot_token` (string), `telegram` (dict), `email` (dict)
+
+**What to build in the frontend:**
+
+Add a "Connections" or "Integrations" tab to SettingsPage with two sections:
+
+**Telegram section:**
+- Shows "Connected" badge if `telegram_configured` is true, "Not configured" if false
+- Input field for bot token (password type, masked when saved)
+- Instructions text: "1. Open Telegram and message @BotFather, 2. Send /newbot, 3. Paste the token here"
+- Save button that POSTs `{telegram_bot_token: "..."}` to `/api/settings`
+- Note: "Restart required after changing token" (we'll fix hot-reload later)
+
+**Email section:**
+- Shows "Connected" badge if `email.enabled` is true
+- Fields: address, IMAP host, IMAP port, SMTP host, SMTP port, username, password
+- Enable/disable toggle
+- Save button that POSTs `{email: {enabled: true, address: "...", ...}}` to `/api/settings`
+
+**Files:** Create `dashboard/src/pages/settings/IntegrationsTab.tsx`, modify `dashboard/src/pages/SettingsPage.tsx`
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)

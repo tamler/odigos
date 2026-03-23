@@ -18,6 +18,7 @@ class SettingsUpdate(BaseModel):
     llm_api_key: str | None = None
     api_key: str | None = None
     current_api_key: str | None = None  # Required when changing api_key
+    telegram_bot_token: str | None = None
     llm: dict | None = None
     agent: dict | None = None
     budget: dict | None = None
@@ -26,6 +27,8 @@ class SettingsUpdate(BaseModel):
     mesh: dict | None = None
     templates: dict | None = None
     feed: dict | None = None
+    telegram: dict | None = None
+    email: dict | None = None
 
 
 def _mask_key(key: str) -> str:
@@ -41,6 +44,8 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
     return {
         "llm_api_key": _mask_key(settings.llm_api_key),
         "api_key": _mask_key(settings.api_key),
+        "telegram_bot_token": _mask_key(settings.telegram_bot_token),
+        "telegram_configured": bool(settings.telegram_bot_token),
         "llm": settings.llm.model_dump(),
         "agent": settings.agent.model_dump(),
         "budget": settings.budget.model_dump(),
@@ -49,6 +54,8 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
         "mesh": settings.mesh.model_dump(),
         "templates": settings.templates.model_dump(),
         "feed": settings.feed.model_dump(),
+        "telegram": settings.telegram.model_dump(),
+        "email": settings.email.model_dump(),
         "stt": settings.stt.model_dump() if hasattr(settings, 'stt') else {},
         "tts": settings.tts.model_dump() if hasattr(settings, 'tts') else {},
     }
@@ -72,12 +79,17 @@ async def update_settings_endpoint(
             yaml_config = yaml.safe_load(f) or {}
 
     # Merge updated sections into yaml config
-    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "mesh", "templates", "feed"):
-        section_data = getattr(update, section)
+    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "mesh", "templates", "feed", "telegram", "email"):
+        section_data = getattr(update, section, None)
         if section_data is not None:
             if section not in yaml_config:
                 yaml_config[section] = {}
             yaml_config[section].update(section_data)
+
+    # Update Telegram bot token in config.yaml (not .env -- accessible via settings UI)
+    if update.telegram_bot_token is not None and update.telegram_bot_token != "****":
+        yaml_config["telegram_bot_token"] = update.telegram_bot_token
+        object.__setattr__(settings, "telegram_bot_token", update.telegram_bot_token)
 
     # Update LLM API key in .env (ignore masked placeholder)
     if update.llm_api_key is not None and update.llm_api_key != "****":
@@ -96,7 +108,7 @@ async def update_settings_endpoint(
 
     # Validate all merged sections with Pydantic BEFORE writing to disk
     validated_sections: dict[str, object] = {}
-    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "templates", "feed"):
+    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "templates", "feed", "telegram", "email"):
         section_data = getattr(update, section)
         if section_data is not None:
             current = getattr(settings, section)
