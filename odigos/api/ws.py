@@ -141,14 +141,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
 
                 async def send_status(text: str) -> None:
-                    await websocket.send_json({"type": "status", "text": text})
+                    try:
+                        await websocket.send_json({"type": "status", "text": text})
+                    except Exception:
+                        pass  # Client disconnected
 
                 async def send_chunk(text: str) -> None:
-                    await websocket.send_json({
-                        "type": "chat_chunk",
-                        "content": text,
-                        "conversation_id": conversation_id,
-                    })
+                    try:
+                        await websocket.send_json({
+                            "type": "chat_chunk",
+                            "content": text,
+                            "conversation_id": conversation_id,
+                        })
+                    except Exception:
+                        pass  # Client disconnected
 
                 agent_service = websocket.app.state.agent_service
                 response = await agent_service.handle_message(
@@ -156,18 +162,21 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
 
                 # Notify frontend of new conversation so sidebar updates
-                if first_message:
-                    first_message = False
+                try:
+                    if first_message:
+                        first_message = False
+                        await websocket.send_json({
+                            "type": "conversation_started",
+                            "conversation_id": conversation_id,
+                        })
+
                     await websocket.send_json({
-                        "type": "conversation_started",
+                        "type": "chat_response",
+                        "content": response,
                         "conversation_id": conversation_id,
                     })
-
-                await websocket.send_json({
-                    "type": "chat_response",
-                    "content": response,
-                    "conversation_id": conversation_id,
-                })
+                except Exception:
+                    pass  # Client disconnected, response is still saved in DB
                 agent = agent_service.agent
                 asyncio.create_task(_auto_title_and_notify(
                     websocket, agent.db, agent.executor.provider,
@@ -186,10 +195,13 @@ async def websocket_endpoint(websocket: WebSocket):
             finally:
                 chat_queue.task_done()
                 # Tell frontend how many messages remain queued
-                await websocket.send_json({
-                    "type": "queue_update",
-                    "queued": chat_queue.qsize(),
-                })
+                try:
+                    await websocket.send_json({
+                        "type": "queue_update",
+                        "queued": chat_queue.qsize(),
+                    })
+                except Exception:
+                    pass  # Client may have disconnected
 
     try:
         await websocket.send_json({
