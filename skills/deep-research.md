@@ -28,13 +28,22 @@ After gathering information:
 - Identify gaps where information is missing or uncertain
 - Draw connections between sub-topics
 
-### 4. Create deliverables
+### 4. Self-review loop (inspired by ARIS)
+Review your own findings critically:
+- What claims lack sufficient evidence? Research those gaps.
+- What questions would a skeptic ask? Find answers.
+- Are there perspectives you missed? Search for counterarguments.
+- Run 1-2 additional targeted searches to fill the biggest gaps.
+Use update_plan to track the review round.
+
+### 5. Create deliverables
+
 Use create_artifact to produce:
 - **Main report** (research-report.md or research-report.docx): Executive summary, findings per sub-topic, analysis, conclusions, recommendations
 - **Sources list** (sources.csv): URL, title, date, relevance, key finding from each source
 - Optional: data tables, comparison matrices, or other structured data as CSV
 
-### 5. Notify the user
+### 6. Notify the user
 When complete, use send_notification to alert the user that the research is ready for review. Summarize the key findings in the notification.
 
 ## Quality Standards
