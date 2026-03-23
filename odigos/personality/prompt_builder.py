@@ -19,6 +19,7 @@ def build_system_prompt(
     user_facts: str = "",
     recovery_briefing: str = "",
     page_context: str = "",
+    last_interaction: str = "",
 ) -> str:
     """Compose the system prompt from file-based sections."""
     parts = []
@@ -55,5 +56,7 @@ def build_system_prompt(
         parts.append(corrections_context)
     if page_context:
         parts.append(page_context)
+    if last_interaction:
+        parts.append(last_interaction)
 
     return "\n\n".join(parts)

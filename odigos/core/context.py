@@ -267,15 +267,48 @@ class ContextAssembler:
                 return await self.checkpoint_manager.get_working_sections()
             return self.fallback_registry.load_all()
 
+        async def _last_interaction():
+            """Get a brief summary of the most recent conversation on any channel."""
+            if not self.db:
+                return ""
+            try:
+                row = await self.db.fetch_one(
+                    "SELECT c.id, c.channel, c.title, c.last_message_at, "
+                    "  (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'user' "
+                    "   ORDER BY timestamp DESC LIMIT 1) as last_user_msg, "
+                    "  (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'assistant' "
+                    "   ORDER BY timestamp DESC LIMIT 1) as last_assistant_msg "
+                    "FROM conversations c "
+                    "WHERE c.id != ? AND c.last_message_at IS NOT NULL "
+                    "ORDER BY c.last_message_at DESC LIMIT 1",
+                    (conversation_id,),
+                )
+                if not row or not row["last_user_msg"]:
+                    return ""
+                channel = row["channel"] or "unknown"
+                title = row["title"] or "a conversation"
+                when = row["last_message_at"] or ""
+                user_preview = row["last_user_msg"][:150]
+                asst_preview = (row["last_assistant_msg"] or "")[:150]
+                return (
+                    f"## Last interaction (via {channel}, {when})\n"
+                    f"Topic: {title}\n"
+                    f"User said: {user_preview}\n"
+                    f"You replied: {asst_preview}"
+                )
+            except Exception:
+                logger.debug("Could not load last interaction", exc_info=True)
+                return ""
+
         # Run all context queries in parallel
         (
             recovery_briefing, memory_context, memory_index, doc_listing,
             skill_hints, corrections_context, error_hints, experiences_section,
-            user_profile, user_facts, sections,
+            user_profile, user_facts, sections, last_interaction,
         ) = await asyncio.gather(
             _recovery_briefing(), _memory_context(), _memory_index(), _doc_listing(),
             _skill_hints(), _corrections(), _error_hints(), _experiences(),
-            _user_profile(), _user_facts(), _sections(),
+            _user_profile(), _user_facts(), _sections(), _last_interaction(),
         )
 
         # Build skill catalog (sync, no DB call)
@@ -379,6 +412,7 @@ class ContextAssembler:
             user_facts=user_facts,
             recovery_briefing=recovery_briefing,
             page_context=notebook_context,
+            last_interaction=last_interaction,
         )
 
         messages.append({"role": "system", "content": system_prompt})
