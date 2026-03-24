@@ -49,7 +49,9 @@ When complete, use send_notification to alert the user that the research is read
 ## Quality Standards
 
 - Minimum 10 unique sources cited
-- Each claim should reference a specific source
+- Each claim should reference a specific source with a clickable link
+- Always include URLs as markdown links: [Source Title](https://url.com)
+- In chat responses, provide clickable links to key sources so the user can explore further
 - Include dates on information to show currency
 - Acknowledge limitations and areas needing further investigation
 - Use check_plan periodically to verify you're making progress
