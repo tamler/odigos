@@ -133,6 +133,59 @@ async def update_settings_endpoint(
     return {"status": "ok"}
 
 
+@router.get("/profiles")
+async def get_profiles():
+    """List available agent profiles."""
+    from odigos.profiles import list_profiles
+    return {"profiles": list_profiles()}
+
+
+@router.post("/profiles/{profile_id}")
+async def apply_profile(
+    profile_id: str,
+    settings=Depends(get_settings),
+    config_path_str: str = Depends(get_config_path),
+):
+    """Apply an agent profile, updating config.yaml with the profile's settings."""
+    from odigos.profiles import get_profile
+    profile = get_profile(profile_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"Profile not found: {profile_id}")
+
+    config_path = Path(config_path_str)
+    yaml_config: dict = {}
+    if config_path.exists():
+        with open(config_path) as f:
+            yaml_config = yaml.safe_load(f) or {}
+
+    # Merge profile config into yaml
+    for section, values in profile["config"].items():
+        if isinstance(values, dict):
+            if section not in yaml_config:
+                yaml_config[section] = {}
+            yaml_config[section].update(values)
+        else:
+            yaml_config[section] = values
+
+    with open(config_path, "w") as f:
+        yaml.dump(yaml_config, f, default_flow_style=False)
+
+    # Hot-reload affected settings
+    for section, values in profile["config"].items():
+        if isinstance(values, dict) and hasattr(settings, section):
+            current = getattr(settings, section)
+            if hasattr(current, "model_dump"):
+                merged = current.model_dump()
+                merged.update(values)
+                try:
+                    new_obj = type(current)(**merged)
+                    object.__setattr__(settings, section, new_obj)
+                except Exception:
+                    pass
+
+    return {"status": "ok", "profile": profile_id, "name": profile["name"]}
+
+
 def _update_env_file(env_path: Path, key: str, value: str) -> None:
     """Update or add a key=value pair in an .env file."""
     # Sanitize: strip newlines to prevent env injection
