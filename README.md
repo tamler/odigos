@@ -110,6 +110,31 @@ Odigos has a self-improvement loop that runs continuously:
 
 Three layers of memory feed the loop: [explicit facts](https://manthanguptaa.in/posts/chatgpt_memory/) the user states ("I prefer Python"), a user profile built from conversation analysis, and long-term conversation memory with vector search and entity graphs. The agent also maintains tactical experiences -- lessons learned from past tool interactions that prevent repeating the same mistakes.
 
+## Memory System
+
+Odigos has a five-layer memory architecture. Each layer serves a different purpose and operates at a different timescale.
+
+### Layer 1: Conversation History
+The most immediate layer. Every message (user and assistant) is stored in SQLite with timestamps, conversation IDs, and token counts. The context assembler loads recent history and injects conversation summaries for older exchanges. When conversations grow long, the summarizer compresses old messages into paragraph-length summaries that preserve key decisions and context.
+
+### Layer 2: Vector Memory (RAG)
+All conversation messages and uploaded documents are chunked, embedded (nomic-embed-text-v1.5, local CPU), and stored in sqlite-vec for vector search. On every query, the memory manager runs hybrid retrieval: vector similarity search + FTS5 full-text search, then re-ranks results with a cross-encoder model (ms-marco-MiniLM). This gives the agent access to relevant information from any past conversation or document without loading everything into context.
+
+### Layer 3: Explicit Facts
+When the user says "remember that I prefer Python" or "I'm allergic to shellfish," the agent stores discrete facts in a dedicated `user_facts` table via the `remember_fact` tool. Facts have categories, timestamps, and are injected into every conversation's system prompt. Unlike RAG recall, facts are always present -- they don't depend on semantic similarity to the current query.
+
+### Layer 4: User Profile (Dreaming)
+During idle heartbeat cycles, the agent "dreams" -- analyzing recent conversations to build a structured user profile. This captures communication style, expertise areas, preferences, and engagement patterns. The profile is built automatically without the user explicitly stating anything. Inspired by [Honcho](https://github.com/plastic-labs/honcho) and [ChatGPT's memory architecture](https://manthanguptaa.in/posts/chatgpt_memory/).
+
+### Layer 5: Tactical Experiences
+The agent learns from its own tool usage. When a tool call succeeds or fails, the experience is stored with the context, outcome, and a lesson. These experiences are injected into future conversations so the agent avoids repeating mistakes. Inspired by [XSkill](https://arxiv.org/html/2603.12056v2).
+
+### Entity Graph
+Spanning all layers, an entity graph tracks people, tools, documents, and concepts mentioned across conversations. Entities are linked with relationships and confidence scores. The graph enables the agent to answer "who is Sarah?" or "what documents mention the Q3 budget?" by traversing connections rather than relying solely on keyword matching.
+
+### Active Reasoning Critique
+Inspired by [AREW](https://arxiv.org/abs/2603.12109), the evaluator scores two dimensions after every response: **Action Selection** (did the agent use appropriate tools to gather information?) and **Belief Tracking** (did the agent actually use the information it retrieved?). These signals feed into the strategist, which proposes improvements when the agent shows patterns of ignoring its own memory or tools.
+
 ## Architecture
 
 One process. One database. No microservices.
