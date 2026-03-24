@@ -1,7 +1,7 @@
 """Agent profiles -- pre-built configurations for common use cases.
 
-Profiles set the agent's role, enabled features, default skills, and
-behavior. Applied on first setup or when switching profiles via settings.
+Profiles set the agent's role, enabled features, and default skills.
+Applied on first setup or when switching profiles via settings.
 """
 from __future__ import annotations
 
@@ -13,32 +13,32 @@ PROFILES = {
             "agent": {"role": "personal_assistant"},
             "notebooks": {"enabled": True},
             "kanban": {"enabled": True},
-            "education": {"enabled": False},
+            "coaching": {"enabled": False},
         },
         "skills": ["deep-research", "journal", "kanban", "summarize-doc", "summarize-page"],
     },
-    "student": {
-        "name": "Student Tutor",
-        "description": "Personal AI tutor that adapts to your learning style",
+    "learner": {
+        "name": "Learner",
+        "description": "Personal AI tutor that adapts to your pace and style",
         "config": {
-            "agent": {"role": "student"},
+            "agent": {"role": "learner"},
             "notebooks": {"enabled": True},
             "kanban": {"enabled": True},
-            "education": {"enabled": True, "role": "student"},
+            "coaching": {"enabled": True, "supervised": True},
         },
         "skills": ["tutor", "deep-research", "journal", "kanban"],
     },
-    "teacher": {
-        "name": "Teacher",
-        "description": "Manages curriculum and student progress across the mesh",
+    "mentor": {
+        "name": "Mentor",
+        "description": "Manages learning and tracks progress across connected agents",
         "config": {
-            "agent": {"role": "teacher"},
+            "agent": {"role": "mentor"},
             "notebooks": {"enabled": True},
             "kanban": {"enabled": True},
-            "education": {"enabled": True, "role": "teacher"},
+            "coaching": {"enabled": True, "supervised": False},
             "mesh": {"enabled": True},
         },
-        "skills": ["teacher", "deep-research", "kanban"],
+        "skills": ["mentor", "deep-research", "kanban"],
     },
     "researcher": {
         "name": "Researcher",
@@ -47,7 +47,7 @@ PROFILES = {
             "agent": {"role": "researcher"},
             "notebooks": {"enabled": True},
             "kanban": {"enabled": False},
-            "education": {"enabled": False},
+            "coaching": {"enabled": False},
         },
         "skills": ["deep-research", "summarize-doc", "summarize-page", "journal"],
     },
@@ -58,7 +58,7 @@ PROFILES = {
             "agent": {"role": "sales_agent"},
             "notebooks": {"enabled": False},
             "kanban": {"enabled": False},
-            "education": {"enabled": False},
+            "coaching": {"enabled": False},
             "mesh": {"enabled": True},
         },
         "skills": ["qualify-lead", "handle-objections", "product-demo"],

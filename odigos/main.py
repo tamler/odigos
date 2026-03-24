@@ -185,12 +185,12 @@ async def _register_tools(
     tool_registry.register(SuggestActionsTool(goal_store=goal_store))
     logger.info("Suggest actions tool initialized")
 
-    # Education tools (only if enabled)
-    if settings.education.enabled:
+    # Coaching tools (only if enabled)
+    if settings.coaching.enabled:
         from odigos.tools.quiz import CreateQuizTool, GradeResponseTool
         tool_registry.register(CreateQuizTool(db=db))
         tool_registry.register(GradeResponseTool(db=db))
-        logger.info("Education tools initialized (role: %s)", settings.education.role)
+        logger.info("Coaching tools initialized (role: %s)", settings.coaching.role)
 
     # Email tools (only if configured)
     if settings.email.enabled and settings.email.imap_host:

@@ -163,9 +163,9 @@ class KanbanConfig(BaseModel):
     enabled: bool = True
 
 
-class EducationConfig(BaseModel):
+class CoachingConfig(BaseModel):
     enabled: bool = False
-    role: str = "student"  # "student" or "teacher"
+    supervised: bool = False  # True = this agent is managed by a mentor agent, protected settings locked
 
 
 class EmailConfig(BaseModel):
@@ -217,7 +217,7 @@ class Settings(BaseSettings):
     peers: list[PeerConfig] = []
     notebooks: NotebooksConfig = NotebooksConfig()
     kanban: KanbanConfig = KanbanConfig()
-    education: EducationConfig = EducationConfig()
+    coaching: CoachingConfig = CoachingConfig()
     email: EmailConfig = EmailConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
