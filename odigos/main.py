@@ -180,6 +180,11 @@ async def _register_tools(
     tool_registry.register(CreateArtifactTool(db=db))
     logger.info("Artifact tool initialized")
 
+    # Suggest actions tool
+    from odigos.tools.suggest import SuggestActionsTool
+    tool_registry.register(SuggestActionsTool(goal_store=goal_store))
+    logger.info("Suggest actions tool initialized")
+
     # Email tools (only if configured)
     if settings.email.enabled and settings.email.imap_host:
         from odigos.tools.email import CheckEmailTool, SendEmailTool

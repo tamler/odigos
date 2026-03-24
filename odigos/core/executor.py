@@ -39,6 +39,7 @@ def _estimate_cost(tokens_in: int, tokens_out: int) -> float:
 class ExecuteResult:
     """Result from executor: LLM response + metadata."""
     response: LLMResponse
+    suggested_actions: list[str] | None = None
 
 
 class Executor:
@@ -94,6 +95,7 @@ class Executor:
         self._active_skill_name = None
         self._active_skill_tools = set()
         self._pending_skill_prompt = None
+        self._pending_suggested_actions: list[str] | None = None
 
         # Emit classification status
         if status_callback and query_analysis:
@@ -349,7 +351,7 @@ class Executor:
             tool_calls=last_response.tool_calls,
         )
 
-        return ExecuteResult(response=aggregated)
+        return ExecuteResult(response=aggregated, suggested_actions=self._pending_suggested_actions)
 
     async def _execute_tool(
         self, conversation_id: str, tool_call: ToolCall, *, message_content: str = "",
@@ -394,6 +396,10 @@ class Executor:
                 conversation_id, "tool_result",
                 {"tool": tool_call.name, "success": result.success, "error": result.error, "duration_ms": round(duration * 1000)},
             )
+
+            # Capture suggested actions for the frontend
+            if result.side_effect and result.side_effect.get("suggested_actions"):
+                self._pending_suggested_actions = result.side_effect["suggested_actions"]
 
             # Detect skill activation from structured side_effect
             if result.side_effect and result.side_effect.get("skill_activation"):

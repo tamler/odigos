@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Zap } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -33,40 +33,6 @@ interface ChatPanelProps {
   onClose?: () => void
 }
 
-/**
- * Extract actionable suggestions from the end of an assistant message.
- * Looks for numbered lists (1. / 1) ) or bullet lists (- / * ) in the last portion.
- * Only extracts if items look like actions the agent is offering to do.
- */
-function extractSuggestedActions(content: string): string[] {
-  const lines = content.trim().split('\n')
-  const actions: string[] = []
-
-  // Scan from the end for list items
-  for (let i = lines.length - 1; i >= 0 && i >= lines.length - 10; i--) {
-    const line = lines[i].trim()
-    // Numbered: "1. Do something" or "1) Do something"
-    const numbered = line.match(/^\d+[\.\)]\s+(.+)/)
-    // Bulleted: "- Do something" or "* Do something"
-    const bulleted = line.match(/^[-\*]\s+(.+)/)
-    if (numbered) {
-      actions.unshift(numbered[1].replace(/\*\*/g, ''))
-    } else if (bulleted) {
-      actions.unshift(bulleted[1].replace(/\*\*/g, ''))
-    } else if (line === '') {
-      continue
-    } else {
-      break // Stop when we hit non-list content
-    }
-  }
-
-  // Only return if we found 2+ items (a single item isn't a suggestion list)
-  if (actions.length < 2) return []
-
-  // Filter: only keep items that look like actions (start with verb-like words or "Would you like")
-  return actions.slice(0, 5) // Cap at 5 suggestions
-}
-
 export function ChatPanel({
   activeConversationId,
   setActiveId,
@@ -91,6 +57,7 @@ export function ChatPanel({
   const [recording, setRecording] = useState(false)
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [queuedCount, setQueuedCount] = useState(0)
+  const [suggestedActions, setSuggestedActions] = useState<string[]>([])
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -144,6 +111,9 @@ export function ChatPanel({
       }
       if (msg.type === 'queue_full') {
         toast.warning('Message queue is full. Please wait.')
+      }
+      if (msg.type === 'suggested_actions' && msg.actions) {
+        setSuggestedActions(msg.actions as string[])
       }
     }
 
@@ -336,6 +306,7 @@ export function ChatPanel({
       attachments: attachments.length > 0 ? attachments : undefined,
     }])
     setThinking(true)
+    setSuggestedActions([])
 
     socketRef.current?.send('chat', {
       content,
@@ -432,36 +403,6 @@ export function ChatPanel({
                       <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
                         <Markdown>{msg.content}</Markdown>
                       </div>
-                      {/* Quick action buttons for suggested next steps */}
-                      {i === messages.slice(-messageDisplayLimit).length - 1 && (() => {
-                        const actions = extractSuggestedActions(msg.content)
-                        if (actions.length === 0) return null
-                        return (
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {actions.map((action, ai) => (
-                              <button
-                                key={ai}
-                                onClick={() => {
-                                  // Send the action directly as a chat message
-                                  setMessages((prev) => [...prev, {
-                                    role: 'user', content: action,
-                                    timestamp: new Date().toISOString(),
-                                  }])
-                                  setThinking(true)
-                                  socketRef.current?.send('chat', {
-                                    content: action,
-                                    conversation_id: activeConversationId || undefined,
-                                  })
-                                }}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
-                              >
-                                <Zap className="h-3 w-3" />
-                                {action.length > 60 ? action.slice(0, 57) + '...' : action}
-                              </button>
-                            ))}
-                          </div>
-                        )
-                      })()}
                       {voiceEnabled && (
                         <button
                           onClick={() => playTTS(msg.content)}
@@ -505,6 +446,40 @@ export function ChatPanel({
             <ChatContainerScrollAnchor />
           </ChatContainerContent>
         </ChatContainerRoot>
+
+        {/* Suggested action buttons */}
+        {suggestedActions.length > 0 && (
+          <div className="px-4 pt-2">
+            <div className={`w-full mx-auto flex flex-wrap gap-2 ${!isSidePanel ? 'max-w-[52rem]' : ''}`}>
+              {suggestedActions.map((action, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setSuggestedActions([])
+                    setMessages(prev => [...prev, { role: 'user', content: action, timestamp: new Date().toISOString() }])
+                    setThinking(true)
+                    socketRef.current?.send('chat', { content: action, conversation_id: activeConversationId || undefined })
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                >
+                  {action.length > 60 ? action.slice(0, 57) + '...' : action}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setSuggestedActions([])
+                  const allMsg = `Do all of these: ${suggestedActions.join(', ')}`
+                  setMessages(prev => [...prev, { role: 'user', content: allMsg, timestamp: new Date().toISOString() }])
+                  setThinking(true)
+                  socketRef.current?.send('chat', { content: allMsg, conversation_id: activeConversationId || undefined })
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Do all
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Input area */}
         <div className="pb-6 sm:pb-4 pt-2 px-4 shrink-0 bg-background/50 backdrop-blur-sm">

@@ -175,6 +175,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         "content": response,
                         "conversation_id": conversation_id,
                     })
+
+                    # Send suggested actions if the agent offered options
+                    agent = agent_service.agent
+                    actions = getattr(agent, "_last_suggested_actions", None)
+                    if actions:
+                        await websocket.send_json({
+                            "type": "suggested_actions",
+                            "actions": actions,
+                            "conversation_id": conversation_id,
+                        })
+                        agent._last_suggested_actions = None
                 except Exception:
                     pass  # Client disconnected, response is still saved in DB
                 agent = agent_service.agent

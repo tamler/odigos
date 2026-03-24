@@ -175,6 +175,9 @@ class Agent:
                 await self.tracer.emit("error", conversation_id, {"error": str(e)[:500]})
             return "Something went wrong while processing your message. Please try again."
 
+        # Store suggested actions for the caller (ws.py) to send to frontend
+        self._last_suggested_actions = result.suggested_actions
+
         clean_content = await self.reflector.reflect(
             conversation_id,
             result.response,
