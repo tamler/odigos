@@ -484,8 +484,16 @@ async def lifespan(app: FastAPI):
     app.state.budget_tracker = budget_tracker
     logger.info("Budget tracker initialized")
 
-    # Initialize local embedding provider
-    _embedder = EmbeddingProvider()
+    # Initialize embedding provider (local or remote shared service)
+    if settings.embeddings.mode == "remote":
+        from odigos.providers.embeddings_remote import RemoteEmbeddingProvider
+        _embedder = RemoteEmbeddingProvider(
+            remote_url=settings.embeddings.remote_url,
+        )
+        logger.info("Using remote embedding service at %s", settings.embeddings.remote_url)
+    else:
+        _embedder = EmbeddingProvider()
+        logger.info("Using local embedding model")
 
     # Initialize memory stack
     vector_memory = VectorMemory(embedder=_embedder, db=_db)
@@ -507,13 +515,16 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Memory system initialized")
 
-    # Pre-download cross-encoder reranker model for document recall
-    try:
-        from sentence_transformers import CrossEncoder
-        CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-        logger.info("Cross-encoder reranker model ready")
-    except Exception:
-        logger.warning("Could not load cross-encoder reranker model")
+    # Pre-download cross-encoder reranker model for document recall (skip if using remote embeddings)
+    if settings.embeddings.mode != "remote":
+        try:
+            from sentence_transformers import CrossEncoder
+            CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+            logger.info("Cross-encoder reranker model ready")
+        except Exception:
+            logger.warning("Could not load cross-encoder reranker model")
+    else:
+        logger.info("Cross-encoder handled by remote embedding service")
 
     # Initialize corrections manager
     corrections_manager = CorrectionsManager(db=_db, vector_memory=vector_memory)

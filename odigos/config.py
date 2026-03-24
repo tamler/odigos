@@ -22,6 +22,11 @@ class DatabaseConfig(BaseModel):
     path: str = "data/odigos.db"
 
 
+class EmbeddingsConfig(BaseModel):
+    mode: str = "local"  # "local" (loads model in-process) or "remote" (calls shared service)
+    remote_url: str = "http://localhost:9000"
+
+
 class LLMConfig(BaseModel):
     base_url: str = "https://openrouter.ai/api/v1"
     default_model: str = "deepseek/deepseek-v3.2"
@@ -195,6 +200,7 @@ class Settings(BaseSettings):
 
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()
+    embeddings: EmbeddingsConfig = EmbeddingsConfig()
     llm: LLMConfig = LLMConfig()
     telegram: TelegramConfig = TelegramConfig()
     server: ServerConfig = ServerConfig()
