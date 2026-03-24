@@ -185,12 +185,11 @@ async def _register_tools(
     tool_registry.register(SuggestActionsTool(goal_store=goal_store))
     logger.info("Suggest actions tool initialized")
 
-    # Coaching tools (only if enabled)
-    if settings.coaching.enabled:
-        from odigos.tools.quiz import CreateQuizTool, GradeResponseTool
-        tool_registry.register(CreateQuizTool(db=db))
-        tool_registry.register(GradeResponseTool(db=db))
-        logger.info("Coaching tools initialized (role: %s)", settings.coaching.role)
+    # Quiz/assessment tools (available to all agents, used by tutor/mentor skills)
+    from odigos.tools.quiz import CreateQuizTool, GradeResponseTool
+    tool_registry.register(CreateQuizTool(db=db))
+    tool_registry.register(GradeResponseTool(db=db))
+    logger.info("Quiz tools initialized")
 
     # Email tools (only if configured)
     if settings.email.enabled and settings.email.imap_host:

@@ -102,7 +102,7 @@ class ManageSettingsTool(BaseTool):
 
             # Protected keys that cannot be changed via the agent
             _PROTECTED_KEYS = {
-                "coaching.supervised", "coaching.enabled",
+                "access.supervised",
                 "api_key", "session_secret",
                 "mesh.enabled", "peers",
             }
