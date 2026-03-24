@@ -51,10 +51,13 @@ Built-in markdown notebooks with agent integration. Start a journal and the agen
 Shared kanban boards between you and the agent. Create boards, manage cards with drag-and-drop, and the agent has full read/write access via tools. Ask it to create tasks, move cards as work progresses, or summarize what's in progress. Your board is a shared workspace for getting things done.
 
 ### Create files and artifacts
-Ask the agent to generate a spreadsheet, report, or document and it creates a downloadable file. Supports CSV, Markdown, JSON, HTML, TXT, XML, and YAML. Files appear as download cards in the chat.
+Ask the agent to generate a spreadsheet, report, or document and it creates a downloadable file. Supports CSV, Markdown, JSON, HTML, TXT, XML, YAML, and DOCX (Word documents). Files appear as download cards in the chat.
+
+### Deep research
+Say "research the competitive landscape for X" and walk away. The agent decomposes your question into sub-topics, searches multiple sources per topic, cross-references findings, self-reviews for gaps, then produces a comprehensive report (DOCX or Markdown) with a sources CSV. You get a notification when it's done.
 
 ### Search and research
-Web search (SearXNG, Brave, or Google), web scraping, RSS feeds. Upload documents and the agent indexes them for retrieval. Ask questions across all your documents -- the agent writes code to search them programmatically when simple retrieval isn't enough.
+Web search (SearXNG, Brave, or Google), web scraping, RSS feeds. Upload documents and the agent indexes them for retrieval. Ask questions across all your documents -- the agent writes code to search them programmatically when simple retrieval isn't enough. All results include clickable source links.
 
 ### Execute code
 Sandboxed Python and shell execution with memory limits, timeouts, and network isolation. The agent can write and run code to solve problems, then save working solutions as reusable tools.
@@ -65,14 +68,29 @@ Goals, todos, reminders with proactive follow-up. Cron jobs for recurring tasks.
 ### Analytics
 Built-in analytics dashboard showing query classifications, skill usage, tool errors, and active plans. See how your agent is performing at a glance.
 
+### Email
+Connect your agent to any email account via standard IMAP/SMTP. The agent checks for new mail, notifies you, reads messages when asked, and sends replies on your behalf. No OAuth setup -- just provide credentials in Settings.
+
+### Quizzes and assessments
+The agent can create interactive quizzes, grade responses with explanations, and track learning progress. Use it for self-study, tutoring, training, or professional development.
+
+### Suggested actions
+When the agent offers next steps, they appear as clickable buttons you can tap instead of typing. Pick one, pick several, or "Do all" to queue everything. The agent works through them and reports back.
+
+### Agent profiles
+Pre-built configurations for common use cases: personal assistant, learner, mentor, researcher, sales agent. Apply a profile to set the right tools, skills, and features in one click. Or customize your own.
+
 ### Work with your tools
 Google Workspace (Gmail, Calendar, Drive), browser automation, MCP server integration, file management. Extend with plugins -- no restart required.
 
 ### Speak and listen
 Optional voice: mic button for speech-to-text, speaker button for text-to-speech. Local models, no cloud dependency.
 
+### Cross-channel awareness
+Switch between web dashboard, Telegram, and API without losing context. The agent knows what you were last talking about regardless of which channel you were on.
+
 ### Connect with other agents
-Mesh networking with WebSocket auto-connect, mutual authentication, and heartbeat monitoring. Agents connect on startup, reconnect with exponential backoff, and can message each other in real-time. Contact cards for establishing trust. HTTP fallback for co-located agents.
+Mesh networking with WebSocket auto-connect, mutual authentication, and heartbeat monitoring. Agents connect on startup, reconnect with exponential backoff, and can message each other in real-time. Supervised mode for managed agents with locked settings.
 
 ## How It Gets Smarter
 
@@ -140,6 +158,8 @@ Key settings:
 | `notebooks` | Enable/disable notebooks |
 | `kanban` | Enable/disable kanban boards |
 | `mesh` | Enable/disable agent mesh networking |
+| `email` | IMAP/SMTP credentials for agent email |
+| `access` | Supervised mode for managed agents |
 | `voice` | TTS/STT on/off |
 
 ## Plugins
@@ -170,7 +190,7 @@ Enable in the Plugins tab. Changes apply immediately.
 
 ```bash
 uv sync                        # Install dependencies
-uv run pytest                  # Run tests (1094+)
+uv run pytest                  # Run tests (1100+)
 uv run python -m odigos.main   # Start locally
 cd dashboard && npm run dev    # Dashboard dev server
 ```
