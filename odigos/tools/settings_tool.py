@@ -100,6 +100,15 @@ class ManageSettingsTool(BaseTool):
             if "value" not in params:
                 return ToolResult(success=False, data="", error="value is required for write")
 
+            # Protected keys that cannot be changed via the agent
+            _PROTECTED_KEYS = {
+                "education.role", "education.enabled",
+                "api_key", "session_secret",
+                "mesh.enabled", "peers",
+            }
+            if key in _PROTECTED_KEYS or key.startswith("peers."):
+                return ToolResult(success=False, data="", error=f"Setting '{key}' is protected and cannot be changed by the agent")
+
             value = params["value"]
 
             # Update in-memory settings via dotted key
