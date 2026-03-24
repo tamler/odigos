@@ -123,6 +123,35 @@ export default function GeneralSettings({ active }: Props) {
         </div>
       </SectionCard>
 
+      {/* Text Size */}
+      <SectionCard title="Chat Text Size">
+        <div className="flex gap-2">
+          {[
+            { value: 'small', label: 'Small' },
+            { value: 'medium', label: 'Medium' },
+            { value: 'large', label: 'Large' },
+          ].map(({ value, label }) => (
+            <Button
+              key={value}
+              variant={(localStorage.getItem('chat-text-size') || 'medium') === value ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                localStorage.setItem('chat-text-size', value)
+                if (value === 'medium') {
+                  document.body.removeAttribute('data-chat-size')
+                } else {
+                  document.body.setAttribute('data-chat-size', value)
+                }
+                // Force re-render
+                window.dispatchEvent(new Event('storage'))
+              }}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </SectionCard>
+
       {/* LLM Provider */}
       <SectionCard title="LLM Provider">
         <div className="flex flex-wrap gap-2">

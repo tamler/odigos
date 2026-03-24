@@ -160,6 +160,20 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
     }
+
+  /* Chat text size variants -- controlled by data-chat-size on body */
+  .chat-text {
+    font-size: 15px;
+    line-height: 1.75;
+  }
+  body[data-chat-size="small"] .chat-text {
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  body[data-chat-size="large"] .chat-text {
+    font-size: 17px;
+    line-height: 1.85;
+  }
   :root {
     --color-kanban-board-circle-blue: var(--kanban-board-circle-blue);
     --color-kanban-board-circle-cyan: var(--kanban-board-circle-cyan);

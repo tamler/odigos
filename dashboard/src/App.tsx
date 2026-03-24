@@ -11,6 +11,12 @@ import LoginPrompt from './components/LoginPrompt'
 import NotFoundPage from './pages/NotFoundPage'
 import ArtifactsPage from './pages/ArtifactsPage'
 
+// Load saved chat text size preference
+const savedSize = localStorage.getItem('chat-text-size')
+if (savedSize && savedSize !== 'medium') {
+  document.body.setAttribute('data-chat-size', savedSize)
+}
+
 interface AuthState {
   setup_required: boolean
   authenticated: boolean

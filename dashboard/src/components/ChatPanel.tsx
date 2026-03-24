@@ -395,7 +395,7 @@ export function ChatPanel({
                     </div>
                   ) : (
                     <div className="group/msg w-full overflow-hidden">
-                      <div className="text-sm text-foreground leading-relaxed break-words prose dark:prose-invert max-w-none">
+                      <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
                         <Markdown>{msg.content}</Markdown>
                       </div>
                       {voiceEnabled && (
@@ -414,7 +414,7 @@ export function ChatPanel({
               ))}
               {streamingContent && (
                 <div className="group/msg w-full overflow-hidden">
-                  <div className="text-sm text-foreground leading-relaxed break-words prose dark:prose-invert max-w-none">
+                  <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
                     <Markdown>{streamingContent}</Markdown>
                   </div>
                 </div>
