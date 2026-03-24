@@ -92,23 +92,71 @@ Switch between web dashboard, Telegram, and API without losing context. The agen
 ### Connect with other agents
 Mesh networking with WebSocket auto-connect, mutual authentication, and heartbeat monitoring. Agents connect on startup, reconnect with exponential backoff, and can message each other in real-time. Supervised mode for managed agents with locked settings.
 
-## How It Gets Smarter
+## Evolution Engine
 
-Odigos has a self-improvement loop that runs continuously:
+Odigos improves itself without human intervention. The evolution engine runs a continuous loop:
 
-**1. Classify** -- Every incoming message is categorized (simple, standard, document query, complex, planning) with [evolvable rules](https://arxiv.org/html/2603.11808v1). Simple questions skip heavy processing. Complex ones get decomposed into sub-tasks with persistent plans.
+### The Loop
 
-**2. Execute** -- The agent works through the request using its tools, memory, and skills. It tracks which tools it uses, how long each step takes, and how many tokens each classification costs.
+**Classify → Execute → Evaluate → Dream → Learn → Evolve**
 
-**3. Evaluate** -- After responding, the evaluator scores the conversation using implicit feedback signals and rubric-based assessment. [AREW-inspired](https://arxiv.org/abs/2603.12109) critique signals also score whether the agent used appropriate tools (Action Selection) and whether it actually used the information it retrieved (Belief Tracking).
+1. **Classify** -- Every message is categorized (simple, standard, document_query, complex, planning) using a two-tier system: fast heuristic rules first, LLM-based classification for uncertain cases. The rules themselves are [evolvable](https://arxiv.org/html/2603.11808v1) -- stored in editable markdown files that the evolution engine can modify.
 
-**4. Dream** -- In the background, the heartbeat ["dreams"](https://github.com/plastic-labs/honcho): analyzing conversations to build a [user profile](https://manthanguptaa.in/posts/chatgpt_memory/), extracting [tactical experiences](https://arxiv.org/html/2603.12056v2) from tool successes and failures, and mining repeated patterns for new skills.
+2. **Execute** -- The ReAct-style executor runs tools in a loop until the LLM responds without tool calls. Each classification has routing rules that control which tools are available, whether to skip RAG, and which context sections to include -- saving tokens on simple queries.
 
-**5. Learn** -- The strategist analyzes classification stats, skill usage, token costs, experience data, and AREW critique aggregates. It proposes experimental changes AND auto-creates new skills when it detects repeated patterns. When the agent frequently ignores its tools, the strategist proposes routing fixes.
+3. **Evaluate** -- The evaluator runs two assessments: rubric-based scoring (generates a rubric for the task type, then scores against it) and implicit feedback detection (did the user correct the agent? thank it? ignore it?). [AREW-inspired](https://arxiv.org/abs/2603.12109) critique signals score tool usage quality.
 
-**6. Evolve** -- The evolution engine runs time-boxed trials. Changes that improve scores get promoted. Changes that hurt get reverted. Classification rules, routing, prompt sections, and skills all evolve this way.
+4. **Dream** -- During idle heartbeat cycles, the agent analyzes conversations to build a user profile, extracts tactical experiences from tool successes/failures, and mines repeated tool patterns that could become reusable skills.
 
-Three layers of memory feed the loop: [explicit facts](https://manthanguptaa.in/posts/chatgpt_memory/) the user states ("I prefer Python"), a user profile built from conversation analysis, and long-term conversation memory with vector search and entity graphs. The agent also maintains tactical experiences -- lessons learned from past tool interactions that prevent repeating the same mistakes.
+5. **Learn** -- The strategist aggregates evaluation data, query classification stats, skill usage patterns, and AREW critique scores. It proposes hypotheses: "document queries would improve if we forced tool use" or "this repeated 3-tool pattern should become a skill." High-confidence proposals are auto-executed.
+
+6. **Evolve** -- Proposals become time-boxed trials. The checkpoint manager snapshots the current state, applies the change, and monitors evaluation scores. After enough data, trials are promoted (change kept) or reverted (rolled back). Classification rules, routing, prompt sections, and skills all evolve this way.
+
+### What Evolves
+
+| Component | How it changes |
+|-----------|---------------|
+| Classification rules | Heuristic patterns in `classification_rules.md` |
+| Routing rules | Per-classification tool filtering, RAG skipping in `routing_rules.md` |
+| Prompt sections | Identity, voice, meta instructions in `data/agent/*.md` |
+| Skills | New skills auto-created from detected patterns |
+| Experiences | Tactical lessons stored and injected into future context |
+
+## Skill System
+
+Skills are reusable instruction sets that the agent activates for specific tasks. Unlike tools (which execute code), skills modify how the agent thinks and responds.
+
+### Text Skills
+Markdown files in `skills/` with a name, description, tool list, and instructions. When activated, the skill's full prompt is injected into the conversation. Examples: `deep-research` (multi-round investigation), `journal` (reflective journaling), `tutor` (Socratic teaching), `mentor` (curriculum management).
+
+### Executable Skills
+When the agent writes Python code that solves a reusable problem, it can save the code as an executable skill via `create_skill`. The code defines a `run()` function with typed parameters. Saved skills appear as callable tools -- the agent can invoke them directly on future queries. Inspired by [SAGE](https://arxiv.org/html/2512.17102v2).
+
+### Skill Mining
+The strategist monitors tool usage patterns. When it detects a combination of tools being used repeatedly with high evaluation scores, it proposes creating a new skill that encapsulates the pattern. Skills are born from real successful interactions, not pre-programmed.
+
+### Skill Lifecycle
+1. Agent encounters a task → activates a relevant skill (or works without one)
+2. Evaluator scores the result
+3. Strategist detects repeated patterns → proposes new skill
+4. Evolution engine trials the skill → promotes if scores improve
+5. Agent uses the skill on similar future tasks
+
+## Plan System
+
+For complex multi-step requests, the agent decomposes work into tracked plans.
+
+### Decomposition
+The `decompose_query` tool breaks a request into 2-6 sequential sub-tasks. Each step has a description, status (pending/in_progress/done/failed), and optional result notes. Steps can have sub-steps for nested complexity.
+
+### Tracking
+Plans persist in the database across conversation turns. The agent uses `check_plan` to review progress and `update_plan` to mark steps complete. The context assembler injects a recovery briefing if a plan was interrupted -- so the agent picks up where it left off, even in a new conversation.
+
+### Dual-Loop Verification
+After updating a plan step, the executor injects a verification prompt: "Before proceeding to the next step, verify the result of the current step is correct and complete." This catches errors mid-plan instead of at the end.
+
+### Outcome Evaluation
+When all steps are done, the plan outcome is evaluated: did the plan achieve its goal? The outcome score feeds back into the strategist, informing future decomposition strategies.
 
 ## Memory System
 
