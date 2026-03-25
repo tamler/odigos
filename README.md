@@ -1,10 +1,23 @@
-# Odigos
+<p align="center">
+  <img src="docs/images/hero-banner.jpg" alt="Odigos" width="100%">
+</p>
 
-Your personal AI that gets smarter every day.
+<h1 align="center">Odigos</h1>
 
-Deploy it anywhere, connect any LLM, and get an assistant that remembers everything, learns from its mistakes, writes and saves its own tools, and improves its own behavior without you touching a prompt.
+<p align="center">
+  <strong>Your personal AI that gets smarter every day.</strong><br>
+  Deploy it anywhere, connect any LLM, and get an assistant that remembers everything,<br>
+  learns from its mistakes, writes and saves its own tools, and improves its own behavior.
+</p>
 
-**License:** MIT
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#what-can-it-do">Features</a> ·
+  <a href="#evolution-engine">Self-Improvement</a> ·
+  <a href="#memory-system">Memory</a> ·
+  <a href="https://github.com/tamler/odigos/wiki">Wiki</a> ·
+  <a href="#license">MIT License</a>
+</p>
 
 ---
 
@@ -78,7 +91,13 @@ The agent can create interactive quizzes, grade responses with explanations, and
 When the agent offers next steps, they appear as clickable buttons you can tap instead of typing. Pick one, pick several, or "Do all" to queue everything. The agent works through them and reports back.
 
 ### Agent profiles
-Pre-built configurations for common use cases: personal assistant, learner, mentor, researcher, sales agent. Apply a profile to set the right tools, skills, and features in one click. Or customize your own.
+Pre-built configurations for common use cases: personal assistant, learner, mentor, researcher, writer, sales agent. Apply a profile to set the right tools, skills, and features in one click. Or customize your own.
+
+### Calendar
+Connect your calendar via CalDAV (Google, Apple, Outlook, Nextcloud). The agent checks upcoming events and includes them in morning briefings. No proprietary integrations -- standard CalDAV protocol.
+
+### News monitoring
+Tell the agent to watch RSS feeds for topics you care about. "Follow TechCrunch for AI news." The agent checks feeds periodically, filters by your topics, and surfaces relevant articles with clickable links.
 
 ### Work with your tools
 Google Workspace (Gmail, Calendar, Drive), browser automation, MCP server integration, file management. Extend with plugins -- no restart required.
@@ -93,6 +112,10 @@ Switch between web dashboard, Telegram, and API without losing context. The agen
 Mesh networking with WebSocket auto-connect, mutual authentication, and heartbeat monitoring. Agents connect on startup, reconnect with exponential backoff, and can message each other in real-time. Supervised mode for managed agents with locked settings.
 
 ## Evolution Engine
+
+<p align="center">
+  <img src="docs/images/evolution-loop.jpg" alt="Evolution Loop" width="80%">
+</p>
 
 Odigos improves itself without human intervention. The evolution engine runs a continuous loop:
 
@@ -159,6 +182,10 @@ After updating a plan step, the executor injects a verification prompt: "Before 
 When all steps are done, the plan outcome is evaluated: did the plan achieve its goal? The outcome score feeds back into the strategist, informing future decomposition strategies.
 
 ## Memory System
+
+<p align="center">
+  <img src="docs/images/memory-system.jpg" alt="Memory System" width="80%">
+</p>
 
 Odigos has a five-layer memory architecture. Each layer serves a different purpose and operates at a different timescale.
 
