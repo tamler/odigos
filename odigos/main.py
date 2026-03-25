@@ -191,6 +191,19 @@ async def _register_tools(
     tool_registry.register(GradeResponseTool(db=db))
     logger.info("Quiz tools initialized")
 
+    # Calendar tools (only if configured)
+    if settings.calendar.enabled and settings.calendar.url:
+        from odigos.tools.calendar import CheckCalendarTool
+        tool_registry.register(CheckCalendarTool(calendar_config=settings.calendar))
+        logger.info("Calendar tool initialized (%s)", settings.calendar.url)
+
+    # Feed monitoring tools (always available -- user adds feeds via watch_feed)
+    from odigos.tools.feed_monitor import WatchFeedTool, ListFeedsTool, CheckFeedsTool
+    tool_registry.register(WatchFeedTool(db=db))
+    tool_registry.register(ListFeedsTool(db=db))
+    tool_registry.register(CheckFeedsTool(db=db))
+    logger.info("Feed monitoring tools initialized")
+
     # Email tools (only if configured)
     if settings.email.enabled and settings.email.imap_host:
         from odigos.tools.email import CheckEmailTool, SendEmailTool

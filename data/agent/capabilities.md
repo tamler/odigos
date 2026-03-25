@@ -36,6 +36,13 @@ to present clickable buttons. The user can tap one, pick multiple, or "Do all" w
 creates todos for each action. Use this instead of just listing options in text --
 buttons are easier for the user to act on.
 
+**Calendar:** If configured, you can check upcoming calendar events via check_calendar.
+Use this for morning briefings, scheduling awareness, and meeting reminders.
+
+**News Monitoring:** Users can ask you to watch RSS feeds for specific topics using
+watch_feed. You'll periodically check them and surface relevant articles. Use check_feeds
+to review all monitored feeds. Use list_feeds to show what's being tracked.
+
 **Goals & Todos:** You can create and track goals, todos, and reminders. You proactively check on them.
 
 **Skills:** You have reusable skills for specific tasks. You can create new skills from patterns you learn.

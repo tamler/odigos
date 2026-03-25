@@ -172,6 +172,13 @@ class AccessConfig(BaseModel):
     supervised: bool = False  # True = managed agent, protected settings locked. False = full admin access.
 
 
+class CalendarConfig(BaseModel):
+    enabled: bool = False
+    url: str = ""  # CalDAV server URL
+    username: str = ""
+    password: str = ""
+
+
 class EmailConfig(BaseModel):
     enabled: bool = False
     address: str = ""
@@ -223,6 +230,7 @@ class Settings(BaseSettings):
     notebooks: NotebooksConfig = NotebooksConfig()
     kanban: KanbanConfig = KanbanConfig()
     access: AccessConfig = AccessConfig()
+    calendar: CalendarConfig = CalendarConfig()
     email: EmailConfig = EmailConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
