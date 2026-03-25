@@ -484,8 +484,23 @@ async def lifespan(app: FastAPI):
     app.state.budget_tracker = budget_tracker
     logger.info("Budget tracker initialized")
 
-    # Initialize embedding provider (local or remote shared service)
-    if settings.embeddings.mode == "remote":
+    # Initialize embedding provider
+    # Auto-detect shared toolkit if mode is "auto" (default), or use explicit setting
+    embed_mode = settings.embeddings.mode
+    if embed_mode == "auto":
+        # Check if shared embedding service is available
+        try:
+            import httpx
+            resp = httpx.get(f"{settings.embeddings.remote_url}/health", timeout=2.0)
+            if resp.status_code == 200:
+                embed_mode = "remote"
+                logger.info("Detected shared embedding toolkit at %s", settings.embeddings.remote_url)
+            else:
+                embed_mode = "local"
+        except Exception:
+            embed_mode = "local"
+
+    if embed_mode == "remote":
         from odigos.providers.embeddings_remote import RemoteEmbeddingProvider
         _embedder = RemoteEmbeddingProvider(
             remote_url=settings.embeddings.remote_url,
@@ -516,7 +531,7 @@ async def lifespan(app: FastAPI):
     logger.info("Memory system initialized")
 
     # Pre-download cross-encoder reranker model for document recall (skip if using remote embeddings)
-    if settings.embeddings.mode != "remote":
+    if embed_mode != "remote":
         try:
             from sentence_transformers import CrossEncoder
             CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")

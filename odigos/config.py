@@ -23,7 +23,7 @@ class DatabaseConfig(BaseModel):
 
 
 class EmbeddingsConfig(BaseModel):
-    mode: str = "local"  # "local" (loads model in-process) or "remote" (calls shared service)
+    mode: str = "auto"  # "auto" (detect toolkit), "local" (in-process), or "remote" (shared service)
     remote_url: str = "http://localhost:9000"
 
 
