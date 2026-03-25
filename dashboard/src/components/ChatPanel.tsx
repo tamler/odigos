@@ -259,7 +259,7 @@ export function ChatPanel({
       mediaRecorderRef.current = recorder
 
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      const ws = new WebSocket(`${protocol}://${window.location.host}/ws/audio/transcribe`)
+      const ws = new WebSocket(`${protocol}://${window.location.host}/api/ws/audio/transcribe`)
       audioWsRef.current = ws
 
       ws.onmessage = (event) => {

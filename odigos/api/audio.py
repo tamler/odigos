@@ -15,12 +15,23 @@ router = APIRouter(prefix="/api")
 
 
 def _authenticate(websocket: WebSocket) -> bool:
-    """Authenticate WebSocket via query param token."""
+    """Authenticate WebSocket via session cookie or query param token."""
     settings = websocket.app.state.settings
+
+    # Try session cookie first (same as main WebSocket)
+    from odigos.api.auth import SESSION_COOKIE, _validate_session
+    cookie = websocket.cookies.get(SESSION_COOKIE)
+    if cookie and settings.session_secret:
+        session = _validate_session(settings.session_secret, cookie)
+        if session:
+            return True
+
+    # Fall back to query param token
     token = websocket.query_params.get("token", "")
-    if not settings.api_key:
-        return False
-    return hmac.compare_digest(token.encode(), settings.api_key.encode())
+    if settings.api_key and token:
+        return hmac.compare_digest(token.encode(), settings.api_key.encode())
+
+    return False
 
 
 @router.websocket("/ws/audio/transcribe")
