@@ -308,6 +308,7 @@ cd dashboard && npm run dev    # Dashboard dev server
 - Token efficiency tracking inspired by [jMunchWorkbench](https://github.com/jgravelle/jMunchWorkbench)
 - Evolution engine improvements informed by [VISTA](https://arxiv.org/abs/2603.18388) (parallel trials, decoupled hypothesis/rewrite, random restarts)
 - Strategist trial-pattern learning informed by [Self-Evolve](https://arxiv.org/abs/2603.18620) and [AutoPrompter](https://github.com/gauravvij/autoprompter) (learning from trial history, optimization ledger)
+- Goal-directed evolution informed by [GOAL.md](https://github.com/jmilinovich/goal-md) (explicit fitness functions, operating modes, action catalogs)
 
 ## License
 
