@@ -44,6 +44,27 @@ async def get_artifact(artifact_id: str, db=Depends(get_db)):
     return dict(row)
 
 
+@router.get("/{artifact_id}/content")
+async def get_artifact_content(artifact_id: str, db=Depends(get_db)):
+    """Get raw text content of an artifact for preview rendering."""
+    row = await db.fetch_one("SELECT * FROM artifacts WHERE id = ?", (artifact_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    file_path = ARTIFACTS_DIR / artifact_id / row["filename"]
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Artifact file missing from disk")
+
+    # Only serve text-based content for preview
+    content_type = row["content_type"]
+    text_types = {"text/", "application/json", "application/xml", "application/x-yaml"}
+    if not any(content_type.startswith(t) for t in text_types):
+        raise HTTPException(status_code=400, detail="Binary artifacts cannot be previewed as text")
+
+    content = file_path.read_text(encoding="utf-8")
+    return {"content": content, "content_type": content_type, "filename": row["filename"]}
+
+
 @router.get("/{artifact_id}/download")
 async def download_artifact(artifact_id: str, db=Depends(get_db)):
     """Download an artifact file."""

@@ -235,6 +235,144 @@ Add a "Connections" or "Integrations" tab to SettingsPage with two sections:
 
 ---
 
+### Task G38: Artifact Preview Panel (Split View)
+
+**Priority:** High — this is a major UX upgrade
+
+When the agent creates an artifact (via the `create_artifact` tool), the artifact should open in a live preview panel alongside the chat, similar to Claude Artifacts or ChatGPT Canvas. The chat shrinks to ~30% and the artifact takes ~70%.
+
+**Research references:**
+- Claude Artifacts: https://support.claude.com/en/articles/9487310-what-are-artifacts-and-how-do-i-use-them
+- assistant-ui (open source React): https://www.assistant-ui.com/examples/artifacts
+- Implementation guide: https://blog.logrocket.com/implementing-claudes-artifacts-feature-ui-visualization/
+- ChatGPT Canvas: https://help.openai.com/en/articles/9930697-what-is-the-canvas-feature-in-chatgpt-and-how-do-i-use-it
+- assistant-ui GitHub: https://github.com/assistant-ui/assistant-ui
+
+**Current state:**
+- Artifacts are created by the agent via the `create_artifact` tool
+- The tool returns a `side_effect` with artifact metadata: `{id, filename, content_type, file_size, download_url}`
+- The WebSocket sends `suggested_actions` after tool use (same mechanism can carry artifact info)
+- `ArtifactCard` component already exists at `dashboard/src/components/ArtifactCard.tsx` for download cards
+- Artifacts are served via `GET /api/artifacts/{id}/download` (FileResponse)
+- Artifact metadata via `GET /api/artifacts/{id}` returns `{id, filename, content_type, file_size, created_at}`
+
+**What the artifact side_effect looks like** (already sent by the backend):
+```json
+{
+  "artifact": {
+    "id": "uuid",
+    "filename": "report.html",
+    "content_type": "text/html",
+    "file_size": 1234,
+    "download_url": "/api/artifacts/uuid/download"
+  }
+}
+```
+
+**NEW: We need a content endpoint.** Currently artifacts can only be downloaded as files. For preview, we need the raw content. Add this backend endpoint (or I can build it — ask Claude):
+
+`GET /api/artifacts/{id}/content` — returns the raw file content as text (for text-based artifacts) with appropriate Content-Type header.
+
+**Layout architecture:**
+
+```
+Current layouts:
+  [Chat 100%]                           — ChatPage (no artifact)
+  [Content 70% | Chat Panel 30%]        — NotebookPage/KanbanPage with cowork chat
+
+New layout:
+  [Chat 30% | Artifact Preview 70%]     — when artifact is active
+```
+
+This follows the same pattern as the existing cowork layout but reversed — chat shrinks, artifact takes the main area. AppLayout already manages `chatPanelOpen` state. Add `artifactPanelOpen` + `activeArtifactId` state.
+
+**Components to build:**
+
+1. **`ArtifactPreview.tsx`** — The main preview component. Takes an artifact ID, fetches content, renders based on type:
+
+   | Content Type | Renderer |
+   |---|---|
+   | `text/html` | Sandboxed `<iframe srcDoc={content}>` |
+   | `text/markdown` | Existing `<Markdown>` component |
+   | `text/csv` | Simple HTML table rendering |
+   | `application/json` | Syntax-highlighted code block |
+   | `text/plain` | Pre-formatted text |
+   | `text/css`, `application/javascript` | Syntax-highlighted code |
+   | Other (DOCX, etc.) | Download-only card (can't preview) |
+
+2. **Tab bar on the preview panel** with three modes:
+   - **Preview** — rendered output (HTML in iframe, markdown rendered, etc.)
+   - **Code** — raw source with syntax highlighting (use existing CodeBlock component or Shiki)
+   - **Download** — the existing ArtifactCard with download button
+
+3. **Panel header** showing: filename, file size, close button (X), and a "Pop out" button that opens the artifact in a new browser tab (`window.open(download_url)`)
+
+**How the artifact panel opens:**
+
+The backend already sends artifact info via the `suggested_actions` WebSocket message mechanism. But we need a dedicated message type. The WebSocket handler in `ws.py` already sends this after a response:
+
+```javascript
+// In ws.py, after chat_response:
+if (agent._last_suggested_actions) {
+    send({ type: "suggested_actions", actions: [...] })
+}
+```
+
+We also need to check for artifacts. The `side_effect` from `create_artifact` includes artifact metadata. The executor stores it, and ws.py can send it:
+
+**Option A (simpler):** After loading artifacts for the conversation (which ChatPanel already does for ArtifactCard), detect NEW artifacts that appeared since the last check and auto-open the preview panel.
+
+**Option B (real-time):** Add a new WebSocket message type `artifact_created` that ws.py sends when the tool produces an artifact. ChatPanel listens for it and opens the preview.
+
+**Recommend Option A** — it's simpler and doesn't require backend changes beyond the content endpoint.
+
+**Implementation flow:**
+
+1. Agent creates artifact → ArtifactCard appears in chat (existing behavior)
+2. ChatPanel detects new artifact → sets `artifactPanelOpen = true` + `activeArtifactId`
+3. AppLayout renders: `[ChatPanel 30%] [ArtifactPreview 70%]`
+4. User can switch tabs (Preview/Code/Download), close panel, or pop out
+
+**Mobile behavior:**
+On mobile (< lg breakpoint), the artifact panel is full-screen with a back button to return to chat. Same pattern as how the chat panel works on mobile in the cowork layout.
+
+**Security for HTML preview:**
+HTML artifacts MUST render in a sandboxed iframe:
+```tsx
+<iframe
+  srcDoc={content}
+  sandbox="allow-scripts"
+  style={{ width: '100%', height: '100%', border: 'none' }}
+  title={filename}
+/>
+```
+The `sandbox="allow-scripts"` allows JS to run but blocks:
+- Access to parent window (no XSS)
+- Form submissions
+- Navigation changes
+- Popups
+
+DO NOT use `sandbox="allow-same-origin"` — that would defeat the sandbox.
+
+**Files to create/modify:**
+- Create: `dashboard/src/components/ArtifactPreview.tsx`
+- Modify: `dashboard/src/layouts/AppLayout.tsx` (add artifactPanelOpen state, render preview panel)
+- Modify: `dashboard/src/components/ChatPanel.tsx` (detect new artifacts, trigger panel open)
+- Modify: `dashboard/src/components/ArtifactCard.tsx` (add "Preview" button that opens panel instead of just download)
+
+**Verification:**
+1. Ask the agent to "create an HTML page with a calculator"
+2. The artifact should appear as a card in chat AND auto-open in the preview panel
+3. The preview panel should show the live calculator in an iframe
+4. Switching to "Code" tab should show the HTML source with syntax highlighting
+5. "Download" tab should show the download button
+6. Closing the panel returns to full-width chat
+7. On mobile, preview should be full-screen with back button
+8. TypeScript must compile: `npx tsc --noEmit`
+9. Build must succeed: `npm run build`
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
