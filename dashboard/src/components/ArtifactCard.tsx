@@ -1,5 +1,6 @@
-import { Download, FileText, FileSpreadsheet, FileJson, FileCode, FileImage, File } from 'lucide-react'
+import { Download, FileText, FileSpreadsheet, FileJson, FileCode, FileImage, File, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useOutletContext } from 'react-router-dom'
 
 export interface Artifact {
   id: string
@@ -30,8 +31,19 @@ export function getFileIcon(contentType: string, filename: string) {
 }
 
 export function ArtifactCard({ artifact, className = '' }: { artifact: Artifact, className?: string }) {
+  const context = useOutletContext<any>()
+  const setArtifactPanelOpen = context?.setArtifactPanelOpen
+  const setActiveArtifactId = context?.setActiveArtifactId
+
   const handleDownload = () => {
     window.open(`/api/artifacts/${artifact.id}/download`, '_blank')
+  }
+
+  const handlePreview = () => {
+    if (setArtifactPanelOpen && setActiveArtifactId) {
+      setActiveArtifactId(artifact.id)
+      setArtifactPanelOpen(true)
+    }
   }
 
   return (
@@ -49,9 +61,16 @@ export function ArtifactCard({ artifact, className = '' }: { artifact: Artifact,
           </p>
         </div>
       </div>
-      <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 hover:bg-muted" onClick={handleDownload} aria-label={`Download ${artifact.filename}`}>
-        <Download className="h-4 w-4" />
-      </Button>
+      <div className="flex gap-1">
+        {setArtifactPanelOpen && (
+          <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 hover:bg-muted" onClick={handlePreview} title="Preview">
+            <Eye className="h-4 w-4" />
+          </Button>
+        )}
+        <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 hover:bg-muted" onClick={handleDownload} aria-label={`Download ${artifact.filename}`} title="Download">
+          <Download className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   )
 }

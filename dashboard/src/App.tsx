@@ -1,15 +1,17 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { getAuthStatus } from './lib/auth'
 import AppLayout from './layouts/AppLayout'
 import ChatPage from './pages/ChatPage'
-import SettingsPage from './pages/SettingsPage'
-import NotebookPage from './pages/NotebookPage'
-import KanbanPage from './pages/KanbanPage'
 import LoginPrompt from './components/LoginPrompt'
-import NotFoundPage from './pages/NotFoundPage'
-import ArtifactsPage from './pages/ArtifactsPage'
+import { Loader } from '@/components/ui/loader'
+
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const NotebookPage = lazy(() => import('./pages/NotebookPage'))
+const KanbanPage = lazy(() => import('./pages/KanbanPage'))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
+const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
 
 // Load saved chat text size preference
 const savedSize = localStorage.getItem('chat-text-size')
@@ -51,18 +53,20 @@ export default function App() {
         />
       ) : (
         <BrowserRouter>
-          <Routes>
-            <Route element={<AppLayout />}>
-              <Route path="/" element={<ChatPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/notebooks" element={<NotebookPage />} />
-              <Route path="/notebooks/:id" element={<NotebookPage />} />
-              <Route path="/kanban" element={<KanbanPage />} />
-              <Route path="/kanban/:id" element={<KanbanPage />} />
-              <Route path="/artifacts" element={<ArtifactsPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Route>
-          </Routes>
+          <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader /></div>}>
+            <Routes>
+              <Route element={<AppLayout />}>
+                <Route path="/" element={<ChatPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/notebooks" element={<NotebookPage />} />
+                <Route path="/notebooks/:id" element={<NotebookPage />} />
+                <Route path="/kanban" element={<KanbanPage />} />
+                <Route path="/kanban/:id" element={<KanbanPage />} />
+                <Route path="/artifacts" element={<ArtifactsPage />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Route>
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       )}
     </>

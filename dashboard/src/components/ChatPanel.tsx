@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -33,6 +33,42 @@ interface ChatPanelProps {
   onClose?: () => void
 }
 
+function WelcomeView({ agentName, onSuggest }: { agentName: string; onSuggest: (text: string) => void }) {
+  const suggestions = [
+    { text: "What can you do?", label: "Capabilities" },
+    { text: "Start a journal entry", label: "Journal" },
+    { text: "Create a task board for my project", label: "Task Board" },
+    { text: "Research the latest trends in AI agents", label: "Research" },
+  ]
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-500">
+      <div className="max-w-md space-y-6">
+        <div className="space-y-2">
+          <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl font-bold text-primary">{agentName[0]}</span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Hello, I'm {agentName}</h1>
+          <p className="text-muted-foreground">Your personal AI assistant that learns and improves over time. How can I help you today?</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {suggestions.map((s) => (
+            <button
+              key={s.label}
+              onClick={() => onSuggest(s.text)}
+              className="p-4 rounded-xl border border-border/40 bg-card hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
+            >
+              <p className="text-xs font-semibold text-primary mb-1 uppercase tracking-wider">{s.label}</p>
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">{s.text}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ChatPanel({
   activeConversationId,
   setActiveId,
@@ -45,7 +81,13 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { hasNewEmail, setHasNewEmail } = useOutletContext<any>()
+  const { 
+    hasNewEmail, 
+    setHasNewEmail, 
+    artifactPanelOpen, 
+    setArtifactPanelOpen, 
+    setActiveArtifactId 
+  } = useOutletContext<any>()
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -57,6 +99,7 @@ export function ChatPanel({
   const [recording, setRecording] = useState(false)
   const [voiceEnabled, setVoiceEnabled] = useState(false)
   const [queuedCount, setQueuedCount] = useState(0)
+  const [agentName, setAgentName] = useState('Odigos')
   const [suggestedActions, setSuggestedActions] = useState<string[]>([])
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -122,8 +165,23 @@ export function ChatPanel({
     }
   }, [socketRef, setActiveId, setSearchParams, refreshConversations])
 
+  // Auto-open new artifacts (G38)
+  const prevArtifactsCount = useRef(0)
+  useEffect(() => {
+    if (artifacts.length > prevArtifactsCount.current) {
+      const latest = artifacts[0] // list is sorted by created_at DESC
+      if (latest && !artifactPanelOpen) {
+        setActiveArtifactId(latest.id)
+        setArtifactPanelOpen(true)
+      }
+    }
+    prevArtifactsCount.current = artifacts.length
+  }, [artifacts, artifactPanelOpen, setActiveArtifactId, setArtifactPanelOpen])
+
   // Load conversation messages when switching
   useEffect(() => {
+    get<any>('/api/settings').then(s => setAgentName(s.agent.name)).catch(() => {})
+
     const cid = searchParams.get('c') || activeConversationId
     if (!cid) {
       if (loadedConvRef.current !== null) {
@@ -291,7 +349,22 @@ export function ChatPanel({
     setPendingFiles((prev) => prev.filter((p) => p.file !== file))
   }
 
-  const handleSend = useCallback((overrideContent?: string) => {
+  async function exportToArtifact() {
+    if (!activeConversationId) return
+    toast.promise(
+      (async () => {
+        const text = await get<string>(`/api/conversations/${activeConversationId}/export?format=markdown`)
+        handleSend(`Save this conversation export as a markdown artifact:\n\n${text}`)
+      })(),
+      {
+        loading: 'Preparing export...',
+        success: 'Export message sent to agent',
+        error: 'Failed to prepare export'
+      }
+    )
+  }
+
+  function handleSend(overrideContent?: string) {
     const content = (overrideContent ?? inputValue).trim()
     if (!content && pendingFiles.length === 0) return
 
@@ -317,7 +390,7 @@ export function ChatPanel({
 
     setInputValue('')
     setPendingFiles([])
-  }, [inputValue, pendingFiles, activeConversationId, socketRef, chatContext])
+  }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -340,10 +413,24 @@ export function ChatPanel({
         {/* Header for Side Panel Mode */}
         {isSidePanel && (
           <div className="flex items-center justify-between px-4 h-[52px] border-b border-border/40 shrink-0 lg:pt-0 pt-2 lg:mt-0 lg:bg-transparent bg-background/50 backdrop-blur-sm shadow-sm sticky top-0 z-20">
-            <div>
-              <div className="text-sm font-medium">Copilot</div>
-              {chatContext && Object.keys(chatContext).length > 0 && (
-                <div className="text-xs text-muted-foreground mt-0.5">Context active</div>
+            <div className="flex items-center gap-3">
+              <div>
+                <div className="text-sm font-medium">Copilot</div>
+                {chatContext && Object.keys(chatContext).length > 0 && (
+                  <div className="text-xs text-muted-foreground mt-0.5">Context active</div>
+                )}
+              </div>
+              {activeConversationId && (
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  aria-label="Export conversation as artifact" 
+                  onClick={exportToArtifact}
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  title="Export as Artifact"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
               )}
             </div>
             {onClose && (
@@ -365,13 +452,20 @@ export function ChatPanel({
         {/* Messages area */}
         <ChatContainerRoot className="flex-1 w-full relative z-0">
           <ChatContainerContent>
-            <div className={`w-full mx-auto px-4 py-6 space-y-6 ${!isSidePanel ? 'max-w-[52rem]' : ''}`}>
-              {messages.length === 0 && !thinking && (
-                <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-base text-center">
-                  What can I help you with?
-                </div>
-              )}
-              {messages.length > messageDisplayLimit && (
+            <div className={`w-full h-full mx-auto px-4 py-6 ${!isSidePanel ? 'max-w-[52rem]' : ''}`}>
+              {messages.length === 0 && !activeConversationId ? (
+                <WelcomeView 
+                  agentName={agentName} 
+                  onSuggest={(text) => handleSend(text)} 
+                />
+              ) : (
+                <div className="space-y-6">
+                  {messages.length === 0 && !thinking && (
+                    <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-base text-center">
+                      What can I help you with?
+                    </div>
+                  )}
+                  {messages.length > messageDisplayLimit && (
                 <div className="flex justify-center pb-2">
                   <Button variant="outline" size="sm" onClick={() => setMessageDisplayLimit(l => l + 100)} className="text-xs h-7">
                     Load earlier messages
@@ -443,8 +537,10 @@ export function ChatPanel({
                 </div>
               )}
             </div>
-            <ChatContainerScrollAnchor />
-          </ChatContainerContent>
+          )}
+        </div>
+        <ChatContainerScrollAnchor />
+      </ChatContainerContent>
         </ChatContainerRoot>
 
         {/* Suggested action buttons */}

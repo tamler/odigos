@@ -506,4 +506,20 @@ Build pipeline passing completely. No downstream regressions. Ready for manual r
 - Cleanup: Removed unused imports and variables across modified files.
 - Build verified: `tsc` and `vite build` passing.
 
+### 2026-03-21 (Gemini)
+- G37: Implemented `IntegrationsTab` for Telegram and Email configuration. Added support for bot tokens and SMTP/IMAP settings.
+- G38: Deployed Artifact Preview Panel. Features split-view layout, sandboxed HTML preview, Markdown rendering, and code source view.
+- Artifacts: Added auto-open logic to `ChatPanel` and "Preview" buttons to `ArtifactCard`.
+- UI: Refactored `AppLayout` to handle three-mode responsive layout (Standard, Cowork, Artifact Preview).
+- Build verified: Production build passing with new components.
+
+### 2026-03-22 (Gemini)
+- G40: Added Agent Profile Selector in General Settings. Users can now switch between specialized agent personalities (Researcher, Mentor, etc.) with real-time feedback.
+- G41: Performed consistency pass: ensured all icon buttons have `aria-label`, replaced direct `fetch` with API helpers in `SkillsTab`, and standardized loading states.
+- G42: Implemented Onboarding Flow. New users are now greeted by the agent with a `WelcomeView` and suggested starter prompts instead of an empty screen.
+- G43: Added "Export as Artifact" to the chat header. One-click conversion of full conversations into markdown artifacts.
+- G44: Verified and polished settings page mobile responsiveness (horizontal tab scroll, stacking form fields).
+- G45: Optimized performance via Route-level Code Splitting. Pages are now lazily loaded using `React.lazy` and `Suspense`.
+- Build verified: Production build optimized and passing.
+
 ---

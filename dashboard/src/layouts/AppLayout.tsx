@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Outlet, useNavigate, useSearchParams } from 'react-router-dom'
 import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
+import { ArtifactPreview } from '@/components/ArtifactPreview'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +38,8 @@ export default function AppLayout() {
   const [connected, setConnected] = useState(false)
   const [hasNewEmail, setHasNewEmail] = useState(false)
   const [chatPanelOpen, setChatPanelOpen] = useState(false)
+  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false)
+  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
   const [chatContext, setChatContext] = useState<Record<string, string> | undefined>(undefined)
   const editInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
@@ -379,38 +382,66 @@ export default function AppLayout() {
           />
         )}
 
-        {/* Main content */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden pt-[52px] lg:pt-0">
-          <ErrorBoundary>
-            <Outlet context={{
-              activeConversationId: activeId,
-              setActiveId,
-              refreshConversations: loadConversations,
-              socketRef,
-              connected,
-              hasNewEmail,
-              setHasNewEmail,
-              setChatPanelOpen,
-              setChatContext,
-            }} />
-          </ErrorBoundary>
-        </main>
-        
-        {/* Contextual Chat Panel */}
-        {chatPanelOpen && (
-          <aside className="fixed inset-0 z-50 lg:static lg:border-l lg:border-border/40 lg:w-[400px] lg:min-w-[400px] bg-background flex flex-col overflow-hidden">
-            <ChatPanel
-              activeConversationId={activeId}
-              setActiveId={setActiveId}
-              refreshConversations={loadConversations}
-              socketRef={socketRef}
-              connected={connected}
-              chatContext={chatContext}
-              isSidePanel={true}
-              onClose={() => setChatPanelOpen(false)}
-            />
-          </aside>
-        )}
+        {/* Main layout container */}
+        <div className="flex-1 flex overflow-hidden relative">
+          <main className={`flex-1 flex flex-col min-w-0 overflow-hidden pt-[52px] lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
+            <ErrorBoundary>
+              {artifactPanelOpen ? (
+                <ChatPanel
+                  activeConversationId={activeId}
+                  setActiveId={setActiveId}
+                  refreshConversations={loadConversations}
+                  socketRef={socketRef}
+                  connected={connected}
+                  chatContext={chatContext}
+                  isSidePanel={false}
+                />
+              ) : (
+                <Outlet context={{
+                  activeConversationId: activeId,
+                  setActiveId,
+                  refreshConversations: loadConversations,
+                  socketRef,
+                  connected,
+                  hasNewEmail,
+                  setHasNewEmail,
+                  setChatPanelOpen,
+                  artifactPanelOpen,
+                  setArtifactPanelOpen,
+                  activeArtifactId,
+                  setActiveArtifactId,
+                  setChatContext,
+                }} />
+              )}
+            </ErrorBoundary>
+          </main>
+          
+          {/* Contextual Chat Panel (Cowork mode) */}
+          {chatPanelOpen && !artifactPanelOpen && (
+            <aside className="fixed inset-0 z-50 lg:static lg:border-l lg:border-border/40 lg:w-[400px] lg:min-w-[400px] bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+              <ChatPanel
+                activeConversationId={activeId}
+                setActiveId={setActiveId}
+                refreshConversations={loadConversations}
+                socketRef={socketRef}
+                connected={connected}
+                chatContext={chatContext}
+                isSidePanel={true}
+                onClose={() => setChatPanelOpen(false)}
+              />
+            </aside>
+          )}
+
+          {/* Artifact Preview Panel */}
+          {artifactPanelOpen && activeArtifactId && (
+            <aside className="fixed inset-0 z-50 lg:static lg:flex-1 lg:min-w-0 bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+              <ArtifactPreview 
+                artifactId={activeArtifactId} 
+                onClose={() => setArtifactPanelOpen(false)} 
+              />
+            </aside>
+          )}
+        </div>
       </div>
     </TooltipProvider>
   )

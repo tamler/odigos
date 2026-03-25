@@ -10,6 +10,7 @@ import PromptsTab from './settings/PromptsTab'
 import DocumentsTab from './settings/DocumentsTab'
 import AnalyticsTab from './settings/AnalyticsTab'
 import MeshTab from './settings/MeshTab'
+import IntegrationsTab from './settings/IntegrationsTab'
 import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
 import InspectorTab from './StatePage'
@@ -24,6 +25,7 @@ const TABS = [
   { id: 'agents', label: 'Agents' },
   { id: 'plugins', label: 'Plugins' },
   { id: 'documents', label: 'Documents' },
+  { id: 'integrations', label: 'Integrations' },
   { id: 'analytics', label: 'Analytics' },
   { id: 'mesh', label: 'Mesh' },
   { id: 'connections', label: 'Connections' },
@@ -84,6 +86,7 @@ export default function SettingsPage() {
         {activeTab === 'agents' && <AgentsTab active={true} />}
         {activeTab === 'plugins' && <PluginsTab active={true} />}
         {activeTab === 'documents' && <DocumentsTab active={true} />}
+        {activeTab === 'integrations' && <IntegrationsTab active={true} />}
         {activeTab === 'analytics' && <AnalyticsTab />}
         {activeTab === 'mesh' && <MeshTab />}
         {activeTab === 'connections' && <ConnectionsTab active={true} />}

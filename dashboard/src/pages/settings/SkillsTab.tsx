@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { get, post, del } from '@/lib/api'
+import { get, post, del, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,25 +35,19 @@ function SkillCard({
   async function handleSave() {
     setSaving(true)
     try {
-      await fetch(`/api/skills/${skill.name}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          description,
-          system_prompt: systemPrompt,
-          tools: tools
-            .split(',')
-            .map((t) => t.trim())
-            .filter(Boolean),
-        }),
+      await put(`/api/skills/${skill.name}`, {
+        description,
+        system_prompt: systemPrompt,
+        tools: tools
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
       })
       toast.success(`Skill "${skill.name}" updated`)
       setEditing(false)
       onSaved()
     } catch {
-      toast.error('Failed to update skill')
+      toast.error(`Failed to update skill "${skill.name}"`)
     } finally {
       setSaving(false)
     }
@@ -203,7 +197,7 @@ export default function SkillsTab({ active }: { active?: boolean }) {
     load()
   }, [load])
 
-  useEffect(() => { if (active) load() }, [active])
+  useEffect(() => { if (active) load() }, [active, load])
 
   async function handleCreate() {
     if (!newName.trim() || !newPrompt.trim()) {

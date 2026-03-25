@@ -19,13 +19,19 @@ interface SettingsData {
   llm_api_key: string
   api_key: string
   llm: { base_url: string; default_model: string; fallback_model: string; background_model: string; max_tokens: number; temperature: number }
-  agent: { name: string; max_tool_turns: number; run_timeout_seconds: number }
+  agent: { name: string; profile?: string; max_tool_turns: number; run_timeout_seconds: number }
   budget: { daily_limit_usd: number; monthly_limit_usd: number; warn_threshold: number }
   heartbeat: { interval_seconds: number; max_todos_per_tick: number; idle_think_interval: number }
   sandbox: { timeout_seconds: number; max_memory_mb: number; allow_network: boolean }
   mesh: { enabled: boolean }
   feed: { enabled: boolean; public: boolean; max_entries: number }
   templates: { repo_url: string; cache_ttl_days: number }
+}
+
+interface Profile {
+  id: string
+  name: string
+  description: string
 }
 
 interface Props {
@@ -47,19 +53,38 @@ function SectionCard({ title, children }: { title: string; children: React.React
 
 export default function GeneralSettings({ active }: Props) {
   const [settings, setSettings] = useState<SettingsData | null>(null)
+  const [profiles, setProfiles] = useState<Profile[]>([])
   const [saving, setSaving] = useState(false)
+  const [applyingProfile, setApplyingProfile] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
   const { theme, setTheme } = useTheme()
 
   const loadSettings = useCallback(() => {
-    get<SettingsData>('/api/settings')
-      .then(setSettings)
-      .catch(() => {})
+    Promise.all([
+      get<SettingsData>('/api/settings'),
+      get<{ profiles: Profile[] }>('/api/profiles')
+    ]).then(([s, p]) => {
+      setSettings(s)
+      setProfiles(p.profiles)
+    }).catch(() => {})
   }, [])
 
   useEffect(() => { loadSettings() }, [loadSettings])
 
-  useEffect(() => { if (active) loadSettings() }, [active])
+  useEffect(() => { if (active) loadSettings() }, [active, loadSettings])
+
+  async function applyProfile(id: string) {
+    setApplyingProfile(id)
+    try {
+      await post(`/api/profiles/${id}`)
+      toast.success('Profile applied')
+      loadSettings()
+    } catch {
+      toast.error('Failed to apply profile')
+    } finally {
+      setApplyingProfile(null)
+    }
+  }
 
   function selectProvider(id: string) {
     const p = PROVIDERS.find((p) => p.id === id)
@@ -220,6 +245,40 @@ export default function GeneralSettings({ active }: Props) {
             <Label className="text-xs text-muted-foreground">Run Timeout (s)</Label>
             <Input type="number" value={settings.agent.run_timeout_seconds} onChange={(e) => update('agent', 'run_timeout_seconds', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
           </div>
+        </div>
+      </SectionCard>
+
+      {/* Profile Selector (G40) */}
+      <SectionCard title="Agent Profile">
+        <p className="text-sm text-muted-foreground mb-4">Select a specialized profile to adjust the agent's behavior and system prompt.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {profiles.map((p) => (
+            <div 
+              key={p.id} 
+              className={`p-4 rounded-lg border transition-all ${
+                settings.agent.profile === p.id 
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary' 
+                  : 'border-border/40 bg-muted/20 hover:border-border'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h3 className="font-semibold text-sm">{p.name}</h3>
+                {settings.agent.profile === p.id && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-primary text-primary-foreground px-1.5 py-0.5 rounded">Active</span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mb-4 leading-relaxed line-clamp-2">{p.description}</p>
+              <Button 
+                variant={settings.agent.profile === p.id ? "secondary" : "outline"} 
+                size="sm" 
+                className="w-full h-8 text-xs"
+                disabled={settings.agent.profile === p.id || applyingProfile !== null}
+                onClick={() => applyProfile(p.id)}
+              >
+                {applyingProfile === p.id ? 'Applying...' : settings.agent.profile === p.id ? 'Active' : 'Apply Profile'}
+              </Button>
+            </div>
+          ))}
         </div>
       </SectionCard>
 
