@@ -51,6 +51,17 @@ PROFILES = {
         },
         "skills": ["deep-research", "summarize-doc", "summarize-page", "journal"],
     },
+    "writer": {
+        "name": "Writer",
+        "description": "Creative writing, journaling, and content creation",
+        "config": {
+            "agent": {"role": "writer"},
+            "notebooks": {"enabled": True},
+            "kanban": {"enabled": True},
+            "access": {"supervised": False},
+        },
+        "skills": ["journal", "deep-research", "summarize-doc"],
+    },
     "sales": {
         "name": "Sales Agent",
         "description": "Public-facing agent for product inquiries and lead qualification",
