@@ -13,6 +13,15 @@ from odigos.core.resource_store import ResourceStore
 
 logger = logging.getLogger(__name__)
 
+
+async def _backup_board(db, board_id: str) -> None:
+    """Export board to disk after mutations."""
+    try:
+        from odigos.core.data_export import export_kanban_board
+        await export_kanban_board(db, board_id)
+    except Exception:
+        pass
+
 router = APIRouter(
     prefix="/api/kanban",
     tags=["kanban"],
@@ -116,6 +125,7 @@ async def create_board(body: CreateBoardRequest, db=Depends(get_db)):
     cols = _columns(db)
     for i, title in enumerate(_DEFAULT_COLUMNS):
         await cols.create(board_id=board_id, title=title, position=i)
+    await _backup_board(db, board_id)
     return await _boards(db).get(board_id)
 
 @router.get("/boards/{board_id}")
@@ -176,6 +186,7 @@ async def create_card(board_id: str, body: CreateCardRequest, db=Depends(get_db)
         description=body.description, position=position, priority=body.priority,
         due_at=body.due_at, metadata=body.metadata,
     )
+    await _backup_board(db, board_id)
     return await _cards(db).get(card_id)
 
 @router.patch("/boards/{board_id}/cards/{card_id}")
@@ -185,12 +196,14 @@ async def update_card(board_id: str, card_id: str, body: UpdateCardRequest, db=D
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
     await _cards(db).update(card_id, **fields)
+    await _backup_board(db, board_id)
     return await _cards(db).get(card_id)
 
 @router.delete("/boards/{board_id}/cards/{card_id}")
 async def delete_card(board_id: str, card_id: str, db=Depends(get_db)):
     await _get_card_or_404(db, board_id, card_id)
     await _cards(db).delete(card_id)
+    await _backup_board(db, board_id)
     return {"deleted": True}
 
 @router.post("/boards/{board_id}/cards/{card_id}/move")
@@ -198,6 +211,7 @@ async def move_card(board_id: str, card_id: str, body: MoveCardRequest, db=Depen
     await _get_card_or_404(db, board_id, card_id)
     await _get_column_or_404(db, board_id, body.column_id)
     await _cards(db).update(card_id, column_id=body.column_id, position=body.position)
+    await _backup_board(db, board_id)
     return await _cards(db).get(card_id)
 
 @router.patch("/boards/{board_id}/reorder")
@@ -214,4 +228,5 @@ async def reorder(board_id: str, body: ReorderRequest, db=Depends(get_db)):
             if item.column_id:
                 fields["column_id"] = item.column_id
             await _cards(db).update(item.id, **fields)
+    await _backup_board(db, board_id)
     return {"reordered": True}

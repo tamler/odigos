@@ -198,6 +198,13 @@ class Agent:
             (conversation_id,),
         )
 
+        # Disk backup -- export conversation to markdown file
+        try:
+            from odigos.core.data_export import export_conversation
+            await export_conversation(self.db, conversation_id)
+        except Exception:
+            pass
+
         return clean_content
 
     def _get_session_lock(self, conversation_id: str) -> asyncio.Lock:

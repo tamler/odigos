@@ -74,6 +74,12 @@ class RememberFactTool(BaseTool):
                 "VALUES (?, ?, ?, 'user_stated', 1.0, ?, ?)",
                 (fact_id, fact, category, now, now),
             )
+            # Backup user data to disk
+            try:
+                from odigos.core.data_export import export_user_data
+                await export_user_data(self.db)
+            except Exception:
+                pass
             return ToolResult(
                 success=True,
                 data=f"Remembered: {fact} [{category}]",
