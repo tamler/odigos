@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Send, Mail, CheckCircle2, Circle } from 'lucide-react'
+import { Send, Mail, CheckCircle2, Circle, Calendar as CalendarIcon } from 'lucide-react'
 
 interface IntegrationSettings {
   telegram_bot_token?: string
@@ -22,20 +22,29 @@ interface IntegrationSettings {
     username: string
     password?: string
   }
+  calendar: {
+    enabled: boolean
+    url: string
+    username: string
+    password?: string
+  }
 }
 
 export default function IntegrationsTab({ active: isActive }: { active?: boolean }) {
   const [settings, setSettings] = useState<IntegrationSettings | null>(null)
   const [telegramToken, setTelegramToken] = useState('')
   const [emailValues, setEmailValues] = useState<IntegrationSettings['email'] | null>(null)
+  const [calendarValues, setCalendarValues] = useState<IntegrationSettings['calendar'] | null>(null)
   const [savingTelegram, setSavingTelegram] = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
+  const [savingCalendar, setSavingCalendar] = useState(false)
 
   const load = useCallback(async () => {
     try {
       const data = await get<IntegrationSettings>('/api/settings')
       setSettings(data)
       setEmailValues(data.email)
+      setCalendarValues(data.calendar)
     } catch {
       toast.error('Failed to load integration settings')
     }
@@ -72,7 +81,21 @@ export default function IntegrationsTab({ active: isActive }: { active?: boolean
     }
   }
 
-  if (!settings || !emailValues) return null
+  async function saveCalendar() {
+    if (!calendarValues) return
+    setSavingCalendar(true)
+    try {
+      await post('/api/settings', { calendar: calendarValues })
+      toast.success('Calendar configuration saved.')
+      load()
+    } catch {
+      toast.error('Failed to save calendar settings')
+    } finally {
+      setSavingCalendar(false)
+    }
+  }
+
+  if (!settings || !emailValues || !calendarValues) return null
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-8">
@@ -224,6 +247,73 @@ export default function IntegrationsTab({ active: isActive }: { active?: boolean
           <div className="flex justify-end pt-2">
             <Button onClick={saveEmail} disabled={savingEmail}>
               {savingEmail ? 'Saving...' : 'Save Email Configuration'}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Calendar Integration (G46) */}
+      <section className="space-y-4 pb-12">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="h-5 w-5 text-orange-500" />
+            <h2 className="text-lg font-semibold">Calendar</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className={`h-8 ${calendarValues.enabled ? 'bg-primary/10 text-primary border-primary/20' : 'text-muted-foreground'}`}
+              onClick={() => setCalendarValues({ ...calendarValues, enabled: !calendarValues.enabled })}
+            >
+              {calendarValues.enabled ? 'Enabled' : 'Disabled'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border/40 bg-card p-4 space-y-4 shadow-sm">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="calendar-url">CalDAV URL</Label>
+              <Input
+                id="calendar-url"
+                placeholder="https://caldav.google.com/caldav/v2/your@gmail.com/events"
+                value={calendarValues.url}
+                onChange={(e) => setCalendarValues({ ...calendarValues, url: e.target.value })}
+              />
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Google: <code className="bg-muted px-1 rounded text-foreground font-mono">https://caldav.google.com/caldav/v2/your@gmail.com/events</code> (use an app password).<br />
+                Apple: <code className="bg-muted px-1 rounded text-foreground font-mono">https://caldav.icloud.com</code>. 
+                Nextcloud: your server URL + <code className="bg-muted px-1 rounded text-foreground font-mono">/remote.php/dav</code>
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="calendar-username">Username</Label>
+                <Input
+                  id="calendar-username"
+                  placeholder="Username / Email"
+                  value={calendarValues.username}
+                  onChange={(e) => setCalendarValues({ ...calendarValues, username: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="calendar-password">Password</Label>
+                <Input
+                  id="calendar-password"
+                  type="password"
+                  placeholder="Leave empty to keep current"
+                  value={calendarValues.password || ''}
+                  onChange={(e) => setCalendarValues({ ...calendarValues, password: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button onClick={saveCalendar} disabled={savingCalendar}>
+              {savingCalendar ? 'Saving...' : 'Save Calendar Configuration'}
             </Button>
           </div>
         </div>

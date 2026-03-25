@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from odigos.api.deps import get_db, require_auth
 
@@ -63,6 +64,38 @@ async def get_artifact_content(artifact_id: str, db=Depends(get_db)):
 
     content = file_path.read_text(encoding="utf-8")
     return {"content": content, "content_type": content_type, "filename": row["filename"]}
+
+
+class ArtifactUpdate(BaseModel):
+    content: str
+
+
+@router.put("/{artifact_id}/content")
+async def update_artifact_content(
+    artifact_id: str,
+    update: ArtifactUpdate,
+    db=Depends(get_db),
+):
+    """Update raw text content of an artifact."""
+    row = await db.fetch_one("SELECT * FROM artifacts WHERE id = ?", (artifact_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    file_path = ARTIFACTS_DIR / artifact_id / row["filename"]
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Artifact file missing from disk")
+
+    # Update file on disk
+    file_path.write_text(update.content, encoding="utf-8")
+
+    # Update file size in DB
+    new_size = file_path.stat().st_size
+    await db.execute(
+        "UPDATE artifacts SET file_size = ? WHERE id = ?",
+        (new_size, artifact_id),
+    )
+
+    return {"status": "updated", "file_size": new_size}
 
 
 @router.get("/{artifact_id}/download")

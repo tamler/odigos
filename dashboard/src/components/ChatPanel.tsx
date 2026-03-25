@@ -101,6 +101,7 @@ export function ChatPanel({
   const [queuedCount, setQueuedCount] = useState(0)
   const [agentName, setAgentName] = useState('Odigos')
   const [suggestedActions, setSuggestedActions] = useState<string[]>([])
+  const [showAllActions, setShowAllActions] = useState(false)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -547,7 +548,7 @@ export function ChatPanel({
         {suggestedActions.length > 0 && (
           <div className="px-4 pt-2">
             <div className={`w-full mx-auto flex flex-wrap gap-2 ${!isSidePanel ? 'max-w-[52rem]' : ''}`}>
-              {suggestedActions.map((action, i) => (
+              {(showAllActions ? suggestedActions : suggestedActions.slice(0, 5)).map((action, i) => (
                 <button
                   key={i}
                   onClick={() => {
@@ -556,11 +557,21 @@ export function ChatPanel({
                     setThinking(true)
                     socketRef.current?.send('chat', { content: action, conversation_id: activeConversationId || undefined })
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all border border-border/40 hover:border-primary/20 shadow-sm"
                 >
                   {action.length > 60 ? action.slice(0, 57) + '...' : action}
                 </button>
               ))}
+              
+              {suggestedActions.length > 5 && (
+                <button
+                  onClick={() => setShowAllActions(!showAllActions)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] text-muted-foreground hover:text-foreground transition-colors font-medium"
+                >
+                  {showAllActions ? 'Show less' : `+${suggestedActions.length - 5} more`}
+                </button>
+              )}
+
               <button
                 onClick={() => {
                   setSuggestedActions([])
@@ -569,7 +580,7 @@ export function ChatPanel({
                   setThinking(true)
                   socketRef.current?.send('chat', { content: allMsg, conversation_id: activeConversationId || undefined })
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-md font-semibold ml-auto"
               >
                 Do all
               </button>

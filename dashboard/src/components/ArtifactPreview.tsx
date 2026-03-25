@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { get } from '@/lib/api'
+import { get, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { X, ExternalLink, Download, Code, Eye, FileText } from 'lucide-react'
-import Markdown from 'react-markdown'
+import { X, ExternalLink, Download, Code, Eye, FileText, Save } from 'lucide-react'
 import { ArtifactCard } from './ArtifactCard'
+import { MarkdownEditor, CodeEditor } from './Editor'
 
   interface ArtifactContent {
     content: string
@@ -24,7 +24,10 @@ type PreviewTab = 'preview' | 'code' | 'download'
 export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   const [data, setData] = useState<ArtifactContent | null>(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<PreviewTab>('preview')
+  const [editContent, setEditContent] = useState('')
+  const [isDirty, setIsDirty] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -33,6 +36,8 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
       .then((res) => {
         if (mounted) {
           setData(res)
+          setEditContent(res.content)
+          setIsDirty(false)
           // Default to download tab if not previewable text
           const previewable = res.content_type.startsWith('text/') || 
                             res.content_type === 'application/json' ||
@@ -48,6 +53,26 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
       })
     return () => { mounted = false }
   }, [artifactId])
+
+  async function handleSave() {
+    if (!isDirty || saving) return
+    setSaving(true)
+    try {
+      await put(`/api/artifacts/${artifactId}/content`, { content: editContent })
+      toast.success('Artifact saved')
+      setIsDirty(false)
+      // Update local data size if possible or just rely on backend
+    } catch {
+      toast.error('Failed to save artifact')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleContentChange = (newContent: string) => {
+    setEditContent(newContent)
+    setIsDirty(true)
+  }
 
   if (loading) {
     return (
@@ -82,6 +107,18 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
         </div>
         
         <div className="flex items-center gap-1">
+          {isDirty && (
+            <Button 
+              variant="default" 
+              size="sm" 
+              className="h-8 gap-1.5 mr-2"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              <Save className="h-3.5 w-3.5" />
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          )}
           <Button 
             variant="ghost" 
             size="icon" 
@@ -132,33 +169,38 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
           <div className="h-full w-full">
             {isHtml ? (
               <iframe
-                srcDoc={data.content}
+                srcDoc={editContent}
                 sandbox="allow-scripts"
                 className="w-full h-full border-none bg-white"
                 title={data.filename}
               />
             ) : isMarkdown ? (
               <ScrollArea className="h-full">
-                <div className="p-8 max-w-3xl mx-auto prose prose-sm dark:prose-invert">
-                  <Markdown>{data.content}</Markdown>
-                </div>
+                <MarkdownEditor 
+                  content={editContent} 
+                  onChange={handleContentChange} 
+                />
               </ScrollArea>
             ) : (
               <ScrollArea className="h-full">
-                <pre className="p-6 text-sm font-mono whitespace-pre-wrap leading-relaxed">
-                  {data.content}
-                </pre>
+                <CodeEditor
+                  content={editContent}
+                  contentType={data.content_type}
+                  onChange={handleContentChange}
+                  onSave={handleSave}
+                />
               </ScrollArea>
             )}
           </div>
         )}
 
         {activeTab === 'code' && (
-          <ScrollArea className="h-full bg-zinc-950">
-            <pre className="p-6 text-xs sm:text-sm font-mono text-zinc-300 whitespace-pre leading-relaxed">
-              {data.content}
-            </pre>
-          </ScrollArea>
+          <CodeEditor
+            content={editContent}
+            contentType={data.content_type}
+            onChange={handleContentChange}
+            onSave={handleSave}
+          />
         )}
 
         {activeTab === 'download' && (

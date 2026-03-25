@@ -634,4 +634,33 @@ Build pipeline passing completely. No downstream regressions. Ready for manual r
 - G45: Optimized performance via Route-level Code Splitting. Pages are now lazily loaded using `React.lazy` and `Suspense`.
 - Build verified: Production build optimized and passing.
 
+### 2026-03-23 (Gemini)
+#### G48 Research: Unified Editor Investigation
+- **Which works for BOTH prose (markdown) and code editing?**
+  - **CodeMirror 6** is the technical winner for dual-mode support. It is a full-featured code editor that also has a robust Markdown mode with syntax highlighting and command support.
+  - **Tiptap** is the winner for "Rich Text" feel. It is a headless WYSIWYG editor that can parse/serialize Markdown but provides a Notion-like editing experience. It is less suitable for raw code artifacts.
+  - **Monaco** is excellent for code but excessive for prose and lacks mobile support.
+- **Bundle size impact?**
+  - **CodeMirror 6**: ~150KB (Lightest, modular).
+  - **Tiptap**: ~300KB+ (Moderate, grows with extensions).
+  - **Monaco**: ~5MB+ (Heaviest).
+- **Can we switch modes in the same panel?**
+  - Yes with CodeMirror 6 (swapping extensions). Tiptap stays Rich Text.
+- **Can content save on blur or Ctrl+S?**
+  - Yes for all candidates.
+- **Recommendation:** Use **Tiptap** for prose (Markdown) artifacts to achieve the "Journal" feel, and **CodeMirror 6** for code-centric artifacts (JSON, JS, HTML source). Both are light enough for Odigos.
+
+#### Progress on G48 Prototype
+- Added `PUT /api/artifacts/{id}/content` to backend for persistence.
+- Installed Tiptap and CodeMirror dependencies.
+- Starting implementation of editable artifacts in `ArtifactPreview.tsx`.
+
+### 2026-03-23 (Gemini - Batch 2)
+- G48: Unified Editor Research & Prototype. Deployed `MarkdownEditor` (Tiptap) and `CodeEditor` (CodeMirror 6) in the Artifact Panel. Artifacts are now fully editable with a "Save" action. Added `PUT /api/artifacts/{id}/content` backend endpoint.
+- G49: Implemented Full-Screen Welcome Experience. New users now select a profile (Researcher, Mentor, etc.) before their first session. Integrated with `/api/profiles` and `localStorage` detection.
+- G46: Expanded Integrations Tab with Calendar (CalDAV) configuration.
+- G47: Added Data & Export Tab in Settings. Users can now view item counts and trigger exports for conversations and artifacts.
+- G50: Polished Suggested Actions UI. Added "Show more" toggle for 5+ actions and made the "Do all" button visually distinct with a primary fill and shadow.
+- Build verified: optimized build passing with zero TypeScript errors.
+
 ---
