@@ -307,6 +307,7 @@ cd dashboard && npm run dev    # Dashboard dev server
 - User profiling and fact extraction inspired by [ChatGPT's memory architecture](https://manthanguptaa.in/posts/chatgpt_memory/) and [Honcho](https://github.com/plastic-labs/honcho)
 - Token efficiency tracking inspired by [jMunchWorkbench](https://github.com/jgravelle/jMunchWorkbench)
 - Evolution engine improvements informed by [VISTA](https://arxiv.org/abs/2603.18388) (parallel trials, decoupled hypothesis/rewrite, random restarts)
+- Strategist trial-pattern learning informed by [Self-Evolve](https://arxiv.org/abs/2603.18620) (learning to improve context from trial history)
 
 ## License
 
