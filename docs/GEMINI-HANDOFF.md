@@ -373,6 +373,111 @@ DO NOT use `sandbox="allow-same-origin"` — that would defeat the sandbox.
 
 ---
 
+### Task G39: Integrations Settings Tab (Telegram + Email)
+
+**Priority:** High (from earlier G37 spec, may not be built yet)
+
+Check if `dashboard/src/pages/settings/IntegrationsTab.tsx` exists. If not, build it per the G37 spec above. Telegram bot token input + email IMAP/SMTP config, both saving via `POST /api/settings`.
+
+---
+
+### Task G40: Profile Selector in Settings
+
+**Priority:** Medium
+
+The backend has a profiles API:
+- `GET /api/profiles` returns `{profiles: [{id, name, description}, ...]}`
+- `POST /api/profiles/{id}` applies a profile
+
+Add a "Profile" section to GeneralSettings (or a new tab) showing available profiles as cards. Each card shows name, description, and an "Apply" button. Current profile highlighted. Applying a profile shows a confirmation toast and refreshes settings.
+
+Profiles: personal, learner, mentor, researcher, sales.
+
+---
+
+### Task G41: Frontend Code Review + Consistency Pass
+
+**Priority:** Medium
+
+Review ALL pages and components for consistency issues. Things to check:
+- Are all pages using the same loading pattern? (Skeleton vs text vs nothing)
+- Are all forms using shadcn Input/Select/Button consistently? (No raw HTML inputs)
+- Are all icon buttons using `aria-label`?
+- Are error states handled consistently? (toast vs inline vs nothing)
+- Is the dark mode working properly on all pages?
+- Are all API calls using `get/post/patch/del` from `@/lib/api`?
+- Remove any dead imports, unused variables, console.logs
+
+Fix anything you find. This is a cleanup pass, not new features.
+
+---
+
+### Task G42: Onboarding Flow for New Users
+
+**Priority:** Medium
+
+When a user logs in for the first time (no conversations, no notebooks, no kanban boards), the chat page should show a helpful welcome experience instead of just "What can I help you with?"
+
+Show a brief intro with:
+- Agent name (from `/api/settings` → `agent.name`)
+- 3-4 suggested starting prompts as clickable chips (like suggested_actions but hardcoded):
+  - "What can you do?"
+  - "Start a journal"
+  - "Create a task board"
+  - "Research something for me"
+- A brief one-liner: "I'm your personal AI assistant. I learn and improve over time."
+
+Only show this when there are zero conversations. Once the user sends their first message, it disappears and never comes back.
+
+**Files:** Modify `dashboard/src/components/ChatPanel.tsx`
+
+---
+
+### Task G43: Conversation Export as Artifact
+
+**Priority:** Low
+
+When viewing a conversation, add a small export button (Download icon) in the chat header that creates an artifact from the full conversation. The backend already has `GET /api/conversations/{id}/export?format=markdown`. Fetch it, create an artifact via `POST`, and show the download card.
+
+This lets users save important conversations as documents.
+
+**Files:** Modify `dashboard/src/components/ChatPanel.tsx`
+
+---
+
+### Task G44: Settings Page Mobile Responsiveness
+
+**Priority:** Medium
+
+The settings page has many tabs. On mobile, the tab bar likely overflows or wraps badly. Check and fix:
+- Tab bar should scroll horizontally on mobile (overflow-x-auto)
+- Form fields should stack vertically on mobile
+- Save buttons should be full-width on mobile
+- Test each settings tab at 375px width
+
+**Files:** Modify `dashboard/src/pages/SettingsPage.tsx` and individual tab files
+
+---
+
+### Task G45: Loading Performance — Lazy Load Pages
+
+**Priority:** Low
+
+All pages are imported eagerly in App.tsx. Use React.lazy() + Suspense for route-level code splitting:
+
+```tsx
+const NotebookPage = React.lazy(() => import('./pages/NotebookPage'))
+const KanbanPage = React.lazy(() => import('./pages/KanbanPage'))
+const SettingsPage = React.lazy(() => import('./pages/SettingsPage'))
+const ArtifactsPage = React.lazy(() => import('./pages/ArtifactsPage'))
+```
+
+Wrap routes in `<Suspense fallback={<Loader />}>`. This reduces initial bundle size since most users land on chat first.
+
+**Files:** Modify `dashboard/src/App.tsx`
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
