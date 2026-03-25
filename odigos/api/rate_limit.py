@@ -48,8 +48,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return False
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Skip rate limiting for health checks
+        # Skip rate limiting for health checks and WebSocket upgrades
         if request.url.path == "/health":
+            return await call_next(request)
+        if request.headers.get("upgrade", "").lower() == "websocket":
             return await call_next(request)
 
         ip = self._get_client_ip(request)
