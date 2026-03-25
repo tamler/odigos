@@ -159,8 +159,11 @@ class AgentClient:
                 logger.warning("WebSocket send to %s failed, message queued", peer_name)
                 del self._ws_connections[peer_name]
 
-        # No WS connection — try HTTP fallback for localhost peers
-        if peer.netbird_ip:
+        # No WS connection — try HTTP fallback for content messages only
+        # System messages (announce, ping, pong) must NOT go through /api/message
+        # as that creates user conversations from system data
+        _SYSTEM_MSG_TYPES = {MSG_REGISTRY_ANNOUNCE, MSG_STATUS_PING, "status_pong"}
+        if peer.netbird_ip and message_type not in _SYSTEM_MSG_TYPES:
             try:
                 import httpx
                 port = peer.ws_port or 8001
