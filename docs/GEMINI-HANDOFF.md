@@ -478,6 +478,118 @@ Wrap routes in `<Suspense fallback={<Loader />}>`. This reduces initial bundle s
 
 ---
 
+### Task G46: Calendar Config in Integrations Tab
+
+**Priority:** High
+
+The backend now has CalDAV calendar support. Add it to IntegrationsTab.
+
+**Calendar section:**
+- "Connected" badge if `calendar.enabled` in settings
+- Fields: CalDAV URL, username, password (masked)
+- Save via `POST /api/settings` with `{calendar: {enabled: true, url: "...", username: "...", password: "..."}}`
+- Help text: "Google Calendar: `https://caldav.google.com/caldav/v2/your@gmail.com/events` with an app password. Apple: `https://caldav.icloud.com`. Nextcloud: your server URL + `/remote.php/dav`"
+
+**Files:** Modify `dashboard/src/pages/settings/IntegrationsTab.tsx`
+
+---
+
+### Task G47: Data Export Tab in Settings
+
+**Priority:** Medium
+
+New settings tab showing data counts with export options.
+
+Show:
+- Conversation count (from `GET /api/conversations?limit=1` — check total in response)
+- Notebook count (from `GET /api/notebooks`)
+- Artifact count (from `GET /api/artifacts`)
+- Board count (from `GET /api/kanban/boards`)
+
+Each section has an export/download link:
+- Conversations: link to `GET /api/conversations/{id}/export?format=markdown` for each
+- Notebooks: already backed up to `data/notebooks/` — show a note about this
+- Artifacts: link to individual downloads
+- Boards: no export endpoint yet — show "coming soon"
+
+Keep it simple. A table with counts and action links.
+
+**Files:** Create `dashboard/src/pages/settings/DataTab.tsx`, modify `SettingsPage.tsx`
+
+---
+
+### Task G48: Unified Editor Investigation + Prototype
+
+**Priority:** High (research + prototype)
+
+The artifact preview panel should become EDITABLE. Research and build a prototype.
+
+**Research these editor components (check their docs, try installing, report findings):**
+1. **Tiptap** (https://tiptap.dev) — Rich text editor, open source core, extensible
+2. **CodeMirror 6** (https://codemirror.net/6/) — Code editor, lightweight
+3. **Monaco** (from VS Code) — Full IDE editor, heavy
+
+**Answer these questions in the GEMINI-HANDOFF.md communication log:**
+- Which works for BOTH prose (markdown) and code editing?
+- Bundle size impact of each?
+- Can we switch modes in the same panel?
+- Can content save on blur or Ctrl+S?
+
+**Then prototype with your recommendation:**
+- For markdown artifacts: replace the read-only Markdown view with an editable Tiptap (or winner)
+- Add a "Save" button that PUTs content back (we need `PUT /api/artifacts/{id}/content` — ask Claude to build it, or create a mock for now)
+- Keep iframe preview read-only for HTML
+- For code: add a CodeMirror instance with syntax highlighting + editing
+
+Start small. Get ONE artifact type editable (markdown is easiest). Report what worked and what didn't.
+
+**Install candidates:**
+```bash
+npm install @tiptap/react @tiptap/starter-kit @tiptap/extension-placeholder
+npm install @codemirror/view @codemirror/state @codemirror/lang-markdown
+```
+
+**Files:** Modify `dashboard/src/components/ArtifactPreview.tsx`, possibly create `dashboard/src/components/Editor.tsx`
+
+---
+
+### Task G49: Welcome Screen with Profile Selection
+
+**Priority:** Medium
+
+First-time users should pick a profile before landing in chat.
+
+**Flow:**
+1. User logs in for the first time (zero conversations)
+2. Full-screen welcome: "Welcome to Odigos. How will you use your agent?"
+3. Profile cards from `GET /api/profiles` (returns `{profiles: [{id, name, description}]}`)
+4. User clicks a card → `POST /api/profiles/{id}` applies it → navigate to chat
+5. Chat shows the G42 onboarding prompts
+
+Only show once. After first profile selection, go straight to chat on future logins.
+
+Detection: check conversation count. If zero AND no profile has been applied (check localStorage flag `profile-selected`), show welcome. After applying, set `localStorage.setItem('profile-selected', 'true')`.
+
+**Profiles available:** personal, learner, mentor, researcher, writer, sales
+
+**Files:** Create `dashboard/src/components/WelcomeScreen.tsx`, modify `dashboard/src/App.tsx`
+
+---
+
+### Task G50: Suggested Actions Styling + "Do All" Behavior
+
+**Priority:** Low
+
+Review the suggested_actions buttons rendering in ChatPanel. Ensure:
+- Buttons wrap nicely on mobile (flex-wrap is set but verify at 375px)
+- "Do all" button is visually distinct (filled vs outline)
+- Buttons disappear on scroll/new message (already implemented, verify)
+- If more than 5 actions, only show first 5 with a "Show more" toggle
+
+**Files:** Review `dashboard/src/components/ChatPanel.tsx`
+
+---
+
 ## Communication Log
 
 ### 2026-03-19 (Claude)
