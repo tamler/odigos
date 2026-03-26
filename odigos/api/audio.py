@@ -64,7 +64,7 @@ async def ws_transcribe(websocket: WebSocket):
     try:
         while True:
             try:
-                chunk = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
+                chunk = await asyncio.wait_for(websocket.receive_bytes(), timeout=2.0)
                 audio_data.extend(chunk)
             except asyncio.TimeoutError:
                 break  # No more audio, transcribe what we have

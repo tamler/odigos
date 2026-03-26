@@ -240,10 +240,18 @@ export function ChatPanel({
           const data = JSON.parse(event.data)
           if (data.text) {
             setInputValue((prev: string) => prev + (prev ? ' ' : '') + data.text)
+            toast.success('Transcribed')
+          } else if (data.error) {
+            toast.error(`Transcription: ${data.error}`)
           }
         } catch {
           // ignore non-JSON frames
         }
+      }
+
+      ws.onclose = () => {
+        audioWsRef.current = null
+        setRecording(false)
       }
 
       ws.onopen = () => {
@@ -257,7 +265,7 @@ export function ChatPanel({
       }
 
       ws.onerror = () => {
-        toast.error('Audio WebSocket error')
+        toast.error('Audio connection error')
         stopRecording()
       }
     } catch {
@@ -271,12 +279,12 @@ export function ChatPanel({
       mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop())
     }
     mediaRecorderRef.current = null
-
+    // Don't close the WebSocket — backend needs to receive the timeout,
+    // transcribe, send the response, then close from its side.
+    // The ws.onclose handler will clean up audioWsRef and setRecording(false).
     if (audioWsRef.current) {
-      audioWsRef.current.close()
-      audioWsRef.current = null
+      toast.info('Transcribing...')
     }
-    setRecording(false)
   }, [])
 
   const [isTTSPlaying, setIsTTSPlaying] = useState(false)
