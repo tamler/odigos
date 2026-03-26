@@ -29,6 +29,7 @@ import {
   Eye
 } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
+import { FloatingBubble } from '@/components/FloatingBubble'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
@@ -45,6 +46,10 @@ import {
 import { get, patch, del } from '@/lib/api'
 import { ChatSocket } from '@/lib/ws'
 import { toast } from 'sonner'
+import { executeActions, UIAction } from '@/lib/actions'
+import { PageContext } from '@/hooks/usePageContext'
+import { useTheme } from 'next-themes'
+import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
 
 interface Conversation {
   id: string
@@ -74,6 +79,23 @@ const SETTINGS_SECTIONS = [
   { id: 'inspector', label: 'Inspector', icon: Eye },
 ]
 
+export interface AssistantConfig {
+  enabled: boolean
+  show_transcript: boolean
+  text_input: boolean
+  voice_input: boolean
+  auto_read: boolean
+  position: 'bottom-right' | 'bottom-left'
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string
+  attachments?: { id: string; filename: string; size: number }[]
+  actions?: UIAction[]
+}
+
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -81,6 +103,12 @@ export default function AppLayout() {
   const [searchQuery, setSearchQuery] = useState('')
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [streamingContent, setStreamingContent] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const [queuedCount, setQueuedCount] = useState(0)
+  const [suggestedActions, setSuggestedActions] = useState<string[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [connected, setConnected] = useState(false)
@@ -88,6 +116,15 @@ export default function AppLayout() {
   const [chatPanelOpen, setChatPanelOpen] = useState(false)
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
+  const [pageContextData, setPageContextData] = useState<Partial<PageContext>>({})
+  const [assistantConfig, setAssistantConfig] = useState<AssistantConfig>({
+    enabled: false,
+    show_transcript: true,
+    text_input: true,
+    voice_input: true,
+    auto_read: false,
+    position: 'bottom-right'
+  })
   const [chatContext, setChatContext] = useState<Record<string, string> | undefined>(undefined)
   const editInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
@@ -95,7 +132,33 @@ export default function AppLayout() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const [agentName, setAgentName] = useState('Odigos')
+  const { setTheme } = useTheme()
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const pendingTitles = useRef<Record<string, string>>({})
+
+  const playTTS = useCallback(async (text: string) => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause()
+      currentAudioRef.current.src = ''
+      currentAudioRef.current = null
+    }
+    if (!text) return
+    try {
+      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`, {
+        credentials: 'include',
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      currentAudioRef.current = audio
+      audio.onended = () => {
+        URL.revokeObjectURL(url)
+        currentAudioRef.current = null
+      }
+      audio.play()
+    } catch {}
+  }, [])
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024)
@@ -137,7 +200,10 @@ export default function AppLayout() {
 
   useEffect(() => {
     get<any>('/api/settings')
-      .then(s => setAgentName(s.agent?.name || 'Odigos'))
+      .then(s => {
+        setAgentName(s.agent?.name || 'Odigos')
+        if (s.assistant) setAssistantConfig(s.assistant)
+      })
       .catch(() => {})
   }, [])
 
@@ -151,6 +217,17 @@ export default function AppLayout() {
       })
       .catch(() => {})
   }, [])
+
+  const loadMessages = useCallback((cid: string) => {
+    get<{ messages: ChatMessage[] }>(`/api/conversations/${cid}/messages`)
+      .then((data) => setMessages(data.messages))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (activeId) loadMessages(activeId)
+    else setMessages([])
+  }, [activeId, loadMessages])
 
   // Persistent WebSocket — lives at layout level, survives page navigation
   useEffect(() => {
@@ -174,6 +251,63 @@ export default function AppLayout() {
           } else {
             toast.info(label)
           }
+        }
+        if (msg.type === 'status') {
+          setStatus(msg.text as string)
+        }
+        if (msg.type === 'chat_chunk') {
+          if (msg.conversation_id && activeId && msg.conversation_id !== activeId) {
+            return 
+          }
+          setThinking(false)
+          setStatus(null)
+          setStreamingContent((prev) => prev + (msg.content as string))
+        }
+        if (msg.type === 'chat_response') {
+          if (msg.conversation_id && activeId && msg.conversation_id !== activeId) {
+            return 
+          }
+          setThinking(false)
+          setStatus(null)
+          setStreamingContent('')
+          const content = msg.content as string
+          setMessages((prev) => [...prev, {
+            role: 'assistant',
+            content,
+            timestamp: new Date().toISOString(),
+          }])
+
+          // Auto-read if enabled (G-V4)
+          if (assistantConfig.auto_read && shouldPlayTTS(content)) {
+            playTTS(stripForTTS(content))
+          }
+
+          // Handle UI Actions (G-B4)
+          if (Array.isArray(msg.actions) && msg.actions.length > 0) {
+            executeActions(msg.actions as UIAction[], navigate, {
+              refresh: () => window.location.reload(),
+              openChat: () => setChatPanelOpen(true),
+              setTheme: (t) => setTheme(t),
+            })
+          }
+        }
+        if (msg.type === 'stream_end') {
+          setThinking(false)
+          setStatus(null)
+        }
+        if (msg.type === 'queue_update') {
+          const queued = msg.queued as number
+          setQueuedCount(queued)
+          if (queued === 0) setThinking(false)
+        }
+        if (msg.type === 'message_queued') {
+          setStatus(`Queued (${msg.queued as number} pending)`)
+        }
+        if (msg.type === 'queue_full') {
+          toast.warning('Message queue is full. Please wait.')
+        }
+        if (msg.type === 'suggested_actions' && msg.actions) {
+          setSuggestedActions(msg.actions as string[])
         }
         if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
           const cid = msg.conversation_id as string
@@ -268,7 +402,7 @@ export default function AppLayout() {
     }
   }
 
-  function handleExport(id: string, format: 'markdown' | 'json') {
+  const handleExport = (id: string, format: 'markdown' | 'json') => {
     const url = `/api/conversations/${id}/export?format=${format}`
     fetch(url)
       .then((res) => {
@@ -287,6 +421,21 @@ export default function AppLayout() {
       .catch(() => toast.error('Failed to export conversation'))
   }
 
+  const handleBubbleSend = useCallback((content: string, context?: Record<string, any>) => {
+    if (!content.trim()) return
+    setMessages((prev) => [...prev, {
+      role: 'user',
+      content,
+      timestamp: new Date().toISOString(),
+    }])
+    setThinking(true)
+    socketRef.current?.send('chat', {
+      content,
+      conversation_id: activeId || undefined,
+      context: { ...context, ...chatContext },
+    })
+  }, [activeId, chatContext])
+
   function displayTitle(c: Conversation): string {
     if (c.title) return c.title
     const raw = c.last_message_at || c.started_at
@@ -301,6 +450,7 @@ export default function AppLayout() {
   )
 
   const isSettings = location.pathname.startsWith('/settings')
+  const isChat = location.pathname === '/' || searchParams.has('c')
   const currentTab = location.pathname.split('/')[2] || 'general'
 
   return (
@@ -513,6 +663,20 @@ export default function AppLayout() {
                   setActiveArtifactId,
                   setChatContext,
                   isMobile,
+                  setPageContextData,
+                  messages,
+                  setMessages,
+                  streamingContent,
+                  setStreamingContent,
+                  thinking,
+                  setThinking,
+                  status,
+                  setStatus,
+                  queuedCount,
+                  setQueuedCount,
+                  suggestedActions,
+                  setSuggestedActions,
+                  playTTS,
                 }} />
               )}
             </ErrorBoundary>
@@ -562,6 +726,23 @@ export default function AppLayout() {
             </>
           )}
         </div>
+
+        {/* Floating Assistant Bubble (G-B1) */}
+        {!isChat && !chatPanelOpen && assistantConfig.enabled && (
+          <FloatingBubble
+            socketRef={socketRef}
+            connected={connected}
+            activeConversationId={activeId}
+            messages={messages}
+            onSend={handleBubbleSend}
+            pageContext={{ page: location.pathname.split('/')[1] || 'home', ...pageContextData }}
+            assistantConfig={assistantConfig}
+            agentName={agentName}
+            ttsAvailable={assistantConfig.enabled} 
+            sttAvailable={connected}
+            playTTS={playTTS}
+          />
+        )}
       </div>
     </TooltipProvider>
   )

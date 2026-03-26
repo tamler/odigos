@@ -57,6 +57,7 @@ export default function GeneralSettings({ active }: Props) {
   const [saving, setSaving] = useState(false)
   const [applyingProfile, setApplyingProfile] = useState<string | null>(null)
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
+  const [chatTextSize, setChatTextSize] = useState(() => localStorage.getItem('chat-text-size') || 'medium')
   const { theme, setTheme } = useTheme()
 
   const loadSettings = useCallback(() => {
@@ -158,17 +159,16 @@ export default function GeneralSettings({ active }: Props) {
           ].map(({ value, label }) => (
             <Button
               key={value}
-              variant={(localStorage.getItem('chat-text-size') || 'medium') === value ? 'default' : 'outline'}
+              variant={chatTextSize === value ? 'default' : 'outline'}
               size="sm"
               onClick={() => {
                 localStorage.setItem('chat-text-size', value)
+                setChatTextSize(value)
                 if (value === 'medium') {
                   document.body.removeAttribute('data-chat-size')
                 } else {
                   document.body.setAttribute('data-chat-size', value)
                 }
-                // Force re-render
-                window.dispatchEvent(new Event('storage'))
               }}
             >
               {label}

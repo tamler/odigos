@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import GeneralSettings from './settings/GeneralSettings'
 import AccountTab from './settings/AccountTab'
@@ -10,6 +11,7 @@ import DocumentsTab from './settings/DocumentsTab'
 import AnalyticsTab from './settings/AnalyticsTab'
 import MeshTab from './settings/MeshTab'
 import IntegrationsTab from './settings/IntegrationsTab'
+import AssistantTab from './settings/AssistantTab'
 import VoiceTab from './settings/VoiceTab'
 import DataTab from './settings/DataTab'
 import ConnectionsTab from './ConnectionsPage'
@@ -32,7 +34,8 @@ import {
   Link as LinkIcon, 
   Rss, 
   Eye,
-  ChevronRight
+  ChevronRight,
+  MessageCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -47,6 +50,7 @@ const SECTIONS = [
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'documents', label: 'Documents', icon: FileText },
   { id: 'integrations', label: 'Integrations', icon: Zap },
+  { id: 'assistant', label: 'Assistant', icon: MessageCircle },
   { id: 'mesh', label: 'Mesh', icon: Network },
   { id: 'data', label: 'Data', icon: Database },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
@@ -58,9 +62,19 @@ const SECTIONS = [
 
 export default function SettingsPage() {
   const { tab } = useParams<{ tab?: string }>()
-  const { isMobile } = useOutletContext<any>()
+  const { isMobile, setPageContextData } = useOutletContext<any>()
   const navigate = useNavigate()
   const activeTab = tab || (isMobile ? null : 'general')
+
+  useEffect(() => {
+    if (activeTab) {
+      setPageContextData({
+        page_id: activeTab,
+        page_title: `Settings > ${SECTIONS.find(s => s.id === activeTab)?.label || activeTab}`,
+      })
+    }
+    return () => setPageContextData({})
+  }, [activeTab, setPageContextData])
 
   if (isMobile && !activeTab) {
     return (
@@ -113,6 +127,7 @@ export default function SettingsPage() {
         {resolvedTab === 'plugins' && <PluginsTab active={true} />}
         {resolvedTab === 'documents' && <DocumentsTab active={true} />}
         {resolvedTab === 'integrations' && <IntegrationsTab active={true} />}
+        {resolvedTab === 'assistant' && <AssistantTab active={true} />}
         {resolvedTab === 'voice' && <VoiceTab active={true} />}
         {resolvedTab === 'data' && <DataTab active={true} />}
         {resolvedTab === 'analytics' && <AnalyticsTab />}

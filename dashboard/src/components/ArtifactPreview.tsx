@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import { get, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,7 @@ interface ArtifactPreviewProps {
 type PreviewTab = 'preview' | 'code' | 'download'
 
 export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
+  const { setPageContextData } = useOutletContext<any>()
   const [data, setData] = useState<ArtifactContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -40,6 +42,17 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   const [editContent, setEditContent] = useState('')
   const [isDirty, setIsDirty] = useState(false)
   const [exporting, setExporting] = useState(false)
+
+  useEffect(() => {
+    if (data) {
+      setPageContextData({
+        page_id: artifactId,
+        page_title: data.filename,
+        visible_data: `Type: ${data.content_type}, Size: ${data.file_size} bytes`
+      })
+    }
+    return () => setPageContextData({})
+  }, [data, artifactId, setPageContextData])
 
   useEffect(() => {
     let mounted = true

@@ -92,7 +92,7 @@ function BoardDetailInner({ boardId, board, setBoard }: {
   setBoard: React.Dispatch<React.SetStateAction<BoardDetail | null>>
 }) {
   const navigate = useNavigate()
-  const { setChatPanelOpen, setChatContext, isMobile } = useOutletContext<any>()
+  const { setChatPanelOpen, setChatContext, isMobile, setPageContextData } = useOutletContext<any>()
   const [newCardTexts, setNewCardTexts] = useState<Record<string, string>>({})
   const [newColumnTitle, setNewColumnTitle] = useState('')
   const [addingColumn, setAddingColumn] = useState(false)
@@ -224,6 +224,17 @@ function BoardDetailInner({ boardId, board, setBoard }: {
       toast.error('Failed to delete column')
     }
   }
+
+  useEffect(() => {
+    if (board) {
+      setPageContextData({
+        page_id: boardId,
+        page_title: board.title,
+        visible_data: `Columns: ${board.columns.map(c => `${c.title}`).join(', ')}. Cards: ${board.cards.length}`
+      })
+    }
+    return () => setPageContextData({})
+  }, [board, boardId, setPageContextData])
 
   const sortedColumns = [...board.columns].sort((a, b) => a.position - b.position)
 

@@ -21,7 +21,7 @@ import {
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
 import { Artifact, ArtifactCard, getFileIcon } from '@/components/ArtifactCard'
 import { MessageActions } from '@/components/MessageActions'
-import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
+import { VoiceOrb, VoiceState } from '@/components/VoiceOrb'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -79,15 +79,13 @@ function WelcomeView({ agentName, onSuggest }: { agentName: string; onSuggest: (
 
 export function ChatPanel({
   activeConversationId,
-  setActiveId,
-  refreshConversations,
   socketRef,
   connected,
   chatContext,
   isSidePanel = false,
   onClose,
 }: ChatPanelProps) {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { 
     hasNewEmail, 
@@ -95,14 +93,20 @@ export function ChatPanel({
     artifactPanelOpen, 
     setArtifactPanelOpen, 
     setActiveArtifactId,
-    isMobile
+    isMobile,
+    messages,
+    setMessages,
+    streamingContent,
+    thinking,
+    setThinking,
+    status,
+    setStatus,
+    queuedCount,
+    suggestedActions,
+    setSuggestedActions,
   } = useOutletContext<any>()
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
-  const [streamingContent, setStreamingContent] = useState('')
-  const [thinking, setThinking] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean; progress?: number }[]>([])
   const [recording, setRecording] = useState(false)
@@ -112,12 +116,15 @@ export function ChatPanel({
   const [autoRead, setAutoRead] = useState(() =>
     localStorage.getItem('odigos-auto-read') === 'true'
   )
+  const autoReadRef = useRef(autoRead)
+  useEffect(() => { autoReadRef.current = autoRead }, [autoRead])
   const [conciseMode, setConciseMode] = useState(false)
-  const [queuedCount, setQueuedCount] = useState(0)
   const [agentName, setAgentName] = useState('Odigos')
-  const [suggestedActions, setSuggestedActions] = useState<string[]>([])
   const [showAllActions, setShowAllActions] = useState(false)
   const [useCamera, setUseCamera] = useState<boolean | 'environment'>(false)
+  const [voiceMode, setVoiceMode] = useState(false)
+  const [voiceOrbState, setVoiceOrbState] = useState<VoiceState>('idle')
+  const [amplitude] = useState(0)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -126,75 +133,18 @@ export function ChatPanel({
 
   // Wire up message handler on the shared socket
   useEffect(() => {
-    const socket = socketRef.current
-    if (!socket) return
+    // socket.onMessage is now handled globally in AppLayout.tsx
+    // to keep messages in sync across chat and floating bubble.
+  }, [])
 
-    socket.onMessage = (msg) => {
-      if (msg.type === 'status') {
-        setStatus(msg.text as string)
-      }
-      if (msg.type === 'chat_chunk') {
-        if (msg.conversation_id && loadedConvRef.current && msg.conversation_id !== loadedConvRef.current) {
-          return // Ignore chunks for inactive conversations
-        }
-        setIsStreaming(true)
-        setThinking(false)
-        setStatus(null)
-        setStreamingContent((prev) => prev + (msg.content as string))
-      }
-      if (msg.type === 'chat_response') {
-        if (msg.conversation_id && loadedConvRef.current && msg.conversation_id !== loadedConvRef.current) {
-          return // Ignore responses for inactive conversations
-        }
-        setIsStreaming(false)
-        setThinking(false)
-        setStatus(null)
-        setStreamingContent('')
-        const content = msg.content as string
-        setMessages((prev) => [...prev, {
-          role: 'assistant',
-          content,
-          timestamp: new Date().toISOString(),
-        }])
-
-        // Auto-read if enabled (G-V4)
-        if (autoRead && ttsAvailable && shouldPlayTTS(content)) {
-          playTTS(stripForTTS(content))
-        }
-      }
-      if (msg.type === 'stream_end') {
-        setIsStreaming(false)
-        setThinking(false)
-        setStatus(null)
-      }
-      if (msg.type === 'conversation_started' && msg.conversation_id) {
-        const cid = msg.conversation_id as string
-        setActiveId(cid)
-        setSearchParams({ c: cid })
-        refreshConversations()
-      }
-      if (msg.type === 'queue_update') {
-        const queued = msg.queued as number
-        setQueuedCount(queued)
-        if (queued === 0) {
-          setThinking(false)
-        }
-      }
-      if (msg.type === 'message_queued') {
-        setStatus(`Queued (${msg.queued as number} pending)`)
-      }
-      if (msg.type === 'queue_full') {
-        toast.warning('Message queue is full. Please wait.')
-      }
-      if (msg.type === 'suggested_actions' && msg.actions) {
-        setSuggestedActions(msg.actions as string[])
-      }
-    }
-
-    return () => {
-      socket.onMessage = null
-    }
-  }, [socketRef, setActiveId, setSearchParams, refreshConversations])
+  // Sync voice orb state with agent status (G-B6)
+  useEffect(() => {
+    if (!voiceMode) return
+    if (thinking) setVoiceOrbState('thinking')
+    else if (isStreaming) setVoiceOrbState('speaking')
+    else if (recording) setVoiceOrbState('listening')
+    else setVoiceOrbState('idle')
+  }, [voiceMode, thinking, isStreaming, recording])
 
   // Auto-open new artifacts (G38)
   const prevArtifactsCount = useRef(0)
@@ -376,7 +326,7 @@ export function ChatPanel({
       conversation_id: activeConversationId,
     })
     // Truncate local messages state to match
-    setMessages(prev => prev.slice(0, messageIndex))
+    setMessages((prev: ChatMessage[]) => prev.slice(0, messageIndex))
   }, [activeConversationId, socketRef])
 
   const toggleConciseMode = useCallback(async () => {
@@ -447,7 +397,7 @@ export function ChatPanel({
       .filter((p) => p.id)
       .map((p) => ({ id: p.id!, filename: p.file.name, size: p.file.size }))
 
-    setMessages((prev) => [...prev, {
+    setMessages((prev: ChatMessage[]) => [...prev, {
       role: 'user',
       content,
       timestamp: new Date().toISOString(),
@@ -585,109 +535,137 @@ export function ChatPanel({
                   onSuggest={(text) => handleSend(text)} 
                 />
               ) : (
-                <div className="space-y-6">
-                  {messages.length === 0 && !thinking && (
-                    <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-base text-center">
-                      What can I help you with?
+                <div className="flex-1 flex flex-col h-full min-h-0">
+                  {voiceMode ? (
+                    <div className="flex-1 flex flex-col h-full">
+                      {/* Compact transcript above orb */}
+                      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 opacity-40 hover:opacity-100 transition-opacity">
+                         {messages.slice(-5).map((msg: ChatMessage, i: number) => (
+                           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                             <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-xs ${msg.role === 'user' ? 'bg-primary/20' : 'bg-muted/40'}`}>
+                               {msg.content}
+                             </div>
+                           </div>
+                         ))}
+                      </div>
+                      <VoiceOrb 
+                        state={voiceOrbState} 
+                        amplitude={amplitude}
+                        onExit={() => setVoiceMode(false)}
+                        onToggleMic={() => recording ? stopRecording() : startRecording()}
+                      />
                     </div>
-                  )}
-                  {messages.length > messageDisplayLimit && (
-                <div className="flex justify-center pb-2">
-                  <Button variant="outline" size="sm" onClick={() => setMessageDisplayLimit(l => l + 100)} className="text-xs h-7">
-                    Load earlier messages
-                  </Button>
-                </div>
-              )}
-              {(() => {
-                const offset = Math.max(0, messages.length - messageDisplayLimit)
-                return messages.slice(-messageDisplayLimit).map((msg, i) => {
-                  const actualIndex = offset + i
-                  return (
-                    <div key={i}>
-                      {msg.role === 'user' ? (
-                        <div className="group/msg flex flex-col items-end">
-                          <div className="max-w-[90%] sm:max-w-[85%]">
-                            <div className="rounded-2xl sm:rounded-3xl bg-muted/60 px-3 py-2 sm:px-5 sm:py-3 shadow-sm border border-border/20">
-                              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed break-words overflow-hidden">{msg.content}</div>
+                  ) : (
+                    <div className="space-y-6">
+                      {messages.length === 0 && !thinking && (
+                        <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-base text-center">
+                          What can I help you with?
+                        </div>
+                      )}
+                      
+                      {messages.length > messageDisplayLimit && (
+                        <div className="flex justify-center pb-2">
+                          <Button variant="outline" size="sm" onClick={() => setMessageDisplayLimit(l => l + 100)} className="text-xs h-7">
+                            Load earlier messages
+                          </Button>
+                        </div>
+                      )}
+
+                      {(() => {
+                        const offset = Math.max(0, messages.length - messageDisplayLimit)
+                        return messages.slice(-messageDisplayLimit).map((msg: ChatMessage, i: number) => {
+                          const actualIndex = offset + i
+                          return (
+                            <div key={i}>
+                              {msg.role === 'user' ? (
+                                <div className="group/msg flex flex-col items-end">
+                                  <div className="max-w-[90%] sm:max-w-[85%]">
+                                    <div className="rounded-2xl sm:rounded-3xl bg-muted/60 px-3 py-2 sm:px-5 sm:py-3 shadow-sm border border-border/20">
+                                      <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed break-words overflow-hidden">{msg.content}</div>
+                                    </div>
+                                    <MessageActions
+                                      role="user"
+                                      content={msg.content}
+                                      messageIndex={actualIndex}
+                                      conversationId={activeConversationId || ''}
+                                      isStreaming={isStreaming}
+                                      ttsAvailable={ttsAvailable}
+                                      socket={socketRef.current}
+                                      onEdit={handleEdit}
+                                      playTTS={(text) => playTTS(text)}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="group/msg w-full overflow-hidden mb-4">
+                                  <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
+                                    <Markdown>{msg.content}</Markdown>
+                                  </div>
+                                  <MessageActions
+                                    role="assistant"
+                                    content={msg.content}
+                                    messageIndex={actualIndex}
+                                    conversationId={activeConversationId || ''}
+                                    previousUserMessage={getPreviousUserMessage(actualIndex)}
+                                    isStreaming={isStreaming}
+                                    ttsAvailable={ttsAvailable}
+                                    socket={socketRef.current}
+                                    onEdit={() => {}}
+                                    playTTS={(text) => playTTS(text)}
+                                  />
+                                </div>
+                              )}
                             </div>
-                            <MessageActions
-                              role="user"
-                              content={msg.content}
-                              messageIndex={actualIndex}
-                              conversationId={activeConversationId || ''}
-                              isStreaming={isStreaming}
-                              ttsAvailable={ttsAvailable}
-                              socket={socketRef.current}
-                              onEdit={handleEdit}
-                              playTTS={(text) => playTTS(text)}
-                            />
+                          )
+                        })
+                      })()}
+
+                      {streamingContent && (
+                        <div className="group/msg w-full overflow-hidden">
+                          <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
+                            <Markdown>{streamingContent}</Markdown>
                           </div>
                         </div>
-                      ) : (
-                        <div className="group/msg w-full overflow-hidden mb-4">
-                          <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
-                            <Markdown>{msg.content}</Markdown>
+                      )}
+
+                      {thinking && (
+                        <div className="flex items-center gap-2">
+                          <Loader variant="typing" />
+                          <span className="text-xs text-muted-foreground animate-pulse">
+                            {status || 'Thinking...'}
+                          </span>
+                        </div>
+                      )}
+
+                      {artifacts.length > 0 && (
+                        <div className="pt-4 mt-6 border-t border-border/40">
+                          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Generated Artifacts</h3>
+                          <div className="flex flex-wrap gap-3">
+                            {artifacts.map(a => (
+                              <ArtifactCard key={a.id} artifact={a} />
+                            ))}
                           </div>
-                          <MessageActions
-                            role="assistant"
-                            content={msg.content}
-                            messageIndex={actualIndex}
-                            conversationId={activeConversationId || ''}
-                            previousUserMessage={getPreviousUserMessage(actualIndex)}
-                            isStreaming={isStreaming}
-                            ttsAvailable={ttsAvailable}
-                            socket={socketRef.current}
-                            onEdit={() => {}}
-                            playTTS={(text) => playTTS(text)}
-                          />
                         </div>
                       )}
                     </div>
-                  )
-                })
-              })()}
-              {streamingContent && (
-                <div className="group/msg w-full overflow-hidden">
-                  <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
-                    <Markdown>{streamingContent}</Markdown>
-                  </div>
-                </div>
-              )}
-              {thinking && (
-                <div className="flex items-center gap-2">
-                  <Loader variant="typing" />
-                  <span className="text-xs text-muted-foreground animate-pulse">
-                    {status || 'Thinking...'}
-                  </span>
-                </div>
-              )}
-              {artifacts.length > 0 && (
-                <div className="pt-4 mt-6 border-t border-border/40">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Generated Artifacts</h3>
-                  <div className="flex flex-wrap gap-3">
-                    {artifacts.map(a => (
-                      <ArtifactCard key={a.id} artifact={a} />
-                    ))}
-                  </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
-        <ChatContainerScrollAnchor />
-      </ChatContainerContent>
+            <ChatContainerScrollAnchor />
+          </ChatContainerContent>
         </ChatContainerRoot>
 
         {/* Suggested action buttons */}
         {suggestedActions.length > 0 && (
           <div className="px-4 pt-2">
             <div className={`w-full mx-auto flex flex-wrap gap-2 ${!isSidePanel ? 'max-w-[52rem]' : ''}`}>
-              {(showAllActions ? suggestedActions : suggestedActions.slice(0, 5)).map((action, i) => (
+              {(showAllActions ? suggestedActions : suggestedActions.slice(0, 5)).map((action: string, i: number) => (
                 <button
                   key={i}
                   onClick={() => {
                     setSuggestedActions([])
-                    setMessages(prev => [...prev, { role: 'user', content: action, timestamp: new Date().toISOString() }])
+                    setMessages((prev: ChatMessage[]) => [...prev, { role: 'user', content: action, timestamp: new Date().toISOString() }])
                     setThinking(true)
                     socketRef.current?.send('chat', { content: action, conversation_id: activeConversationId || undefined })
                   }}
@@ -710,7 +688,7 @@ export function ChatPanel({
                 onClick={() => {
                   setSuggestedActions([])
                   const allMsg = `Do all of these: ${suggestedActions.join(', ')}`
-                  setMessages(prev => [...prev, { role: 'user', content: allMsg, timestamp: new Date().toISOString() }])
+                  setMessages((prev: ChatMessage[]) => [...prev, { role: 'user', content: allMsg, timestamp: new Date().toISOString() }])
                   setThinking(true)
                   socketRef.current?.send('chat', { content: allMsg, conversation_id: activeConversationId || undefined })
                 }}
@@ -774,6 +752,17 @@ export function ChatPanel({
               />
               <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                 <div className="flex items-center gap-1">
+                  {sttAvailable && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Toggle voice mode"
+                      className={`h-11 w-11 lg:h-8 lg:w-8 rounded-lg ${voiceMode ? 'text-primary bg-primary/10' : 'text-muted-foreground'}`}
+                      onClick={() => setVoiceMode(!voiceMode)}
+                    >
+                      <Volume2 className="h-5 w-5 lg:h-4 lg:w-4" />
+                    </Button>
+                  )}
                   <FileUploadTrigger asChild>
                     <Button
                       variant="ghost"

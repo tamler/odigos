@@ -70,8 +70,19 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
   const [loading, setLoading] = useState(true)
   const [shareOpen, setShareOpen] = useState(false)
   const [activeMobileTab, setActiveMobileTab] = useState<'write' | 'history'>('write')
-  const { setChatPanelOpen, setChatContext, isMobile } = useOutletContext<any>()
+  const { setChatPanelOpen, setChatContext, isMobile, setPageContextData } = useOutletContext<any>()
   const entriesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (notebook) {
+      setPageContextData({
+        page_id: notebookId,
+        page_title: notebook.title,
+        visible_data: `${entries.length} entries. Latest: "${entries[entries.length - 1]?.content.slice(0, 80)}..."`
+      })
+    }
+    return () => setPageContextData({})
+  }, [notebook, notebookId, entries, setPageContextData])
 
   useEffect(() => {
     get<{ notebooks: Notebook[] }>('/api/notebooks').then(data => {
