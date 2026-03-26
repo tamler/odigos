@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, PanelRightClose, Square, Camera } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -15,7 +15,8 @@ import {
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
 import { Artifact, ArtifactCard, getFileIcon } from '@/components/ArtifactCard'
 import { MessageActions } from '@/components/MessageActions'
-import { VoiceOrb, VoiceState } from '@/components/VoiceOrb'
+import { VoiceOrb } from '@/components/VoiceOrb'
+import { useVoiceMode } from '@/hooks/useVoiceMode'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -103,19 +104,32 @@ export function ChatPanel({
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [inputValue, setInputValue] = useState('')
   const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean; progress?: number }[]>([])
-  const [recording, setRecording] = useState(false)
   const [sttAvailable, setSttAvailable] = useState(false)
   const [ttsAvailable, setTtsAvailable] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [agentName, setAgentName] = useState('Odigos')
   const [showAllActions, setShowAllActions] = useState(false)
   const [useCamera, setUseCamera] = useState<boolean | 'environment'>(false)
-  const [voiceMode, setVoiceMode] = useState(false)
-  const [voiceOrbState, setVoiceOrbState] = useState<VoiceState>('idle')
-  const [amplitude] = useState(0)
+  const [voiceAmplitude, setVoiceAmplitude] = useState(0)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Voice mode: continuous listen → transcribe → send → TTS → repeat
+  const voiceMode = useVoiceMode({
+    onTranscription: (text) => {
+      // Auto-send transcribed text as a chat message
+      handleSendRef.current?.(text)
+    },
+    onPhaseChange: (phase) => {
+      // Sync phase with streaming/thinking state
+      if (phase === 'thinking' || phase === 'processing') {
+        // Visual feedback handled by orb
+      }
+    },
+    onAmplitudeChange: setVoiceAmplitude,
+  })
+  const handleSendRef = useRef<((text: string) => void) | null>(null)
 
   // Wire up message handler on the shared socket
   useEffect(() => {
@@ -123,14 +137,12 @@ export function ChatPanel({
     // to keep messages in sync across chat and floating bubble.
   }, [])
 
-  // Sync voice orb state with agent status (G-B6)
+  // Sync voice mode phase with agent status
   useEffect(() => {
-    if (!voiceMode) return
-    if (thinking) setVoiceOrbState('thinking')
-    else if (isStreaming) setVoiceOrbState('speaking')
-    else if (recording) setVoiceOrbState('listening')
-    else setVoiceOrbState('idle')
-  }, [voiceMode, thinking, isStreaming, recording])
+    if (!voiceMode.active) return
+    if (thinking) voiceMode.setPhase('thinking')
+    else if (isStreaming) voiceMode.setPhase('speaking')
+  }, [voiceMode.active, thinking, isStreaming])
 
   // Auto-open new artifacts (G38)
   const prevArtifactsCount = useRef(0)
@@ -221,74 +233,10 @@ export function ChatPanel({
       .catch(() => {})
   }, [])
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const audioStreamRef = useRef<MediaStream | null>(null)
-
-  const startRecording = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-      })
-      audioStreamRef.current = stream
-
-      const recorder = new MediaRecorder(stream)
-      mediaRecorderRef.current = recorder
-      const chunks: Blob[] = []
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data)
-      }
-
-      recorder.onstop = async () => {
-        // Clean up mic stream AFTER recording is fully stopped
-        if (audioStreamRef.current) {
-          audioStreamRef.current.getTracks().forEach(t => t.stop())
-          audioStreamRef.current = null
-        }
-        mediaRecorderRef.current = null
-
-        const blob = new Blob(chunks, { type: recorder.mimeType })
-        console.log(`[STT] Recording complete: ${blob.size} bytes, ${recorder.mimeType}`)
-        if (blob.size < 1000) return // too short, skip
-
-        // POST the audio file to the transcribe endpoint
-        try {
-          const formData = new FormData()
-          const ext = recorder.mimeType.includes('mp4') ? 'mp4'
-            : recorder.mimeType.includes('ogg') ? 'ogg' : 'webm'
-          formData.append('audio', blob, `recording.${ext}`)
-
-          const res = await fetch('/api/audio/transcribe', {
-            method: 'POST',
-            credentials: 'include',
-            body: formData,
-          })
-          if (res.ok) {
-            const data = await res.json()
-            if (data.text) {
-              setInputValue((prev: string) => prev + (prev ? ' ' : '') + data.text)
-            }
-          }
-        } catch (err) {
-          console.error('Transcription request failed:', err)
-        }
-      }
-
-      recorder.start(250)  // Capture data every 250ms so chunks accumulate during recording
-      setRecording(true)
-      console.log(`[STT] Recording started, mimeType=${recorder.mimeType}`)
-    } catch {
-      toast.error('Microphone access denied')
-    }
-  }, [])
-
-  const stopRecording = useCallback(() => {
-    // Just stop the recorder — ondataavailable and onstop callbacks handle the rest
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop()
-    }
-    setRecording(false)
-  }, [])
+  // Wire handleSendRef for voice mode auto-send
+  useEffect(() => {
+    handleSendRef.current = (text: string) => handleSend(text)
+  })
 
   const [isTTSPlaying, setIsTTSPlaying] = useState(false)
 
@@ -450,7 +398,7 @@ export function ChatPanel({
                 />
               ) : (
                 <div className="flex-1 flex flex-col h-full min-h-0">
-                  {voiceMode ? (
+                  {voiceMode.active ? (
                     <div className="flex-1 flex flex-col h-full">
                       {/* Compact transcript above orb */}
                       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 opacity-40 hover:opacity-100 transition-opacity">
@@ -462,11 +410,11 @@ export function ChatPanel({
                            </div>
                          ))}
                       </div>
-                      <VoiceOrb 
-                        state={voiceOrbState} 
-                        amplitude={amplitude}
-                        onExit={() => setVoiceMode(false)}
-                        onToggleMic={() => recording ? stopRecording() : startRecording()}
+                      <VoiceOrb
+                        state={voiceMode.phase as any}
+                        amplitude={voiceAmplitude}
+                        onExit={() => voiceMode.exit()}
+                        onToggleMic={() => {}}
                       />
                     </div>
                   ) : (
@@ -704,12 +652,12 @@ export function ChatPanel({
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={recording ? "Stop dictation" : "Start dictation"}
-                      className={`h-11 w-11 lg:h-8 lg:w-8 rounded-lg text-muted-foreground hover:text-foreground ${recording ? 'text-red-500 animate-pulse' : ''}`}
+                      aria-label="Voice mode"
+                      className="h-11 w-11 lg:h-8 lg:w-8 rounded-lg text-muted-foreground hover:text-foreground"
                       disabled={!connected}
-                      onClick={recording ? stopRecording : startRecording}
+                      onClick={() => voiceMode.enter()}
                     >
-                      {recording ? <MicOff className="h-5 w-5 lg:h-4 lg:w-4" /> : <Mic className="h-5 w-5 lg:h-4 lg:w-4" />}
+                      <Mic className="h-5 w-5 lg:h-4 lg:w-4" />
                     </Button>
                   )}
                   {isStreaming ? (
@@ -754,7 +702,7 @@ export function ChatPanel({
                 <span>&middot;</span>
                 {sttAvailable && (
                   <>
-                    <button onClick={() => setVoiceMode(true)} className="hover:text-foreground transition-colors">Voice</button>
+                    <button onClick={() => voiceMode.enter()} className="hover:text-foreground transition-colors">Voice</button>
                     <span>&middot;</span>
                   </>
                 )}
