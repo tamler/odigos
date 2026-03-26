@@ -25,6 +25,7 @@ export type FileUploadProps = {
   children: React.ReactNode
   multiple?: boolean
   accept?: string
+  capture?: boolean | "user" | "environment"
   disabled?: boolean
 }
 
@@ -33,6 +34,7 @@ function FileUpload({
   children,
   multiple = true,
   accept,
+  capture,
   disabled = false,
 }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -109,6 +111,7 @@ function FileUpload({
         className="hidden"
         multiple={multiple}
         accept={accept}
+        capture={capture}
         aria-hidden
         disabled={disabled}
       />

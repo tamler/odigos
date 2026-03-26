@@ -69,6 +69,7 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
   const [adding, setAdding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [shareOpen, setShareOpen] = useState(false)
+  const [activeMobileTab, setActiveMobileTab] = useState<'write' | 'history'>('write')
   const { setChatPanelOpen, setChatContext, isMobile } = useOutletContext<any>()
   const entriesEndRef = useRef<HTMLDivElement>(null)
 
@@ -144,10 +145,10 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden flex-col">
       {/* Main editor panel */}
       <div className={`flex flex-col flex-1 min-w-0 ${!isMobile ? 'border-r border-border/40' : ''}`}>
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
           <DropdownMenu>
             <DropdownMenuTrigger>
               <Button variant="ghost" className="h-8 px-2 flex items-center gap-2 max-w-[200px] sm:max-w-[300px]">
@@ -206,18 +207,38 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
             </Button>
           )}
 
-          {notebook && (
-            <span className="text-xs text-muted-foreground ml-auto">
+          {/* Info Badge (Desktop Only) */}
+          {notebook && !isMobile && (
+            <span className="text-xs text-muted-foreground ml-auto truncate">
               {notebook.mode} &middot; {notebook.collaboration}
             </span>
           )}
-          <Button variant="outline" size="sm" className="ml-2 text-xs sm:text-sm h-8 sm:h-9" onClick={() => {
+          
+          <Button variant="outline" size="sm" className={`ml-auto sm:ml-2 text-xs sm:text-sm h-8 sm:h-9 ${isMobile ? 'px-2' : ''}`} onClick={() => {
             setChatContext({ notebook_id: notebookId })
             setChatPanelOpen(true)
           }}>
             {isMobile ? 'Ask' : 'Ask Agent'}
           </Button>
         </div>
+
+        {/* Mobile Tab Switcher (G-P1) */}
+        {isMobile && (
+          <div className="flex p-1 bg-muted/30 border-b border-border/40">
+            <button
+              onClick={() => setActiveMobileTab('write')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeMobileTab === 'write' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}
+            >
+              Write
+            </button>
+            <button
+              onClick={() => setActiveMobileTab('history')}
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeMobileTab === 'history' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}
+            >
+              History ({entries.length})
+            </button>
+          </div>
+        )}
 
         <ScrollArea className="flex-1 px-4">
           <div className={`py-4 space-y-3 ${isMobile ? 'max-w-full' : 'max-w-2xl'}`}>
@@ -226,84 +247,90 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
                 <Skeleton key={i} className="h-20 w-full rounded-md" />
               ))
             ) : entries.length === 0 ? (
-              <div className="text-muted-foreground text-sm">No entries yet. Add one below.</div>
+              <div className="text-muted-foreground text-sm text-center py-12 italic">No entries yet. Add one below.</div>
             ) : (
-              entries.map((entry) => (
-                <div
-                  key={entry.id}
-                className={`group relative rounded-md border px-4 py-3 text-sm ${
-                  entry.entry_type === 'agent_suggestion'
-                    ? 'border-blue-500/40 bg-blue-500/5'
-                    : entry.entry_type === 'agent'
-                    ? 'border-primary/30 bg-primary/5'
-                    : 'border-border/50'
-                }`}
-              >
-                {entry.entry_type === 'agent_suggestion' && (
-                  <div className="text-xs text-blue-400 mb-1 font-medium">Agent suggestion</div>
-                )}
-                {entry.entry_type === 'agent' && (
-                  <div className="text-xs text-primary/60 mb-1 font-medium">Agent</div>
-                )}
-                {entry.mood && (
-                  <div className="text-xs text-muted-foreground mb-1">{entry.mood}</div>
-                )}
-                <div className="whitespace-pre-wrap leading-relaxed">{entry.content}</div>
-                <div className="text-xs text-muted-foreground mt-2">
-                  {new Date(entry.created_at + 'Z').toLocaleString(undefined, {
-                    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                  })}
-                </div>
-                {entry.entry_type === 'agent_suggestion' && entry.status === 'pending' ? (
-                  <div className="flex gap-2 mt-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      onClick={() => handleAcceptSuggestion(entry.id)}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-xs text-muted-foreground"
-                      onClick={() => handleRejectSuggestion(entry.id)}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Delete entry"
-                    className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                    onClick={() => handleDeleteEntry(entry.id)}
+              // On mobile 'write' tab, we only show the last entry for context (G-P1)
+              (isMobile && activeMobileTab === 'write' ? [entries[entries.length - 1]] : entries).map((entry) => (
+                entry && (
+                  <div
+                    key={entry.id}
+                    className={`group relative rounded-xl border px-4 py-3 text-sm shadow-sm transition-all ${
+                      entry.entry_type === 'agent_suggestion'
+                        ? 'border-blue-500/40 bg-blue-500/5'
+                        : entry.entry_type === 'agent'
+                        ? 'border-primary/30 bg-primary/5'
+                        : 'border-border/50 bg-card/50'
+                    }`}
                   >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
-            )))}
+                    {entry.entry_type === 'agent_suggestion' && (
+                      <div className="text-xs text-blue-400 mb-1 font-medium">Agent suggestion</div>
+                    )}
+                    {entry.entry_type === 'agent' && (
+                      <div className="text-xs text-primary/60 mb-1 font-medium">Agent</div>
+                    )}
+                    {entry.mood && (
+                      <div className="text-xs text-muted-foreground mb-1">{entry.mood}</div>
+                    )}
+                    <div className="whitespace-pre-wrap leading-relaxed">{entry.content}</div>
+                    <div className="text-xs text-muted-foreground mt-2">
+                      {new Date(entry.created_at + 'Z').toLocaleString(undefined, {
+                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                      })}
+                    </div>
+                    {entry.entry_type === 'agent_suggestion' && entry.status === 'pending' ? (
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => handleAcceptSuggestion(entry.id)}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-muted-foreground"
+                          onClick={() => handleRejectSuggestion(entry.id)}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Delete entry"
+                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDeleteEntry(entry.id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                )
+              ))
+            )}
             <div ref={entriesEndRef} />
           </div>
         </ScrollArea>
 
-        <div className="px-4 py-3 border-t border-border/40 shrink-0">
-          <div className={`flex gap-2 ${isMobile ? 'max-w-full' : 'max-w-2xl'}`}>
-            <Input
-              value={newEntry}
-              onChange={(e) => setNewEntry(e.target.value)}
-              placeholder="Add a note..."
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleAddEntry() }}
-              className="flex-1 text-base sm:text-sm"
-            />
-            <Button onClick={handleAddEntry} disabled={adding || !newEntry.trim()} size="icon" aria-label="Add entry" className="h-10 w-10 sm:h-9 sm:w-9">
-              <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
-            </Button>
+        {(!isMobile || activeMobileTab === 'write') && (
+          <div className="px-4 py-3 border-t border-border/40 shrink-0 bg-background/50 backdrop-blur-sm pb-safe">
+            <div className={`flex gap-2 ${isMobile ? 'max-w-full' : 'max-w-2xl mx-auto'}`}>
+              <Input
+                value={newEntry}
+                onChange={(e) => setNewEntry(e.target.value)}
+                placeholder="Add a note..."
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleAddEntry() }}
+                className="flex-1 text-base sm:text-sm h-11 sm:h-9"
+              />
+              <Button onClick={handleAddEntry} disabled={adding || !newEntry.trim()} size="icon" aria-label="Add entry" className="h-11 w-11 sm:h-9 sm:w-9 shrink-0 shadow-sm">
+                <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <ShareDialog

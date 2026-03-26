@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, post, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Download, Square, AlignLeft, MoreHorizontal } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Download, Square, AlignLeft, MoreHorizontal, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -117,6 +117,7 @@ export function ChatPanel({
   const [agentName, setAgentName] = useState('Odigos')
   const [suggestedActions, setSuggestedActions] = useState<string[]>([])
   const [showAllActions, setShowAllActions] = useState(false)
+  const [useCamera, setUseCamera] = useState<boolean | 'environment'>(false)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -483,8 +484,8 @@ export function ChatPanel({
   const canSend = connected && (inputValue.trim() || pendingFiles.length > 0) && queuedCount < 3
 
   return (
-    <FileUpload onFilesAdded={handleFilesAdded}>
-      <div className="flex-1 flex flex-col h-full bg-background z-10 w-full overflow-hidden">
+    <FileUpload onFilesAdded={handleFilesAdded} capture={useCamera || undefined}>
+      <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-[52px] border-b border-border/40 shrink-0 lg:pt-0 pt-2 lg:mt-0 lg:bg-transparent bg-background/50 backdrop-blur-sm shadow-sm sticky top-0 z-20">
           <div className="flex items-center gap-3 min-w-0">
@@ -505,19 +506,19 @@ export function ChatPanel({
                       setAutoRead(next)
                       localStorage.setItem('odigos-auto-read', String(next))
                     }}
-                    className={`p-1.5 rounded-md transition-colors relative ${autoRead ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
+                    className={`p-2 sm:p-1.5 rounded-md transition-colors relative h-11 w-11 lg:h-8 lg:w-8 flex items-center justify-center ${autoRead ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
                     title="Auto-read responses"
                   >
-                    <Volume2 className="h-4 w-4" />
-                    {autoRead && <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />}
+                    <Volume2 className="h-5 w-5 lg:h-4 lg:w-4" />
+                    {autoRead && <span className="absolute top-2 right-2 lg:top-1 lg:right-1 w-1.5 h-1.5 bg-primary rounded-full" />}
                   </button>
                 )}
                 <button
                   onClick={toggleConciseMode}
-                  className={`p-1.5 rounded-md transition-colors ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
+                  className={`p-2 sm:p-1.5 rounded-md transition-colors h-11 w-11 lg:h-8 lg:w-8 flex items-center justify-center ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
                   title="Concise mode"
                 >
-                  <AlignLeft className="h-4 w-4" />
+                  <AlignLeft className="h-5 w-5 lg:h-4 lg:w-4" />
                 </button>
               </div>
             ) : (
@@ -772,35 +773,54 @@ export function ChatPanel({
                 className="w-full resize-none bg-transparent px-4 pt-3 pb-14 sm:pb-12 text-base sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50 min-h-[52px]"
               />
               <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                <FileUploadTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Attach file"
-                    className="h-11 w-11 sm:h-8 sm:w-8 rounded-lg text-muted-foreground hover:text-foreground"
-                    disabled={!connected}
-                  >
-                    <Paperclip className="h-5 w-5 sm:h-4 sm:w-4" />
-                  </Button>
-                </FileUploadTrigger>
+                <div className="flex items-center gap-1">
+                  <FileUploadTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Attach file"
+                      className="h-11 w-11 lg:h-8 lg:w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                      disabled={!connected}
+                      onClick={() => setUseCamera(false)}
+                    >
+                      <Paperclip className="h-5 w-5 lg:h-4 lg:w-4" />
+                    </Button>
+                  </FileUploadTrigger>
+                  
+                  {isMobile && (
+                    <FileUploadTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Take photo"
+                        className="h-11 w-11 rounded-lg text-muted-foreground hover:text-foreground"
+                        disabled={!connected}
+                        onClick={() => setUseCamera('environment')}
+                      >
+                        <Camera className="h-5 w-5" />
+                      </Button>
+                    </FileUploadTrigger>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-1">
                   {sttAvailable && (
                     <Button
                       variant="ghost"
                       size="icon"
                       aria-label={recording ? "Stop dictation" : "Start dictation"}
-                      className={`h-11 w-11 sm:h-8 sm:w-8 rounded-lg text-muted-foreground hover:text-foreground ${recording ? 'text-red-500 animate-pulse' : ''}`}
+                      className={`h-11 w-11 lg:h-8 lg:w-8 rounded-lg text-muted-foreground hover:text-foreground ${recording ? 'text-red-500 animate-pulse' : ''}`}
                       disabled={!connected}
                       onClick={recording ? stopRecording : startRecording}
                     >
-                      {recording ? <MicOff className="h-5 w-5 sm:h-4 sm:w-4" /> : <Mic className="h-5 w-5 sm:h-4 sm:w-4" />}
+                      {recording ? <MicOff className="h-5 w-5 lg:h-4 lg:w-4" /> : <Mic className="h-5 w-5 lg:h-4 lg:w-4" />}
                     </Button>
                   )}
                   {isStreaming ? (
                     <Button
                       size="icon"
                       aria-label="Stop generation"
-                      className="h-11 w-11 sm:h-8 sm:w-8 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-sm transition-all active:scale-95 flex items-center justify-center"
+                      className="h-11 w-11 lg:h-8 lg:w-8 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-sm transition-all active:scale-95 flex items-center justify-center"
                       onClick={() => {
                         socketRef.current?.send('cancel')
                         setIsStreaming(false)
@@ -810,17 +830,17 @@ export function ChatPanel({
                         }
                       }}
                     >
-                      <Square className="h-5 w-5 sm:h-4 sm:w-4 fill-current" />
+                      <Square className="h-5 w-5 lg:h-4 lg:w-4 fill-current" />
                     </Button>
                   ) : (
                     <Button
                       size="icon"
                       aria-label="Send message"
-                      className="h-11 w-11 sm:h-8 sm:w-8 rounded-lg shadow-sm transition-all active:scale-95 flex items-center justify-center"
+                      className="h-11 w-11 lg:h-8 lg:w-8 rounded-lg shadow-sm transition-all active:scale-95 flex items-center justify-center"
                       disabled={!canSend}
                       onClick={() => handleSend()}
                     >
-                      <ArrowUp className="h-5 w-5 sm:h-4 sm:w-4" />
+                      <ArrowUp className="h-5 w-5 lg:h-4 lg:w-4" />
                     </Button>
                   )}
                 </div>

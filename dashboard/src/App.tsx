@@ -94,6 +94,7 @@ export default function App() {
               <Route element={<AppLayout />}>
                 <Route path="/" element={<ChatPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings/:tab" element={<SettingsPage />} />
                 <Route path="/notebooks" element={<NotebookPage />} />
                 <Route path="/notebooks/:id" element={<NotebookPage />} />
                 <Route path="/kanban" element={<KanbanPage />} />

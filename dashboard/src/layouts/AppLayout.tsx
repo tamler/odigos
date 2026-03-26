@@ -1,6 +1,33 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Outlet, useNavigate, useSearchParams } from 'react-router-dom'
-import { Settings, PanelLeftClose, PanelLeft, Plus, Pencil, Trash2, Check, X, Download, MoreHorizontal, Menu } from 'lucide-react'
+import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { 
+  Settings, 
+  PanelLeftClose, 
+  PanelLeft, 
+  Plus, 
+  Pencil, 
+  Trash2, 
+  Check, 
+  X, 
+  Download, 
+  MoreHorizontal, 
+  Menu,
+  MessageCircle,
+  Volume2,
+  Zap,
+  Network,
+  Puzzle,
+  TrendingUp,
+  BarChart3,
+  Database,
+  FileText,
+  Terminal,
+  User,
+  ArrowLeft,
+  Link as LinkIcon,
+  Rss,
+  Eye
+} from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -27,6 +54,26 @@ interface Conversation {
   message_count: number
 }
 
+const SETTINGS_SECTIONS = [
+  { id: 'general', label: 'General', icon: Settings },
+  { id: 'account', label: 'Account', icon: User },
+  { id: 'voice', label: 'Voice', icon: Volume2 },
+  { id: 'skills', label: 'Skills', icon: Zap },
+  { id: 'prompts', label: 'Prompts', icon: Terminal },
+  { id: 'evolution', label: 'Evolution', icon: TrendingUp },
+  { id: 'agents', label: 'Agents', icon: User },
+  { id: 'plugins', label: 'Plugins', icon: Puzzle },
+  { id: 'documents', label: 'Documents', icon: FileText },
+  { id: 'integrations', label: 'Integrations', icon: Zap },
+  { id: 'mesh', label: 'Mesh', icon: Network },
+  { id: 'data', label: 'Data', icon: Database },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { id: 'connections', label: 'Connections', icon: LinkIcon },
+  { id: 'peers', label: 'Peers', icon: Network },
+  { id: 'feed', label: 'Feed', icon: Rss },
+  { id: 'inspector', label: 'Inspector', icon: Eye },
+]
+
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -45,7 +92,9 @@ export default function AppLayout() {
   const editInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
+  const [agentName, setAgentName] = useState('Odigos')
   const pendingTitles = useRef<Record<string, string>>({})
 
   useEffect(() => {
@@ -85,6 +134,12 @@ export default function AppLayout() {
   }, [setSidebarOpen, setChatPanelOpen])
 
 
+
+  useEffect(() => {
+    get<any>('/api/settings')
+      .then(s => setAgentName(s.agent?.name || 'Odigos'))
+      .catch(() => {})
+  }, [])
 
   const loadConversations = useCallback(() => {
     get<{ conversations: Conversation[] }>('/api/conversations?limit=50')
@@ -245,15 +300,25 @@ export default function AppLayout() {
     !searchQuery || displayTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  const isSettings = location.pathname.startsWith('/settings')
+  const currentTab = location.pathname.split('/')[2] || 'general'
+
   return (
     <TooltipProvider>
       <div className="flex h-[100dvh] bg-background text-foreground">
         {/* Mobile top bar */}
-        <div className="flex items-center gap-2 p-3 border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background">
+        <div className="flex items-center gap-2 p-3 pt-safe border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background">
           <Button variant="ghost" size="icon" aria-label="Toggle mobile menu" className="h-11 w-11" onClick={() => setSidebarOpen(true)}>
             <Menu className="h-5 w-5" />
           </Button>
-          <button onClick={() => navigate('/')} className="text-sm font-semibold hover:text-muted-foreground transition-colors">Odigos</button>
+          <button onClick={() => navigate('/')} className="text-sm font-semibold hover:text-muted-foreground transition-colors truncate max-w-[150px]">
+            {isSettings && isMobile ? (
+              <div className="flex items-center gap-2">
+                <ArrowLeft className="h-4 w-4" onClick={(e) => { e.stopPropagation(); navigate('/settings') }} />
+                <span>{SETTINGS_SECTIONS.find(s => s.id === currentTab)?.label || 'Settings'}</span>
+              </div>
+            ) : agentName}
+          </button>
           <Button variant="ghost" size="icon" aria-label="New chat" className="h-11 w-11 ml-auto" onClick={handleNewChat}>
             <Plus className="h-5 w-5" />
           </Button>
@@ -266,9 +331,9 @@ export default function AppLayout() {
             {!collapsed && (
               <button 
                 onClick={() => navigate('/')} 
-                className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors"
+                className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors text-left truncate"
               >
-                Odigos
+                {agentName}
               </button>
             )}
             <div className="flex items-center gap-2">
@@ -288,8 +353,8 @@ export default function AppLayout() {
             </div>
           </div>
 
-          {/* Conversation Search */}
-          {!collapsed && (
+          {/* Conversation Search (Chat only) */}
+          {!collapsed && !isSettings && (
             <div className="px-3 pb-2 pt-1 border-b border-border/40 mb-2">
               <Input 
                 placeholder="Search conversations..." 
@@ -300,93 +365,112 @@ export default function AppLayout() {
             </div>
           )}
 
-          {/* Conversation list */}
+          {/* Sidebar Content (List) */}
           {!collapsed && (
             <ScrollArea className="flex-1 px-2">
               <div className="space-y-0.5 pb-4">
-                {filteredConversations.length === 0 ? (
-                  <div className="px-3 py-6 mt-4 text-center text-sm text-muted-foreground">
-                    {searchQuery ? 'No matching conversations' : 'Start a new conversation'}
-                  </div>
+                {isSettings ? (
+                  // Settings Sections
+                  SETTINGS_SECTIONS.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => { navigate(`/settings/${s.id}`); setSidebarOpen(false) }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+                        currentTab === s.id
+                          ? 'bg-accent text-accent-foreground font-medium'
+                          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                      }`}
+                    >
+                      <s.icon className="h-4 w-4 shrink-0" />
+                      <span>{s.label}</span>
+                    </button>
+                  ))
                 ) : (
-                  filteredConversations.map((c) => (
-                    <div key={c.id} className="group relative">
-                    {editingId === c.id ? (
-                      <div className="flex items-center gap-1 px-1 py-1">
-                        <Input
-                          ref={editInputRef}
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') confirmRename()
-                            if (e.key === 'Escape') setEditingId(null)
-                          }}
-                          className="h-7 text-sm"
-                        />
-                        <Button variant="ghost" size="icon" aria-label="Confirm rename" className="h-7 w-7 shrink-0" onClick={confirmRename}>
-                          <Check className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="icon" aria-label="Cancel rename" className="h-7 w-7 shrink-0" onClick={() => setEditingId(null)}>
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleSelectConversation(c.id)}
-                        className={`w-full text-left px-3 py-2 min-h-[44px] rounded-md text-sm truncate transition-colors pr-8 ${
-                          activeId === c.id
-                            ? 'bg-accent text-accent-foreground'
-                            : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                        }`}
-                      >
-                        {displayTitle(c)}
-                      </button>
-                    )}
-                    {editingId !== c.id && (
-                      <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger>
-                            <Button variant="ghost" size="icon" aria-label="Conversation options" className="h-6 w-6">
-                              <MoreHorizontal className="h-3 w-3" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem onClick={() => startRename(c)}>
-                              <Pencil className="h-3 w-3 mr-2" /> Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleExport(c.id, 'markdown')}>
-                              <Download className="h-3 w-3 mr-2" /> Export
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(c.id)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="h-3 w-3 mr-2" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    )}
-                  </div>
-                )))}
+                  // Conversation list
+                  filteredConversations.length === 0 ? (
+                    <div className="px-3 py-6 mt-4 text-center text-sm text-muted-foreground">
+                      {searchQuery ? 'No matching conversations' : 'Start a new conversation'}
+                    </div>
+                  ) : (
+                    filteredConversations.map((c) => (
+                      <div key={c.id} className="group relative">
+                      {editingId === c.id ? (
+                        <div className="flex items-center gap-1 px-1 py-1">
+                          <Input
+                            ref={editInputRef}
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') confirmRename()
+                              if (e.key === 'Escape') setEditingId(null)
+                            }}
+                            className="h-7 text-sm"
+                          />
+                          <Button variant="ghost" size="icon" aria-label="Confirm rename" className="h-7 w-7 shrink-0" onClick={confirmRename}>
+                            <Check className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="icon" aria-label="Cancel rename" className="h-7 w-7 shrink-0" onClick={() => setEditingId(null)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleSelectConversation(c.id)}
+                          className={`w-full text-left px-3 py-2 min-h-[44px] rounded-md text-sm truncate transition-colors pr-8 ${
+                            activeId === c.id
+                              ? 'bg-accent text-accent-foreground'
+                              : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                          }`}
+                        >
+                          {displayTitle(c)}
+                        </button>
+                      )}
+                      {editingId !== c.id && (
+                        <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger>
+                              <Button variant="ghost" size="icon" aria-label="Conversation options" className="h-6 w-6">
+                                <MoreHorizontal className="h-3 w-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={() => startRename(c)}>
+                                <Pencil className="h-3 w-3 mr-2" /> Rename
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleExport(c.id, 'markdown')}>
+                                <Download className="h-3 w-3 mr-2" /> Export
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(c.id)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3 mr-2" /> Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      )}
+                    </div>
+                  )))
+                )}
               </div>
             </ScrollArea>
           )}
 
-          {/* Bottom: Settings Gear Icon (G29) */}
+          {/* Bottom: Settings / Chat Toggle (G-P7) */}
           <div className="p-3 mt-auto">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => { setSidebarOpen(false); setSearchQuery(''); navigate('/settings') }}
+                  onClick={() => { setSidebarOpen(false); setSearchQuery(''); navigate(isSettings ? '/' : '/settings') }}
                   className={`flex items-center gap-2 p-2 rounded-md transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground ${collapsed ? 'justify-center' : 'w-10'}`}
-                  aria-label="Settings"
+                  aria-label={isSettings ? "Chat" : "Settings"}
                 >
-                  <Settings className="h-4 w-4 shrink-0" />
+                  {isSettings ? <MessageCircle className="h-4 w-4 shrink-0" /> : <Settings className="h-4 w-4 shrink-0" />}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Settings</TooltipContent>
+              <TooltipContent side="right">{isSettings ? "Chat" : "Settings"}</TooltipContent>
             </Tooltip>
           </div>
         </aside>

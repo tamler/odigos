@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import GeneralSettings from './settings/GeneralSettings'
 import AccountTab from './settings/AccountTab'
 import EvolutionTab from './settings/EvolutionTab'
@@ -17,88 +16,111 @@ import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
 import InspectorTab from './StatePage'
 import PeerConfigTab from './settings/PeerConfigTab'
+import { 
+  ArrowLeft, 
+  Settings, 
+  User, 
+  Volume2, 
+  Zap, 
+  Terminal, 
+  TrendingUp, 
+  Puzzle, 
+  FileText, 
+  Network, 
+  Database, 
+  BarChart3, 
+  Link as LinkIcon, 
+  Rss, 
+  Eye,
+  ChevronRight
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
-const TABS = [
-  { id: 'account', label: 'Account' },
-  { id: 'general', label: 'General' },
-  { id: 'skills', label: 'Skills' },
-  { id: 'prompts', label: 'Prompts' },
-  { id: 'evolution', label: 'Evolution' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'plugins', label: 'Plugins' },
-  { id: 'documents', label: 'Documents' },
-  { id: 'integrations', label: 'Integrations' },
-  { id: 'voice', label: 'Voice' },
-  { id: 'data', label: 'Data' },
-  { id: 'analytics', label: 'Analytics' },
-  { id: 'mesh', label: 'Mesh' },
-  { id: 'connections', label: 'Connections' },
-  { id: 'peers', label: 'Peers' },
-  { id: 'feed', label: 'Feed' },
-  { id: 'inspector', label: 'Inspector' },
+const SECTIONS = [
+  { id: 'general', label: 'General', icon: Settings },
+  { id: 'account', label: 'Account', icon: User },
+  { id: 'voice', label: 'Voice', icon: Volume2 },
+  { id: 'skills', label: 'Skills', icon: Zap },
+  { id: 'prompts', label: 'Prompts', icon: Terminal },
+  { id: 'evolution', label: 'Evolution', icon: TrendingUp },
+  { id: 'agents', label: 'Agents', icon: User },
+  { id: 'plugins', label: 'Plugins', icon: Puzzle },
+  { id: 'documents', label: 'Documents', icon: FileText },
+  { id: 'integrations', label: 'Integrations', icon: Zap },
+  { id: 'mesh', label: 'Mesh', icon: Network },
+  { id: 'data', label: 'Data', icon: Database },
+  { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { id: 'connections', label: 'Connections', icon: LinkIcon },
+  { id: 'peers', label: 'Peers', icon: Network },
+  { id: 'feed', label: 'Feed', icon: Rss },
+  { id: 'inspector', label: 'Inspector', icon: Eye },
 ] as const
 
-type TabId = typeof TABS[number]['id']
-
 export default function SettingsPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState<TabId>('general')
+  const { tab } = useParams<{ tab?: string }>()
+  const { isMobile } = useOutletContext<any>()
+  const navigate = useNavigate()
+  const activeTab = tab || (isMobile ? null : 'general')
 
-  useEffect(() => {
-    const tab = searchParams.get('tab') as TabId
-    if (tab && TABS.some(t => t.id === tab)) {
-      setActiveTab(tab)
-    }
-  }, [searchParams])
-
-  const handleTabChange = (id: TabId) => {
-    setActiveTab(id)
-    setSearchParams({ tab: id })
-  }
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Tab bar */}
-      <div className="border-b border-border/40 px-4 sm:px-6">
-        <div className="max-w-4xl mx-auto flex gap-0.5 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`px-3 py-3 text-xs sm:text-sm font-medium transition-colors relative shrink-0 ${
-                activeTab === tab.id
-                  ? 'text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab.label}
-              {activeTab === tab.id && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground rounded-full" />
-              )}
-            </button>
-          ))}
+  if (isMobile && !activeTab) {
+    return (
+      <div className="flex-1 flex flex-col bg-background overflow-y-auto">
+        <div className="px-4 py-6">
+          <h1 className="text-2xl font-bold mb-6 px-2">Settings</h1>
+          <div className="space-y-1">
+            {SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => navigate(`/settings/${s.id}`)}
+                className="w-full flex items-center justify-between p-4 rounded-xl border border-border/40 bg-card/50 active:bg-muted transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <s.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <span className="font-semibold text-sm">{s.label}</span>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+    )
+  }
 
-      {/* Tab content — conditionally remounted per G25 */}
+  const resolvedTab = activeTab || 'general'
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-background">
+      {/* Header for mobile drill-down */}
+      <div className="flex items-center gap-4 px-4 h-[52px] border-b border-border/40 shrink-0 lg:hidden">
+        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate('/settings')}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <h1 className="text-sm font-bold uppercase tracking-widest">
+          {SECTIONS.find(s => s.id === resolvedTab)?.label || 'Settings'}
+        </h1>
+      </div>
+
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'account' && <AccountTab active={true} />}
-        {activeTab === 'general' && <GeneralSettings active={true} />}
-        {activeTab === 'skills' && <SkillsTab active={true} />}
-        {activeTab === 'prompts' && <PromptsTab active={true} />}
-        {activeTab === 'evolution' && <EvolutionTab active={true} />}
-        {activeTab === 'agents' && <AgentsTab active={true} />}
-        {activeTab === 'plugins' && <PluginsTab active={true} />}
-        {activeTab === 'documents' && <DocumentsTab active={true} />}
-        {activeTab === 'integrations' && <IntegrationsTab active={true} />}
-        {activeTab === 'voice' && <VoiceTab active={true} />}
-        {activeTab === 'data' && <DataTab active={true} />}
-        {activeTab === 'analytics' && <AnalyticsTab />}
-        {activeTab === 'mesh' && <MeshTab />}
-        {activeTab === 'connections' && <ConnectionsTab active={true} />}
-        {activeTab === 'peers' && <PeerConfigTab />}
-        {activeTab === 'feed' && <FeedTab active={true} />}
-        {activeTab === 'inspector' && <InspectorTab active={true} />}
+        {resolvedTab === 'account' && <AccountTab active={true} />}
+        {resolvedTab === 'general' && <GeneralSettings active={true} />}
+        {resolvedTab === 'skills' && <SkillsTab active={true} />}
+        {resolvedTab === 'prompts' && <PromptsTab active={true} />}
+        {resolvedTab === 'evolution' && <EvolutionTab active={true} />}
+        {resolvedTab === 'agents' && <AgentsTab active={true} />}
+        {resolvedTab === 'plugins' && <PluginsTab active={true} />}
+        {resolvedTab === 'documents' && <DocumentsTab active={true} />}
+        {resolvedTab === 'integrations' && <IntegrationsTab active={true} />}
+        {resolvedTab === 'voice' && <VoiceTab active={true} />}
+        {resolvedTab === 'data' && <DataTab active={true} />}
+        {resolvedTab === 'analytics' && <AnalyticsTab />}
+        {resolvedTab === 'mesh' && <MeshTab />}
+        {resolvedTab === 'connections' && <ConnectionsTab active={true} />}
+        {resolvedTab === 'peers' && <PeerConfigTab />}
+        {resolvedTab === 'feed' && <FeedTab active={true} />}
+        {resolvedTab === 'inspector' && <InspectorTab active={true} />}
       </div>
     </div>
   )
