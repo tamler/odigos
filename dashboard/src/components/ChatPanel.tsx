@@ -115,7 +115,6 @@ export function ChatPanel({
   const [amplitude] = useState(0)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioWsRef = useRef<WebSocket | null>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -223,14 +222,20 @@ export function ChatPanel({
       .catch(() => {})
   }, [])
 
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null)
+
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const recorder = new MediaRecorder(stream)
-      mediaRecorderRef.current = recorder
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      })
+      audioStreamRef.current = stream
 
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
       const ws = new WebSocket(`${protocol}://${window.location.host}/api/ws/audio/transcribe`)
+      ws.binaryType = 'arraybuffer'
       audioWsRef.current = ws
 
       ws.onmessage = (event) => {
@@ -238,8 +243,12 @@ export function ChatPanel({
           const data = JSON.parse(event.data)
           if (data.text) {
             setInputValue((prev: string) => prev + (prev ? ' ' : '') + data.text)
-          } else if (data.error) {
-            console.warn('Transcription error:', data.error)
+          }
+          if (data.speaking === true) {
+            // VAD detected speech
+          }
+          if (data.speaking === false) {
+            // VAD detected silence after speech
           }
         } catch {
           // ignore non-JSON frames
@@ -251,19 +260,30 @@ export function ChatPanel({
         setRecording(false)
       }
 
-      ws.onopen = () => {
-        const chunks: Blob[] = []
-        recorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data)
-        }
-        recorder.onstop = () => {
-          // Send complete audio blob as one piece (valid webm container)
-          const blob = new Blob(chunks, { type: recorder.mimeType })
-          if (blob.size > 0 && ws.readyState === WebSocket.OPEN) {
-            blob.arrayBuffer().then(buf => ws.send(buf))
+      ws.onopen = async () => {
+        // Create AudioContext at 16kHz and use ScriptProcessorNode for PCM capture
+        // (AudioWorklet requires a separate file — ScriptProcessor is simpler and works everywhere)
+        const ctx = new AudioContext({ sampleRate: 16000 })
+        audioContextRef.current = ctx
+        const source = ctx.createMediaStreamSource(stream)
+
+        // ScriptProcessor: 4096 samples per buffer at 16kHz = 256ms chunks
+        const processor = ctx.createScriptProcessor(4096, 1, 1)
+        processor.onaudioprocess = (e) => {
+          if (ws.readyState !== WebSocket.OPEN) return
+          const float32 = e.inputBuffer.getChannelData(0)
+          // Convert Float32 [-1,1] to Int16 PCM
+          const int16 = new Int16Array(float32.length)
+          for (let i = 0; i < float32.length; i++) {
+            const s = Math.max(-1, Math.min(1, float32[i]))
+            int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
           }
+          ws.send(int16.buffer)
         }
-        recorder.start()  // No timeslice — collect all data, send on stop
+
+        source.connect(processor)
+        processor.connect(ctx.destination)
+        workletNodeRef.current = processor as unknown as AudioWorkletNode
         setRecording(true)
       }
 
@@ -277,17 +297,25 @@ export function ChatPanel({
   }, [])
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop()
-      mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop())
+    // Stop audio processing
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect()
+      workletNodeRef.current = null
     }
-    mediaRecorderRef.current = null
-    // Don't close the WebSocket — backend needs to receive the timeout,
-    // transcribe, send the response, then close from its side.
-    // The ws.onclose handler will clean up audioWsRef and setRecording(false).
+    if (audioContextRef.current) {
+      audioContextRef.current.close()
+      audioContextRef.current = null
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(t => t.stop())
+      audioStreamRef.current = null
+    }
+    // Close WebSocket — backend will transcribe any remaining buffered speech
     if (audioWsRef.current) {
-      // Recording stopped, waiting for transcription
+      audioWsRef.current.close()
+      audioWsRef.current = null
     }
+    setRecording(false)
   }, [])
 
   const [isTTSPlaying, setIsTTSPlaying] = useState(false)
