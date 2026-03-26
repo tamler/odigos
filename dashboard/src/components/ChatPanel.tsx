@@ -222,17 +222,35 @@ export function ChatPanel({
       .catch(() => {})
   }, [])
 
-  const audioContextRef = useRef<AudioContext | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const audioStreamRef = useRef<MediaStream | null>(null)
-  const workletNodeRef = useRef<AudioWorkletNode | null>(null)
+  const workletRef = useRef<AudioWorkletNode | null>(null)
 
   const startRecording = useCallback(async () => {
     try {
+      // 1. Get mic stream
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       })
       audioStreamRef.current = stream
 
+      // 2. Create AudioContext at 16kHz IN THE CLICK HANDLER (user gesture context)
+      //    Chrome handles internal resampling from device rate to 16kHz automatically.
+      const ctx = new AudioContext({ sampleRate: 16000 })
+      if (ctx.state === 'suspended') await ctx.resume()
+      audioCtxRef.current = ctx
+
+      // 3. Load AudioWorklet processor
+      await ctx.audioWorklet.addModule('/pcm-processor.js')
+
+      // 4. Connect mic → worklet
+      const source = ctx.createMediaStreamSource(stream)
+      const worklet = new AudioWorkletNode(ctx, 'pcm-processor')
+      workletRef.current = worklet
+      source.connect(worklet)
+      // No need to connect to ctx.destination (AudioWorklet doesn't require it)
+
+      // 5. Open WebSocket
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
       const ws = new WebSocket(`${protocol}://${window.location.host}/api/ws/audio/transcribe`)
       ws.binaryType = 'arraybuffer'
@@ -244,78 +262,53 @@ export function ChatPanel({
           if (data.text) {
             setInputValue((prev: string) => prev + (prev ? ' ' : '') + data.text)
           }
-          if (data.speaking === true) {
-            // VAD detected speech
-          }
-          if (data.speaking === false) {
-            // VAD detected silence after speech
-          }
         } catch {
-          // ignore non-JSON frames
+          // ignore
         }
       }
 
       ws.onclose = () => {
         audioWsRef.current = null
-        setRecording(false)
-      }
-
-      ws.onopen = async () => {
-        // Use native sample rate and resample to 16kHz for webrtcvad
-        const ctx = new AudioContext()
-        audioContextRef.current = ctx
-        const nativeRate = ctx.sampleRate  // typically 44100 or 48000
-        const targetRate = 16000
-        const source = ctx.createMediaStreamSource(stream)
-
-        // ScriptProcessor captures audio at native rate
-        const processor = ctx.createScriptProcessor(4096, 1, 1)
-        processor.onaudioprocess = (e) => {
-          if (ws.readyState !== WebSocket.OPEN) return
-          const float32 = e.inputBuffer.getChannelData(0)
-
-          // Resample from native rate to 16kHz
-          const ratio = nativeRate / targetRate
-          const targetLen = Math.floor(float32.length / ratio)
-          const int16 = new Int16Array(targetLen)
-          for (let i = 0; i < targetLen; i++) {
-            const srcIdx = Math.floor(i * ratio)
-            const s = Math.max(-1, Math.min(1, float32[srcIdx]))
-            int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
-          }
-          ws.send(int16.buffer)
-        }
-
-        source.connect(processor)
-        processor.connect(ctx.destination)
-        workletNodeRef.current = processor as unknown as AudioWorkletNode
-        setRecording(true)
       }
 
       ws.onerror = () => {
         console.warn('Audio WebSocket error')
         stopRecording()
       }
-    } catch {
+
+      // 6. Stream PCM to WebSocket when it opens
+      worklet.port.onmessage = (event: MessageEvent) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return
+        const float32: Float32Array = event.data
+        // Convert Float32 [-1,1] to Int16 PCM
+        const int16 = new Int16Array(float32.length)
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]))
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+        }
+        ws.send(int16.buffer)
+      }
+
+      setRecording(true)
+    } catch (err) {
+      console.error('Mic setup failed:', err)
       toast.error('Microphone access denied')
     }
   }, [])
 
   const stopRecording = useCallback(() => {
-    // Stop audio processing
-    if (workletNodeRef.current) {
-      workletNodeRef.current.disconnect()
-      workletNodeRef.current = null
+    if (workletRef.current) {
+      workletRef.current.disconnect()
+      workletRef.current = null
     }
-    if (audioContextRef.current) {
-      audioContextRef.current.close()
-      audioContextRef.current = null
+    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+      audioCtxRef.current.close()
+      audioCtxRef.current = null
     }
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach(t => t.stop())
       audioStreamRef.current = null
     }
-    // Close WebSocket — backend will transcribe any remaining buffered speech
     if (audioWsRef.current) {
       audioWsRef.current.close()
       audioWsRef.current = null
