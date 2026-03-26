@@ -240,7 +240,15 @@ export function ChatPanel({
       }
 
       recorder.onstop = async () => {
+        // Clean up mic stream AFTER recording is fully stopped
+        if (audioStreamRef.current) {
+          audioStreamRef.current.getTracks().forEach(t => t.stop())
+          audioStreamRef.current = null
+        }
+        mediaRecorderRef.current = null
+
         const blob = new Blob(chunks, { type: recorder.mimeType })
+        console.log(`[STT] Recording complete: ${blob.size} bytes, ${recorder.mimeType}`)
         if (blob.size < 1000) return // too short, skip
 
         // POST the audio file to the transcribe endpoint
@@ -274,13 +282,9 @@ export function ChatPanel({
   }, [])
 
   const stopRecording = useCallback(() => {
+    // Just stop the recorder — ondataavailable and onstop callbacks handle the rest
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
-    }
-    mediaRecorderRef.current = null
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach(t => t.stop())
-      audioStreamRef.current = null
     }
     setRecording(false)
   }, [])
