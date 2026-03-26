@@ -66,6 +66,7 @@ class HeartbeatConfig(BaseModel):
     max_todos_per_tick: int = 3
     idle_think_interval: int = 900
     announce_interval_seconds: int = 60
+    morning_briefing: bool = True
 
 
 class SandboxConfig(BaseModel):

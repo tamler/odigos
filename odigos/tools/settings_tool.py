@@ -25,6 +25,7 @@ ALLOWED_KEYS = [
     "approval.tools",
     "heartbeat.interval_seconds",
     "heartbeat.idle_think_interval",
+    "heartbeat.morning_briefing",
 ]
 
 BLOCKED_PREFIXES = ["api_key", "llm_api_key", "budget", "llm"]

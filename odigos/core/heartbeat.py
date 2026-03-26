@@ -67,8 +67,10 @@ class Heartbeat:
         notifier: Notifier | None = None,
         scheduler: Scheduler | None = None,
         ws_port: int = 8001,
+        settings=None,
     ) -> None:
         self.db = db
+        self.settings = settings
         self.agent = agent
         self.channel_registry = channel_registry
         self.goal_store = goal_store
@@ -130,6 +132,9 @@ class Heartbeat:
             return
 
         did_work = False
+
+        # Phase 0: Morning briefing (once per day)
+        await self._maybe_send_briefing()
 
         # Phase 1: Process scheduled tasks (unified reminders + cron)
         did_work |= await self._process_scheduled_tasks()
@@ -195,6 +200,46 @@ class Heartbeat:
             await self.tracer.emit("heartbeat_tick", None, {
                 "did_work": did_work,
             })
+
+    async def _maybe_send_briefing(self) -> None:
+        """Send morning briefing once per day if enabled."""
+        try:
+            # Check if briefing is enabled in settings
+            if self.settings:
+                enabled = getattr(self.settings.heartbeat, 'morning_briefing', True)
+                if not enabled:
+                    return
+
+            from odigos.core.briefing import should_send_briefing, compose_briefing, mark_briefing_sent
+
+            if not await should_send_briefing(self.db):
+                return
+
+            logger.info("Composing morning briefing")
+            model = self._background_model or ""
+            content = await compose_briefing(
+                self.db, self.provider, settings=self.settings, model=model,
+            )
+
+            # Send via notifier to all channels
+            if self.notifier:
+                await self.notifier.notify(
+                    title="Morning Briefing",
+                    body=content,
+                )
+
+            # Also send as a structured WebSocket message for the frontend
+            web_channel = self.channel_registry.get("web") if self.channel_registry else None
+            if web_channel and hasattr(web_channel, 'broadcast'):
+                await web_channel.broadcast({
+                    "type": "morning_briefing",
+                    "content": content,
+                })
+
+            await mark_briefing_sent(self.db)
+            logger.info("Morning briefing sent")
+        except Exception:
+            logger.debug("Morning briefing failed", exc_info=True)
 
     async def _check_email(self) -> bool:
         """Check inbox for new emails and notify the user."""
