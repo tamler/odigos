@@ -23,8 +23,8 @@ async def test_list_settings(tool):
     result = await tool.execute({"action": "list"})
     assert result.success
     assert "browser.enabled" in result.data
-    assert "stt.enabled" in result.data
-    assert "tts.voice" in result.data
+    assert "voice.stt_provider" in result.data
+    assert "voice.tts_voice" in result.data
 
 
 @pytest.mark.asyncio

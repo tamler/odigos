@@ -56,8 +56,7 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
         "feed": settings.feed.model_dump(),
         "telegram": settings.telegram.model_dump(),
         "email": settings.email.model_dump(),
-        "stt": settings.stt.model_dump() if hasattr(settings, 'stt') else {},
-        "tts": settings.tts.model_dump() if hasattr(settings, 'tts') else {},
+        "voice": settings.voice.model_dump(),
     }
 
 
