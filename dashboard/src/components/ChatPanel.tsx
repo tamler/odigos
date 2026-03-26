@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, post, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Download, Square, AlignLeft, MoreHorizontal, Camera } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Download, Square, AlignLeft, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -12,12 +12,6 @@ import {
   ChatContainerContent,
   ChatContainerScrollAnchor,
 } from '@/components/ui/chat-container'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
 import { Artifact, ArtifactCard, getFileIcon } from '@/components/ArtifactCard'
 import { MessageActions } from '@/components/MessageActions'
@@ -113,11 +107,6 @@ export function ChatPanel({
   const [sttAvailable, setSttAvailable] = useState(false)
   const [ttsAvailable, setTtsAvailable] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [autoRead, setAutoRead] = useState(() =>
-    localStorage.getItem('odigos-auto-read') === 'true'
-  )
-  const autoReadRef = useRef(autoRead)
-  useEffect(() => { autoReadRef.current = autoRead }, [autoRead])
   const [conciseMode, setConciseMode] = useState(false)
   const [agentName, setAgentName] = useState('Odigos')
   const [showAllActions, setShowAllActions] = useState(false)
@@ -447,55 +436,15 @@ export function ChatPanel({
             </div>
 
             {/* Toggles (G-V4, G-V6) */}
-            {!isMobile ? (
-              <div className="flex items-center gap-1 ml-2 border-l border-border/40 pl-3 shrink-0">
-                {ttsAvailable && (
-                  <button
-                    onClick={() => {
-                      const next = !autoRead
-                      setAutoRead(next)
-                      localStorage.setItem('odigos-auto-read', String(next))
-                    }}
-                    className={`p-2 sm:p-1.5 rounded-md transition-colors relative h-11 w-11 lg:h-8 lg:w-8 flex items-center justify-center ${autoRead ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
-                    title="Auto-read responses"
-                  >
-                    <Volume2 className="h-5 w-5 lg:h-4 lg:w-4" />
-                    {autoRead && <span className="absolute top-2 right-2 lg:top-1 lg:right-1 w-1.5 h-1.5 bg-primary rounded-full" />}
-                  </button>
-                )}
-                <button
-                  onClick={toggleConciseMode}
-                  className={`p-2 sm:p-1.5 rounded-md transition-colors h-11 w-11 lg:h-8 lg:w-8 flex items-center justify-center ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
-                  title="Concise mode"
-                >
-                  <AlignLeft className="h-5 w-5 lg:h-4 lg:w-4" />
-                </button>
-              </div>
-            ) : (
-              <DropdownMenu>
-                <DropdownMenuTrigger>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 ml-1">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {ttsAvailable && (
-                    <DropdownMenuItem onClick={() => {
-                      const next = !autoRead
-                      setAutoRead(next)
-                      localStorage.setItem('odigos-auto-read', String(next))
-                    }}>
-                      <Volume2 className="h-4 w-4 mr-2" />
-                      {autoRead ? 'Disable' : 'Enable'} Auto-read
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={toggleConciseMode}>
-                    <AlignLeft className="h-4 w-4 mr-2" />
-                    {conciseMode ? 'Standard' : 'Concise'} Mode
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+            <div className="flex items-center gap-1 ml-2 border-l border-border/40 pl-3 shrink-0">
+              <button
+                onClick={toggleConciseMode}
+                className={`p-2 sm:p-1.5 rounded-md transition-colors h-11 w-11 lg:h-8 lg:w-8 flex items-center justify-center ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
+                title="Concise mode"
+              >
+                <AlignLeft className="h-5 w-5 lg:h-4 lg:w-4" />
+              </button>
+            </div>
 
             {activeConversationId && (
               <Button 
