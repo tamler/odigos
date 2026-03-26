@@ -124,13 +124,17 @@ async def _transcribe_groq(api_key: str, audio_data: bytes, model: str) -> str:
         temp_path = f.name
 
     try:
+        logger.info("Transcribing %d bytes of audio via Groq %s", len(audio_data), model)
         with open(temp_path, "rb") as audio_file:
             transcription = await client.audio.transcriptions.create(
                 file=("audio.webm", audio_file),
                 model=model,
+                language="en",
                 response_format="text",
             )
-        return transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
+        text = transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
+        logger.info("Transcription result: %s", text[:100])
+        return text
     finally:
         import os
         os.unlink(temp_path)

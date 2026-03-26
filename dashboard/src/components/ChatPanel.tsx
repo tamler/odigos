@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, post, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, PanelRightClose, Square, AlignLeft, Camera } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, PanelRightClose, Square, Minimize2, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -435,9 +435,9 @@ export function ChatPanel({
             <button
               onClick={toggleConciseMode}
               className={`p-1.5 rounded-md transition-colors h-8 w-8 flex items-center justify-center ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
-              title="Concise mode"
+              title={conciseMode ? 'Concise mode (on)' : 'Concise mode (off)'}
             >
-              <AlignLeft className="h-4 w-4" />
+              <Minimize2 className="h-4 w-4" />
             </button>
           </div>
           {onClose && (
@@ -768,6 +768,12 @@ export function ChatPanel({
                 <span>&middot;</span>
                 <button onClick={() => navigate('/settings?tab=documents')} className="hover:text-foreground transition-colors">Documents</button>
                 <span>&middot;</span>
+                {sttAvailable && (
+                  <>
+                    <button onClick={() => setVoiceMode(true)} className="hover:text-foreground transition-colors">Voice</button>
+                    <span>&middot;</span>
+                  </>
+                )}
                 <button 
                   onClick={() => {
                     setHasNewEmail(false)
