@@ -311,17 +311,101 @@ These message types will be sent by the backend when relevant events occur. The 
 
 ---
 
+## G-P7: Settings Layout Redesign + Agent Name
+
+The Settings page has too many tabs crammed horizontally. Redesign to use the sidebar for section navigation, matching the chat/artifact layout pattern.
+
+### Layout Change
+
+When the user navigates to `/settings`:
+- The **left sidebar** replaces the conversation list with settings section links (General, Voice, LLM, Budget, Mesh, Email, Integrations, Plugins, Evolution, etc.)
+- The **main content area** renders the selected settings section at full width
+- The **"Odigos" brand name** in the upper-left becomes the **agent's name** (from `GET /api/settings` → `agent.name`). This applies globally, not just in settings.
+- The **gear icon** at the bottom of the sidebar becomes a **chat bubble** (`MessageCircle` from lucide) when in Settings — clicking it returns to chat
+- When back in chat view, the icon returns to the gear (`Settings` icon)
+
+### Sidebar Sections
+
+Replace the horizontal tabs with sidebar links. Current tabs from `SettingsPage.tsx`:
+- General
+- Voice (new from G-P3)
+- Integrations
+- Mesh
+- Plugins
+- Evolution
+- Analytics
+- Data
+- Documents
+- Prompts
+- Account
+
+Each section link: icon + label, highlighted when active. Same styling as conversation list items.
+
+### Agent Name
+
+The "Odigos" text in the sidebar header (`AppLayout.tsx` line 251) should be replaced with the agent's configured name:
+
+```typescript
+// Fetch agent name on mount (already available from settings)
+const [agentName, setAgentName] = useState('Odigos')
+// In the settings fetch:
+get('/api/settings').then(s => setAgentName(s.agent?.name || 'Odigos'))
+```
+
+Display `agentName` instead of hardcoded "Odigos" in the sidebar header. This applies on ALL pages, not just settings.
+
+### Navigation Icon Swap
+
+In the sidebar footer, the Settings gear icon should be context-aware:
+
+```tsx
+// When on /settings route:
+<MessageCircle /> → navigates to /
+
+// When on any other route:
+<Settings /> → navigates to /settings
+```
+
+Use `useLocation()` to detect current route:
+```typescript
+const location = useLocation()
+const isSettings = location.pathname.startsWith('/settings')
+```
+
+### Mobile Behavior
+- On mobile, settings sections show as a scrollable list (like the conversation list)
+- Selecting a section shows the content full-screen with a back arrow
+- Same pattern as any mobile drill-down navigation
+
+### Files to Modify
+- `dashboard/src/layouts/AppLayout.tsx` — sidebar context switching, agent name, icon swap
+- `dashboard/src/pages/SettingsPage.tsx` — remove horizontal tabs, render only the active section content
+- `dashboard/src/App.tsx` — routing may need adjustment for `/settings/:section` pattern
+
+### Testing
+- [ ] Settings sections appear in sidebar when on /settings
+- [ ] Clicking a section shows its content in main area
+- [ ] Gear icon becomes chat bubble on settings page
+- [ ] Chat bubble returns to chat view
+- [ ] Agent name shows instead of "Odigos" (configure a custom name to verify)
+- [ ] Conversation list returns when navigating back to chat
+- [ ] Mobile: sections as list, drill-down to content
+- [ ] Back navigation works correctly on mobile
+
+---
+
 ## Implementation Order
 
-1. **G-P1: Mobile responsive** (highest impact, touches most files)
-2. **G-P2: Shared notebooks/kanban** (new feature, new pages)
-3. **G-P3: Voice settings UI** (settings page addition)
-4. **G-P5: PDF/ePub export** (artifact enhancement)
-5. **G-P6: Notifications** (small, quick win)
+1. **G-P7: Settings layout redesign** (highest impact, changes interaction model)
+2. **G-P1: Mobile responsive** (touches most files, do after layout is settled)
+3. **G-P2: Shared notebooks/kanban** (new feature, new pages)
+4. **G-P3: Voice settings UI** (settings page — now renders in new layout)
+5. **G-P5: PDF/ePub export** (artifact enhancement)
+6. **G-P6: Notifications** (small, quick win)
 
 ## Backend Tasks (Claude will do before Gemini starts)
 
-1. **Share endpoints** — POST/DELETE share for notebooks and kanban, GET public view endpoints
-2. **Migration** — add `share_token` column to notebooks and kanban_boards tables
-3. **Voice in SettingsUpdate** — add `voice: dict | None = None` to the settings POST model
+1. **Share endpoints** — DONE
+2. **Migration** — DONE (041_sharing.sql)
+3. **Voice in SettingsUpdate** — DONE
 4. **Mesh sharing** — expose shared boards/notebooks via mesh API
