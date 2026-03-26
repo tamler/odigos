@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
-import { get, post, uploadFile } from '@/lib/api'
+import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, PanelRightClose, Square, Minimize2, Camera } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, PanelRightClose, Square, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -107,7 +107,6 @@ export function ChatPanel({
   const [sttAvailable, setSttAvailable] = useState(false)
   const [ttsAvailable, setTtsAvailable] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [conciseMode, setConciseMode] = useState(false)
   const [agentName, setAgentName] = useState('Odigos')
   const [showAllActions, setShowAllActions] = useState(false)
   const [useCamera, setUseCamera] = useState<boolean | 'environment'>(false)
@@ -220,7 +219,6 @@ export function ChatPanel({
       .then((s) => {
         setSttAvailable(s.voice?.stt_provider !== 'disabled')
         setTtsAvailable(s.voice?.tts_provider !== 'disabled')
-        setConciseMode(s.agent?.concise_mode ?? false)
       })
       .catch(() => {})
   }, [])
@@ -240,9 +238,8 @@ export function ChatPanel({
           const data = JSON.parse(event.data)
           if (data.text) {
             setInputValue((prev: string) => prev + (prev ? ' ' : '') + data.text)
-            toast.success('Transcribed')
           } else if (data.error) {
-            toast.error(`Transcription: ${data.error}`)
+            console.warn('Transcription error:', data.error)
           }
         } catch {
           // ignore non-JSON frames
@@ -255,17 +252,23 @@ export function ChatPanel({
       }
 
       ws.onopen = () => {
+        const chunks: Blob[] = []
         recorder.ondataavailable = (e) => {
-          if (e.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-            ws.send(e.data)
+          if (e.data.size > 0) chunks.push(e.data)
+        }
+        recorder.onstop = () => {
+          // Send complete audio blob as one piece (valid webm container)
+          const blob = new Blob(chunks, { type: recorder.mimeType })
+          if (blob.size > 0 && ws.readyState === WebSocket.OPEN) {
+            blob.arrayBuffer().then(buf => ws.send(buf))
           }
         }
-        recorder.start(500)
+        recorder.start()  // No timeslice — collect all data, send on stop
         setRecording(true)
       }
 
       ws.onerror = () => {
-        toast.error('Audio connection error')
+        console.warn('Audio WebSocket error')
         stopRecording()
       }
     } catch {
@@ -283,7 +286,7 @@ export function ChatPanel({
     // transcribe, send the response, then close from its side.
     // The ws.onclose handler will clean up audioWsRef and setRecording(false).
     if (audioWsRef.current) {
-      toast.info('Transcribing...')
+      // Recording stopped, waiting for transcription
     }
   }, [])
 
@@ -337,16 +340,6 @@ export function ChatPanel({
     setMessages((prev: ChatMessage[]) => prev.slice(0, messageIndex))
   }, [activeConversationId, socketRef])
 
-  const toggleConciseMode = useCallback(async () => {
-    const next = !conciseMode
-    setConciseMode(next)
-    try {
-      await post('/api/settings', { agent: { concise_mode: next } })
-    } catch {
-      setConciseMode(!next) // revert on failure
-      toast.error('Failed to update concise mode')
-    }
-  }, [conciseMode])
 
   const getPreviousUserMessage = (assistantIndex: number): string => {
     for (let i = assistantIndex - 1; i >= 0; i--) {
@@ -429,23 +422,14 @@ export function ChatPanel({
   return (
     <FileUpload onFilesAdded={handleFilesAdded} capture={useCamera || undefined}>
       <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 h-[52px] shrink-0 lg:pt-0 pt-2 lg:mt-0 sticky top-0 z-20">
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              onClick={toggleConciseMode}
-              className={`p-1.5 rounded-md transition-colors h-8 w-8 flex items-center justify-center ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
-              title={conciseMode ? 'Concise mode (on)' : 'Concise mode (off)'}
-            >
-              <Minimize2 className="h-4 w-4" />
-            </button>
-          </div>
-          {onClose && (
+        {/* Header — only show close button for side panel */}
+        {onClose && (
+          <div className="flex items-center justify-end px-4 h-[40px] shrink-0">
             <Button variant="ghost" size="icon" aria-label="Close chat panel" onClick={onClose} className="shrink-0 h-8 w-8 hover:bg-muted">
               <PanelRightClose className="h-4 w-4" />
             </Button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Drag overlay */}
         <FileUploadContent>
