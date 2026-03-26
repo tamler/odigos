@@ -40,8 +40,11 @@ class RememberFactTool(BaseTool):
         "required": ["fact"],
     }
 
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, provider=None, embedder=None, background_model: str = "") -> None:
         self.db = db
+        self.provider = provider
+        self.embedder = embedder
+        self._background_model = background_model
 
     async def execute(self, params: dict) -> ToolResult:
         fact = params.get("fact", "").strip()
@@ -49,41 +52,31 @@ class RememberFactTool(BaseTool):
             return ToolResult(success=False, data="", error="Fact text is required")
 
         category = params.get("category", "general")
-        now = datetime.now(timezone.utc).isoformat()
-        fact_id = uuid.uuid4().hex
 
         try:
-            # Check for duplicate/similar facts (exact match)
-            existing = await self.db.fetch_one(
-                "SELECT id FROM user_facts WHERE fact = ?", (fact,)
+            from odigos.memory.fact_checker import check_and_store_fact
+            result = await check_and_store_fact(
+                self.db,
+                fact,
+                category=category,
+                source="user_stated",
+                confidence=1.0,
+                provider=self.provider,
+                embedder=self.embedder,
+                model=self._background_model,
             )
-            if existing:
-                # Update the existing fact's timestamp
-                await self.db.execute(
-                    "UPDATE user_facts SET updated_at = ?, confidence = 1.0, "
-                    "source = 'user_stated' WHERE id = ?",
-                    (now, existing["id"]),
-                )
-                return ToolResult(
-                    success=True,
-                    data=f"Updated existing fact: {fact}",
-                )
 
-            await self.db.execute(
-                "INSERT INTO user_facts (id, fact, category, source, confidence, created_at, updated_at) "
-                "VALUES (?, ?, ?, 'user_stated', 1.0, ?, ?)",
-                (fact_id, fact, category, now, now),
-            )
             # Backup user data to disk
             try:
                 from odigos.core.data_export import export_user_data
                 await export_user_data(self.db)
             except Exception:
                 pass
-            return ToolResult(
-                success=True,
-                data=f"Remembered: {fact} [{category}]",
-            )
+
+            msg = result["message"]
+            if result["replaced"]:
+                msg += f"\n(Replaced contradicting fact: {result['replaced']})"
+            return ToolResult(success=True, data=msg)
         except Exception as e:
             logger.error("Failed to save fact: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=f"Failed to save fact: {e}")

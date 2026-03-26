@@ -262,7 +262,11 @@ async def _register_tools(
     logger.info("Settings tool registered")
 
     # Remember fact tool
-    tool_registry.register(RememberFactTool(db=db))
+    _embedder = vector_memory.embedder if vector_memory else None
+    tool_registry.register(RememberFactTool(
+        db=db, provider=provider, embedder=_embedder,
+        background_model=settings.llm.background_model,
+    ))
     logger.info("Remember fact tool registered")
 
     # Feed publish tool
