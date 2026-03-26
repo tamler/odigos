@@ -193,6 +193,15 @@ class EmailConfig(BaseModel):
     check_interval_ticks: int = 10  # heartbeat ticks between inbox checks (0 = agent decides)
 
 
+class AssistantConfig(BaseModel):
+    enabled: bool = True
+    show_transcript: bool = True
+    text_input: bool = True
+    voice_input: bool = True
+    auto_read: bool = False
+    position: str = "bottom-right"  # "bottom-right" or "bottom-left"
+
+
 class VoiceConfig(BaseModel):
     stt_provider: str = "groq"  # "groq", "local" (moonshine), or "disabled"
     tts_provider: str = "edge"  # "edge" (edge-tts), "local" (pocket-tts), or "disabled"
@@ -241,6 +250,7 @@ class Settings(BaseSettings):
     kanban: KanbanConfig = KanbanConfig()
     access: AccessConfig = AccessConfig()
     voice: VoiceConfig = VoiceConfig()
+    assistant: AssistantConfig = AssistantConfig()
     calendar: CalendarConfig = CalendarConfig()
     email: EmailConfig = EmailConfig()
 

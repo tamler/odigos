@@ -398,6 +398,24 @@ class ContextAssembler:
             except Exception:
                 logger.debug("Could not load board context", exc_info=True)
 
+        # Enrich page context from bubble/UI metadata
+        if context_metadata:
+            page = context_metadata.get("page")
+            if page and page not in ("chat",):
+                page_lines = []
+                page_title = context_metadata.get("page_title", "")
+                visible_data = context_metadata.get("visible_data", "")
+                if page_title:
+                    page_lines.append(f"## User is currently viewing: {page_title} ({page} page)")
+                elif page:
+                    page_lines.append(f"## User is currently on the {page} page")
+                if visible_data:
+                    page_lines.append(visible_data)
+                if page_lines and not notebook_context:
+                    notebook_context = "\n".join(page_lines)
+                elif page_lines:
+                    notebook_context = notebook_context + "\n\n" + "\n".join(page_lines)
+
         concise_mode = getattr(getattr(self.settings, 'agent', None), 'concise_mode', False) if self.settings else False
 
         system_prompt = build_system_prompt(

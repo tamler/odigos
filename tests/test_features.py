@@ -214,6 +214,18 @@ def _settings(**overrides):
             password="",
             model_dump=lambda: {"enabled": False, "url": "", "username": "", "password": ""},
         ),
+        assistant=SimpleNamespace(
+            enabled=True,
+            show_transcript=True,
+            text_input=True,
+            voice_input=True,
+            auto_read=False,
+            position="bottom-right",
+            model_dump=lambda: {
+                "enabled": True, "show_transcript": True, "text_input": True,
+                "voice_input": True, "auto_read": False, "position": "bottom-right",
+            },
+        ),
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)

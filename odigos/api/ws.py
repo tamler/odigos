@@ -15,6 +15,33 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_VALID_ACTIONS = {"navigate", "refresh", "open_chat", "create", "theme"}
+
+
+def _extract_ui_actions(response: str) -> list[dict]:
+    """Extract UI action directives from LLM response text.
+
+    Looks for JSON objects with an "action" key, either inline or in code blocks.
+    """
+    import json as _json
+    import re
+    actions = []
+
+    # Find ```json blocks
+    for match in re.finditer(r'```json\s*\n?(.*?)\n?```', response, re.DOTALL):
+        try:
+            obj = _json.loads(match.group(1).strip())
+            if isinstance(obj, dict) and obj.get("action") in _VALID_ACTIONS:
+                actions.append(obj)
+            elif isinstance(obj, list):
+                for item in obj:
+                    if isinstance(item, dict) and item.get("action") in _VALID_ACTIONS:
+                        actions.append(item)
+        except (ValueError, TypeError):
+            pass
+
+    return actions
+
 MAX_QUEUED_MESSAGES = 3
 
 
@@ -174,11 +201,17 @@ async def websocket_endpoint(websocket: WebSocket):
                             "conversation_id": conversation_id,
                         })
 
-                    await websocket.send_json({
+                    # Extract UI actions from response (```json blocks with "action" key)
+                    ui_actions = _extract_ui_actions(response)
+
+                    response_msg = {
                         "type": "chat_response",
                         "content": response,
                         "conversation_id": conversation_id,
-                    })
+                    }
+                    if ui_actions:
+                        response_msg["actions"] = ui_actions
+                    await websocket.send_json(response_msg)
 
                     # Send suggested actions if the agent offered options
                     agent = agent_service.agent
