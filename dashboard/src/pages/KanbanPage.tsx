@@ -5,9 +5,10 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Trash2, Columns3 } from 'lucide-react'
+import { Plus, Trash2, Columns3, Share2, Globe } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ShareDialog } from '@/components/ShareDialog'
 import {
   KanbanBoardProvider,
   KanbanBoard,
@@ -29,6 +30,7 @@ import { useDndEvents } from '@/components/kanban'
 interface Board {
   id: string
   title: string
+  share_token?: string | null
   created_at: string
   updated_at: string
 }
@@ -90,12 +92,20 @@ function BoardDetailInner({ boardId, board, setBoard }: {
   setBoard: React.Dispatch<React.SetStateAction<BoardDetail | null>>
 }) {
   const navigate = useNavigate()
-  const { setChatPanelOpen, setChatContext } = useOutletContext<any>()
+  const { setChatPanelOpen, setChatContext, isMobile } = useOutletContext<any>()
   const [newCardTexts, setNewCardTexts] = useState<Record<string, string>>({})
   const [newColumnTitle, setNewColumnTitle] = useState('')
   const [addingColumn, setAddingColumn] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [activeColumnId, setActiveColumnId] = useState<string | null>(null)
   const { onDragEnd } = useDndEvents()
   const [boardsList, setBoardsList] = useState<Board[]>([])
+
+  useEffect(() => {
+    if (board.columns.length > 0 && !activeColumnId) {
+      setActiveColumnId(board.columns[0].id)
+    }
+  }, [board.columns, activeColumnId])
 
   useEffect(() => {
     get<{ boards: Board[] }>('/api/kanban/boards').then(data => {
@@ -274,18 +284,60 @@ function BoardDetailInner({ boardId, board, setBoard }: {
           </Button>
         )}
 
-        <Button variant="outline" size="sm" className="ml-auto" onClick={() => {
+        {/* Share Button */}
+        {board && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className={`h-8 w-8 ${board.share_token ? 'text-primary' : 'text-muted-foreground'}`}
+            onClick={() => setShareOpen(true)}
+            title="Share board"
+          >
+            {board.share_token ? <Globe className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+          </Button>
+        )}
+
+        <Button variant="outline" size="sm" className="ml-auto text-xs sm:text-sm h-8 sm:h-9" onClick={() => {
           setChatContext({ board_id: boardId })
           setChatPanelOpen(true)
         }}>
-          Ask Agent
+          {isMobile ? 'Ask' : 'Ask Agent'}
         </Button>
       </div>
+
+      {/* Mobile Column Tabs (G-P1) */}
+      {isMobile && sortedColumns.length > 0 && (
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-border/40 overflow-x-auto scrollbar-hide bg-muted/20">
+          {sortedColumns.map(col => (
+            <button
+              key={col.id}
+              onClick={() => setActiveColumnId(col.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap border ${
+                activeColumnId === col.id 
+                  ? 'bg-primary text-primary-foreground border-primary shadow-sm' 
+                  : 'bg-background text-muted-foreground border-border/60'
+              }`}
+            >
+              {col.title}
+            </button>
+          ))}
+          <button 
+            onClick={() => setActiveColumnId('add')}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all border ${
+              activeColumnId === 'add' 
+                ? 'bg-primary text-primary-foreground border-primary shadow-sm' 
+                : 'bg-background text-muted-foreground border-border/60'
+            }`}
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {/* Board */}
       <div className="flex-1 overflow-x-auto lg:overflow-hidden px-4 py-4 touch-pan-x">
         <KanbanBoard>
-          {sortedColumns.map((col) => {
+          {sortedColumns.filter(col => !isMobile || activeColumnId === col.id).map((col) => {
             const cards = cardsByColumn[col.id] ?? []
             return (
               <KanbanBoardColumn
@@ -375,28 +427,42 @@ function BoardDetailInner({ boardId, board, setBoard }: {
           })}
 
           {/* Add column */}
-          <div className="w-64 flex-shrink-0">
-            <div className="flex gap-1">
-              <Input
-                value={newColumnTitle}
-                onChange={(e) => setNewColumnTitle(e.target.value)}
-                placeholder="New column..."
-                className="h-8 text-sm"
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAddColumn() }}
-              />
-              <KanbanBoardColumnButton
-                onClick={handleAddColumn}
-                disabled={addingColumn || !newColumnTitle.trim()}
-                className="w-auto px-2 shrink-0"
-              >
-                <Plus className="h-4 w-4" />
-              </KanbanBoardColumnButton>
+          {(!isMobile || activeColumnId === 'add') && (
+            <div className="w-64 flex-shrink-0">
+              <div className="flex gap-1">
+                <Input
+                  value={newColumnTitle}
+                  onChange={(e) => setNewColumnTitle(e.target.value)}
+                  placeholder="New column..."
+                  className="h-8 text-sm"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddColumn() }}
+                />
+                <KanbanBoardColumnButton
+                  onClick={handleAddColumn}
+                  disabled={addingColumn || !newColumnTitle.trim()}
+                  className="w-auto px-2 shrink-0"
+                >
+                  <Plus className="h-4 w-4" />
+                </KanbanBoardColumnButton>
+              </div>
             </div>
-          </div>
+          )}
 
-          <KanbanBoardExtraMargin />
+          {!isMobile && <KanbanBoardExtraMargin />}
         </KanbanBoard>
       </div>
+
+      <ShareDialog
+        type="board"
+        id={boardId}
+        isOpen={shareOpen}
+        onClose={() => {
+          setShareOpen(false)
+          // Simple refresh to get share state
+          window.location.reload()
+        }}
+        initialShareToken={board?.share_token}
+      />
     </div>
   )
 }

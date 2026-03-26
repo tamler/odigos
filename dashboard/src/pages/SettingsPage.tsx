@@ -11,6 +11,7 @@ import DocumentsTab from './settings/DocumentsTab'
 import AnalyticsTab from './settings/AnalyticsTab'
 import MeshTab from './settings/MeshTab'
 import IntegrationsTab from './settings/IntegrationsTab'
+import VoiceTab from './settings/VoiceTab'
 import DataTab from './settings/DataTab'
 import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
@@ -27,6 +28,7 @@ const TABS = [
   { id: 'plugins', label: 'Plugins' },
   { id: 'documents', label: 'Documents' },
   { id: 'integrations', label: 'Integrations' },
+  { id: 'voice', label: 'Voice' },
   { id: 'data', label: 'Data' },
   { id: 'analytics', label: 'Analytics' },
   { id: 'mesh', label: 'Mesh' },
@@ -89,6 +91,7 @@ export default function SettingsPage() {
         {activeTab === 'plugins' && <PluginsTab active={true} />}
         {activeTab === 'documents' && <DocumentsTab active={true} />}
         {activeTab === 'integrations' && <IntegrationsTab active={true} />}
+        {activeTab === 'voice' && <VoiceTab active={true} />}
         {activeTab === 'data' && <DataTab active={true} />}
         {activeTab === 'analytics' && <AnalyticsTab />}
         {activeTab === 'mesh' && <MeshTab />}

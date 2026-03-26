@@ -30,6 +30,7 @@ interface Conversation {
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false)
   const [searchQuery, setSearchQuery] = useState('')
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -46,6 +47,12 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const pendingTitles = useRef<Record<string, string>>({})
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 1024)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Keyboard shortcuts (G14)
   useEffect(() => {
@@ -120,6 +127,16 @@ export default function AppLayout() {
           setConversations((prev) =>
             prev.map((c) => (c.id === cid ? { ...c, title } : c))
           )
+        }
+        if (msg.type === 'feed_update') {
+          toast.info(`New feed items from ${msg.source || 'RSS feed'}`, { duration: 4000 })
+        }
+        if (msg.type === 'email_received') {
+          setHasNewEmail(true)
+          toast.info(`New email: ${msg.subject || 'New message'}`, { duration: 5000 })
+        }
+        if (msg.type === 'task_completed') {
+          toast.success(`Completed: ${msg.task || 'Background task'}`, { duration: 3000 })
         }
       },
       (isConnected) => {
@@ -411,6 +428,7 @@ export default function AppLayout() {
                   activeArtifactId,
                   setActiveArtifactId,
                   setChatContext,
+                  isMobile,
                 }} />
               )}
             </ErrorBoundary>
@@ -432,14 +450,32 @@ export default function AppLayout() {
             </aside>
           )}
 
-          {/* Artifact Preview Panel */}
+          {/* Artifact Preview Panel / Bottom Sheet (G-P1) */}
           {artifactPanelOpen && activeArtifactId && (
-            <aside className="fixed inset-0 z-50 lg:static lg:flex-1 lg:min-w-0 bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
-              <ArtifactPreview 
-                artifactId={activeArtifactId} 
-                onClose={() => setArtifactPanelOpen(false)} 
-              />
-            </aside>
+            <>
+              {isMobile ? (
+                <>
+                  <div 
+                    className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm animate-in fade-in duration-300"
+                    onClick={() => setArtifactPanelOpen(false)}
+                  />
+                  <aside className="fixed inset-x-0 bottom-0 z-50 h-[80vh] bg-background border-t border-border/40 rounded-t-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 ease-out">
+                    <div className="w-12 h-1 bg-muted rounded-full mx-auto my-3 shrink-0" />
+                    <ArtifactPreview 
+                      artifactId={activeArtifactId} 
+                      onClose={() => setArtifactPanelOpen(false)} 
+                    />
+                  </aside>
+                </>
+              ) : (
+                <aside className="fixed inset-0 z-50 lg:static lg:flex-1 lg:min-w-0 bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+                  <ArtifactPreview 
+                    artifactId={activeArtifactId} 
+                    onClose={() => setArtifactPanelOpen(false)} 
+                  />
+                </aside>
+              )}
+            </>
           )}
         </div>
       </div>

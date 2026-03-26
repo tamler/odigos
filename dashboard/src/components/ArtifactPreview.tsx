@@ -3,9 +3,20 @@ import { get, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { X, ExternalLink, Download, Code, Eye, FileText, Save } from 'lucide-react'
+import { X, ExternalLink, Download, Code, Eye, FileText, Save, FileDown, BookOpen } from 'lucide-react'
 import { ArtifactCard } from './ArtifactCard'
 import { MarkdownEditor, CodeEditor } from './Editor'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+
+// @ts-ignore
+import html2pdf from 'html2pdf.js'
+// @ts-ignore
+import { epub } from 'epub-gen-memory'
 
   interface ArtifactContent {
     content: string
@@ -28,6 +39,7 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   const [activeTab, setActiveTab] = useState<PreviewTab>('preview')
   const [editContent, setEditContent] = useState('')
   const [isDirty, setIsDirty] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -72,6 +84,73 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   const handleContentChange = (newContent: string) => {
     setEditContent(newContent)
     setIsDirty(true)
+  }
+
+  const handleExportPDF = async () => {
+    if (!data) return
+    setExporting(true)
+    try {
+      const element = document.createElement('div')
+      element.className = 'prose prose-sm p-8 bg-white text-black'
+      
+      // Simple markdown to basic HTML conversion if it's markdown
+      if (data.content_type === 'text/markdown') {
+        element.innerHTML = `<h1 style="font-size: 24px; margin-bottom: 20px;">${data.filename}</h1>` + 
+                           editContent.replace(/\n/g, '<br/>')
+      } else {
+        element.innerHTML = editContent
+      }
+
+      const opt = {
+        margin: 1,
+        filename: `${data.filename.split('.')[0]}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const }
+      }
+
+      await html2pdf().from(element).set(opt).save()
+      toast.success('PDF exported')
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to export PDF')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExportEPUB = async () => {
+    if (!data) return
+    setExporting(true)
+    try {
+      const content = [
+        {
+          title: data.filename,
+          data: editContent.replace(/\n/g, '<br/>')
+        }
+      ]
+      
+      const option = {
+        title: data.filename.split('.')[0],
+        author: 'Odigos Agent',
+        content
+      }
+
+      const result = await epub(option, [])
+      const blob = new Blob([result], { type: 'application/epub+zip' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${data.filename.split('.')[0]}.epub`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('ePub exported')
+    } catch (err) {
+      console.error(err)
+      toast.error('Failed to export ePub')
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (loading) {
@@ -119,6 +198,26 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
               {saving ? 'Saving...' : 'Save'}
             </Button>
           )}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                <FileDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => window.open(`/api/artifacts/${artifactId}/download`)}>
+                <Download className="h-4 w-4 mr-2" /> Download Raw
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPDF} disabled={exporting}>
+                <FileText className="h-4 w-4 mr-2" /> Export as PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportEPUB} disabled={exporting}>
+                <BookOpen className="h-4 w-4 mr-2" /> Export as ePub
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button 
             variant="ghost" 
             size="icon" 

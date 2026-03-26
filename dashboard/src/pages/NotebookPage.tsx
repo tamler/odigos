@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Trash2, BookOpen } from 'lucide-react'
+import { Plus, Trash2, BookOpen, Share2, Globe } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { ShareDialog } from '@/components/ShareDialog'
 
 interface Notebook {
   id: string
@@ -15,6 +16,7 @@ interface Notebook {
   mode: string
   collaboration: string
   share_with_agent: number
+  share_token?: string | null
   created_at: string
   updated_at: string
 }
@@ -66,7 +68,8 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
   const [newEntry, setNewEntry] = useState('')
   const [adding, setAdding] = useState(false)
   const [loading, setLoading] = useState(true)
-  const { setChatPanelOpen, setChatContext } = useOutletContext<any>()
+  const [shareOpen, setShareOpen] = useState(false)
+  const { setChatPanelOpen, setChatContext, isMobile } = useOutletContext<any>()
   const entriesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -142,8 +145,8 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Main editor panel (70%) */}
-      <div className="flex flex-col flex-1 min-w-0 border-r border-border/40">
+      {/* Main editor panel */}
+      <div className={`flex flex-col flex-1 min-w-0 ${!isMobile ? 'border-r border-border/40' : ''}`}>
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger>
@@ -190,21 +193,34 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
             </Button>
           )}
 
+          {/* Share Button */}
+          {notebook && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`h-8 w-8 ${notebook.share_token ? 'text-primary' : 'text-muted-foreground'}`}
+              onClick={() => setShareOpen(true)}
+              title="Share notebook"
+            >
+              {notebook.share_token ? <Globe className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+            </Button>
+          )}
+
           {notebook && (
             <span className="text-xs text-muted-foreground ml-auto">
               {notebook.mode} &middot; {notebook.collaboration}
             </span>
           )}
-          <Button variant="outline" size="sm" className="ml-2" onClick={() => {
+          <Button variant="outline" size="sm" className="ml-2 text-xs sm:text-sm h-8 sm:h-9" onClick={() => {
             setChatContext({ notebook_id: notebookId })
             setChatPanelOpen(true)
           }}>
-            Ask Agent
+            {isMobile ? 'Ask' : 'Ask Agent'}
           </Button>
         </div>
 
         <ScrollArea className="flex-1 px-4">
-          <div className="py-4 space-y-3 max-w-2xl">
+          <div className={`py-4 space-y-3 ${isMobile ? 'max-w-full' : 'max-w-2xl'}`}>
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-20 w-full rounded-md" />
@@ -275,20 +291,31 @@ function NotebookEditor({ notebookId }: { notebookId: string }) {
         </ScrollArea>
 
         <div className="px-4 py-3 border-t border-border/40 shrink-0">
-          <div className="flex gap-2 max-w-2xl">
+          <div className={`flex gap-2 ${isMobile ? 'max-w-full' : 'max-w-2xl'}`}>
             <Input
               value={newEntry}
               onChange={(e) => setNewEntry(e.target.value)}
               placeholder="Add a note..."
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleAddEntry() }}
-              className="flex-1"
+              className="flex-1 text-base sm:text-sm"
             />
-            <Button onClick={handleAddEntry} disabled={adding || !newEntry.trim()} size="icon" aria-label="Add entry">
-              <Plus className="h-4 w-4" />
+            <Button onClick={handleAddEntry} disabled={adding || !newEntry.trim()} size="icon" aria-label="Add entry" className="h-10 w-10 sm:h-9 sm:w-9">
+              <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
             </Button>
           </div>
         </div>
       </div>
+
+      <ShareDialog
+        type="notebook"
+        id={notebookId}
+        isOpen={shareOpen}
+        onClose={() => {
+          setShareOpen(false)
+          loadNotebook() // Refresh to get share_token state
+        }}
+        initialShareToken={notebook?.share_token}
+      />
     </div>
   )
 }

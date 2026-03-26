@@ -205,28 +205,28 @@ export default function GeneralSettings({ active }: Props) {
             <Input value={settings.llm.default_model} onChange={(e) => update('llm', 'default_model', e.target.value)} className="bg-muted/50 border-border/40" />
             <p className="text-xs text-muted-foreground">Used for chat, evaluation, strategy, and all primary tasks.</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Fallback Model</Label>
-              <Input value={settings.llm.fallback_model} onChange={(e) => update('llm', 'fallback_model', e.target.value)} className="bg-muted/50 border-border/40" />
-              <p className="text-xs text-muted-foreground">Used when default model fails.</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Background Model</Label>
-              <Input value={settings.llm.background_model} onChange={(e) => update('llm', 'background_model', e.target.value)} placeholder={settings.llm.default_model} className="bg-muted/50 border-border/40" />
-              <p className="text-xs text-muted-foreground">Optional cheaper model for idle thinking. Defaults to default model.</p>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Fallback Model</Label>
+            <Input value={settings.llm.fallback_model} onChange={(e) => update('llm', 'fallback_model', e.target.value)} className="bg-muted/50 border-border/40" />
+            <p className="text-xs text-muted-foreground">Used when default model fails.</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Max Tokens</Label>
-              <Input type="number" value={settings.llm.max_tokens} onChange={(e) => update('llm', 'max_tokens', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Temperature</Label>
-              <Input type="number" step="0.1" value={settings.llm.temperature} onChange={(e) => update('llm', 'temperature', parseFloat(e.target.value))} className="bg-muted/50 border-border/40" />
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Background Model</Label>
+            <Input value={settings.llm.background_model} onChange={(e) => update('llm', 'background_model', e.target.value)} placeholder={settings.llm.default_model} className="bg-muted/50 border-border/40" />
+            <p className="text-xs text-muted-foreground">Optional cheaper model for idle thinking. Defaults to default model.</p>
           </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Max Tokens</Label>
+            <Input type="number" value={settings.llm.max_tokens} onChange={(e) => update('llm', 'max_tokens', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Temperature</Label>
+            <Input type="number" step="0.1" value={settings.llm.temperature} onChange={(e) => update('llm', 'temperature', parseFloat(e.target.value))} className="bg-muted/50 border-border/40" />
+          </div>
+        </div>
         </div>
       </SectionCard>
 
@@ -236,7 +236,7 @@ export default function GeneralSettings({ active }: Props) {
           <Label className="text-xs text-muted-foreground">Name</Label>
           <Input value={settings.agent.name} onChange={(e) => update('agent', 'name', e.target.value)} className="bg-muted/50 border-border/40" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Max Tool Turns</Label>
             <Input type="number" value={settings.agent.max_tool_turns} onChange={(e) => update('agent', 'max_tool_turns', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
@@ -284,7 +284,7 @@ export default function GeneralSettings({ active }: Props) {
 
       {/* Budget */}
       <SectionCard title="Budget">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Daily Limit (USD)</Label>
             <Input type="number" step="0.5" value={settings.budget.daily_limit_usd} onChange={(e) => update('budget', 'daily_limit_usd', parseFloat(e.target.value))} className="bg-muted/50 border-border/40" />
@@ -372,7 +372,7 @@ export default function GeneralSettings({ active }: Props) {
 
       {/* Advanced */}
       <SectionCard title="Advanced">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Heartbeat (s)</Label>
             <Input type="number" value={settings.heartbeat.interval_seconds} onChange={(e) => update('heartbeat', 'interval_seconds', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />

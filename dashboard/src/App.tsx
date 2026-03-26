@@ -14,6 +14,8 @@ const NotebookPage = lazy(() => import('./pages/NotebookPage'))
 const KanbanPage = lazy(() => import('./pages/KanbanPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
+const SharedNotebookPage = lazy(() => import('./pages/SharedNotebookPage'))
+const SharedBoardPage = lazy(() => import('./pages/SharedBoardPage'))
 
 // Load saved chat text size preference
 const savedSize = localStorage.getItem('chat-text-size')
@@ -85,6 +87,10 @@ export default function App() {
         <BrowserRouter>
           <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader /></div>}>
             <Routes>
+              {/* Standalone Shared Routes (No Auth Required) */}
+              <Route path="/shared/notebook/:token" element={<SharedNotebookPage />} />
+              <Route path="/shared/board/:token" element={<SharedBoardPage />} />
+
               <Route element={<AppLayout />}>
                 <Route path="/" element={<ChatPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
