@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Copy, Volume2, Flag, RotateCcw, Pencil, Check, X } from 'lucide-react'
+import { Copy, Volume2, VolumeX, Flag, RotateCcw, Pencil, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { post } from '@/lib/api'
 import { ChatSocket } from '@/lib/ws'
+import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +24,8 @@ interface MessageActionsProps {
   socket: ChatSocket | null    // ChatSocket from '@/lib/ws' (socketRef.current)
   onEdit: (index: number, content: string) => void
   playTTS: (text: string) => void
+  stopTTS: () => void
+  isTTSPlaying: boolean
 }
 
 export function MessageActions({
@@ -36,10 +39,11 @@ export function MessageActions({
   socket,
   onEdit,
   playTTS,
+  stopTTS,
+  isTTSPlaying,
 }: MessageActionsProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(content)
-  const [isSpeaking, setIsSpeaking] = useState(false)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content)
@@ -115,22 +119,20 @@ export function MessageActions({
         <Copy className="h-4 w-4" />
       </button>
       
-      {role === 'assistant' && ttsAvailable && (
+      {role === 'assistant' && ttsAvailable && shouldPlayTTS(content) && (
         <button
           onClick={() => {
-            if (isSpeaking) return
-            setIsSpeaking(true)
-            playTTS(content)
-            // Debounce: prevent rapid double-clicks. The actual audio
-            // lifecycle is managed by AppLayout's currentAudioRef.
-            setTimeout(() => setIsSpeaking(false), 500)
+            if (isTTSPlaying) {
+              stopTTS()
+            } else {
+              playTTS(stripForTTS(content))
+            }
           }}
-          disabled={isSpeaking}
-          className={`text-muted-foreground hover:text-foreground transition-colors p-0.5 ${isSpeaking ? 'opacity-50' : ''}`}
-          title="Speak"
-          aria-label="Speak message"
+          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+          title={isTTSPlaying ? 'Stop reading' : 'Read aloud'}
+          aria-label={isTTSPlaying ? 'Stop reading' : 'Read aloud'}
         >
-          <Volume2 className="h-4 w-4" />
+          {isTTSPlaying ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
         </button>
       )}
 

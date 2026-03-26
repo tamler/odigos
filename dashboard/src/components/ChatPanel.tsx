@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, post, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Square, AlignLeft, Camera } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, PanelRightClose, Square, AlignLeft, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -279,16 +279,16 @@ export function ChatPanel({
     setRecording(false)
   }, [])
 
+  const [isTTSPlaying, setIsTTSPlaying] = useState(false)
+
   const playTTS = useCallback(async (text: string) => {
-    // Stop any currently playing audio
     if (currentAudioRef.current) {
       currentAudioRef.current.pause()
       currentAudioRef.current.src = ''
       currentAudioRef.current = null
+      setIsTTSPlaying(false)
     }
-
     if (!text) return
-
     try {
       const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`, {
         credentials: 'include',
@@ -298,14 +298,25 @@ export function ChatPanel({
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       currentAudioRef.current = audio
+      setIsTTSPlaying(true)
       audio.onended = () => {
         URL.revokeObjectURL(url)
         currentAudioRef.current = null
+        setIsTTSPlaying(false)
       }
       audio.play()
     } catch {
-      // silent fail
+      setIsTTSPlaying(false)
     }
+  }, [])
+
+  const stopTTS = useCallback(() => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause()
+      currentAudioRef.current.src = ''
+      currentAudioRef.current = null
+    }
+    setIsTTSPlaying(false)
   }, [])
 
   const handleEdit = useCallback((messageIndex: number, content: string) => {
@@ -503,7 +514,9 @@ export function ChatPanel({
                                       ttsAvailable={ttsAvailable}
                                       socket={socketRef.current}
                                       onEdit={handleEdit}
-                                      playTTS={(text) => playTTS(text)}
+                                      playTTS={playTTS}
+                                      stopTTS={stopTTS}
+                                      isTTSPlaying={isTTSPlaying}
                                     />
                                   </div>
                                 </div>
@@ -522,7 +535,9 @@ export function ChatPanel({
                                     ttsAvailable={ttsAvailable}
                                     socket={socketRef.current}
                                     onEdit={() => {}}
-                                    playTTS={(text) => playTTS(text)}
+                                    playTTS={playTTS}
+                                      stopTTS={stopTTS}
+                                      isTTSPlaying={isTTSPlaying}
                                   />
                                 </div>
                               )}
@@ -663,17 +678,6 @@ export function ChatPanel({
               />
               <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                 <div className="flex items-center gap-1">
-                  {sttAvailable && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Toggle voice mode"
-                      className={`h-11 w-11 lg:h-8 lg:w-8 rounded-lg ${voiceMode ? 'text-primary bg-primary/10' : 'text-muted-foreground'}`}
-                      onClick={() => setVoiceMode(!voiceMode)}
-                    >
-                      <Volume2 className="h-5 w-5 lg:h-4 lg:w-4" />
-                    </Button>
-                  )}
                   <FileUploadTrigger asChild>
                     <Button
                       variant="ghost"

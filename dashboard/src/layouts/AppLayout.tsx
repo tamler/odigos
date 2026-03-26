@@ -136,11 +136,14 @@ export default function AppLayout() {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const pendingTitles = useRef<Record<string, string>>({})
 
+  const [isTTSPlaying, setIsTTSPlaying] = useState(false)
+
   const playTTS = useCallback(async (text: string) => {
     if (currentAudioRef.current) {
       currentAudioRef.current.pause()
       currentAudioRef.current.src = ''
       currentAudioRef.current = null
+      setIsTTSPlaying(false)
     }
     if (!text) return
     try {
@@ -152,12 +155,25 @@ export default function AppLayout() {
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       currentAudioRef.current = audio
+      setIsTTSPlaying(true)
       audio.onended = () => {
         URL.revokeObjectURL(url)
         currentAudioRef.current = null
+        setIsTTSPlaying(false)
       }
       audio.play()
-    } catch {}
+    } catch {
+      setIsTTSPlaying(false)
+    }
+  }, [])
+
+  const stopTTS = useCallback(() => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause()
+      currentAudioRef.current.src = ''
+      currentAudioRef.current = null
+    }
+    setIsTTSPlaying(false)
   }, [])
 
   useEffect(() => {
@@ -677,6 +693,8 @@ export default function AppLayout() {
                   suggestedActions,
                   setSuggestedActions,
                   playTTS,
+                  stopTTS,
+                  isTTSPlaying,
                 }} />
               )}
             </ErrorBoundary>
