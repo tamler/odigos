@@ -7,6 +7,9 @@ from starlette.testclient import TestClient
 from odigos.config import VoiceConfig
 
 
+AUTH = {"Authorization": "Bearer test-key"}
+
+
 def _make_app(voice_config=None, groq_api_key=""):
     from odigos.api.audio import router
     app = FastAPI()
@@ -23,63 +26,57 @@ def _make_app(voice_config=None, groq_api_key=""):
 
 class TestTTS:
     def test_tts_returns_audio(self):
-        """TTS endpoint should return audio bytes (edge-tts)."""
         app = _make_app()
         client = TestClient(app)
-        resp = client.get(
-            "/api/audio/speak?text=hello",
-            headers={"Authorization": "Bearer test-key"},
-        )
+        resp = client.get("/api/audio/speak?text=hello", headers=AUTH)
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "audio/mpeg"
 
     def test_tts_empty_text(self):
         app = _make_app()
         client = TestClient(app)
-        resp = client.get(
-            "/api/audio/speak?text=",
-            headers={"Authorization": "Bearer test-key"},
-        )
+        resp = client.get("/api/audio/speak?text=", headers=AUTH)
         assert resp.status_code == 200
 
-
-class TestTTSAuth:
     def test_tts_requires_auth(self):
         app = _make_app()
         client = TestClient(app)
         resp = client.get("/api/audio/speak?text=hello")
         assert resp.status_code == 401
 
-    def test_tts_with_auth_works(self):
-        app = _make_app()
-        client = TestClient(app)
-        resp = client.get(
-            "/api/audio/speak?text=hello",
-            headers={"Authorization": "Bearer test-key"},
-        )
-        assert resp.status_code == 200
-
     def test_tts_disabled_returns_404(self):
         app = _make_app(voice_config=VoiceConfig(tts_provider="disabled"))
         client = TestClient(app)
-        resp = client.get(
-            "/api/audio/speak?text=hello",
-            headers={"Authorization": "Bearer test-key"},
-        )
+        resp = client.get("/api/audio/speak?text=hello", headers=AUTH)
         assert resp.status_code == 404
 
 
-class TestSTTWebSocket:
-    def test_stt_disabled_returns_error(self):
-        app = _make_app(voice_config=VoiceConfig(stt_provider="disabled"))
-        client = TestClient(app)
-        with client.websocket_connect("/api/ws/audio/transcribe?token=test-key") as ws:
-            data = ws.receive_json()
-            assert "disabled" in data.get("error", "").lower()
-
-    def test_stt_auth_failure(self):
+class TestSTTTranscribe:
+    def test_stt_requires_auth(self):
         app = _make_app()
         client = TestClient(app)
-        with client.websocket_connect("/api/ws/audio/transcribe?token=wrong-key") as ws:
-            data = ws.receive_json()
-            assert data.get("error") is not None
+        resp = client.post("/api/audio/transcribe")
+        assert resp.status_code == 401
+
+    def test_stt_disabled_returns_404(self):
+        app = _make_app(voice_config=VoiceConfig(stt_provider="disabled"))
+        client = TestClient(app)
+        resp = client.post("/api/audio/transcribe", headers=AUTH)
+        assert resp.status_code == 404
+
+    def test_stt_no_file_returns_400(self):
+        app = _make_app()
+        client = TestClient(app)
+        resp = client.post("/api/audio/transcribe", headers=AUTH)
+        assert resp.status_code == 400
+
+    def test_stt_short_audio_returns_empty(self):
+        app = _make_app()
+        client = TestClient(app)
+        resp = client.post(
+            "/api/audio/transcribe",
+            headers=AUTH,
+            files={"audio": ("test.webm", b"\x00" * 100, "audio/webm")},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["text"] == ""
