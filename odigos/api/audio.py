@@ -120,7 +120,14 @@ async def ws_transcribe(websocket: WebSocket):
             # Add to PCM buffer and process complete frames
             pcm_buffer.extend(chunk)
             if total_frames == 0:
-                logger.info("Audio WebSocket: first chunk received, %d bytes, buffer now %d", len(chunk), len(pcm_buffer))
+                # Log first chunk info + audio level
+                import array
+                samples = array.array('h', chunk)  # Int16
+                if samples:
+                    peak = max(abs(s) for s in samples)
+                    rms = (sum(s*s for s in samples) / len(samples)) ** 0.5
+                    logger.info("Audio WebSocket: first chunk %d bytes, %d samples, peak=%d rms=%.0f (max=32767)",
+                                len(chunk), len(samples), peak, rms)
 
             while len(pcm_buffer) >= _FRAME_BYTES:
                 total_frames += 1
