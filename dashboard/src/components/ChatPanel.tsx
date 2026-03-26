@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, post, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Download, Square, AlignLeft, Camera } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Square, AlignLeft, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -363,21 +363,6 @@ export function ChatPanel({
     setPendingFiles((prev) => prev.filter((p) => p.file !== file))
   }
 
-  async function exportToArtifact() {
-    if (!activeConversationId) return
-    toast.promise(
-      (async () => {
-        const text = await get<string>(`/api/conversations/${activeConversationId}/export?format=markdown`)
-        handleSend(`Save this conversation export as a markdown artifact:\n\n${text}`)
-      })(),
-      {
-        loading: 'Preparing export...',
-        success: 'Export message sent to agent',
-        error: 'Failed to prepare export'
-      }
-    )
-  }
-
   function handleSend(overrideContent?: string) {
     const content = (overrideContent ?? inputValue).trim()
     if (!content && pendingFiles.length === 0) return
@@ -427,37 +412,14 @@ export function ChatPanel({
       <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-[52px] border-b border-border/40 shrink-0 lg:pt-0 pt-2 lg:mt-0 lg:bg-transparent bg-background/50 backdrop-blur-sm shadow-sm sticky top-0 z-20">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="min-w-0">
-              <div className="text-sm font-medium truncate">{isSidePanel ? 'Copilot' : 'Copilot'}</div>
-              {chatContext && Object.keys(chatContext).length > 0 && (
-                <div className="text-xs text-muted-foreground mt-0.5">Context active</div>
-              )}
-            </div>
-
-            {/* Toggles (G-V4, G-V6) */}
-            <div className="flex items-center gap-1 ml-2 border-l border-border/40 pl-3 shrink-0">
-              <button
-                onClick={toggleConciseMode}
-                className={`p-2 sm:p-1.5 rounded-md transition-colors h-11 w-11 lg:h-8 lg:w-8 flex items-center justify-center ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
-                title="Concise mode"
-              >
-                <AlignLeft className="h-5 w-5 lg:h-4 lg:w-4" />
-              </button>
-            </div>
-
-            {activeConversationId && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                aria-label="Export conversation as artifact" 
-                onClick={exportToArtifact}
-                className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
-                title="Export as Artifact"
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            )}
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={toggleConciseMode}
+              className={`p-1.5 rounded-md transition-colors h-8 w-8 flex items-center justify-center ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
+              title="Concise mode"
+            >
+              <AlignLeft className="h-4 w-4" />
+            </button>
           </div>
           {onClose && (
             <Button variant="ghost" size="icon" aria-label="Close chat panel" onClick={onClose} className="shrink-0 h-8 w-8 hover:bg-muted">
