@@ -274,8 +274,9 @@ export function ChatPanel({
         }
       }
 
-      recorder.start()
+      recorder.start(250)  // Capture data every 250ms so chunks accumulate during recording
       setRecording(true)
+      console.log(`[STT] Recording started, mimeType=${recorder.mimeType}`)
     } catch {
       toast.error('Microphone access denied')
     }
