@@ -422,7 +422,7 @@ export function ChatPanel({
     <FileUpload onFilesAdded={handleFilesAdded} capture={useCamera || undefined}>
       <div className="flex-1 flex flex-col h-full bg-background relative overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 h-[52px] border-b border-border/40 shrink-0 lg:pt-0 pt-2 lg:mt-0 lg:bg-transparent bg-background/50 backdrop-blur-sm shadow-sm sticky top-0 z-20">
+        <div className="flex items-center justify-between px-4 h-[52px] shrink-0 lg:pt-0 pt-2 lg:mt-0 sticky top-0 z-20">
           <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={toggleConciseMode}
@@ -564,7 +564,7 @@ export function ChatPanel({
                       )}
 
                       {artifacts.length > 0 && (
-                        <div className="pt-4 mt-6 border-t border-border/40">
+                        <div className="pt-4 mt-6">
                           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Generated Artifacts</h3>
                           <div className="flex flex-wrap gap-3">
                             {artifacts.map(a => (
