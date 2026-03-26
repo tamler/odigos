@@ -136,6 +136,75 @@ async def approve_proposal(proposal_id: str, db: Database = Depends(get_db)):
     return {"status": "approved"}
 
 
+# -- Fitness Functions --
+
+@router.get("/evolution/fitness")
+async def get_fitness_functions(db: Database = Depends(get_db)):
+    """List all fitness functions."""
+    from odigos.core.fitness import list_fitness_functions
+    functions = await list_fitness_functions(db, enabled_only=False)
+    return {"fitness_functions": functions}
+
+
+@router.post("/evolution/fitness")
+async def create_fitness_function_endpoint(
+    body: dict,
+    db: Database = Depends(get_db),
+):
+    """Create a new fitness function."""
+    from odigos.core.fitness import create_fitness_function
+    func_id = await create_fitness_function(
+        db,
+        name=body.get("name", ""),
+        description=body.get("description", ""),
+        metric=body.get("metric", ""),
+        target_score=body.get("target_score"),
+        weight=body.get("weight", 1.0),
+    )
+    return {"id": func_id}
+
+
+@router.delete("/evolution/fitness/{func_id}")
+async def delete_fitness_function(func_id: str, db: Database = Depends(get_db)):
+    """Delete a fitness function."""
+    await db.execute("DELETE FROM fitness_functions WHERE id = ?", (func_id,))
+    return {"status": "deleted"}
+
+
+# -- Evolution Mode --
+
+@router.get("/evolution/mode")
+async def get_evolution_mode_endpoint(db: Database = Depends(get_db)):
+    """Get the current evolution operating mode."""
+    from odigos.core.fitness import get_evolution_mode, EVOLUTION_MODES
+    mode = await get_evolution_mode(db)
+    return {"mode": mode, "available_modes": EVOLUTION_MODES}
+
+
+@router.post("/evolution/mode")
+async def set_evolution_mode_endpoint(body: dict, db: Database = Depends(get_db)):
+    """Set the evolution operating mode."""
+    from odigos.core.fitness import set_evolution_mode
+    mode = body.get("mode", "continuous")
+    await set_evolution_mode(db, mode)
+    return {"mode": mode}
+
+
+# -- Trial Patterns --
+
+@router.get("/evolution/patterns")
+async def get_trial_patterns(
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Database = Depends(get_db),
+):
+    """Get trial success/failure patterns."""
+    rows = await db.fetch_all(
+        "SELECT * FROM trial_patterns ORDER BY created_at DESC LIMIT ?",
+        (limit,),
+    )
+    return {"patterns": [dict(r) for r in rows]}
+
+
 @router.post("/proposals/{proposal_id}/dismiss")
 async def dismiss_proposal(proposal_id: str, db: Database = Depends(get_db)):
     """Dismiss a specialization proposal."""

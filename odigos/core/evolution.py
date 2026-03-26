@@ -115,10 +115,14 @@ class EvolutionEngine:
                 "Promoted trial %s: score %.1f vs baseline %.1f (+%.1f)",
                 trial_id[:8], avg, baseline, delta,
             )
+            # Record success pattern
+            await self._record_trial_pattern(trial, "success", delta)
             return "promoted"
 
         if delta <= self._config.revert_threshold:
             await self._revert_with_log(trial, reason="worse_than_baseline")
+            # Record failure pattern
+            await self._record_trial_pattern(trial, "failure", delta)
             return "reverted"
 
         return "continue"
@@ -184,6 +188,27 @@ class EvolutionEngine:
         )
         await self.checkpoint_manager.revert_trial(trial_id, reason=reason)
         logger.info("Reverted trial %s: %s", trial_id[:8], reason)
+
+    async def _record_trial_pattern(self, trial: dict, pattern_type: str, score_delta: float) -> None:
+        """Record a success or failure pattern from a completed trial."""
+        try:
+            from odigos.core.fitness import store_trial_pattern
+            await store_trial_pattern(
+                self.db,
+                trial_id=trial["id"],
+                pattern_type=pattern_type,
+                target=trial.get("target", "prompt_section"),
+                target_name=trial.get("change_description", "")[:100],
+                hypothesis=trial.get("hypothesis", ""),
+                score_delta=score_delta,
+                context={
+                    "avg_score": trial.get("avg_score"),
+                    "baseline": trial.get("baseline_avg_score"),
+                    "eval_count": trial.get("evaluation_count"),
+                },
+            )
+        except Exception:
+            logger.debug("Failed to record trial pattern", exc_info=True)
 
     async def _generate_lessons(self, trial: dict) -> str:
         try:

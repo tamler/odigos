@@ -59,6 +59,22 @@ If you see a repeated pattern that could be a reusable skill, include it in your
 
 Plans that failed to achieve their goals may indicate systemic issues with planning or execution.
 
+## Fitness Functions (optimization targets)
+{fitness_summary}
+
+Prioritize hypotheses that target fitness functions with the largest gap between current and target scores.
+Weight your proposals by the fitness function weights.
+
+## Trial Pattern History (learn from past trials)
+{trial_patterns}
+
+Repeat patterns that worked. Avoid patterns that failed. Use this history to make better proposals.
+
+## Evolution Mode: {evolution_mode}
+- continuous: keep proposing improvements indefinitely
+- converge: stop when all fitness targets are met
+- supervised: propose but require user approval
+
 ## Active Reasoning Critique (AS/BT analysis)
 {arew_summary}
 
@@ -140,6 +156,21 @@ class Strategist:
 
     async def analyze(self) -> dict | None:
         """Run the full strategist cycle: analyze, hypothesize, act."""
+        # Check operating mode
+        from odigos.core.fitness import get_evolution_mode, get_fitness_summary, get_trial_patterns_summary, list_fitness_functions
+        mode = await get_evolution_mode(self.db)
+
+        # In converge mode, check if all targets are met
+        if mode == "converge":
+            functions = await list_fitness_functions(self.db)
+            all_met = all(
+                f["target_score"] is not None and f["current_score"] >= f["target_score"]
+                for f in functions
+            ) if functions else False
+            if all_met:
+                logger.info("Strategist: all fitness targets met, converge mode — skipping")
+                return None
+
         # Gather context
         recent_evals = await self._get_evaluation_summary()
         query_log_summary = await self._get_query_log_summary()
@@ -150,11 +181,18 @@ class Strategist:
         failed_trials = await self.evolution.get_failed_trials(limit=10)
         directions = await self.evolution.get_recent_directions(limit=3)
 
+        # Fitness functions and trial patterns
+        fitness_summary = await get_fitness_summary(self.db)
+        trial_patterns = await get_trial_patterns_summary(self.db)
+
         # Build prompt variables
         prompt_vars = self._build_prompt_vars(
             recent_evals, failed_trials, directions,
             query_log_summary, skill_usage_summary, skill_mining_summary,
             outcome_summary, arew_summary,
+            fitness_summary=fitness_summary,
+            trial_patterns=trial_patterns,
+            evolution_mode=mode,
         )
 
         # Ask LLM
@@ -410,7 +448,7 @@ class Strategist:
             "total_recent": sum(r["cnt"] for r in rows) if rows else 0,
         }
 
-    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "", outcome_summary: str = "", arew_summary: str = "") -> dict[str, str]:
+    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "", outcome_summary: str = "", arew_summary: str = "", fitness_summary: str = "", trial_patterns: str = "", evolution_mode: str = "continuous") -> dict[str, str]:
         failed_summary = ""
         if failed_trials:
             failed_summary = "\n".join(
@@ -444,6 +482,9 @@ class Strategist:
             "skill_mining_summary": skill_mining_summary or 'No repeated patterns found yet.',
             "outcome_summary": outcome_summary or 'No plan outcome data yet.',
             "arew_summary": arew_summary or 'No AREW critique data yet.',
+            "fitness_summary": fitness_summary or 'No fitness functions defined. Optimizing overall score.',
+            "trial_patterns": trial_patterns or 'No trial history yet.',
+            "evolution_mode": evolution_mode,
         }
 
 
