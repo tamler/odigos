@@ -130,11 +130,41 @@ async def _transcribe_groq(api_key: str, audio_data: bytes, model: str) -> str:
                 file=("audio.webm", audio_file),
                 model=model,
                 language="en",
-                response_format="text",
+                response_format="verbose_json",
+                temperature=0.0,
             )
-        text = transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
-        logger.info("Transcription result: %s", text[:100])
-        return text
+
+        # Filter hallucinations using no_speech_prob and compression_ratio
+        segments = getattr(transcription, 'segments', None) or []
+        clean_parts = []
+        _HALLUCINATION_PHRASES = {
+            "thank you", "thanks for watching", "please subscribe",
+            "subtitles by", "amara.org", "thanks for listening",
+        }
+        for seg in segments:
+            no_speech = seg.get("no_speech_prob", 0)
+            compression = seg.get("compression_ratio", 0)
+            text = seg.get("text", "").strip()
+            # Skip segments that are likely hallucinations
+            if no_speech > 0.7:
+                continue
+            if compression > 2.4:
+                continue
+            if text.lower().rstrip('.!') in _HALLUCINATION_PHRASES:
+                continue
+            if text:
+                clean_parts.append(text)
+
+        result = " ".join(clean_parts).strip()
+        # Fallback to raw text if segment filtering removed everything
+        if not result and hasattr(transcription, 'text'):
+            raw = transcription.text.strip()
+            if raw.lower().rstrip('.!') not in _HALLUCINATION_PHRASES:
+                result = raw
+
+        logger.info("Transcription result (%d segments, %d clean): %s",
+                     len(segments), len(clean_parts), result[:100])
+        return result
     finally:
         import os
         os.unlink(temp_path)
