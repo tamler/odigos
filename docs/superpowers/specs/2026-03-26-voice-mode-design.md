@@ -5,11 +5,12 @@
 
 ## Overview
 
-Three interconnected features that make Odigos more interactive and accessible:
+Four interconnected features that make Odigos more interactive and accessible:
 
 1. **Message hover actions** — copy, speak, report, retry, edit on every message
 2. **Voice mode Phase A** — fix existing voice, add TTS content filtering, auto-read toggle, stop button
 3. **Voice mode Phase B** — conversational voice UI with input-bar orb swap
+4. **Verbosity control** — concise mode toggle to reduce agent over-explanation
 
 ## 1. Message Hover Actions
 
@@ -121,11 +122,13 @@ New logic:
 ```typescript
 // STT available (mic button): check voice.stt_provider !== "disabled"
 const sttAvailable = s.voice?.stt_provider !== 'disabled'
-// TTS always available (edge-tts is free), no check needed
+// TTS available (speak icons, auto-read): check voice.tts_provider !== "disabled"
+const ttsAvailable = s.voice?.tts_provider !== 'disabled'
 ```
 
-- **Speak icon on messages**: Always visible on hover (no config gate). Free.
+- **Speak icon on messages**: Visible on hover when `tts_provider !== "disabled"`. Users who don't want TTS can disable it via settings.
 - **Mic button**: Visible when `stt_provider !== "disabled"` (requires Groq key or local provider).
+- **If a TTS plugin is active** (`tts_provider === "local"`): the speak endpoint should route through the plugin instead of edge-tts. This is a future concern — for now, only `"edge"` and `"disabled"` are supported.
 
 ### Auto-Read Toggle
 
@@ -244,28 +247,84 @@ A typical voice session (10 min) costs ~$0.007. Auto-read is free regardless of 
 - `odigos/api/settings.py` — add report endpoint (or new file `odigos/api/report.py`)
 - `odigos/core/executor.py` — accept cancel event in streaming
 
-- `odigos/api/audio.py` — fix hardcoded voice: read `tts_voice` from `request.app.state.settings.voice.tts_voice` instead of hardcoded `"en-US-AriaNeural"`. TTS speak endpoint is intentionally unauthenticated (free service, low abuse risk, used by frontend directly).
+- `odigos/api/audio.py` — fix hardcoded voice: read `tts_voice` from `request.app.state.settings.voice.tts_voice` instead of hardcoded `"en-US-AriaNeural"`. Add auth to TTS speak endpoint (session cookie or query param token) to prevent abuse — even though edge-tts is free to us, an unauthenticated endpoint lets attackers hammer our server with CPU/bandwidth. Also respect `tts_provider === "disabled"` by returning 404.
 - `odigos/api/report.py` — new file for report endpoint
 
 ### Unchanged
 - `odigos/config.py` — VoiceConfig already complete
 - `plugins/stt/`, `plugins/tts/` — untouched, plugin system stays
 
-## 9. Implementation Order
+## 9. Verbosity Control
+
+### Problem
+
+The agent often answers correctly in the first paragraph then continues explaining for several more. Users like Rachel want shorter answers by default, not to have to hit stop every time.
+
+### Solution: Concise Mode Toggle
+
+A setting (`agent.concise_mode: bool`, default `false`) that appends to the system prompt:
+
+> "Be concise. Lead with the direct answer. Only elaborate if the user asks for more detail. Avoid restating the question, unnecessary caveats, or multi-paragraph explanations when a sentence will do."
+
+### UI
+
+- Toggle in Settings page under Agent section
+- Also accessible via a small toggle in the chat header (next to auto-read) for quick access
+- Icon: `MessageSquareDashed` or similar — tooltip "Concise mode"
+- Persisted server-side in config.yaml (not localStorage — this affects prompt behavior)
+
+### Backend
+
+- Add `concise_mode: bool = False` to `AgentConfig` in `config.py`
+- Add `"agent.concise_mode"` to `ALLOWED_KEYS` in `settings_tool.py`
+- In `prompt_builder.py`: if `settings.agent.concise_mode`, append concise instruction to system prompt
+- The agent can also toggle this itself via `manage_settings` if a user says "be more concise" in chat
+
+### Interaction with Stop Button
+
+These cover different scenarios:
+- **Concise mode** — reduces verbosity proactively (prompt-level). For everyday use.
+- **Stop button** — kills generation reactively. For emergencies, wrong direction, or token waste.
+
+Both should be available simultaneously.
+
+## 10. Implementation Order
 
 ### Phase A (immediate)
 1. `MessageActions` component with copy, speak, report, retry, edit
-2. Report backend endpoint
+2. Report backend endpoint (`odigos/api/report.py`)
 3. `tts-filter.ts` utility
-4. Fix voice detection in ChatPanel
-5. Stop button (Send ↔ Stop swap) + backend cancel mechanism
+4. Fix voice detection in ChatPanel (respect tts/stt provider settings)
+5. Stop button (Send <-> Stop swap) + backend cancel mechanism
 6. Auto-read toggle
-7. Integration testing
+7. TTS endpoint: add auth, read voice from config, respect disabled
+8. Concise mode toggle (backend + frontend)
+9. Integration testing
 
 ### Phase B (future)
 1. `VoiceOrb` component with visual states
 2. Input bar swap animation
 3. Continuous voice conversation loop
-4. Silence detection / auto-send
+4. Silence detection / auto-send (tunable `SILENCE_TIMEOUT_MS`)
 5. Interrupt handling
 6. Polish and edge cases
+
+## 11. Gemini Handoff
+
+Frontend-heavy tasks suitable for Gemini (with comprehensive specs):
+
+### Gemini Tasks
+1. **G-V1: MessageActions component** — new `MessageActions.tsx` with copy/speak/report/retry/edit icons. Hover bar on messages. Copy uses `navigator.clipboard`. Speak calls `playTTS(stripForTTS(text))`. Report opens inline dropdown. Retry re-sends previous user message. Edit makes user message editable.
+2. **G-V2: tts-filter.ts** — `stripForTTS()` utility with the 9 filtering rules from Section 3. Export from `dashboard/src/lib/tts-filter.ts`.
+3. **G-V3: Stop button** — Send button transforms to Stop (Square icon, red) while agent is streaming. Sends `{"type": "cancel"}` on WebSocket. Handles `stream_end.cancelled` response.
+4. **G-V4: Auto-read toggle** — Toggle in chat header. When on, calls `playTTS(stripForTTS(content))` after each assistant stream completes. localStorage persistence. Respects `tts_provider !== "disabled"`.
+5. **G-V5: Fix voice detection** — Update ChatPanel voice check from old `stt/tts` config to new `voice` config. Gate mic button on `stt_provider`, gate speak/auto-read on `tts_provider`.
+6. **G-V6: Concise mode toggle** — Toggle in chat header + Settings page. Reads/writes `agent.concise_mode` via settings API.
+7. **G-V7: ChatPanel integration** — Wire MessageActions into message rendering, replace existing speaker button, integrate stop button into input area.
+
+### Claude Tasks (backend)
+1. Report endpoint (`odigos/api/report.py`) — evaluations table integration
+2. Cancel mechanism in `ws.py` + `executor.py` — asyncio.Event plumbing
+3. TTS endpoint fixes in `audio.py` — auth, config voice, disabled check
+4. Concise mode backend — `AgentConfig.concise_mode`, prompt_builder integration
+5. Edit/retry WebSocket message handling in `ws.py`
