@@ -269,6 +269,11 @@ async def _register_tools(
     ))
     logger.info("Remember fact tool registered")
 
+    # Workspace search tool (find notebooks/boards by name)
+    from odigos.tools.workspace_search import WorkspaceSearchTool
+    tool_registry.register(WorkspaceSearchTool(db=db))
+    logger.info("Workspace search tool registered")
+
     # Feed publish tool
     if settings.feed.enabled:
         from odigos.tools.feed_publish import PublishToFeedTool

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-_VALID_ACTIONS = {"navigate", "refresh", "open_chat", "create", "theme"}
+_VALID_ACTIONS = {"navigate", "refresh", "open_chat", "create", "create_and_navigate", "theme", "focus_entry"}
 
 
 def _extract_ui_actions(response: str) -> list[dict]:
