@@ -1,13 +1,13 @@
-"""WebSocket endpoints for streaming audio (STT and TTS)."""
+"""WebSocket endpoints for streaming audio (STT via Groq Whisper, TTS via edge-tts)."""
 from __future__ import annotations
 
 import asyncio
-import hmac
-import json
+import io
 import logging
-import struct
+import tempfile
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +16,10 @@ router = APIRouter(prefix="/api")
 
 def _authenticate(websocket: WebSocket) -> bool:
     """Authenticate WebSocket via session cookie or query param token."""
+    import hmac
     settings = websocket.app.state.settings
 
-    # Try session cookie first (same as main WebSocket)
+    # Try session cookie first
     from odigos.api.auth import SESSION_COOKIE, _validate_session
     cookie = websocket.cookies.get(SESSION_COOKIE)
     if cookie and settings.session_secret:
@@ -36,11 +37,10 @@ def _authenticate(websocket: WebSocket) -> bool:
 
 @router.websocket("/ws/audio/transcribe")
 async def ws_transcribe(websocket: WebSocket):
-    """Stream audio chunks for real-time transcription.
+    """Stream audio for transcription.
 
-    Client -> Server: binary PCM audio chunks (16kHz, mono, 16-bit)
-    Server -> Client: {"partial": "text so far", "final": false}
-    On stream end: {"partial": "complete text", "final": true}
+    Client sends binary audio chunks.
+    Server responds with {"text": "transcribed text"} when complete.
     """
     await websocket.accept()
 
@@ -49,109 +49,111 @@ async def ws_transcribe(websocket: WebSocket):
         await websocket.close(code=4003)
         return
 
-    plugin_context = getattr(websocket.app.state, "plugin_context", None)
-    stt_provider = plugin_context.get_provider("stt") if plugin_context else None
+    settings = websocket.app.state.settings
+    voice_config = settings.voice
 
-    if not stt_provider:
-        await websocket.send_json({"error": "STT provider not available"})
+    if voice_config.stt_provider == "disabled":
+        await websocket.send_json({"error": "Speech-to-text is disabled"})
         await websocket.close(code=4004)
         return
 
-    last_text = ""
+    # Collect audio chunks
+    audio_data = bytearray()
     try:
-        async def audio_chunks():
-            while True:
-                try:
-                    data = await websocket.receive_bytes()
-                    num_samples = len(data) // 2
-                    samples = struct.unpack(f"<{num_samples}h", data)
-                    float_samples = [s / 32768.0 for s in samples]
-                    yield float_samples, 16000
-                except WebSocketDisconnect:
-                    return
-
-        async for partial_text in stt_provider.transcribe_stream(audio_chunks()):
-            last_text = partial_text
-            await websocket.send_json({"partial": partial_text, "final": False})
-
-        await websocket.send_json({"partial": last_text, "final": True})
-
-        # Auto-ingest final transcript into memory
-        if last_text:
-            ingester = None
-            if plugin_context:
-                service = getattr(websocket.app.state, "agent_service", None)
-                ingester = getattr(service, "doc_ingester", None) if service else None
-            if ingester:
-                try:
-                    import hashlib
-                    content_hash = hashlib.sha256(last_text.encode()).hexdigest()
-                    await ingester.ingest(
-                        text=last_text,
-                        filename="voice_stream_transcript",
-                        content_hash=content_hash,
-                    )
-                except Exception:
-                    logger.warning("STT WebSocket transcript ingestion failed", exc_info=True)
-
-    except WebSocketDisconnect:
+        while True:
+            try:
+                chunk = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
+                audio_data.extend(chunk)
+            except asyncio.TimeoutError:
+                break  # No more audio, transcribe what we have
+            except WebSocketDisconnect:
+                break
+    except Exception:
         pass
-    except Exception as e:
-        logger.warning("STT WebSocket error: %s", e, exc_info=True)
+
+    if not audio_data:
+        await websocket.send_json({"text": ""})
         try:
-            await websocket.send_json({"error": str(e)})
+            await websocket.close()
         except Exception:
             pass
-
-
-@router.websocket("/ws/audio/speak")
-async def ws_speak(websocket: WebSocket):
-    """Stream TTS audio generation.
-
-    Client -> Server: {"text": "speak this", "voice": "alba"}
-    Server -> Client: binary float32 PCM audio chunks
-    Final: {"done": true, "duration_ms": 1234}
-    """
-    await websocket.accept()
-
-    if not _authenticate(websocket):
-        await websocket.send_json({"error": "Authentication failed"})
-        await websocket.close(code=4003)
         return
 
-    plugin_context = getattr(websocket.app.state, "plugin_context", None)
-    tts_provider = plugin_context.get_provider("tts") if plugin_context else None
-
-    if not tts_provider:
-        await websocket.send_json({"error": "TTS provider not available"})
-        await websocket.close(code=4004)
-        return
-
+    # Transcribe
+    text = ""
     try:
-        raw = await websocket.receive_text()
-        request = json.loads(raw)
-        text = request.get("text", "")
-        voice = request.get("voice")
-
-        if not text:
-            await websocket.send_json({"error": "No text provided"})
-            return
-
-        total_bytes = 0
-        async for chunk_bytes in tts_provider.generate_stream(text, voice):
-            await websocket.send_bytes(chunk_bytes)
-            total_bytes += len(chunk_bytes)
-
-        samples = total_bytes // 4
-        duration_ms = int(samples / tts_provider.sample_rate * 1000) if samples > 0 else 0
-
-        await websocket.send_json({"done": True, "duration_ms": duration_ms})
-
-    except WebSocketDisconnect:
-        pass
+        if voice_config.stt_provider == "groq":
+            text = await _transcribe_groq(settings.groq_api_key, audio_data, voice_config.groq_model)
+        elif voice_config.stt_provider == "local":
+            # Fall back to local moonshine if configured
+            plugin_context = getattr(websocket.app.state, "plugin_context", None)
+            stt_provider = plugin_context.get_provider("stt") if plugin_context else None
+            if stt_provider:
+                text = await asyncio.to_thread(stt_provider.transcribe_file_bytes, bytes(audio_data))
     except Exception as e:
-        logger.warning("TTS WebSocket error: %s", e, exc_info=True)
+        logger.warning("Transcription failed: %s", e)
+        await websocket.send_json({"error": f"Transcription failed: {e}"})
         try:
-            await websocket.send_json({"error": str(e)})
+            await websocket.close()
         except Exception:
             pass
+        return
+
+    await websocket.send_json({"text": text})
+    try:
+        await websocket.close()
+    except Exception:
+        pass
+
+
+async def _transcribe_groq(api_key: str, audio_data: bytes, model: str) -> str:
+    """Transcribe audio using Groq Whisper API."""
+    if not api_key:
+        raise ValueError("groq_api_key not configured")
+
+    from groq import AsyncGroq
+
+    client = AsyncGroq(api_key=api_key)
+
+    # Write audio to a temp file (Groq API expects a file)
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
+        f.write(audio_data)
+        f.flush()
+        temp_path = f.name
+
+    try:
+        with open(temp_path, "rb") as audio_file:
+            transcription = await client.audio.transcriptions.create(
+                file=("audio.webm", audio_file),
+                model=model,
+                response_format="text",
+            )
+        return transcription.strip() if isinstance(transcription, str) else transcription.text.strip()
+    finally:
+        import os
+        os.unlink(temp_path)
+
+
+@router.get("/audio/speak")
+async def speak(text: str):
+    """Convert text to speech using edge-tts. Returns audio stream."""
+    if not text:
+        return StreamingResponse(io.BytesIO(b""), media_type="audio/mpeg")
+
+    try:
+        import edge_tts
+
+        communicate = edge_tts.Communicate(text, voice="en-US-AriaNeural")
+        audio_data = bytearray()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data.extend(chunk["data"])
+
+        return StreamingResponse(
+            io.BytesIO(bytes(audio_data)),
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "inline"},
+        )
+    except Exception as e:
+        logger.warning("TTS failed: %s", e)
+        return StreamingResponse(io.BytesIO(b""), media_type="audio/mpeg")

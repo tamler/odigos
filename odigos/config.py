@@ -191,9 +191,17 @@ class EmailConfig(BaseModel):
     check_interval_ticks: int = 10  # heartbeat ticks between inbox checks (0 = agent decides)
 
 
+class VoiceConfig(BaseModel):
+    stt_provider: str = "groq"  # "groq", "local" (moonshine), or "disabled"
+    tts_provider: str = "edge"  # "edge" (edge-tts), "local" (pocket-tts), or "disabled"
+    tts_voice: str = "en-US-AriaNeural"  # edge-tts voice name
+    groq_model: str = "whisper-large-v3-turbo"
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str = ""
     llm_api_key: str = ""
+    groq_api_key: str = ""  # Groq API key for Whisper STT
     api_key: str = ""
     session_secret: str = ""
     search_provider: str = ""
@@ -230,6 +238,7 @@ class Settings(BaseSettings):
     notebooks: NotebooksConfig = NotebooksConfig()
     kanban: KanbanConfig = KanbanConfig()
     access: AccessConfig = AccessConfig()
+    voice: VoiceConfig = VoiceConfig()
     calendar: CalendarConfig = CalendarConfig()
     email: EmailConfig = EmailConfig()
 
