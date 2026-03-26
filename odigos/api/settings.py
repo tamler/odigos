@@ -29,6 +29,7 @@ class SettingsUpdate(BaseModel):
     feed: dict | None = None
     telegram: dict | None = None
     email: dict | None = None
+    voice: dict | None = None
 
 
 def _mask_key(key: str) -> str:

@@ -66,6 +66,7 @@ from odigos.api.kanban import router as kanban_router
 from odigos.api.artifacts import router as artifacts_router
 from odigos.api.mesh import router as mesh_router
 from odigos.api.report import router as report_router
+from odigos.api.sharing import router as sharing_router, public_router as sharing_public_router
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
@@ -929,6 +930,8 @@ app.include_router(kanban_router)
 app.include_router(artifacts_router)
 app.include_router(mesh_router)
 app.include_router(report_router)
+app.include_router(sharing_router)
+app.include_router(sharing_public_router)
 
 
 @app.get("/health")
