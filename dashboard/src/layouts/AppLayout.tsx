@@ -29,7 +29,6 @@ import {
   Eye
 } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
-import { FloatingBubble } from '@/components/FloatingBubble'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
@@ -116,7 +115,7 @@ export default function AppLayout() {
   const [chatPanelOpen, setChatPanelOpen] = useState(false)
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
-  const [pageContextData, setPageContextData] = useState<Partial<PageContext>>({})
+  const [_pageContextData, setPageContextData] = useState<Partial<PageContext>>({}); void _pageContextData
   const [assistantConfig, setAssistantConfig] = useState<AssistantConfig>({
     enabled: false,
     show_transcript: true,
@@ -438,21 +437,6 @@ export default function AppLayout() {
       .catch(() => toast.error('Failed to export conversation'))
   }
 
-  const handleBubbleSend = useCallback((content: string, context?: Record<string, any>) => {
-    if (!content.trim()) return
-    setMessages((prev) => [...prev, {
-      role: 'user',
-      content,
-      timestamp: new Date().toISOString(),
-    }])
-    setThinking(true)
-    socketRef.current?.send('chat', {
-      content,
-      conversation_id: activeId || undefined,
-      context: { ...context, ...chatContext },
-    })
-  }, [activeId, chatContext])
-
   function displayTitle(c: Conversation): string {
     if (c.title) return c.title
     const raw = c.last_message_at || c.started_at
@@ -467,7 +451,6 @@ export default function AppLayout() {
   )
 
   const isSettings = location.pathname.startsWith('/settings')
-  const isChat = location.pathname === '/' || searchParams.has('c')
   const currentTab = location.pathname.split('/')[2] || 'general'
 
   return (
@@ -492,7 +475,7 @@ export default function AppLayout() {
         </div>
 
         {/* Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed ? 'lg:w-14' : 'lg:w-64'}`}>
+        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'}`}>
           {/* Top: Logo + New Chat */}
           <div className="flex flex-col gap-2 p-3 mb-2">
             {!collapsed && (
@@ -746,22 +729,6 @@ export default function AppLayout() {
           )}
         </div>
 
-        {/* Floating Assistant Bubble (G-B1) */}
-        {!isChat && !chatPanelOpen && assistantConfig.enabled && (
-          <FloatingBubble
-            socketRef={socketRef}
-            connected={connected}
-            activeConversationId={activeId}
-            messages={messages}
-            onSend={handleBubbleSend}
-            pageContext={{ page: location.pathname.split('/')[1] || 'home', ...pageContextData }}
-            assistantConfig={assistantConfig}
-            agentName={agentName}
-            ttsAvailable={assistantConfig.enabled} 
-            sttAvailable={connected}
-            playTTS={playTTS}
-          />
-        )}
       </div>
     </TooltipProvider>
   )

@@ -83,7 +83,7 @@ async def update_settings_endpoint(
             yaml_config = yaml.safe_load(f) or {}
 
     # Merge updated sections into yaml config
-    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "mesh", "templates", "feed", "telegram", "email"):
+    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "mesh", "templates", "feed", "telegram", "email", "voice", "calendar", "assistant"):
         section_data = getattr(update, section, None)
         if section_data is not None:
             if section not in yaml_config:
@@ -112,7 +112,7 @@ async def update_settings_endpoint(
 
     # Validate all merged sections with Pydantic BEFORE writing to disk
     validated_sections: dict[str, object] = {}
-    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "templates", "feed", "telegram", "email"):
+    for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "templates", "feed", "telegram", "email", "voice", "calendar", "assistant"):
         section_data = getattr(update, section)
         if section_data is not None:
             current = getattr(settings, section)

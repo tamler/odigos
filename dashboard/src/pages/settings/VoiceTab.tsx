@@ -21,12 +21,39 @@ interface VoiceSettings {
 }
 
 const EDGE_VOICES = [
+  // US voices
+  { id: 'en-US-AvaMultilingualNeural', name: 'Ava (US Female, Natural)' },
+  { id: 'en-US-AndrewMultilingualNeural', name: 'Andrew (US Male, Natural)' },
+  { id: 'en-US-EmmaMultilingualNeural', name: 'Emma (US Female, Warm)' },
+  { id: 'en-US-BrianMultilingualNeural', name: 'Brian (US Male, Clear)' },
   { id: 'en-US-AriaNeural', name: 'Aria (US Female)' },
-  { id: 'en-US-GuyNeural', name: 'Guy (US Male)' },
   { id: 'en-US-JennyNeural', name: 'Jenny (US Female)' },
+  { id: 'en-US-GuyNeural', name: 'Guy (US Male)' },
+  { id: 'en-US-ChristopherNeural', name: 'Christopher (US Male)' },
+  { id: 'en-US-EricNeural', name: 'Eric (US Male)' },
+  { id: 'en-US-MichelleNeural', name: 'Michelle (US Female)' },
+  { id: 'en-US-RogerNeural', name: 'Roger (US Male)' },
+  { id: 'en-US-SteffanNeural', name: 'Steffan (US Male)' },
+  // UK voices
   { id: 'en-GB-SoniaNeural', name: 'Sonia (UK Female)' },
   { id: 'en-GB-RyanNeural', name: 'Ryan (UK Male)' },
+  { id: 'en-GB-LibbyNeural', name: 'Libby (UK Female)' },
+  { id: 'en-GB-ThomasNeural', name: 'Thomas (UK Male)' },
+  // Australian
   { id: 'en-AU-NatashaNeural', name: 'Natasha (AU Female)' },
+  { id: 'en-AU-WilliamMultilingualNeural', name: 'William (AU Male)' },
+  // Other accents
+  { id: 'en-IN-NeerjaExpressiveNeural', name: 'Neerja (India Female, Expressive)' },
+  { id: 'en-IN-PrabhatNeural', name: 'Prabhat (India Male)' },
+  { id: 'en-IE-EmilyNeural', name: 'Emily (Ireland Female)' },
+  { id: 'en-IE-ConnorNeural', name: 'Connor (Ireland Male)' },
+  { id: 'en-CA-ClaraNeural', name: 'Clara (Canada Female)' },
+  { id: 'en-CA-LiamNeural', name: 'Liam (Canada Male)' },
+  { id: 'en-PH-RosaNeural', name: 'Rosa (Philippines Female)' },
+  { id: 'en-PH-JamesNeural', name: 'James (Philippines Male)' },
+  { id: 'en-NZ-MollyNeural', name: 'Molly (NZ Female)' },
+  { id: 'en-SG-LunaNeural', name: 'Luna (Singapore Female)' },
+  { id: 'en-ZA-LeahNeural', name: 'Leah (South Africa Female)' },
 ]
 
 export default function VoiceTab({ active: isActive }: { active?: boolean }) {
