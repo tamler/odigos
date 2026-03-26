@@ -39,6 +39,7 @@ export function MessageActions({
 }: MessageActionsProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(content)
+  const [isSpeaking, setIsSpeaking] = useState(false)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content)
@@ -116,8 +117,16 @@ export function MessageActions({
       
       {role === 'assistant' && ttsAvailable && (
         <button
-          onClick={() => playTTS(content)}
-          className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+          onClick={() => {
+            if (isSpeaking) return
+            setIsSpeaking(true)
+            playTTS(content)
+            // Debounce: prevent rapid double-clicks. The actual audio
+            // lifecycle is managed by AppLayout's currentAudioRef.
+            setTimeout(() => setIsSpeaking(false), 500)
+          }}
+          disabled={isSpeaking}
+          className={`text-muted-foreground hover:text-foreground transition-colors p-0.5 ${isSpeaking ? 'opacity-50' : ''}`}
           title="Speak"
           aria-label="Speak message"
         >
