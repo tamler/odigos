@@ -229,7 +229,7 @@ export function ChatPanel({
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       })
       audioStreamRef.current = stream
 
@@ -261,21 +261,26 @@ export function ChatPanel({
       }
 
       ws.onopen = async () => {
-        // Create AudioContext at 16kHz and use ScriptProcessorNode for PCM capture
-        // (AudioWorklet requires a separate file — ScriptProcessor is simpler and works everywhere)
-        const ctx = new AudioContext({ sampleRate: 16000 })
+        // Use native sample rate and resample to 16kHz for webrtcvad
+        const ctx = new AudioContext()
         audioContextRef.current = ctx
+        const nativeRate = ctx.sampleRate  // typically 44100 or 48000
+        const targetRate = 16000
         const source = ctx.createMediaStreamSource(stream)
 
-        // ScriptProcessor: 4096 samples per buffer at 16kHz = 256ms chunks
+        // ScriptProcessor captures audio at native rate
         const processor = ctx.createScriptProcessor(4096, 1, 1)
         processor.onaudioprocess = (e) => {
           if (ws.readyState !== WebSocket.OPEN) return
           const float32 = e.inputBuffer.getChannelData(0)
-          // Convert Float32 [-1,1] to Int16 PCM
-          const int16 = new Int16Array(float32.length)
-          for (let i = 0; i < float32.length; i++) {
-            const s = Math.max(-1, Math.min(1, float32[i]))
+
+          // Resample from native rate to 16kHz
+          const ratio = nativeRate / targetRate
+          const targetLen = Math.floor(float32.length / ratio)
+          const int16 = new Int16Array(targetLen)
+          for (let i = 0; i < targetLen; i++) {
+            const srcIdx = Math.floor(i * ratio)
+            const s = Math.max(-1, Math.min(1, float32[srcIdx]))
             int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
           }
           ws.send(int16.buffer)

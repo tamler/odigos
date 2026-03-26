@@ -93,6 +93,7 @@ async def ws_transcribe(websocket: WebSocket):
         return
 
     await websocket.send_json({"listening": True})
+    logger.info("Audio WebSocket: listening, expecting 16kHz Int16 mono PCM")
 
     # State for VAD-gated buffering
     speech_buffer = bytearray()
@@ -100,6 +101,7 @@ async def ws_transcribe(websocket: WebSocket):
     silence_count = 0
     speech_count = 0
     is_speaking = False
+    total_frames = 0
 
     try:
         while True:
@@ -117,8 +119,11 @@ async def ws_transcribe(websocket: WebSocket):
 
             # Add to PCM buffer and process complete frames
             pcm_buffer.extend(chunk)
+            if total_frames == 0:
+                logger.info("Audio WebSocket: first chunk received, %d bytes, buffer now %d", len(chunk), len(pcm_buffer))
 
             while len(pcm_buffer) >= _FRAME_BYTES:
+                total_frames += 1
                 frame = bytes(pcm_buffer[:_FRAME_BYTES])
                 del pcm_buffer[:_FRAME_BYTES]
 
