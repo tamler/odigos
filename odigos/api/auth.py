@@ -215,6 +215,45 @@ async def auth_change_password(request: Request, response: Response):
     return {"status": "ok"}
 
 
+@router.post("/reset-password")
+async def auth_reset_password(request: Request):
+    """Reset a user's password. Requires API key (admin only)."""
+    from odigos.api.deps import require_auth
+    # Manual auth check — we need API key, not session
+    settings = request.app.state.settings
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer ") or not settings.api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    import hmac
+    token = auth_header.split(" ", 1)[1]
+    if not hmac.compare_digest(token.encode(), settings.api_key.encode()):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+    body = await request.json()
+    username = body.get("username", "").strip()
+    new_password = body.get("new_password", "")
+
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+    if len(new_password) < _MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {_MIN_PASSWORD_LENGTH} characters",
+        )
+
+    db = request.app.state.db
+    user = await db.fetch_one("SELECT id FROM users WHERE username = ?", (username,))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_hash = _hash_password(new_password)
+    await db.execute(
+        "UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?",
+        (new_hash, user["id"]),
+    )
+    return {"status": "ok", "must_change_password": True}
+
+
 @router.get("/me")
 async def auth_me(request: Request):
     """Return info about the currently authenticated user (session required)."""
