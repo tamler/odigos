@@ -260,11 +260,15 @@ A typical voice session (10 min) costs ~$0.007. Auto-read is free regardless of 
 
 The agent often answers correctly in the first paragraph then continues explaining for several more. Users like Rachel want shorter answers by default, not to have to hit stop every time.
 
-### Solution: Concise Mode Toggle
+### Solution: Two Layers
 
-A setting (`agent.concise_mode: bool`, default `false`) that appends to the system prompt:
+**Layer 1 — Personality (baseline):** Each agent personality already defines tone and style. Verbose/concise is a natural axis of personality. A researcher agent explains in depth; a personal assistant is direct. This is the default behavior set by the agent's personality/prompt sections.
+
+**Layer 2 — User override (concise mode toggle):** A user-facing toggle that overrides personality verbosity. When enabled, appends to the system prompt:
 
 > "Be concise. Lead with the direct answer. Only elaborate if the user asks for more detail. Avoid restating the question, unnecessary caveats, or multi-paragraph explanations when a sentence will do."
+
+This gives the user control regardless of what personality is active.
 
 ### UI
 
