@@ -20,6 +20,7 @@ def build_system_prompt(
     recovery_briefing: str = "",
     page_context: str = "",
     last_interaction: str = "",
+    concise_mode: bool = False,
 ) -> str:
     """Compose the system prompt from file-based sections."""
     parts = []
@@ -58,5 +59,13 @@ def build_system_prompt(
         parts.append(page_context)
     if last_interaction:
         parts.append(last_interaction)
+
+    if concise_mode:
+        parts.append(
+            "IMPORTANT: Be concise. Lead with the direct answer. "
+            "Only elaborate if the user asks for more detail. "
+            "Avoid restating the question, unnecessary caveats, "
+            "or multi-paragraph explanations when a sentence will do."
+        )
 
     return "\n\n".join(parts)

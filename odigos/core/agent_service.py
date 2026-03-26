@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -38,10 +39,12 @@ class AgentService:
         *,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
         stream_callback: Callable[[str], Awaitable[None]] | None = None,
+        abort_event: asyncio.Event | None = None,
     ) -> str:
         """Send a message to the agent and return the response."""
         return await self.agent.handle_message(
             message, status_callback=status_callback, stream_callback=stream_callback,
+            abort_event=abort_event,
         )
 
     # -- Goals / Todos / Reminders --

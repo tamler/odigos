@@ -19,6 +19,7 @@ ALLOWED_KEYS = [
     "voice.tts_provider",
     "voice.tts_voice",
     "voice.groq_model",
+    "agent.concise_mode",
     "searxng_url",
     "approval.enabled",
     "approval.tools",

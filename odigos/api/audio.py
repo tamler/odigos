@@ -6,8 +6,10 @@ import io
 import logging
 import tempfile
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
+
+from odigos.api.deps import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -134,16 +136,22 @@ async def _transcribe_groq(api_key: str, audio_data: bytes, model: str) -> str:
         os.unlink(temp_path)
 
 
-@router.get("/audio/speak")
-async def speak(text: str):
+@router.get("/audio/speak", dependencies=[Depends(require_auth)])
+async def speak(text: str, request: Request):
     """Convert text to speech using edge-tts. Returns audio stream."""
+    settings = request.app.state.settings
+    voice_config = settings.voice
+
+    if voice_config.tts_provider == "disabled":
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"detail": "TTS is disabled"})
+
     if not text:
         return StreamingResponse(io.BytesIO(b""), media_type="audio/mpeg")
 
     try:
         import edge_tts
-
-        communicate = edge_tts.Communicate(text, voice="en-US-AriaNeural")
+        communicate = edge_tts.Communicate(text, voice=voice_config.tts_voice)
         audio_data = bytearray()
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":

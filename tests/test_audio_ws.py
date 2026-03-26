@@ -26,16 +26,47 @@ class TestTTS:
         """TTS endpoint should return audio bytes (edge-tts)."""
         app = _make_app()
         client = TestClient(app)
-        # Auth not required for TTS GET endpoint
-        resp = client.get("/api/audio/speak?text=hello")
+        resp = client.get(
+            "/api/audio/speak?text=hello",
+            headers={"Authorization": "Bearer test-key"},
+        )
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "audio/mpeg"
 
     def test_tts_empty_text(self):
         app = _make_app()
         client = TestClient(app)
-        resp = client.get("/api/audio/speak?text=")
+        resp = client.get(
+            "/api/audio/speak?text=",
+            headers={"Authorization": "Bearer test-key"},
+        )
         assert resp.status_code == 200
+
+
+class TestTTSAuth:
+    def test_tts_requires_auth(self):
+        app = _make_app()
+        client = TestClient(app)
+        resp = client.get("/api/audio/speak?text=hello")
+        assert resp.status_code == 401
+
+    def test_tts_with_auth_works(self):
+        app = _make_app()
+        client = TestClient(app)
+        resp = client.get(
+            "/api/audio/speak?text=hello",
+            headers={"Authorization": "Bearer test-key"},
+        )
+        assert resp.status_code == 200
+
+    def test_tts_disabled_returns_404(self):
+        app = _make_app(voice_config=VoiceConfig(tts_provider="disabled"))
+        client = TestClient(app)
+        resp = client.get(
+            "/api/audio/speak?text=hello",
+            headers={"Authorization": "Bearer test-key"},
+        )
+        assert resp.status_code == 404
 
 
 class TestSTTWebSocket:

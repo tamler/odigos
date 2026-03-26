@@ -46,6 +46,7 @@ class ContextAssembler:
         skill_registry: SkillRegistry | None = None,
         corrections_manager: CorrectionsManager | None = None,
         checkpoint_manager: CheckpointManager | None = None,
+        settings=None,
     ) -> None:
         self.db = db
         self.agent_name = agent_name
@@ -55,6 +56,7 @@ class ContextAssembler:
         self.skill_registry = skill_registry
         self.corrections_manager = corrections_manager
         self.checkpoint_manager = checkpoint_manager
+        self.settings = settings
         self.fallback_registry = SectionRegistry(sections_dir)
 
     async def build(
@@ -396,6 +398,8 @@ class ContextAssembler:
             except Exception:
                 logger.debug("Could not load board context", exc_info=True)
 
+        concise_mode = getattr(getattr(self.settings, 'agent', None), 'concise_mode', False) if self.settings else False
+
         system_prompt = build_system_prompt(
             sections=sections,
             memory_context=memory_context,
@@ -413,6 +417,7 @@ class ContextAssembler:
             recovery_briefing=recovery_briefing,
             page_context=notebook_context,
             last_interaction=last_interaction,
+            concise_mode=concise_mode,
         )
 
         messages.append({"role": "system", "content": system_prompt})

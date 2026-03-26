@@ -65,6 +65,7 @@ from odigos.api.notebooks import router as notebooks_router
 from odigos.api.kanban import router as kanban_router
 from odigos.api.artifacts import router as artifacts_router
 from odigos.api.mesh import router as mesh_router
+from odigos.api.report import router as report_router
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
@@ -648,6 +649,7 @@ async def lifespan(app: FastAPI):
         approval_gate=approval_gate,
         classifier=classifier,
         reasoning_model=settings.llm.reasoning_model,
+        settings=settings,
     )
     app.state.agent = agent
 
@@ -926,6 +928,7 @@ app.include_router(notebooks_router)
 app.include_router(kanban_router)
 app.include_router(artifacts_router)
 app.include_router(mesh_router)
+app.include_router(report_router)
 
 
 @app.get("/health")

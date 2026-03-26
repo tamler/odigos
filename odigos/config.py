@@ -16,6 +16,7 @@ class AgentConfig(BaseModel):
     max_tool_turns: int = 25
     run_timeout_seconds: int = 300
     cite_sources: bool = True
+    concise_mode: bool = False
 
 
 class DatabaseConfig(BaseModel):

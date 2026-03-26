@@ -115,10 +115,11 @@ async def websocket_endpoint(websocket: WebSocket):
     first_message = True
     chat_queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_QUEUED_MESSAGES)
     processor_task: asyncio.Task | None = None
+    cancel_event: asyncio.Event | None = None
 
     async def _process_chat_queue():
         """Process queued chat messages one at a time."""
-        nonlocal conversation_id, first_message
+        nonlocal conversation_id, first_message, cancel_event
         while True:
             data = await chat_queue.get()
             try:
@@ -157,9 +158,12 @@ async def websocket_endpoint(websocket: WebSocket):
                         pass  # Client disconnected
 
                 agent_service = websocket.app.state.agent_service
+                cancel_event = asyncio.Event()
                 response = await agent_service.handle_message(
                     msg, status_callback=send_status, stream_callback=send_chunk,
+                    abort_event=cancel_event,
                 )
+                cancel_event = None
 
                 # Notify frontend of new conversation so sidebar updates
                 try:
@@ -275,6 +279,50 @@ async def websocket_endpoint(websocket: WebSocket):
                         "decision": decision,
                         "resolved": resolved,
                     })
+
+            elif msg_type == "cancel":
+                if cancel_event is not None:
+                    cancel_event.set()
+                    try:
+                        await websocket.send_json({
+                            "type": "stream_end",
+                            "cancelled": True,
+                            "conversation_id": conversation_id,
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type == "edit":
+                # Truncate conversation history and re-send edited content
+                edit_index = data.get("message_index")
+                edit_content = data.get("content", "")
+                if edit_index is not None and edit_content:
+                    try:
+                        db = websocket.app.state.agent_service.agent.db
+                        rows = await db.fetch_all(
+                            "SELECT id FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+                            (conversation_id,),
+                        )
+                        if edit_index < len(rows):
+                            ids_to_delete = [r["id"] for r in rows[edit_index:]]
+                            placeholders = ",".join("?" * len(ids_to_delete))
+                            await db.execute(
+                                f"DELETE FROM messages WHERE id IN ({placeholders})",
+                                ids_to_delete,
+                            )
+                    except Exception as e:
+                        logger.warning("Edit truncation failed: %s", e)
+                    # Re-send as a chat message
+                    if not chat_queue.full():
+                        chat_queue.put_nowait({"type": "chat", "content": edit_content,
+                                               "conversation_id": data.get("conversation_id")})
+
+            elif msg_type == "retry":
+                # Re-send content as a new chat message
+                retry_content = data.get("content", "")
+                if retry_content and not chat_queue.full():
+                    chat_queue.put_nowait({"type": "chat", "content": retry_content,
+                                           "conversation_id": data.get("conversation_id")})
 
             elif msg_type == "subscribe":
                 channels = data.get("channels", [])

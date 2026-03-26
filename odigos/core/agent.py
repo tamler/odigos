@@ -49,8 +49,10 @@ class Agent:
         approval_gate: ApprovalGate | None = None,
         classifier: QueryClassifier | None = None,
         reasoning_model: str = "",
+        settings=None,
     ) -> None:
         self.db = db
+        self.settings = settings
         self.budget_tracker = budget_tracker
         self.tracer = tracer
         self.classifier = classifier
@@ -68,6 +70,7 @@ class Agent:
             summarizer=summarizer,
             skill_registry=skill_registry,
             corrections_manager=corrections_manager,
+            settings=settings,
         )
         self.executor = Executor(
             provider,
@@ -95,6 +98,7 @@ class Agent:
         *,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
         stream_callback: Callable[[str], Awaitable[None]] | None = None,
+        abort_event: asyncio.Event | None = None,
     ) -> str:
         """Process an incoming message through the ReAct loop."""
         conversation_id = await self._get_or_create_conversation(message)
@@ -110,6 +114,7 @@ class Agent:
                 status_callback=status_callback,
                 context_metadata=context_metadata,
                 stream_callback=stream_callback,
+                abort_event=abort_event,
             )
 
     async def _run(
@@ -120,6 +125,7 @@ class Agent:
         status_callback: Callable[[str], Awaitable[None]] | None = None,
         context_metadata: dict | None = None,
         stream_callback: Callable[[str], Awaitable[None]] | None = None,
+        abort_event: asyncio.Event | None = None,
     ) -> str:
         """Execute the agent loop with timeout."""
         await self.db.execute(
@@ -159,7 +165,9 @@ class Agent:
         try:
             async with asyncio.timeout(self._run_timeout):
                 result = await self.executor.execute(
-                    conversation_id, message.content, query_analysis=analysis,
+                    conversation_id, message.content,
+                    abort_event=abort_event,
+                    query_analysis=analysis,
                     status_callback=status_callback,
                     context_metadata=context_metadata,
                     stream_callback=stream_callback,
