@@ -293,8 +293,9 @@ export default function AppLayout() {
             timestamp: new Date().toISOString(),
           }])
 
-          // Auto-read if enabled (G-V4)
-          if (assistantConfig.auto_read && shouldPlayTTS(content)) {
+          // Auto-read: play TTS if auto_read is on OR voice mode is active
+          const voiceModeOn = localStorage.getItem('odigos-voice-mode') === 'true'
+          if ((assistantConfig.auto_read || voiceModeOn) && shouldPlayTTS(content)) {
             playTTS(stripForTTS(content))
           }
 
@@ -491,9 +492,9 @@ export default function AppLayout() {
         </div>
 
         {/* Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed ? 'lg:w-14' : 'lg:w-64'}`}>
+        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed ? 'lg:w-14' : 'lg:w-64'}`}>
           {/* Top: Logo + New Chat */}
-          <div className="flex flex-col gap-2 p-3 border-b border-border/40 mb-2">
+          <div className="flex flex-col gap-2 p-3 mb-2">
             {!collapsed && (
               <button 
                 onClick={() => navigate('/')} 
@@ -521,7 +522,7 @@ export default function AppLayout() {
 
           {/* Conversation Search (Chat only) */}
           {!collapsed && !isSettings && (
-            <div className="px-3 pb-2 pt-1 border-b border-border/40 mb-2">
+            <div className="px-3 pb-2 pt-1 mb-2">
               <Input 
                 placeholder="Search conversations..." 
                 value={searchQuery}

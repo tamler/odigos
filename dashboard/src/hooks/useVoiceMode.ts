@@ -205,6 +205,7 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
 
       activeRef.current = true
       setActive(true)
+      localStorage.setItem('odigos-voice-mode', 'true')
 
       // Start the monitoring loop and recording
       startListening()
@@ -218,6 +219,7 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
     activeRef.current = false
     setActive(false)
     setPhase('idle')
+    localStorage.setItem('odigos-voice-mode', 'false')
 
     cancelAnimationFrame(animFrameRef.current)
 
