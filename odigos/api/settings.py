@@ -30,6 +30,7 @@ class SettingsUpdate(BaseModel):
     telegram: dict | None = None
     email: dict | None = None
     voice: dict | None = None
+    calendar: dict | None = None
 
 
 def _mask_key(key: str) -> str:
@@ -58,6 +59,7 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
         "telegram": settings.telegram.model_dump(),
         "email": settings.email.model_dump(),
         "voice": settings.voice.model_dump(),
+        "calendar": settings.calendar.model_dump(),
     }
 
 

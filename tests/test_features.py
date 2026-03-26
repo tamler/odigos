@@ -207,6 +207,13 @@ def _settings(**overrides):
                 "groq_model": "whisper-large-v3-turbo",
             },
         ),
+        calendar=SimpleNamespace(
+            enabled=False,
+            url="",
+            username="",
+            password="",
+            model_dump=lambda: {"enabled": False, "url": "", "username": "", "password": ""},
+        ),
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
