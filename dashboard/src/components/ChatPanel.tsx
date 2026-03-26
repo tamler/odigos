@@ -115,7 +115,6 @@ export function ChatPanel({
   const [amplitude] = useState(0)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const audioWsRef = useRef<WebSocket | null>(null)
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Wire up message handler on the shared socket
@@ -222,96 +221,66 @@ export function ChatPanel({
       .catch(() => {})
   }, [])
 
-  const audioCtxRef = useRef<AudioContext | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioStreamRef = useRef<MediaStream | null>(null)
-  const workletRef = useRef<AudioWorkletNode | null>(null)
 
   const startRecording = useCallback(async () => {
     try {
-      // 1. Get mic stream
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       })
       audioStreamRef.current = stream
 
-      // 2. Create AudioContext at 16kHz IN THE CLICK HANDLER (user gesture context)
-      //    Chrome handles internal resampling from device rate to 16kHz automatically.
-      const ctx = new AudioContext({ sampleRate: 16000 })
-      if (ctx.state === 'suspended') await ctx.resume()
-      audioCtxRef.current = ctx
+      const recorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+      const chunks: Blob[] = []
 
-      // 3. Load AudioWorklet processor
-      await ctx.audioWorklet.addModule('/pcm-processor.js')
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data)
+      }
 
-      // 4. Connect mic → worklet
-      const source = ctx.createMediaStreamSource(stream)
-      const worklet = new AudioWorkletNode(ctx, 'pcm-processor')
-      workletRef.current = worklet
-      source.connect(worklet)
-      // No need to connect to ctx.destination (AudioWorklet doesn't require it)
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: recorder.mimeType })
+        if (blob.size < 1000) return // too short, skip
 
-      // 5. Open WebSocket
-      const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      const ws = new WebSocket(`${protocol}://${window.location.host}/api/ws/audio/transcribe`)
-      ws.binaryType = 'arraybuffer'
-      audioWsRef.current = ws
-
-      ws.onmessage = (event) => {
+        // POST the audio file to the transcribe endpoint
         try {
-          const data = JSON.parse(event.data)
-          if (data.text) {
-            setInputValue((prev: string) => prev + (prev ? ' ' : '') + data.text)
+          const formData = new FormData()
+          const ext = recorder.mimeType.includes('mp4') ? 'mp4'
+            : recorder.mimeType.includes('ogg') ? 'ogg' : 'webm'
+          formData.append('audio', blob, `recording.${ext}`)
+
+          const res = await fetch('/api/audio/transcribe', {
+            method: 'POST',
+            credentials: 'include',
+            body: formData,
+          })
+          if (res.ok) {
+            const data = await res.json()
+            if (data.text) {
+              setInputValue((prev: string) => prev + (prev ? ' ' : '') + data.text)
+            }
           }
-        } catch {
-          // ignore
+        } catch (err) {
+          console.error('Transcription request failed:', err)
         }
       }
 
-      ws.onclose = () => {
-        audioWsRef.current = null
-      }
-
-      ws.onerror = () => {
-        console.warn('Audio WebSocket error')
-        stopRecording()
-      }
-
-      // 6. Stream PCM to WebSocket when it opens
-      worklet.port.onmessage = (event: MessageEvent) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return
-        const float32: Float32Array = event.data
-        // Convert Float32 [-1,1] to Int16 PCM
-        const int16 = new Int16Array(float32.length)
-        for (let i = 0; i < float32.length; i++) {
-          const s = Math.max(-1, Math.min(1, float32[i]))
-          int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
-        }
-        ws.send(int16.buffer)
-      }
-
+      recorder.start()
       setRecording(true)
-    } catch (err) {
-      console.error('Mic setup failed:', err)
+    } catch {
       toast.error('Microphone access denied')
     }
   }, [])
 
   const stopRecording = useCallback(() => {
-    if (workletRef.current) {
-      workletRef.current.disconnect()
-      workletRef.current = null
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
     }
-    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-      audioCtxRef.current.close()
-      audioCtxRef.current = null
-    }
+    mediaRecorderRef.current = null
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach(t => t.stop())
       audioStreamRef.current = null
-    }
-    if (audioWsRef.current) {
-      audioWsRef.current.close()
-      audioWsRef.current = null
     }
     setRecording(false)
   }, [])

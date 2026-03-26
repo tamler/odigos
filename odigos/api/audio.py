@@ -273,6 +273,107 @@ async def _transcribe_groq(api_key: str, wav_data: bytes, model: str) -> str:
         os.unlink(temp_path)
 
 
+# -- HTTP Transcribe (simple file upload) --
+
+@router.post("/audio/transcribe", dependencies=[Depends(require_auth)])
+async def transcribe_audio(request: Request):
+    """Transcribe an uploaded audio file via Groq Whisper.
+
+    Accepts multipart form with 'audio' file field.
+    Returns {"text": "transcribed text"}.
+    """
+    settings = request.app.state.settings
+    voice_config = settings.voice
+
+    if voice_config.stt_provider == "disabled":
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=404, content={"detail": "STT is disabled"})
+
+    form = await request.form()
+    audio_file = form.get("audio")
+    if not audio_file:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=400, content={"detail": "No audio file provided"})
+
+    audio_bytes = await audio_file.read()
+    if len(audio_bytes) < 1000:
+        return {"text": ""}  # too short
+
+    text = ""
+    try:
+        if voice_config.stt_provider == "groq":
+            # Detect format from filename
+            filename = getattr(audio_file, 'filename', 'audio.webm') or 'audio.webm'
+            text = await _transcribe_groq_file(settings.groq_api_key, audio_bytes, filename, voice_config.groq_model)
+    except Exception as e:
+        logger.warning("Transcription failed: %s", e)
+        return {"text": "", "error": str(e)}
+
+    return {"text": text}
+
+
+async def _transcribe_groq_file(api_key: str, audio_bytes: bytes, filename: str, model: str) -> str:
+    """Transcribe an audio file (any format Groq supports) via Groq Whisper."""
+    if not api_key:
+        raise ValueError("groq_api_key not configured")
+
+    from groq import AsyncGroq
+    client = AsyncGroq(api_key=api_key)
+
+    # Determine suffix from filename
+    import os
+    suffix = os.path.splitext(filename)[1] or '.webm'
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+        f.write(audio_bytes)
+        f.flush()
+        temp_path = f.name
+
+    try:
+        logger.info("Transcribing %d bytes (%s) via Groq %s", len(audio_bytes), suffix, model)
+        with open(temp_path, "rb") as af:
+            transcription = await client.audio.transcriptions.create(
+                file=(filename, af),
+                model=model,
+                language="en",
+                response_format="verbose_json",
+                temperature=0.0,
+            )
+
+        # Filter hallucinations
+        segments = getattr(transcription, 'segments', None) or []
+        clean_parts = []
+        _HALLUCINATION_PHRASES = {
+            "thank you", "thanks for watching", "please subscribe",
+            "subtitles by", "amara.org", "thanks for listening",
+            "you", "bye",
+        }
+        for seg in segments:
+            no_speech = seg.get("no_speech_prob", 0)
+            compression = seg.get("compression_ratio", 0)
+            text = seg.get("text", "").strip()
+            if no_speech > 0.7:
+                continue
+            if compression > 2.4:
+                continue
+            if text.lower().rstrip('.!,') in _HALLUCINATION_PHRASES:
+                continue
+            if text:
+                clean_parts.append(text)
+
+        result = " ".join(clean_parts).strip()
+        if not result and hasattr(transcription, 'text'):
+            raw = transcription.text.strip()
+            if raw.lower().rstrip('.!,') not in _HALLUCINATION_PHRASES:
+                result = raw
+
+        logger.info("Transcription result: %s", result[:100] if result else "(empty)")
+        return result
+    finally:
+        import os as _os
+        _os.unlink(temp_path)
+
+
 # -- TTS --
 
 @router.get("/audio/speak", dependencies=[Depends(require_auth)])
