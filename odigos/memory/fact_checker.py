@@ -61,7 +61,6 @@ async def find_similar_facts(
 
     # Use embeddings for semantic similarity
     try:
-        import struct
         new_vec = await embedder.embed(new_fact)
 
         # Query sqlite-vec for similar facts

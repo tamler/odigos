@@ -20,7 +20,7 @@ export function executeActions(
     console.log('[Actions] Executing:', a)
     switch (a.action) {
       case 'navigate':
-        if (a.to) navigate(a.to)
+        if (a.to && a.to.startsWith('/')) navigate(a.to)
         break
       case 'refresh':
         callbacks.refresh()

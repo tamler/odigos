@@ -161,9 +161,11 @@ class EvolutionEngine:
 
     async def _get_baseline_score(self, lookback: int = 20) -> float:
         row = await self.db.fetch_one(
-            "SELECT AVG(overall_score) as avg FROM evaluations "
-            "WHERE trial_id IS NULL "
-            "ORDER BY created_at DESC LIMIT ?",
+            "SELECT AVG(overall_score) as avg FROM ("
+            "  SELECT overall_score FROM evaluations "
+            "  WHERE trial_id IS NULL "
+            "  ORDER BY created_at DESC LIMIT ?"
+            ")",
             (lookback,),
         )
         return row["avg"] if row and row["avg"] else 5.0
