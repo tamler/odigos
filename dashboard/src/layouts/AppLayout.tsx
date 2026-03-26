@@ -478,7 +478,7 @@ export default function AppLayout() {
         <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'}`}>
           {/* Top: Logo + New Chat */}
           <div className="flex flex-col gap-2 p-3 mb-2">
-            {!collapsed && (
+            {(!collapsed || isSettings) && (
               <button 
                 onClick={() => navigate('/')} 
                 className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors text-left truncate"
@@ -495,7 +495,7 @@ export default function AppLayout() {
                 </TooltipTrigger>
                 <TooltipContent side="right">{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
               </Tooltip>
-              {!collapsed && (
+              {(!collapsed || isSettings) && (
                 <Button variant="secondary" size="sm" className="flex-1 justify-start gap-2 h-8" onClick={handleNewChat}>
                   <Plus className="h-4 w-4" /> New Chat
                 </Button>
@@ -516,7 +516,7 @@ export default function AppLayout() {
           )}
 
           {/* Sidebar Content (List) */}
-          {!collapsed && (
+          {(!collapsed || isSettings) && (
             <ScrollArea className="flex-1 px-2">
               <div className="space-y-0.5 pb-4">
                 {isSettings ? (

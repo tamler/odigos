@@ -150,11 +150,6 @@ export default function VoiceTab({ active: isActive }: { active?: boolean }) {
             )}
           </div>
 
-          {settings.stt_provider === 'groq' && (
-            <p className="text-[11px] text-muted-foreground bg-muted/50 p-2 rounded border border-border/20">
-              Note: Groq Whisper is highly accurate and low latency. Cost is approximately $0.04 per hour of audio.
-            </p>
-          )}
         </div>
       </section>
 
