@@ -195,13 +195,17 @@ def _settings(**overrides):
             check_interval_ticks=10,
             model_dump=lambda: {"enabled": False, "address": "", "imap_host": "", "imap_port": 993, "smtp_host": "", "smtp_port": 587, "username": "", "password": "", "check_interval_ticks": 10},
         ),
-        stt=SimpleNamespace(
-            enabled=False,
-            model_dump=lambda: {"enabled": False},
-        ),
-        tts=SimpleNamespace(
-            enabled=False,
-            model_dump=lambda: {"enabled": False},
+        voice=SimpleNamespace(
+            stt_provider="groq",
+            tts_provider="edge",
+            tts_voice="en-US-AriaNeural",
+            groq_model="whisper-large-v3-turbo",
+            model_dump=lambda: {
+                "stt_provider": "groq",
+                "tts_provider": "edge",
+                "tts_voice": "en-US-AriaNeural",
+                "groq_model": "whisper-large-v3-turbo",
+            },
         ),
     )
     defaults.update(overrides)

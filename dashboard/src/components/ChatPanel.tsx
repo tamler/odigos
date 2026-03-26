@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
-import { get, uploadFile } from '@/lib/api'
+import { get, post, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Download } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, MicOff, Volume2, PanelRightClose, Download, Square, AlignLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/chat-container'
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
 import { Artifact, ArtifactCard, getFileIcon } from '@/components/ArtifactCard'
+import { MessageActions } from '@/components/MessageActions'
+import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -97,7 +99,13 @@ export function ChatPanel({
   const [inputValue, setInputValue] = useState('')
   const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean; progress?: number }[]>([])
   const [recording, setRecording] = useState(false)
-  const [voiceEnabled, setVoiceEnabled] = useState(false)
+  const [sttAvailable, setSttAvailable] = useState(false)
+  const [ttsAvailable, setTtsAvailable] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [autoRead, setAutoRead] = useState(() =>
+    localStorage.getItem('odigos-auto-read') === 'true'
+  )
+  const [conciseMode, setConciseMode] = useState(false)
   const [queuedCount, setQueuedCount] = useState(0)
   const [agentName, setAgentName] = useState('Odigos')
   const [suggestedActions, setSuggestedActions] = useState<string[]>([])
@@ -106,6 +114,7 @@ export function ChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioWsRef = useRef<WebSocket | null>(null)
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Wire up message handler on the shared socket
   useEffect(() => {
@@ -120,6 +129,7 @@ export function ChatPanel({
         if (msg.conversation_id && loadedConvRef.current && msg.conversation_id !== loadedConvRef.current) {
           return // Ignore chunks for inactive conversations
         }
+        setIsStreaming(true)
         setThinking(false)
         setStatus(null)
         setStreamingContent((prev) => prev + (msg.content as string))
@@ -128,14 +138,26 @@ export function ChatPanel({
         if (msg.conversation_id && loadedConvRef.current && msg.conversation_id !== loadedConvRef.current) {
           return // Ignore responses for inactive conversations
         }
+        setIsStreaming(false)
         setThinking(false)
         setStatus(null)
         setStreamingContent('')
+        const content = msg.content as string
         setMessages((prev) => [...prev, {
           role: 'assistant',
-          content: msg.content as string,
+          content,
           timestamp: new Date().toISOString(),
         }])
+
+        // Auto-read if enabled (G-V4)
+        if (autoRead && ttsAvailable && shouldPlayTTS(content)) {
+          playTTS(stripForTTS(content))
+        }
+      }
+      if (msg.type === 'stream_end') {
+        setIsStreaming(false)
+        setThinking(false)
+        setStatus(null)
       }
       if (msg.type === 'conversation_started' && msg.conversation_id) {
         const cid = msg.conversation_id as string
@@ -245,10 +267,14 @@ export function ChatPanel({
     return () => clearTimeout(timer)
   }, [thinking, status])
 
-  // Check voice settings
+  // Check voice and agent settings (G-V5, G-V6)
   useEffect(() => {
     get<Record<string, any>>('/api/settings')
-      .then((s) => setVoiceEnabled(!!(s.stt?.enabled || s.tts?.enabled)))
+      .then((s) => {
+        setSttAvailable(s.voice?.stt_provider !== 'disabled')
+        setTtsAvailable(s.voice?.tts_provider !== 'disabled')
+        setConciseMode(s.agent?.concise_mode ?? false)
+      })
       .catch(() => {})
   }, [])
 
@@ -307,21 +333,61 @@ export function ChatPanel({
   }, [])
 
   const playTTS = useCallback(async (text: string) => {
+    // Stop any currently playing audio
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause()
+      currentAudioRef.current.src = ''
+      currentAudioRef.current = null
+    }
+
+    if (!text) return
+
     try {
-      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`)
-      if (!res.ok) {
-        toast.error('TTS request failed')
-        return
-      }
+      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`, {
+        credentials: 'include',
+      })
+      if (!res.ok) return
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
-      audio.onended = () => URL.revokeObjectURL(url)
+      currentAudioRef.current = audio
+      audio.onended = () => {
+        URL.revokeObjectURL(url)
+        currentAudioRef.current = null
+      }
       audio.play()
     } catch {
-      toast.error('TTS playback failed')
+      // silent fail
     }
   }, [])
+
+  const handleEdit = useCallback((messageIndex: number, content: string) => {
+    socketRef.current?.send('edit', {
+      message_index: messageIndex,
+      content,
+      conversation_id: activeConversationId,
+    })
+    // Truncate local messages state to match
+    setMessages(prev => prev.slice(0, messageIndex))
+  }, [activeConversationId, socketRef])
+
+  const toggleConciseMode = useCallback(async () => {
+    const next = !conciseMode
+    setConciseMode(next)
+    try {
+      await post('/api/settings', { agent: { concise_mode: next } })
+    } catch {
+      setConciseMode(!next) // revert on failure
+      toast.error('Failed to update concise mode')
+    }
+  }, [conciseMode])
+
+  const getPreviousUserMessage = (assistantIndex: number): string => {
+    for (let i = assistantIndex - 1; i >= 0; i--) {
+      if (messages[i]?.role === 'user') return messages[i].content
+    }
+    return ''
+  }
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const newEntries = files.map((file) => ({ file, uploading: true, progress: 0 }))
@@ -380,6 +446,7 @@ export function ChatPanel({
       attachments: attachments.length > 0 ? attachments : undefined,
     }])
     setThinking(true)
+    setIsStreaming(true)
     setSuggestedActions([])
 
     socketRef.current?.send('chat', {
@@ -411,36 +478,60 @@ export function ChatPanel({
   return (
     <FileUpload onFilesAdded={handleFilesAdded}>
       <div className="flex-1 flex flex-col h-full bg-background z-10 w-full overflow-hidden">
-        {/* Header for Side Panel Mode */}
-        {isSidePanel && (
-          <div className="flex items-center justify-between px-4 h-[52px] border-b border-border/40 shrink-0 lg:pt-0 pt-2 lg:mt-0 lg:bg-transparent bg-background/50 backdrop-blur-sm shadow-sm sticky top-0 z-20">
-            <div className="flex items-center gap-3">
-              <div>
-                <div className="text-sm font-medium">Copilot</div>
-                {chatContext && Object.keys(chatContext).length > 0 && (
-                  <div className="text-xs text-muted-foreground mt-0.5">Context active</div>
-                )}
-              </div>
-              {activeConversationId && (
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  aria-label="Export conversation as artifact" 
-                  onClick={exportToArtifact}
-                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  title="Export as Artifact"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 h-[52px] border-b border-border/40 shrink-0 lg:pt-0 pt-2 lg:mt-0 lg:bg-transparent bg-background/50 backdrop-blur-sm shadow-sm sticky top-0 z-20">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="min-w-0">
+              <div className="text-sm font-medium truncate">{isSidePanel ? 'Copilot' : 'Copilot'}</div>
+              {chatContext && Object.keys(chatContext).length > 0 && (
+                <div className="text-xs text-muted-foreground mt-0.5">Context active</div>
               )}
             </div>
-            {onClose && (
-              <Button variant="ghost" size="icon" aria-label="Close chat panel" onClick={onClose} className="shrink-0 h-8 w-8 hover:bg-muted">
-                <PanelRightClose className="h-4 w-4" />
+
+            {/* Toggles (G-V4, G-V6) */}
+            <div className="flex items-center gap-1 ml-2 border-l border-border/40 pl-3 shrink-0">
+              {ttsAvailable && (
+                <button
+                  onClick={() => {
+                    const next = !autoRead
+                    setAutoRead(next)
+                    localStorage.setItem('odigos-auto-read', String(next))
+                  }}
+                  className={`p-1.5 rounded-md transition-colors relative ${autoRead ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
+                  title="Auto-read responses"
+                >
+                  <Volume2 className="h-4 w-4" />
+                  {autoRead && <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />}
+                </button>
+              )}
+              <button
+                onClick={toggleConciseMode}
+                className={`p-1.5 rounded-md transition-colors ${conciseMode ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:bg-muted'}`}
+                title="Concise mode"
+              >
+                <AlignLeft className="h-4 w-4" />
+              </button>
+            </div>
+
+            {activeConversationId && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                aria-label="Export conversation as artifact" 
+                onClick={exportToArtifact}
+                className="h-8 w-8 text-muted-foreground hover:text-foreground shrink-0"
+                title="Export as Artifact"
+              >
+                <Download className="h-4 w-4" />
               </Button>
             )}
           </div>
-        )}
+          {onClose && (
+            <Button variant="ghost" size="icon" aria-label="Close chat panel" onClick={onClose} className="shrink-0 h-8 w-8 hover:bg-muted">
+              <PanelRightClose className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
 
         {/* Drag overlay */}
         <FileUploadContent>
@@ -473,45 +564,54 @@ export function ChatPanel({
                   </Button>
                 </div>
               )}
-              {messages.slice(-messageDisplayLimit).map((msg, i) => (
-                <div key={i}>
-                  {msg.role === 'user' ? (
-                    <div className="flex justify-end">
-                      <div className="max-w-[85%]">
-                        <div className="rounded-3xl bg-muted/60 px-5 py-3">
-                          <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed break-words overflow-hidden">{msg.content}</div>
-                        </div>
-                        {msg.attachments && msg.attachments.length > 0 && (
-                          <div className="mt-1.5 flex justify-end gap-2 flex-wrap">
-                            {msg.attachments.map((a) => (
-                              <div key={a.id} className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Paperclip className="h-3 w-3 shrink-0" />
-                                <span className="truncate">{a.filename}</span> ({formatFileSize(a.size)})
-                              </div>
-                            ))}
+              {(() => {
+                const offset = Math.max(0, messages.length - messageDisplayLimit)
+                return messages.slice(-messageDisplayLimit).map((msg, i) => {
+                  const actualIndex = offset + i
+                  return (
+                    <div key={i}>
+                      {msg.role === 'user' ? (
+                        <div className="group/msg flex flex-col items-end">
+                          <div className="max-w-[85%]">
+                            <div className="rounded-3xl bg-muted/60 px-5 py-3 shadow-sm border border-border/20">
+                              <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed break-words overflow-hidden">{msg.content}</div>
+                            </div>
+                            <MessageActions
+                              role="user"
+                              content={msg.content}
+                              messageIndex={actualIndex}
+                              conversationId={activeConversationId || ''}
+                              isStreaming={isStreaming}
+                              ttsAvailable={ttsAvailable}
+                              socket={socketRef.current}
+                              onEdit={handleEdit}
+                              playTTS={(text) => playTTS(text)}
+                            />
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="group/msg w-full overflow-hidden">
-                      <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
-                        <Markdown>{msg.content}</Markdown>
-                      </div>
-                      {voiceEnabled && (
-                        <button
-                          onClick={() => playTTS(msg.content)}
-                          className="mt-1 opacity-0 group-hover/msg:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-                          title="Read aloud"
-                          aria-label="Read aloud"
-                        >
-                          <Volume2 className="h-4 w-4" />
-                        </button>
+                        </div>
+                      ) : (
+                        <div className="group/msg w-full overflow-hidden mb-4">
+                          <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
+                            <Markdown>{msg.content}</Markdown>
+                          </div>
+                          <MessageActions
+                            role="assistant"
+                            content={msg.content}
+                            messageIndex={actualIndex}
+                            conversationId={activeConversationId || ''}
+                            previousUserMessage={getPreviousUserMessage(actualIndex)}
+                            isStreaming={isStreaming}
+                            ttsAvailable={ttsAvailable}
+                            socket={socketRef.current}
+                            onEdit={() => {}}
+                            playTTS={(text) => playTTS(text)}
+                          />
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  )
+                })
+              })()}
               {streamingContent && (
                 <div className="group/msg w-full overflow-hidden">
                   <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
@@ -651,7 +751,7 @@ export function ChatPanel({
                   </Button>
                 </FileUploadTrigger>
                 <div className="flex items-center gap-1">
-                  {voiceEnabled && (
+                  {sttAvailable && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -663,15 +763,33 @@ export function ChatPanel({
                       {recording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
                     </Button>
                   )}
-                  <Button
-                    size="icon"
-                    aria-label="Send message"
-                    className="h-8 w-8 rounded-lg"
-                    disabled={!canSend}
-                    onClick={() => handleSend()}
-                  >
-                    <ArrowUp className="h-4 w-4" />
-                  </Button>
+                  {isStreaming ? (
+                    <Button
+                      size="icon"
+                      aria-label="Stop generation"
+                      className="h-8 w-8 rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-sm transition-all active:scale-95"
+                      onClick={() => {
+                        socketRef.current?.send('cancel')
+                        setIsStreaming(false)
+                        if (currentAudioRef.current) {
+                          currentAudioRef.current.pause()
+                          currentAudioRef.current = null
+                        }
+                      }}
+                    >
+                      <Square className="h-4 w-4 fill-current" />
+                    </Button>
+                  ) : (
+                    <Button
+                      size="icon"
+                      aria-label="Send message"
+                      className="h-8 w-8 rounded-lg shadow-sm transition-all active:scale-95"
+                      disabled={!canSend}
+                      onClick={() => handleSend()}
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
