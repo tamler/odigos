@@ -92,8 +92,8 @@ ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" <<'REMOTE'
   fi
   git reset --hard origin/main
 
-  # Rebuild and restart all containers
-  docker compose up -d --build 2>&1 | tail -5
+  # Rebuild and restart the odigos service only (system Caddy handles TLS)
+  docker compose up -d --build --no-deps odigos 2>&1 | tail -5
 
   # Recreate user containers with new image
   IMAGE=$(docker compose images -q odigos 2>/dev/null || docker images ghcr.io/tamler/odigos:latest -q)
