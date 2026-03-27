@@ -100,6 +100,15 @@ export default function NotebookPage() {
     return () => setPageContextData({})
   }, [notebook, notebookId, content, setPageContextData])
 
+  useEffect(() => {
+    if (!focusMode) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFocusMode(false)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [focusMode, setFocusMode])
+
   const handleUpdateTitle = async () => {
     if (!notebook || title === notebook.title || !title.trim()) return
     try {
@@ -217,15 +226,13 @@ export default function NotebookPage() {
 
       {/* Focus Mode Exit */}
       {focusMode && (
-        <Button 
-          variant="secondary" 
-          size="sm" 
-          className="fixed top-8 right-8 z-[110] shadow-2xl rounded-full border border-primary/20"
+        <button
+          className="fixed top-3 right-3 z-[110] p-1.5 rounded-md text-muted-foreground/20 hover:text-foreground hover:bg-muted/80 transition-all duration-200"
           onClick={() => setFocusMode(false)}
+          title="Exit Focus Mode (Esc)"
         >
-          <Minimize2 className="h-4 w-4 mr-2" />
-          Exit Focus
-        </Button>
+          <Minimize2 className="h-3.5 w-3.5" />
+        </button>
       )}
 
       <ShareDialog
