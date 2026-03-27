@@ -994,6 +994,20 @@ wheels = [
 ]
 
 [[package]]
+name = "grokipedia-api"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "requests" },
+    { name = "tenacity" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/78/cd/416fea7d2c9a6e9c9ef3e18630c905ff103bce0eabccacf8be9b2be095ff/grokipedia_api-0.3.0.tar.gz", hash = "sha256:733aface529116eb7f93765998e2e823a0b5c17e879b41f56192ba626bbf7f4b", size = 23807 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/d6/8178107e2b903daefdb1297c176e800df60b7525a7f971f8d04a0cba078c/grokipedia_api-0.3.0-py3-none-any.whl", hash = "sha256:fdecb3522e9c29ba8a6a09175e1f2d48c79515841a522e2fd3d1729df4078e4a", size = 24260 },
+]
+
+[[package]]
 name = "groq"
 version = "1.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1876,6 +1890,21 @@ wheels = [
 ]
 
 [[package]]
+name = "nltk"
+version = "3.9.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "joblib" },
+    { name = "regex" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/74/a1/b3b4adf15585a5bc4c357adde150c01ebeeb642173ded4d871e89468767c/nltk-3.9.4.tar.gz", hash = "sha256:ed03bc098a40481310320808b2db712d95d13ca65b27372f8a403949c8b523d0", size = 2946864 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9d/91/04e965f8e717ba0ab4bdca5c112deeab11c9e750d94c4d4602f050295d39/nltk-3.9.4-py3-none-any.whl", hash = "sha256:f2fa301c3a12718ce4a0e9305c5675299da5ad9e26068218b69d692fda84828f", size = 1552087 },
+]
+
+[[package]]
 name = "notebooklm-py"
 version = "0.3.4"
 source = { registry = "https://pypi.org/simple" }
@@ -2098,6 +2127,7 @@ dependencies = [
     { name = "einops" },
     { name = "fastapi" },
     { name = "feedparser" },
+    { name = "grokipedia-api" },
     { name = "groq" },
     { name = "httpx" },
     { name = "itsdangerous" },
@@ -2114,11 +2144,13 @@ dependencies = [
     { name = "scrapling", extra = ["fetchers"] },
     { name = "sentence-transformers", extra = ["onnx"] },
     { name = "sqlite-vec" },
+    { name = "textblob" },
     { name = "tiktoken" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "webauthn" },
     { name = "webrtcvad-wheels" },
     { name = "websockets" },
+    { name = "wikipedia" },
 ]
 
 [package.optional-dependencies]
@@ -2154,6 +2186,7 @@ requires-dist = [
     { name = "einops", specifier = ">=0.8.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "feedparser", specifier = ">=6.0.0" },
+    { name = "grokipedia-api", specifier = ">=0.3.0" },
     { name = "groq", specifier = ">=0.4.0" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "itsdangerous", specifier = ">=2.1.0" },
@@ -2180,11 +2213,13 @@ requires-dist = [
     { name = "scrapling", extras = ["fetchers"], specifier = ">=0.3.0" },
     { name = "sentence-transformers", extras = ["onnx"], specifier = ">=3.0.0" },
     { name = "sqlite-vec", specifier = ">=0.1.6" },
+    { name = "textblob", specifier = ">=0.19.0" },
     { name = "tiktoken", specifier = ">=0.7.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
     { name = "webauthn" },
     { name = "webrtcvad-wheels", specifier = ">=2.0.14" },
     { name = "websockets", specifier = ">=12.0" },
+    { name = "wikipedia", specifier = ">=1.4.0" },
 ]
 provides-extras = ["dev", "stt", "tts", "audio", "notebooklm"]
 
@@ -3808,6 +3843,18 @@ wheels = [
 ]
 
 [[package]]
+name = "textblob"
+version = "0.19.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nltk" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/63/a1/31fc6a5e9e46f2d84f72f12048588feac5464486e526dbfcc4719569cd3e/textblob-0.19.0.tar.gz", hash = "sha256:0a3d06a47cf7759441da3418c4843aed3797a998beba2108c6245a2020f83b01", size = 637872 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/d6/40aa5aead775582ea0cf35870e5a3f16fab4b967f1ad2debe675f673f923/textblob-0.19.0-py3-none-any.whl", hash = "sha256:af6b8827886f1ee839a625f4865e5abb1584eae8db2259627b33a6a0b02ef19d", size = 624280 },
+]
+
+[[package]]
 name = "threadpoolctl"
 version = "3.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4306,6 +4353,16 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/3e/28135a24e384493fa804216b79a6a6759a38cc4ff59118787b9fb693df93/websockets-16.0-cp314-cp314t-win_amd64.whl", hash = "sha256:b14dc141ed6d2dde437cddb216004bcac6a1df0935d79656387bd41632ba0bbd", size = 178531 },
     { url = "https://files.pythonhosted.org/packages/6f/28/258ebab549c2bf3e64d2b0217b973467394a9cea8c42f70418ca2c5d0d2e/websockets-16.0-py3-none-any.whl", hash = "sha256:1637db62fad1dc833276dded54215f2c7fa46912301a24bd94d45d46a011ceec", size = 171598 },
 ]
+
+[[package]]
+name = "wikipedia"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/67/35/25e68fbc99e672127cc6fbb14b8ec1ba3dfef035bf1e4c90f78f24a80b7d/wikipedia-1.4.0.tar.gz", hash = "sha256:db0fad1829fdd441b1852306e9856398204dc0786d2996dd2e0c8bb8e26133b2", size = 27748 }
 
 [[package]]
 name = "x-wr-timezone"

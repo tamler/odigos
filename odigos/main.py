@@ -283,10 +283,28 @@ async def _register_tools(
     tool_registry.register(WorkspaceSearchTool(db=db))
     logger.info("Workspace search tool registered")
 
+    # Image processing tool
+    from odigos.tools.image import ImageTool
+    tool_registry.register(ImageTool())
+    logger.info("Image processing tool registered")
+
     # Translation tool
     from odigos.tools.translate import TranslateTool
     tool_registry.register(TranslateTool())
     logger.info("Translation tool registered")
+
+    # Text analysis tool (NLP)
+    from odigos.tools.text_analysis import TextAnalysisTool
+    tool_registry.register(TextAnalysisTool())
+    logger.info("Text analysis tool registered")
+
+    # Knowledge lookup tool (Grokipedia + Wikipedia)
+    from odigos.tools.knowledge import LookupTool
+    tool_registry.register(LookupTool())
+    logger.info(
+        "Knowledge lookup tool registered"
+        " (Grokipedia + Wikipedia)"
+    )
 
     # Feed publish tool
     if settings.feed.enabled:
