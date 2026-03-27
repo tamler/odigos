@@ -247,10 +247,14 @@ export default function AppLayout() {
   const editInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
   const navigate = useNavigate()
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const [agentName, setAgentName] = useState('Odigos')
   const { setTheme } = useTheme()
+  const setThemeRef = useRef(setTheme)
+  setThemeRef.current = setTheme
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const pendingTitles = useRef<Record<string, string>>({})
 
@@ -401,10 +405,10 @@ export default function AppLayout() {
             playTTS(stripForTTS(content))
           }
           if (Array.isArray(msg.actions) && msg.actions.length > 0) {
-            executeActions(msg.actions as UIAction[], navigate, {
+            executeActions(msg.actions as UIAction[], navigateRef.current, {
               refresh: () => window.location.reload(),
               openChat: () => setChatPanelOpen(true),
-              setTheme: (t) => setTheme(t),
+              setTheme: (t) => setThemeRef.current(t),
             })
           }
         }
@@ -438,7 +442,7 @@ export default function AppLayout() {
     socket.connect()
     socketRef.current = socket
     return () => socket.disconnect()
-  }, [loadConversations, navigate, setTheme, playTTS])
+  }, [loadConversations, playTTS])
 
   useEffect(() => { loadConversations() }, [loadConversations])
 
