@@ -34,12 +34,15 @@ services:
       start_period: 120s
 
   # ── Caddy reverse proxy (automatic HTTPS) ─────────────────────────
+  # Opt-in: only starts with `docker compose --profile caddy up -d`
   # Provides TLS termination via Let's Encrypt when ODIGOS_DOMAIN is set.
-  # For local dev, defaults to localhost (self-signed).
+  # Skip this if you already have a reverse proxy (nginx, system Caddy, etc.)
   caddy:
     image: caddy:2-alpine
     container_name: odigos-caddy
     restart: unless-stopped
+    profiles:
+      - caddy
     depends_on:
       odigos:
         condition: service_healthy
