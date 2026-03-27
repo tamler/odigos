@@ -26,6 +26,8 @@ export function ShareDialog({ type, id, isOpen, onClose, initialShareToken }: Sh
   const [loading, setLoading] = useState(false)
   const [revoking, setRevoking] = useState(false)
 
+  if (!id) return null
+
   const shareUrl = token ? `${window.location.origin}/shared/${type}/${token}` : ''
 
   async function handleCreateShare() {
@@ -62,7 +64,7 @@ export function ShareDialog({ type, id, isOpen, onClose, initialShareToken }: Sh
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
