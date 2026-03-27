@@ -30,14 +30,13 @@ import {
   Columns3
 } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
-import { FloatingBubble } from '@/components/FloatingBubble'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
 import { QuickSwitcher } from '@/components/QuickSwitcher'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,7 +48,6 @@ import { get, patch, del, post } from '@/lib/api'
 import { ChatSocket } from '@/lib/ws'
 import { toast } from 'sonner'
 import { executeActions, UIAction } from '@/lib/actions'
-import { PageContext } from '@/hooks/usePageContext'
 import { useTheme } from 'next-themes'
 import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
 
@@ -103,57 +101,35 @@ const AppSidebar = memo(({
   isMobile, searchQuery, setSearchQuery, 
   isSettings, isNotebook, isKanban, isChat, currentTab,
   agentName, notebooks, boards, filteredConversations,
-  activeId, handleNewChat, handleCreateNotebook, handleCreateBoard,
-  handleSelectConversation, startRename, editingId, editTitle, setEditTitle,
+  activeId, handleNewChat, handleSelectConversation, 
+  startRename, editingId, editTitle, setEditTitle,
   confirmRename, handleExport, handleDelete, displayTitle, navigate, location
 }: any) => {
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'} ${isChat ? '' : ''}`}>
+    <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'}`}>
       <div className="flex flex-col gap-2 p-3 mb-2">
-        {!collapsed && (
-          <div className="flex items-center justify-between px-3 py-1 mb-1">
-            <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">
-              {isNotebook ? 'Notebooks' : isKanban ? 'Boards' : isChat ? 'Chats' : 'Settings'}
-            </span>
-            <div className="flex items-center gap-1">
-              {!isSettings && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => {
-                  if (isNotebook) handleCreateNotebook()
-                  else if (isKanban) handleCreateBoard()
-                  else handleNewChat()
-                }}><Plus className="h-4 w-4" /></Button>
-              )}
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-1 mb-2 px-1 min-h-[32px]">
+          <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="shrink-0 h-8 w-8">
+            {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </Button>
+          {!collapsed && (
+            <button onClick={() => navigate('/')} className="text-lg font-bold tracking-tight px-2 hover:text-primary transition-colors text-left truncate">{agentName}</button>
+          )}
+        </div>
 
-        {!collapsed && !isSettings && (
-          <button onClick={() => navigate('/')} className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors text-left truncate">{agentName}</button>
-        )}
-
-        {!collapsed && !isSettings && (
-          <div className="flex items-center gap-1 px-3 pb-2">
+        {(!collapsed || isSettings) && !isSettings && (
+          <div className="flex items-center gap-1 px-1 pb-2">
             <button onClick={() => navigate('/')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isChat ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Chat"><MessageCircle className="h-4 w-4" /></button>
             <button onClick={() => navigate('/notebooks')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isNotebook ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Notebooks"><FileText className="h-4 w-4" /></button>
             <button onClick={() => navigate('/kanban')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isKanban ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Boards"><Columns3 className="h-4 w-4" /></button>
           </div>
         )}
 
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="shrink-0 h-8 w-8">
-                {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
-          </Tooltip>
-          {(!collapsed || isMobile) && isChat && (
-            <Button variant="secondary" size="sm" className="flex-1 justify-start gap-2 h-8 rounded-lg shadow-sm" onClick={handleNewChat}>
-              <Plus className="h-4 w-4" /> New Chat
-            </Button>
-          )}
-        </div>
+        {(!collapsed || isMobile) && isChat && (
+          <Button variant="secondary" size="sm" className="w-full justify-start gap-2 h-8 rounded-lg shadow-sm mb-2" onClick={handleNewChat}>
+            <Plus className="h-4 w-4" /> New Chat
+          </Button>
+        )}
       </div>
 
       {!collapsed && isChat && (
@@ -228,9 +204,13 @@ const AppSidebar = memo(({
       )}
 
       <div className="p-3 mt-auto border-t border-border/10">
-        <button onClick={() => { setSidebarOpen(false); navigate('/settings') }} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition-all ${isSettings ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground hover:bg-muted'}`}>
-          <Settings className="h-4 w-4 shrink-0" />
-          {!collapsed && <span className="text-sm font-bold">Settings</span>}
+        <button 
+          onClick={() => { setSidebarOpen(false); navigate(isSettings ? '/' : '/settings') }} 
+          className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition-all ${isSettings ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground hover:bg-muted'}`}
+          title={isSettings ? "Back to Chat" : "Settings"}
+        >
+          {isSettings ? <MessageCircle className="h-4 w-4 shrink-0" /> : <Settings className="h-4 w-4 shrink-0" />}
+          {!collapsed && <span className="text-sm font-bold">{isSettings ? 'Back to Chat' : 'Settings'}</span>}
         </button>
       </div>
     </aside>
@@ -263,15 +243,6 @@ export default function AppLayout() {
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
   const [focusMode, setFocusMode] = useState(false)
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  const [pageContextData, setPageContextData] = useState<Partial<PageContext>>({})
-  const [assistantConfig, setAssistantConfig] = useState<AssistantConfig>({
-    enabled: false,
-    show_transcript: true,
-    text_input: true,
-    voice_input: true,
-    auto_read: false,
-    position: 'bottom-right'
-  })
   const [chatContext, setChatContext] = useState<Record<string, string> | undefined>(undefined)
   const editInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
@@ -284,6 +255,11 @@ export default function AppLayout() {
   const pendingTitles = useRef<Record<string, string>>({})
 
   const [isTTSPlaying, setIsTTSPlaying] = useState(false)
+  const activeIdRef = useRef(activeId)
+
+  useEffect(() => {
+    activeIdRef.current = activeId
+  }, [activeId])
 
   const playTTS = useCallback(async (text: string) => {
     if (currentAudioRef.current) {
@@ -363,7 +339,6 @@ export default function AppLayout() {
     get<any>('/api/settings')
       .then(s => {
         setAgentName(s.agent?.name || 'Odigos')
-        if (s.assistant) setAssistantConfig(s.assistant)
       })
       .catch(() => {})
   }, [])
@@ -406,13 +381,13 @@ export default function AppLayout() {
         }
         if (msg.type === 'status') setStatus(msg.text as string)
         if (msg.type === 'chat_chunk') {
-          if (msg.conversation_id && activeId && msg.conversation_id !== activeId) return 
+          if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return 
           setThinking(false)
           setStatus(null)
           setStreamingContent((prev) => prev + (msg.content as string))
         }
         if (msg.type === 'chat_response') {
-          if (msg.conversation_id && activeId && msg.conversation_id !== activeId) return 
+          if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return 
           setThinking(false)
           setStatus(null)
           setStreamingContent('')
@@ -422,8 +397,7 @@ export default function AppLayout() {
             content,
             timestamp: new Date().toISOString(),
           }])
-          const voiceModeOn = localStorage.getItem('odigos-voice-mode') === 'true'
-          if ((assistantConfig.auto_read || voiceModeOn) && shouldPlayTTS(content)) {
+          if (shouldPlayTTS(content)) {
             playTTS(stripForTTS(content))
           }
           if (Array.isArray(msg.actions) && msg.actions.length > 0) {
@@ -464,7 +438,7 @@ export default function AppLayout() {
     socket.connect()
     socketRef.current = socket
     return () => socket.disconnect()
-  }, [loadConversations, activeId, assistantConfig.auto_read, navigate, setTheme, playTTS])
+  }, [loadConversations, navigate, setTheme, playTTS])
 
   useEffect(() => { loadConversations() }, [loadConversations])
 
@@ -529,17 +503,6 @@ export default function AppLayout() {
       toast.success('Conversation exported')
     }).catch(() => toast.error('Failed to export conversation'))
   }, [])
-
-  const handleBubbleSend = useCallback((content: string, context?: Record<string, any>) => {
-    if (!content.trim()) return
-    setMessages((prev) => [...prev, { role: 'user', content, timestamp: new Date().toISOString() }])
-    setThinking(true)
-    socketRef.current?.send('chat', {
-      content,
-      conversation_id: activeId || undefined,
-      context: { ...context, ...chatContext },
-    })
-  }, [activeId, chatContext])
 
   const displayTitle = useCallback((c: Conversation): string => {
     if (c.title) return c.title
@@ -621,8 +584,7 @@ export default function AppLayout() {
           currentTab={currentTab} agentName={agentName}
           notebooks={notebooks} boards={boards}
           filteredConversations={filteredConversations} activeId={activeId}
-          handleNewChat={handleNewChat} handleCreateNotebook={handleCreateNotebook}
-          handleCreateBoard={handleCreateBoard} handleSelectConversation={handleSelectConversation}
+          handleNewChat={handleNewChat} handleSelectConversation={handleSelectConversation}
           startRename={startRename} editingId={editingId} editTitle={editTitle}
           setEditTitle={setEditTitle} confirmRename={confirmRename}
           handleExport={handleExport} handleDelete={handleDelete}
@@ -638,10 +600,13 @@ export default function AppLayout() {
                 <ChatPanel activeConversationId={activeId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={false} />
               ) : (
                 <Outlet context={{
-                  activeConversationId: activeId, setActiveId, refreshConversations: loadConversations,
+                  activeId,
+                  setActiveId,
+                  activeConversationId: activeId,
+                  refreshConversations: loadConversations,
                   socketRef, connected, hasNewEmail, setHasNewEmail, setChatPanelOpen,
                   artifactPanelOpen, setArtifactPanelOpen, activeArtifactId, setActiveArtifactId,
-                  setChatContext, isMobile, setPageContextData, messages, setMessages,
+                  chatContext, setChatContext, isMobile, messages, setMessages,
                   streamingContent, setStreamingContent, thinking, setThinking, status, setStatus,
                   queuedCount, setQueuedCount, suggestedActions, setSuggestedActions,
                   playTTS, stopTTS, isTTSPlaying, focusMode, setFocusMode,
@@ -671,16 +636,6 @@ export default function AppLayout() {
             </>
           )}
         </div>
-
-        {!isChat && !chatPanelOpen && assistantConfig.enabled && (
-          <FloatingBubble
-            socketRef={socketRef} connected={connected} activeConversationId={activeId}
-            messages={messages} onSend={handleBubbleSend}
-            pageContext={{ page: location.pathname.split('/')[1] || 'home', ...pageContextData } as any}
-            assistantConfig={assistantConfig} agentName={agentName}
-            ttsAvailable={assistantConfig.enabled} sttAvailable={connected} playTTS={playTTS}
-          />
-        )}
       </div>
     </TooltipProvider>
   )
