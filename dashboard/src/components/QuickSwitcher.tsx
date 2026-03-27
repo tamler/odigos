@@ -91,25 +91,25 @@ export function QuickSwitcher({ open, onOpenChange }: { open: boolean; onOpenCha
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed left-[50%] top-[20%] z-[101] w-full max-w-lg translate-x-[-50%] gap-4 border border-border/40 bg-background p-0 shadow-2xl duration-200 animate-in zoom-in-95 rounded-2xl overflow-hidden">
+        <Dialog.Content className="fixed left-[50%] top-[10%] lg:top-[20%] z-[101] w-[calc(100%-2rem)] max-w-lg translate-x-[-50%] gap-4 border border-border/40 bg-background p-0 shadow-2xl duration-200 animate-in zoom-in-95 rounded-2xl overflow-hidden">
           <div className="flex items-center px-4 py-3 border-b border-border/10">
-            <Search className="h-4 w-4 mr-3 text-muted-foreground" />
+            <Search className="h-4 w-4 mr-3 text-muted-foreground shrink-0" />
             <input
               autoFocus
               placeholder="Search workspaces, chats, notes..."
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground/50"
+              className="flex-1 bg-transparent border-none outline-none text-base lg:text-sm placeholder:text-muted-foreground/50 min-w-0"
             />
-            <div className="flex items-center gap-1 ml-2">
+            <div className="hidden lg:flex items-center gap-1 ml-2">
               <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
                 Esc
               </kbd>
             </div>
           </div>
 
-          <div className="max-h-[400px] overflow-y-auto py-2">
+          <div className="max-h-[60vh] lg:max-h-[400px] overflow-y-auto py-2">
             {results.length > 0 ? (
               <div className="px-2">
                 {results.map((item, i) => (
@@ -117,16 +117,16 @@ export function QuickSwitcher({ open, onOpenChange }: { open: boolean; onOpenCha
                     key={`${item.type}-${item.id}`}
                     onClick={() => handleSelect(item)}
                     onMouseEnter={() => setSelectedIndex(i)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm transition-all ${i === selectedIndex ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground hover:bg-muted'}`}
+                    className={`w-full flex items-center justify-between px-3 py-3 lg:py-2.5 rounded-xl text-sm transition-all min-h-[44px] ${i === selectedIndex ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground hover:bg-muted'}`}
                   >
-                    <div className="flex items-center gap-3">
-                      {item.type === 'conversation' && <MessageCircle className="h-4 w-4 opacity-70" />}
-                      {item.type === 'notebook' && <FileText className="h-4 w-4 opacity-70" />}
-                      {item.type === 'board' && <Columns3 className="h-4 w-4 opacity-70" />}
-                      <span className="font-medium">{item.title}</span>
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      {item.type === 'conversation' && <MessageCircle className="h-4 w-4 shrink-0 opacity-70" />}
+                      {item.type === 'notebook' && <FileText className="h-4 w-4 shrink-0 opacity-70" />}
+                      {item.type === 'board' && <Columns3 className="h-4 w-4 shrink-0 opacity-70" />}
+                      <span className="font-medium truncate">{item.title}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] opacity-50 uppercase tracking-widest font-bold">{item.type}</span>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <span className="text-[10px] opacity-50 uppercase tracking-widest font-bold hidden sm:inline">{item.type}</span>
                       {i === selectedIndex && <ArrowRight className="h-3 w-3" />}
                     </div>
                   </button>
@@ -149,7 +149,7 @@ export function QuickSwitcher({ open, onOpenChange }: { open: boolean; onOpenCha
             )}
           </div>
 
-          <div className="px-4 py-2 border-t border-border/5 bg-muted/20 flex items-center justify-between">
+          <div className="hidden lg:flex px-4 py-2 border-t border-border/5 bg-muted/20 items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1">
                 <kbd className="h-4 w-4 rounded border bg-background flex items-center justify-center text-[10px] font-mono">↑</kbd>

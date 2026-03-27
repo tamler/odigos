@@ -97,10 +97,10 @@ export function AgentInputBar({
         <div className="rounded-2xl border border-border/40 bg-background/95 backdrop-blur-md p-5 shadow-xl relative group/resp">
           <button 
             onClick={() => setResponse(null)}
-            className="absolute top-3 right-3 p-1 rounded-md opacity-0 group-hover/resp:opacity-100 hover:bg-muted transition-all"
+            className="absolute top-3 right-3 p-2 lg:p-1 rounded-md opacity-100 lg:opacity-0 group-hover/resp:opacity-100 hover:bg-muted transition-all"
             title="Dismiss (Esc)"
           >
-            <X className="h-3.5 w-3.5 text-muted-foreground" />
+            <X className="h-4 w-4 lg:h-3.5 lg:w-3.5 text-muted-foreground" />
           </button>
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <Markdown>{response || ''}</Markdown>
@@ -109,7 +109,7 @@ export function AgentInputBar({
             <Button 
               size="sm" 
               variant="ghost"
-              className="h-7 text-[11px] font-bold text-muted-foreground hover:text-foreground"
+              className="h-11 lg:h-7 px-4 lg:px-3 text-[11px] font-bold text-muted-foreground hover:text-foreground"
               onClick={() => {
                 navigate(`/`) 
               }}
@@ -124,14 +124,14 @@ export function AgentInputBar({
       <div className={`rounded-2xl border transition-all duration-300 ${focused ? 'border-primary/40 bg-background shadow-2xl ring-4 ring-primary/5' : 'border-border/40 bg-muted/20 hover:border-border/60 hover:bg-muted/30 shadow-sm'}`}>
         {!focused ? (
           <div 
-            className="flex items-center justify-between px-5 py-3 cursor-pointer group"
+            className="flex items-center justify-between px-5 py-4 lg:py-3 cursor-pointer group min-h-[44px]"
             onClick={() => setFocused(true)}
           >
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="h-6 w-6 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
                 <span className="text-[10px] font-black text-primary">{agentName[0]}</span>
               </div>
-              <span className="text-sm text-muted-foreground/80 font-medium truncate italic">{placeholder || `Ask ${agentName}...`} <span className="ml-2 text-[10px] not-italic opacity-0 group-hover:opacity-100 transition-opacity font-bold uppercase tracking-widest text-muted-foreground/40">(Press /)</span></span>
+              <span className="text-sm text-muted-foreground/80 font-medium truncate italic">{placeholder || `Ask ${agentName}...`} <span className="ml-2 text-[10px] not-italic opacity-0 lg:group-hover:opacity-100 transition-opacity font-bold uppercase tracking-widest text-muted-foreground/40 hidden lg:inline">(Press /)</span></span>
             </div>
             {sttAvailable && <Mic className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors" />}
           </div>
@@ -154,15 +154,15 @@ export function AgentInputBar({
                   }
                 }}
                 placeholder={placeholder || `What's on your mind, ${agentName}?`}
-                className="flex-1 bg-transparent border-none resize-none text-sm focus:outline-none min-h-[40px] py-1 custom-scrollbar"
+                className="flex-1 bg-transparent border-none resize-none text-base lg:text-sm focus:outline-none min-h-[44px] lg:min-h-[40px] py-2 lg:py-1 custom-scrollbar"
                 rows={1}
               />
             </div>
             <div className="flex items-center justify-between px-3 pb-2">
               <div className="flex items-center">
                 {sttAvailable && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
-                    <Mic className="h-4 w-4" />
+                  <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8 text-muted-foreground hover:text-primary">
+                    <Mic className="h-5 w-5 lg:h-4 lg:w-4" />
                   </Button>
                 )}
               </div>
@@ -170,21 +170,21 @@ export function AgentInputBar({
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="h-8 text-[11px] font-bold text-muted-foreground"
+                  className="h-11 lg:h-8 px-4 lg:px-3 text-[11px] font-bold text-muted-foreground"
                   onClick={() => setFocused(false)}
                 >
                   Close
                 </Button>
                 <Button 
                   size="icon" 
-                  className="h-8 w-8 rounded-xl shadow-lg shadow-primary/20"
+                  className="h-11 w-11 lg:h-8 lg:w-8 rounded-xl shadow-lg shadow-primary/20"
                   disabled={!input.trim() || waiting}
                   onClick={send}
                 >
                   {waiting ? (
                     <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <ArrowUp className="h-4 w-4" />
+                    <ArrowUp className="h-5 w-5 lg:h-4 lg:w-4" />
                   )}
                 </Button>
               </div>

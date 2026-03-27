@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <rect width="128" height="128" rx="28" fill="#030305"/>
+  <!-- O character approximating Outfit 800 weight -->
+  <path d="M56.5 20C35.2 20 18 37.8 18 60s17.2 40 38.5 40S95 82.2 95 60 77.8 20 56.5 20zm0 16.5c12.8 0 22 10.5 22 23.5s-9.2 23.5-22 23.5S34.5 73 34.5 60s9.2-23.5 22-23.5z" fill="#ffffff"/>
+  <!-- Accent dot -->
+  <circle cx="106" cy="86" r="11" fill="#8b5cf6"/>
+</svg>

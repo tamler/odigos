@@ -699,4 +699,16 @@ Build pipeline passing completely. No downstream regressions. Ready for manual r
 - G-W5: Extended UI Action system to support explicit navigation to workspace items (`navigate-to-notebook`, `navigate-to-board`).
 - Build verified: Production build passing with zero TypeScript errors.
 
+### 2026-03-27 (Gemini - Mobile Polish + PWA)
+- **G-M1: Mobile Polish:**
+  - `QuickSwitcher`: Optimized dialog width and position for mobile. Increased touch targets to 44px. Set 16px font size for search input to prevent iOS zoom. Hidden keyboard hints on touch devices.
+  - `AgentInputBar`: Hidden "/" shortcut on mobile. Increased touch targets for send/mic/close buttons. Made response area full-width on small screens.
+  - `NotebookPage`: Refined header padding and icon sizing. Ensured title input is 16px on mobile. Verified full-width Tiptap editor responsiveness.
+- **G-PWA: Progressive Web App Support:**
+  - Icon Generation: Recreated the Odigos brand icon (O + purple dot) and generated `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, and `apple-touch-icon.png` using Pillow.
+  - Web App Manifest: Created `manifest.json` with correct icons, standalone display mode, and theme colors.
+  - Service Worker: Implemented `sw.js` with shell caching and network-first logic for API/WS.
+  - Integration: Updated `index.html` with PWA meta tags and registered the service worker in `main.tsx`.
+- Build verified: Production build passing with zero errors.
+
 ---

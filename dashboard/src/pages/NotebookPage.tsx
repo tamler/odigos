@@ -136,36 +136,36 @@ export default function NotebookPage() {
   }
 
   return (
-    <div className={`flex-1 flex flex-col h-full bg-background transition-all duration-300 ${focusMode ? 'fixed inset-0 z-[100] p-4 sm:p-12' : ''}`}>
+    <div className={`flex-1 flex flex-col h-full bg-background transition-all duration-300 ${focusMode ? 'fixed inset-0 z-[100] p-4 lg:p-12' : ''}`}>
       {/* Header */}
       {!focusMode && (
-        <div className="flex items-center justify-between px-8 py-4 border-b border-border/10 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
-          <div className="flex items-center gap-4 flex-1">
+        <div className="flex items-center justify-between px-4 lg:px-8 py-3 lg:py-4 border-b border-border/10 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleUpdateTitle}
               onKeyDown={(e) => e.key === 'Enter' && handleUpdateTitle()}
-              className="text-xl font-bold bg-transparent border-none focus:outline-none w-full max-w-md tracking-tight placeholder:text-muted-foreground/30"
+              className="text-lg lg:text-xl font-bold bg-transparent border-none focus:outline-none w-full max-w-md tracking-tight placeholder:text-muted-foreground/30 truncate"
               placeholder="Untitled note"
             />
-            {saving && <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 animate-pulse">Saving...</span>}
+            {saving && <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 animate-pulse shrink-0">Saving...</span>}
           </div>
           
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground" onClick={() => setFocusMode(true)} title="Focus Mode (Cmd+.)">
-              <Maximize2 className="h-4 w-4" />
+          <div className="flex items-center gap-1 shrink-0">
+            <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-9 lg:w-9 text-muted-foreground" onClick={() => setFocusMode(true)} title="Focus Mode (Cmd+.)">
+              <Maximize2 className="h-5 w-5 lg:h-4 lg:w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className={`h-9 w-9 ${notebook?.share_token ? 'text-primary' : 'text-muted-foreground'}`} onClick={() => setShareOpen(true)} title="Share">
-              {notebook?.share_token ? <Globe className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+            <Button variant="ghost" size="icon" className={`h-11 w-11 lg:h-9 lg:w-9 ${notebook?.share_token ? 'text-primary' : 'text-muted-foreground'}`} onClick={() => setShareOpen(true)} title="Share">
+              {notebook?.share_token ? <Globe className="h-5 w-5 lg:h-4 lg:w-4" /> : <Share2 className="h-5 w-5 lg:h-4 lg:w-4" />}
             </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={async () => {
+            <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-9 lg:w-9 text-muted-foreground hover:text-destructive" onClick={async () => {
               if (confirm('Delete this entire notebook?')) {
                 await del(`/api/notebooks/${notebookId}`)
                 navigate('/notebooks')
               }
             }}>
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-5 w-5 lg:h-4 lg:w-4" />
             </Button>
           </div>
         </div>
