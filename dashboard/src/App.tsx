@@ -7,13 +7,14 @@ import LoginPrompt from './components/LoginPrompt'
 import WelcomeScreen from './components/WelcomeScreen'
 import { Loader } from '@/components/ui/loader'
 import { get } from './lib/api'
+import ChatPage from './pages/ChatPage'
+import SettingsPage from './pages/SettingsPage'
+import NotebookPage from './pages/NotebookPage'
+import KanbanPage from './pages/KanbanPage'
+import NotFoundPage from './pages/NotFoundPage'
+import ArtifactsPage from './pages/ArtifactsPage'
 
-const ChatPage = lazy(() => import('./pages/ChatPage'))
-const SettingsPage = lazy(() => import('./pages/SettingsPage'))
-const NotebookPage = lazy(() => import('./pages/NotebookPage'))
-const KanbanPage = lazy(() => import('./pages/KanbanPage'))
-const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
-const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
+// Only lazy-load rarely visited pages
 const SharedNotebookPage = lazy(() => import('./pages/SharedNotebookPage'))
 const SharedBoardPage = lazy(() => import('./pages/SharedBoardPage'))
 
@@ -85,25 +86,31 @@ export default function App() {
         />
       ) : (
         <BrowserRouter>
-          <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader /></div>}>
-            <Routes>
-              {/* Standalone Shared Routes (No Auth Required) */}
-              <Route path="/shared/notebook/:token" element={<SharedNotebookPage />} />
-              <Route path="/shared/board/:token" element={<SharedBoardPage />} />
+          <Routes>
+            {/* Shared routes — lazy loaded, rarely visited */}
+            <Route path="/shared/notebook/:token" element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader /></div>}>
+                <SharedNotebookPage />
+              </Suspense>
+            } />
+            <Route path="/shared/board/:token" element={
+              <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader /></div>}>
+                <SharedBoardPage />
+              </Suspense>
+            } />
 
-              <Route element={<AppLayout />}>
-                <Route path="/" element={<ChatPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/settings/:tab" element={<SettingsPage />} />
-                <Route path="/notebooks" element={<NotebookPage />} />
-                <Route path="/notebooks/:id" element={<NotebookPage />} />
-                <Route path="/kanban" element={<KanbanPage />} />
-                <Route path="/kanban/:id" element={<KanbanPage />} />
-                <Route path="/artifacts" element={<ArtifactsPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Route>
-            </Routes>
-          </Suspense>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<ChatPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/settings/:tab" element={<SettingsPage />} />
+              <Route path="/notebooks" element={<NotebookPage />} />
+              <Route path="/notebooks/:id" element={<NotebookPage />} />
+              <Route path="/kanban" element={<KanbanPage />} />
+              <Route path="/kanban/:id" element={<KanbanPage />} />
+              <Route path="/artifacts" element={<ArtifactsPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+          </Routes>
         </BrowserRouter>
       )}
     </>
