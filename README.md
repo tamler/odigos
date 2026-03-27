@@ -76,7 +76,7 @@ Web search (SearXNG, Brave, or Google), web scraping, RSS feeds. Upload document
 Sandboxed Python and shell execution with memory limits, timeouts, and network isolation. The agent can write and run code to solve problems, then save working solutions as reusable tools.
 
 ### Manage your life
-Goals, todos, reminders with proactive follow-up. Cron jobs for recurring tasks. The agent checks in via its heartbeat loop and nudges you when things are due.
+Goals, todos, reminders with proactive follow-up. Cron jobs for recurring tasks. The agent checks in via its heartbeat loop and nudges you when things are due. It detects commitments in your messages ("I'll do that by Friday") and follows up. When idle, it researches open questions and incomplete plans in the background.
 
 ### Analytics
 Built-in analytics dashboard showing query classifications, skill usage, tool errors, and active plans. See how your agent is performing at a glance.
@@ -219,11 +219,19 @@ One process. One database. No microservices.
 - **Local embeddings** (nomic-embed-text-v1.5) on CPU -- no API calls for embedding
 - **Cross-encoder reranking** (ms-marco-MiniLM) for document retrieval accuracy
 - **Plugin system** for tools, channels, and providers
-- **Heartbeat loop** for background processing, goal tracking, evolution trials
+- **Heartbeat loop** for background processing, goal tracking, evolution trials, proactive nudges, follow-up detection, idle research, auto-updates
 - **Parallel context assembly** -- 11 context queries run concurrently via asyncio.gather
 - **Message queue** -- WebSocket chat messages never dropped, processed sequentially
 
 Everything runs on a single VPS. 4 CPU, 16GB RAM is comfortable. No external databases, no message queues, no container orchestration.
+
+### Auto-Update
+
+Enable `auto_update.enabled: true` in config.yaml and the agent checks git for new commits during its heartbeat loop. When updates are found, it can notify you or auto-apply (pull, rebuild dashboard, restart). Works on both systemd (bare metal) and Docker installs.
+
+### Config Validation
+
+On startup, Odigos validates your configuration and logs warnings for common issues: missing API keys, invalid provider names, inconsistent budget limits, incomplete email/calendar config. The agent still starts -- warnings help you fix config without blocking.
 
 ## Dashboard
 
@@ -263,6 +271,9 @@ Key settings:
 | `email` | IMAP/SMTP credentials for agent email |
 | `access` | Supervised mode for managed agents |
 | `voice` | TTS/STT provider, voice selection, voice mode |
+| `auto_update` | Automatic code updates from git |
+| `calendar` | CalDAV calendar integration |
+| `assistant` | Floating assistant bubble settings |
 
 ## Plugins
 
@@ -272,7 +283,7 @@ Key settings:
 | Google Workspace | Gmail, Calendar, Drive (requires gcloud setup) |
 | Agent Browser | Browser automation |
 | Telegram | Telegram bot interface |
-| TTS/STT | Voice input (Groq Whisper) and output (edge-tts) |
+| TTS/STT | Voice input and output (pluggable providers: Groq, edge-tts, local) |
 | Docling | Deep document extraction |
 
 Enable in the Plugins tab. Changes apply immediately.
@@ -292,7 +303,7 @@ Enable in the Plugins tab. Changes apply immediately.
 
 ```bash
 uv sync                        # Install dependencies
-uv run pytest                  # Run tests (1100+)
+uv run pytest                  # Run tests (1190+)
 uv run python -m odigos.main   # Start locally
 cd dashboard && npm run dev    # Dashboard dev server
 ```
