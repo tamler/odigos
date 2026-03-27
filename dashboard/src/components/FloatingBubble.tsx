@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
 import { MessageCircle, X, Send, Mic, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -27,7 +27,7 @@ interface FloatingBubbleProps {
   playTTS: (text: string) => void
 }
 
-export function FloatingBubble({
+export const FloatingBubble = memo(({
   socketRef: _socketRef,
   connected: _connected,
   activeConversationId: _activeConversationId,
@@ -39,7 +39,7 @@ export function FloatingBubble({
   ttsAvailable: _ttsAvailable,
   sttAvailable,
   playTTS: _playTTS,
-}: FloatingBubbleProps) {
+}: FloatingBubbleProps) => {
   // These will be used when full bubble features are wired
   void _socketRef; void _connected; void _activeConversationId; void _ttsAvailable; void _playTTS
   const [expanded, setExpanded] = useState(false)
@@ -224,4 +224,6 @@ export function FloatingBubble({
       </button>
     </div>
   )
-}
+})
+
+FloatingBubble.displayName = 'FloatingBubble'

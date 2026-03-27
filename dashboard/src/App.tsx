@@ -3,12 +3,12 @@ import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { getAuthStatus } from './lib/auth'
 import AppLayout from './layouts/AppLayout'
-import ChatPage from './pages/ChatPage'
 import LoginPrompt from './components/LoginPrompt'
 import WelcomeScreen from './components/WelcomeScreen'
 import { Loader } from '@/components/ui/loader'
 import { get } from './lib/api'
 
+const ChatPage = lazy(() => import('./pages/ChatPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const NotebookPage = lazy(() => import('./pages/NotebookPage'))
 const KanbanPage = lazy(() => import('./pages/KanbanPage'))

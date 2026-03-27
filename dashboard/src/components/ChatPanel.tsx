@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { useSearchParams, useOutletContext } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
@@ -69,14 +69,15 @@ function WelcomeView({ agentName, onSuggest }: { agentName: string; onSuggest: (
     </div>
   )
 }
-export function ChatPanel({
+
+export const ChatPanel = memo(({
   activeConversationId,
   socketRef,
   connected,
   chatContext,
   isSidePanel = false,
   onClose,
-}: ChatPanelProps) {
+}: ChatPanelProps) => {
   const [searchParams] = useSearchParams()
   const { 
     artifactPanelOpen, 
@@ -124,12 +125,6 @@ export function ChatPanel({
     onAmplitudeChange: setVoiceAmplitude,
   })
   const handleSendRef = useRef<((text: string) => void) | null>(null)
-
-  // Wire up message handler on the shared socket
-  useEffect(() => {
-    // socket.onMessage is now handled globally in AppLayout.tsx
-    // to keep messages in sync across chat and floating bubble.
-  }, [])
 
   // Sync voice mode phase with agent status
   useEffect(() => {
@@ -186,7 +181,7 @@ export function ChatPanel({
         setArtifacts(artRes.value.artifacts)
       }
     }).catch(() => {})
-  }, [activeConversationId, searchParams])
+  }, [activeConversationId, searchParams, setMessages])
 
   // Fetch artifacts when thinking completes
   useEffect(() => {
@@ -215,7 +210,7 @@ export function ChatPanel({
       setStatus(null)
     }, 60000)
     return () => clearTimeout(timer)
-  }, [thinking, status])
+  }, [thinking, status, setThinking, setStatus])
 
   // Check voice and agent settings (G-V5, G-V6)
   useEffect(() => {
@@ -280,15 +275,15 @@ export function ChatPanel({
     })
     // Truncate local messages state to match
     setMessages((prev: ChatMessage[]) => prev.slice(0, messageIndex))
-  }, [activeConversationId, socketRef])
+  }, [activeConversationId, socketRef, setMessages])
 
 
-  const getPreviousUserMessage = (assistantIndex: number): string => {
+  const getPreviousUserMessage = useCallback((assistantIndex: number): string => {
     for (let i = assistantIndex - 1; i >= 0; i--) {
       if (messages[i]?.role === 'user') return messages[i].content
     }
     return ''
-  }
+  }, [messages])
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const newEntries = files.map((file) => ({ file, uploading: true, progress: 0 }))
@@ -313,11 +308,11 @@ export function ChatPanel({
     }
   }, [])
 
-  function removeFile(file: File) {
+  const removeFile = useCallback((file: File) => {
     setPendingFiles((prev) => prev.filter((p) => p.file !== file))
-  }
+  }, [])
 
-  function handleSend(overrideContent?: string) {
+  const handleSend = useCallback((overrideContent?: string) => {
     const content = (overrideContent ?? inputValue).trim()
     if (!content && pendingFiles.length === 0) return
 
@@ -344,14 +339,14 @@ export function ChatPanel({
 
     setInputValue('')
     setPendingFiles([])
-  }
+  }, [inputValue, pendingFiles, activeConversationId, chatContext, socketRef, setMessages, setThinking, setSuggestedActions])
 
-  function handleKeyDown(e: React.KeyboardEvent) {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
-  }
+  }, [handleSend])
 
   function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`
@@ -456,7 +451,7 @@ export function ChatPanel({
                                 </div>
                               ) : (
                                 <div className="group/msg w-full overflow-hidden mb-4">
-                                  <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
+                                  <div className="chat-text text-foreground break-words prose dark:prose-invert max-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
                                     <Markdown>{msg.content}</Markdown>
                                   </div>
                                   <MessageActions
@@ -689,4 +684,6 @@ export function ChatPanel({
       </div>
     </FileUpload>
   )
-}
+})
+
+ChatPanel.displayName = 'ChatPanel'

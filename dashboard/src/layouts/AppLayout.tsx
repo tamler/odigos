@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { 
   Settings, 
@@ -97,6 +97,147 @@ export interface ChatMessage {
   attachments?: { id: string; filename: string; size: number }[]
   actions?: UIAction[]
 }
+
+const AppSidebar = memo(({
+  collapsed, setCollapsed, sidebarOpen, setSidebarOpen, 
+  isMobile, searchQuery, setSearchQuery, 
+  isSettings, isNotebook, isKanban, isChat, currentTab,
+  agentName, notebooks, boards, filteredConversations,
+  activeId, handleNewChat, handleCreateNotebook, handleCreateBoard,
+  handleSelectConversation, startRename, editingId, editTitle, setEditTitle,
+  confirmRename, handleExport, handleDelete, displayTitle, navigate, location
+}: any) => {
+  return (
+    <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'} ${isChat ? '' : ''}`}>
+      <div className="flex flex-col gap-2 p-3 mb-2">
+        {!collapsed && (
+          <div className="flex items-center justify-between px-3 py-1 mb-1">
+            <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">
+              {isNotebook ? 'Notebooks' : isKanban ? 'Boards' : isChat ? 'Chats' : 'Settings'}
+            </span>
+            <div className="flex items-center gap-1">
+              {!isSettings && (
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => {
+                  if (isNotebook) handleCreateNotebook()
+                  else if (isKanban) handleCreateBoard()
+                  else handleNewChat()
+                }}><Plus className="h-4 w-4" /></Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!collapsed && !isSettings && (
+          <button onClick={() => navigate('/')} className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors text-left truncate">{agentName}</button>
+        )}
+
+        {!collapsed && !isSettings && (
+          <div className="flex items-center gap-1 px-3 pb-2">
+            <button onClick={() => navigate('/')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isChat ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Chat"><MessageCircle className="h-4 w-4" /></button>
+            <button onClick={() => navigate('/notebooks')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isNotebook ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Notebooks"><FileText className="h-4 w-4" /></button>
+            <button onClick={() => navigate('/kanban')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isKanban ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Boards"><Columns3 className="h-4 w-4" /></button>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="shrink-0 h-8 w-8">
+                {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
+          </Tooltip>
+          {(!collapsed || isMobile) && isChat && (
+            <Button variant="secondary" size="sm" className="flex-1 justify-start gap-2 h-8 rounded-lg shadow-sm" onClick={handleNewChat}>
+              <Plus className="h-4 w-4" /> New Chat
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {!collapsed && isChat && (
+        <div className="px-3 pb-2 pt-1 mb-2 relative group">
+          <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 text-xs bg-muted/40 focus-visible:ring-1 border-none rounded-lg pr-8" />
+          <kbd className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none hidden group-focus-within:inline-flex h-4 select-none items-center gap-1 rounded border bg-muted px-1 font-mono text-[8px] font-medium text-muted-foreground opacity-100">⌘K</kbd>
+        </div>
+      )}
+
+      {!collapsed && (
+        <ScrollArea className="flex-1 px-3">
+          <div className="space-y-0.5 pb-4">
+            {isSettings ? (
+              SETTINGS_SECTIONS.map((s) => (
+                <button key={s.id} onClick={() => { navigate(`/settings/${s.id}`); setSidebarOpen(false) }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${currentTab === s.id ? 'bg-accent text-accent-foreground font-medium shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}><s.icon className="h-4 w-4 shrink-0" /><span>{s.label}</span></button>
+              ))
+            ) : isNotebook ? (
+              <div className="space-y-1">
+                {notebooks.map((nb: any) => (
+                  <button key={nb.id} onClick={() => { navigate(`/notebooks/${nb.id}`); setSidebarOpen(false) }} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${location.pathname.includes(nb.id) ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50'}`}>{nb.title}</button>
+                ))}
+              </div>
+            ) : isKanban ? (
+              <div className="space-y-1">
+                {boards.map((b: any) => (
+                  <button key={b.id} onClick={() => { navigate(`/kanban/${b.id}`); setSidebarOpen(false) }} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${location.pathname.includes(b.id) ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50'}`}>{b.title}</button>
+                ))}
+              </div>
+            ) : (
+              filteredConversations.length === 0 ? (
+                <div className="px-3 py-6 mt-4 text-center text-xs text-muted-foreground italic">No conversations found</div>
+              ) : (
+                filteredConversations.map((c: any) => (
+                  <div key={c.id} className="group relative mb-0.5">
+                    {editingId === c.id ? (
+                      <div className="flex items-center gap-1 px-1 py-1">
+                        <Input
+                          autoFocus
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') confirmRename()
+                            if (e.key === 'Escape') startRename(null)
+                          }}
+                          className="h-7 text-sm"
+                        />
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={confirmRename}><Check className="h-3 w-3" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startRename(null)}><X className="h-3 w-3" /></Button>
+                      </div>
+                    ) : (
+                      <button onClick={() => handleSelectConversation(c.id)} className={`w-full text-left px-3 py-2 min-h-[40px] rounded-lg text-sm truncate transition-colors pr-8 ${activeId === c.id ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}>{displayTitle(c)}</button>
+                    )}
+                    {activeId === c.id && editingId !== c.id && (
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/20"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-xl">
+                            <DropdownMenuItem onClick={() => startRename(c)}><Pencil className="h-3.5 w-3.5 mr-2" /> Rename</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleExport(c.id, 'markdown')}><Download className="h-3.5 w-3.5 mr-2" /> Export</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleDelete(c.id)} className="text-destructive"><Trash2 className="h-3.5 w-3.5 mr-2" /> Delete</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )
+            )}
+          </div>
+        </ScrollArea>
+      )}
+
+      <div className="p-3 mt-auto border-t border-border/10">
+        <button onClick={() => { setSidebarOpen(false); navigate('/settings') }} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition-all ${isSettings ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground hover:bg-muted'}`}>
+          <Settings className="h-4 w-4 shrink-0" />
+          {!collapsed && <span className="text-sm font-bold">Settings</span>}
+        </button>
+      </div>
+    </aside>
+  )
+})
+
+AppSidebar.displayName = 'AppSidebar'
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
@@ -348,19 +489,24 @@ export default function AppLayout() {
     navigate(`/?c=${id}`)
   }
 
-  function startRename(c: Conversation) {
+  const startRename = useCallback((c: Conversation | null) => {
+    if (!c) {
+      setEditingId(null)
+      setEditTitle('')
+      return
+    }
     setEditingId(c.id)
     setEditTitle(c.title || c.id.slice(0, 8))
-  }
+  }, [])
 
-  async function confirmRename() {
+  const confirmRename = useCallback(async () => {
     if (!editingId || !editTitle.trim()) { setEditingId(null); return }
     try {
       await patch(`/api/conversations/${editingId}`, { title: editTitle.trim() })
       setConversations((prev) => prev.map((c) => (c.id === editingId ? { ...c, title: editTitle.trim() } : c)))
     } catch { toast.error('Failed to rename conversation') }
     setEditingId(null)
-  }
+  }, [editingId, editTitle])
 
   async function handleDelete(id: string) {
     try {
@@ -371,7 +517,7 @@ export default function AppLayout() {
     } catch { toast.error('Failed to delete conversation') }
   }
 
-  const handleExport = (id: string, format: 'markdown' | 'json') => {
+  const handleExport = useCallback((id: string, format: 'markdown' | 'json') => {
     const url = `/api/conversations/${id}/export?format=${format}`
     fetch(url).then(res => res.blob()).then(blob => {
       const ext = format === 'json' ? 'json' : 'md'
@@ -382,7 +528,7 @@ export default function AppLayout() {
       URL.revokeObjectURL(a.href)
       toast.success('Conversation exported')
     }).catch(() => toast.error('Failed to export conversation'))
-  }
+  }, [])
 
   const handleBubbleSend = useCallback((content: string, context?: Record<string, any>) => {
     if (!content.trim()) return
@@ -395,23 +541,23 @@ export default function AppLayout() {
     })
   }, [activeId, chatContext])
 
-  function displayTitle(c: Conversation): string {
+  const displayTitle = useCallback((c: Conversation): string => {
     if (c.title) return c.title
     const raw = c.last_message_at || c.started_at
     if (!raw) return 'New chat'
     const date = new Date(raw + 'Z')
     return `Chat ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
-  }
-
-  const filteredConversations = conversations.filter(c => 
-    !searchQuery || displayTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  }, [])
 
   const isSettings = location.pathname.startsWith('/settings')
   const isNotebook = location.pathname.startsWith('/notebooks')
   const isKanban = location.pathname.startsWith('/kanban')
   const isChat = !isSettings && !isNotebook && !isKanban
   const currentTab = location.pathname.split('/')[2] || 'general'
+
+  const filteredConversations = conversations.filter(c => 
+    !searchQuery || displayTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   useEffect(() => {
     if (isNotebook && notebooks.length === 0) {
@@ -422,21 +568,21 @@ export default function AppLayout() {
     }
   }, [isNotebook, isKanban, notebooks.length, boards.length])
 
-  async function handleCreateNotebook() {
+  const handleCreateNotebook = useCallback(async () => {
     try {
       const res = await post<{ id: string }>('/api/notebooks', { title: 'Untitled Note' })
       setNotebooks(prev => [{ id: res.id, title: 'Untitled Note', updated_at: new Date().toISOString() }, ...prev])
       navigate(`/notebooks/${res.id}`)
     } catch { toast.error('Failed to create notebook') }
-  }
+  }, [navigate])
 
-  async function handleCreateBoard() {
+  const handleCreateBoard = useCallback(async () => {
     try {
       const res = await post<{ id: string }>('/api/kanban/boards', { title: 'Untitled Board' })
       setBoards(prev => [{ id: res.id, title: 'Untitled Board', updated_at: new Date().toISOString() }, ...prev])
       navigate(`/kanban/${res.id}`)
     } catch { toast.error('Failed to create board') }
-  }
+  }, [navigate])
 
   return (
     <TooltipProvider>
@@ -467,133 +613,21 @@ export default function AppLayout() {
           </div>
         )}
 
-        {/* Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'} ${focusMode ? 'lg:hidden' : ''}`}>
-          <div className="flex flex-col gap-2 p-3 mb-2">
-            {!collapsed && (
-              <div className="flex items-center justify-between px-3 py-1 mb-1">
-                <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">
-                  {isNotebook ? 'Notebooks' : isKanban ? 'Boards' : isChat ? 'Chats' : 'Settings'}
-                </span>
-                <div className="flex items-center gap-1">
-                  {!isSettings && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => {
-                      if (isNotebook) handleCreateNotebook()
-                      else if (isKanban) handleCreateBoard()
-                      else handleNewChat()
-                    }}><Plus className="h-4 w-4" /></Button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {!collapsed && !isSettings && (
-              <button onClick={() => navigate('/')} className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors text-left truncate">{agentName}</button>
-            )}
-
-            {!collapsed && !isSettings && (
-              <div className="flex items-center gap-1 px-3 pb-2">
-                <button onClick={() => navigate('/')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isChat ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Chat"><MessageCircle className="h-4 w-4" /></button>
-                <button onClick={() => navigate('/notebooks')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isNotebook ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Notebooks"><FileText className="h-4 w-4" /></button>
-                <button onClick={() => navigate('/kanban')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isKanban ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Boards"><Columns3 className="h-4 w-4" /></button>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="shrink-0 h-8 w-8">
-                    {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
-              </Tooltip>
-              {(!collapsed || isMobile) && isChat && (
-                <Button variant="secondary" size="sm" className="flex-1 justify-start gap-2 h-8 rounded-lg shadow-sm" onClick={handleNewChat}>
-                  <Plus className="h-4 w-4" /> New Chat
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {!collapsed && isChat && (
-            <div className="px-3 pb-2 pt-1 mb-2 relative group">
-              <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 text-xs bg-muted/40 focus-visible:ring-1 border-none rounded-lg pr-8" />
-              <kbd className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none hidden group-focus-within:inline-flex h-4 select-none items-center gap-1 rounded border bg-muted px-1 font-mono text-[8px] font-medium text-muted-foreground opacity-100">⌘K</kbd>
-            </div>
-          )}
-
-          {!collapsed && (
-            <ScrollArea className="flex-1 px-3">
-              <div className="space-y-0.5 pb-4">
-                {isSettings ? (
-                  SETTINGS_SECTIONS.map((s) => (
-                    <button key={s.id} onClick={() => { navigate(`/settings/${s.id}`); setSidebarOpen(false) }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${currentTab === s.id ? 'bg-accent text-accent-foreground font-medium shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}><s.icon className="h-4 w-4 shrink-0" /><span>{s.label}</span></button>
-                  ))
-                ) : isNotebook ? (
-                  <div className="space-y-1">
-                    {notebooks.map(nb => (
-                      <button key={nb.id} onClick={() => { navigate(`/notebooks/${nb.id}`); setSidebarOpen(false) }} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${location.pathname.includes(nb.id) ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50'}`}>{nb.title}</button>
-                    ))}
-                  </div>
-                ) : isKanban ? (
-                  <div className="space-y-1">
-                    {boards.map(b => (
-                      <button key={b.id} onClick={() => { navigate(`/kanban/${b.id}`); setSidebarOpen(false) }} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${location.pathname.includes(b.id) ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50'}`}>{b.title}</button>
-                    ))}
-                  </div>
-                ) : (
-                  filteredConversations.length === 0 ? (
-                    <div className="px-3 py-6 mt-4 text-center text-xs text-muted-foreground italic">No conversations found</div>
-                  ) : (
-                    filteredConversations.map((c) => (
-                      <div key={c.id} className="group relative mb-0.5">
-                        {editingId === c.id ? (
-                          <div className="flex items-center gap-1 px-1 py-1">
-                            <Input
-                              ref={editInputRef}
-                              value={editTitle}
-                              onChange={(e) => setEditTitle(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') confirmRename()
-                                if (e.key === 'Escape') setEditingId(null)
-                              }}
-                              className="h-7 text-sm"
-                            />
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={confirmRename}><Check className="h-3 w-3" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3 w-3" /></Button>
-                          </div>
-                        ) : (
-                          <button onClick={() => handleSelectConversation(c.id)} className={`w-full text-left px-3 py-2 min-h-[40px] rounded-lg text-sm truncate transition-colors pr-8 ${activeId === c.id ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}>{displayTitle(c)}</button>
-                        )}
-                        {activeId === c.id && editingId !== c.id && (
-                          <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/20"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-xl">
-                                <DropdownMenuItem onClick={() => startRename(c)}><Pencil className="h-3.5 w-3.5 mr-2" /> Rename</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport(c.id, 'markdown')}><Download className="h-3.5 w-3.5 mr-2" /> Export</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={() => handleDelete(c.id)} className="text-destructive"><Trash2 className="h-3.5 w-3.5 mr-2" /> Delete</DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )
-                )}
-              </div>
-            </ScrollArea>
-          )}
-
-          <div className="p-3 mt-auto border-t border-border/10">
-            <button onClick={() => { setSidebarOpen(false); navigate('/settings') }} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition-all ${isSettings ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground hover:bg-muted'}`}>
-              <Settings className="h-4 w-4 shrink-0" />
-              {!collapsed && <span className="text-sm font-bold">Settings</span>}
-            </button>
-          </div>
-        </aside>
+        <AppSidebar 
+          collapsed={collapsed} setCollapsed={setCollapsed} 
+          sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
+          isMobile={isMobile} searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+          isSettings={isSettings} isNotebook={isNotebook} isKanban={isKanban} isChat={isChat}
+          currentTab={currentTab} agentName={agentName}
+          notebooks={notebooks} boards={boards}
+          filteredConversations={filteredConversations} activeId={activeId}
+          handleNewChat={handleNewChat} handleCreateNotebook={handleCreateNotebook}
+          handleCreateBoard={handleCreateBoard} handleSelectConversation={handleSelectConversation}
+          startRename={startRename} editingId={editingId} editTitle={editTitle}
+          setEditTitle={setEditTitle} confirmRename={confirmRename}
+          handleExport={handleExport} handleDelete={handleDelete}
+          displayTitle={displayTitle} navigate={navigate} location={location}
+        />
 
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
