@@ -107,9 +107,14 @@ async def _backup_to_disk(db, notebook_id: str) -> None:
         lines.append(entry["content"])
         lines.append("")
 
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    (BACKUP_DIR / f"{notebook_id}.md").write_text("\n".join(lines), encoding="utf-8")
-    logger.debug("Backed up notebook %s to disk", notebook_id[:8])
+    try:
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        (BACKUP_DIR / f"{notebook_id}.md").write_text(
+            "\n".join(lines), encoding="utf-8",
+        )
+        logger.debug("Backed up notebook %s to disk", notebook_id[:8])
+    except OSError as exc:
+        logger.warning("Notebook backup failed for %s: %s", notebook_id[:8], exc)
 
 
 # -- Endpoints --
