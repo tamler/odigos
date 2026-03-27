@@ -10,6 +10,7 @@ from odigos.api.rate_limit import RateLimitMiddleware
 
 from odigos.channels.base import ChannelRegistry
 from odigos.config import load_settings
+from odigos.config_validator import validate_settings
 from odigos.core.agent import Agent
 from odigos.core.heartbeat import Heartbeat
 from odigos.core.goal_store import GoalStore
@@ -375,6 +376,17 @@ async def lifespan(app: FastAPI):
 
     config_path = os.environ.get("ODIGOS_CONFIG", "config.yaml")
     settings = load_settings(config_path)
+
+    # Validate configuration and log warnings
+    config_warnings = validate_settings(settings)
+    for w in config_warnings:
+        logger.warning("Config: %s", w)
+    if config_warnings:
+        logger.warning(
+            "%d config warning(s) found. The agent will "
+            "still start, but some features may not work.",
+            len(config_warnings),
+        )
 
     # Auto-generate API key if not configured
     if not settings.api_key:

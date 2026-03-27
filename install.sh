@@ -134,6 +134,48 @@ else
     sed -i.bak "s|^LLM_FALLBACK_MODEL=.*|LLM_FALLBACK_MODEL=${fallback_model}|" .env && rm -f .env.bak
     info "Updated .env with LLM settings"
 
+    # ── Agent Name ────────────────────────────────────────────────────
+    echo ""
+    read -rp "  What would you like to name your agent? (default: Odigos): " agent_name
+    agent_name=${agent_name:-Odigos}
+
+    # ── Voice Setup (optional) ────────────────────────────────────────
+    echo ""
+    read -rp "$(echo -e "${BOLD}Enable voice mode? [y/N]:${NC} ")" enable_voice
+    enable_voice=${enable_voice:-N}
+
+    voice_stt="disabled"
+    voice_tts="disabled"
+    voice_tts_voice=""
+    if [[ "$enable_voice" =~ ^[Yy]$ ]]; then
+        read -rp "  Enter your Groq API key (get one at https://console.groq.com/keys): " groq_key
+        while [ -z "$groq_key" ]; do
+            warn "Groq API key is required for voice STT."
+            read -rp "  Enter your Groq API key: " groq_key
+        done
+        if grep -q "^GROQ_API_KEY=" .env 2>/dev/null; then
+            sed -i.bak "s|^GROQ_API_KEY=.*|GROQ_API_KEY=${groq_key}|" .env && rm -f .env.bak
+        else
+            echo "GROQ_API_KEY=${groq_key}" >> .env
+        fi
+        info "Added GROQ_API_KEY to .env"
+        voice_stt="groq"
+        voice_tts="edge"
+        voice_tts_voice="en-US-AriaNeural"
+    fi
+
+    # ── Auto-Update (optional) ────────────────────────────────────────
+    echo ""
+    read -rp "$(echo -e "${BOLD}Enable automatic updates? [y/N]:${NC} ")" enable_autoupdate
+    enable_autoupdate=${enable_autoupdate:-N}
+
+    autoupdate_enabled="false"
+    autoupdate_auto_apply="false"
+    if [[ "$enable_autoupdate" =~ ^[Yy]$ ]]; then
+        autoupdate_enabled="true"
+        autoupdate_auto_apply="true"
+    fi
+
     # Write config.yaml (settings, no secrets)
     cat > config.yaml << EOF
 # Odigos Configuration
@@ -142,7 +184,7 @@ else
 api_key: "${dashboard_key}"
 
 agent:
-  name: "Odigos"
+  name: "${agent_name}"
 
 llm:
   base_url: "${base_url}"
@@ -152,27 +194,36 @@ llm:
   temperature: 0.7
 
 budget:
-  daily_limit_usd: 5.0
-  monthly_limit_usd: 50.0
+  daily_limit_usd: 1.00
+  monthly_limit_usd: 20.00
+  warn_threshold: 0.80
+
+heartbeat:
+  interval_seconds: 30
+  max_todos_per_tick: 3
+  morning_briefing: true
+
+voice:
+  stt_provider: "${voice_stt}"
+  tts_provider: "${voice_tts}"
+EOF
+
+    # Add tts_voice only when voice is enabled
+    if [ -n "$voice_tts_voice" ]; then
+        echo "  tts_voice: \"${voice_tts_voice}\"" >> config.yaml
+    fi
+
+    cat >> config.yaml << EOF
+
+auto_update:
+  enabled: ${autoupdate_enabled}
+  auto_apply: ${autoupdate_auto_apply}
 
 server:
   host: "0.0.0.0"
   port: 8000
 EOF
     info "Wrote config.yaml"
-fi
-
-# ── Voice Setup (optional) ────────────────────────────────────────
-echo ""
-read -rp "$(echo -e "${BOLD}Enable voice (text-to-speech and speech-to-text)? [y/N]:${NC} ")" enable_voice
-enable_voice=${enable_voice:-N}
-
-if [[ "$enable_voice" =~ ^[Yy]$ ]]; then
-    if [ -f "./install-voice.sh" ]; then
-        bash ./install-voice.sh
-    else
-        warn "install-voice.sh not found. Run it separately after install."
-    fi
 fi
 
 # ── Account Setup (optional) ──────────────────────────────────────

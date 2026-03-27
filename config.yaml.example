@@ -1,15 +1,57 @@
 # Odigos Configuration
 # Copy this to config.yaml and fill in your values.
+# Docs: https://github.com/msitarzewski/odigos
+
+# =============================================================================
+# SECRETS & API KEYS
+# =============================================================================
+# These can also be set as environment variables or in a .env file.
 
 # API key for authenticating dashboard and API requests.
 # If not set, a random key is generated on first startup and saved.
 # api_key: "your-secret-api-key-here"
 
+# LLM provider API key (required for cloud providers like OpenRouter)
+# llm_api_key: "sk-or-..."
+
+# Groq API key (required for Whisper STT via Groq)
+# groq_api_key: "gsk_..."
+
+# Session secret for web auth (auto-generated if not set)
+# session_secret: ""
+
+# Search provider credentials (pick one)
+# search_provider: "searxng"        # "searxng", "brave", or "google"
+# searxng_url: "http://searxng:8080"
+# searxng_username: ""
+# searxng_password: ""
+# brave_api_key: ""
+# google_search_api_key: ""
+# google_search_cx: ""
+
+# Telegram bot token (required for Telegram channel)
+# telegram_bot_token: ""
+
+# NotebookLM cookie (optional, for NotebookLM integration)
+# notebooklm_cookie: ""
+
+# =============================================================================
+# CORE SETTINGS
+# =============================================================================
+
+# Agent identity and behavior
 agent:
   name: "Odigos"
-  max_tool_turns: 10
-  run_timeout_seconds: 120
+  role: "personal_assistant"        # Role identifier for the agent
+  description: ""                   # Optional description shown in UI
+  # parent: ""                      # Parent agent name (for child agents)
+  # allow_external_evaluation: false
+  max_tool_turns: 25                # Max tool calls per conversation turn
+  run_timeout_seconds: 300          # Timeout for a single agent run
+  cite_sources: true                # Include source citations in responses
+  concise_mode: false               # Shorter responses when true
 
+# Database
 database:
   path: "data/odigos.db"
 
@@ -24,36 +66,203 @@ llm:
   base_url: "https://openrouter.ai/api/v1"
   default_model: "deepseek/deepseek-v3.2"
   fallback_model: "google/gemini-2.5-flash"
+  # background_model: ""            # Model for background tasks (falls back to default_model)
+  # reasoning_model: ""             # Model for document_query and complex classifications (falls back to default_model)
   max_tokens: 4096
   temperature: 0.7
+  request_timeout_seconds: 60.0     # Timeout for LLM API requests
+  connect_timeout_seconds: 10.0     # Timeout for establishing LLM API connection
 
 # Budget limits (USD)
 budget:
-  daily_limit_usd: 5.0
-  monthly_limit_usd: 50.0
-  warn_threshold: 0.8
+  daily_limit_usd: 1.00
+  monthly_limit_usd: 20.00
+  warn_threshold: 0.80              # Warn at 80% of budget consumed
 
 # Web server
 server:
   host: "0.0.0.0"
   port: 8000
+  ws_port: 8001
+
+# =============================================================================
+# BACKGROUND PROCESSING
+# =============================================================================
 
 # Heartbeat (autonomous background loop)
 heartbeat:
-  interval_seconds: 30
-  max_todos_per_tick: 3
-  idle_think_interval: 900
+  interval_seconds: 30              # Seconds between heartbeat ticks
+  max_todos_per_tick: 3             # Max todo items processed per tick
+  idle_think_interval: 900          # Seconds of idle before agent thinks autonomously
+  announce_interval_seconds: 60     # Seconds between status announcements
+  morning_briefing: true            # Send a morning briefing summary
 
-# Features (all enabled by default, disable with enabled: false)
+# =============================================================================
+# EMBEDDINGS
+# =============================================================================
+
+# Embedding model configuration
+# embeddings:
+#   mode: "auto"                    # "auto" (detect toolkit), "local" (in-process), or "remote" (shared service)
+#   remote_url: "http://localhost:9000"
+
+# =============================================================================
+# FEATURES
+# =============================================================================
+
+# Notebooks (markdown documents)
 notebooks:
   enabled: true
 
+# Kanban board
 kanban:
   enabled: true
 
-# Agent mesh networking
-mesh:
+# Agent templates repository
+# templates:
+#   repo_url: "https://github.com/msitarzewski/agency-agents"
+#   cache_ttl_days: 7
+
+# =============================================================================
+# TOOLS & SANDBOX
+# =============================================================================
+
+# File tool access paths
+file_access:
+  allowed_paths:
+    - "data/files"
+
+# Code sandbox
+sandbox:
+  timeout_seconds: 5
+  max_memory_mb: 512
+  allow_network: false
+
+# Skills directory
+skills:
+  path: "skills"
+
+# Tool approval gate
+approval:
+  enabled: true                     # Require approval for dangerous tools
+  tools:                            # Tools that require approval
+    - "run_code"
+    - "run_shell"
+    - "write_file"
+  timeout: 300                      # Seconds to wait for approval
+
+# =============================================================================
+# EVOLUTION ENGINE
+# =============================================================================
+
+# Self-improvement through prompt/behavior trials
+evolution:
+  trial_duration_hours: 48
+  min_evaluations: 5
+  promote_threshold: 0.5
+  revert_threshold: -0.3
+  auto_trial_confidence: 0.7
+  strategist_min_evals: 10
+  qualified_evaluator_min_score: 7.0
+
+# =============================================================================
+# VOICE (optional)
+# =============================================================================
+
+# Voice input/output configuration
+# voice:
+#   stt_provider: "groq"            # "groq", "local" (moonshine), or "disabled"
+#   tts_provider: "edge"            # "edge" (edge-tts), "local" (pocket-tts), or "disabled"
+#   tts_voice: "en-US-AriaNeural"   # edge-tts voice name
+#   groq_model: "whisper-large-v3-turbo"
+
+# Legacy STT/TTS toggles (prefer voice section above)
+# stt:
+#   enabled: false
+#   model: "small"
+#   language: "en"
+# tts:
+#   enabled: false
+#   voice: "alba"
+
+# =============================================================================
+# ASSISTANT WIDGET (optional)
+# =============================================================================
+
+# Floating assistant overlay in the dashboard
+# assistant:
+#   enabled: true
+#   show_transcript: true
+#   text_input: true
+#   voice_input: true
+#   auto_read: false                # Automatically read responses aloud
+#   position: "bottom-right"        # "bottom-right" or "bottom-left"
+
+# =============================================================================
+# CALENDAR (optional)
+# =============================================================================
+
+# CalDAV calendar integration
+# calendar:
+#   enabled: false
+#   url: ""                         # CalDAV server URL
+#   username: ""
+#   password: ""
+
+# =============================================================================
+# EMAIL (optional)
+# =============================================================================
+
+# IMAP/SMTP email integration
+# email:
+#   enabled: false
+#   address: "agent@yourdomain.com"
+#   imap_host: "mail.yourdomain.com"
+#   imap_port: 993
+#   smtp_host: "mail.yourdomain.com"
+#   smtp_port: 587
+#   username: "agent@yourdomain.com"
+#   password: "from-env-var"
+#   check_interval_ticks: 10        # Heartbeat ticks between inbox checks (0 = agent decides)
+
+# =============================================================================
+# CHANNELS (optional)
+# =============================================================================
+
+# Telegram bot
+# telegram:
+#   mode: "polling"                 # "polling" or "webhook"
+#   webhook_url: ""                 # Required if mode is "webhook"
+
+# =============================================================================
+# EXTERNAL TOOLS (optional)
+# =============================================================================
+
+# Google Workspace CLI (requires gcloud setup)
+gws:
   enabled: false
+  # timeout: 30
+
+# Agent Browser CLI
+browser:
+  enabled: false
+  # timeout: 120
+
+# MCP servers (Model Context Protocol)
+# mcp:
+#   servers:
+#     myserver:
+#       command: "npx"
+#       args: ["-y", "@my/mcp-server"]
+#       env: {}
+
+# =============================================================================
+# AGENT MESH (optional)
+# =============================================================================
+
+# Multi-agent networking via NetBird
+# mesh:
+#   enabled: false
 
 # Peer agents (requires mesh.enabled: true)
 # peers:
@@ -62,70 +271,31 @@ mesh:
 #     ws_port: 8001
 #     api_key: "peer-secret"
 
-# Email integration (optional)
-# email:
-#   enabled: true
-#   address: "agent@yourdomain.com"
-#   imap_host: "mail.yourdomain.com"
-#   imap_port: 993
-#   smtp_host: "mail.yourdomain.com"
-#   smtp_port: 587
-#   username: "agent@yourdomain.com"
-#   password: "from-env-var"
-#   check_interval_ticks: 10
+# =============================================================================
+# FEED (optional)
+# =============================================================================
 
-# Telegram bot (optional)
-# telegram:
-#   mode: "polling"
+# Public activity feed
+# feed:
+#   enabled: false
+#   public: false                   # Expose feed without authentication
+#   max_entries: 200
 
-# SearXNG search (optional)
-# searxng_url: "http://searxng:8080"
+# =============================================================================
+# ACCESS CONTROL (optional)
+# =============================================================================
 
-# Google Workspace CLI (optional, requires gcloud setup)
-gws:
-  enabled: false
+# Access mode
+# access:
+#   supervised: false               # true = managed agent (protected settings locked), false = full admin
 
-# Agent Browser CLI (optional)
-browser:
-  enabled: false
+# =============================================================================
+# AUTO-UPDATE (optional)
+# =============================================================================
 
-# Voice (optional, requires moonshine-voice and pocket-tts)
-stt:
-  enabled: false
-tts:
-  enabled: false
-
-# File tool sandbox
-file_access:
-  allowed_paths:
-    - "data/files"
-
-# Tool approval gate (optional)
-approval:
-  enabled: false
-  timeout: 300
-  tools: []
-
-# Code sandbox
-sandbox:
-  timeout_seconds: 5
-  max_memory_mb: 512
-  allow_network: false
-
-# MCP servers (optional)
-# mcp:
-#   servers:
-#     myserver:
-#       command: "npx"
-#       args: ["-y", "@my/mcp-server"]
-
-# Skills directory
-skills:
-  path: "skills"
-
-# Evolution engine
-evolution:
-  trial_duration_hours: 48
-  min_evaluations: 5
-  promote_threshold: 0.5
-  revert_threshold: -0.3
+# Automatic update checking and application
+# auto_update:
+#   enabled: false
+#   check_interval_ticks: 60        # Heartbeat ticks between checks (~30min at 30s interval)
+#   auto_apply: false               # true = apply immediately, false = notify only
+#   branch: "main"
