@@ -134,6 +134,29 @@ async def gather_briefing_data(db: Database, settings=None) -> str:
     except Exception:
         logger.debug("Briefing: email query failed", exc_info=True)
 
+    # 5b. Live email count (if email config is enabled)
+    if settings and getattr(settings, "email", None):
+        email_cfg = settings.email
+        if getattr(email_cfg, "enabled", False):
+            try:
+                from odigos.tools.email import CheckEmailTool
+                tool = CheckEmailTool(email_config=email_cfg)
+                result = await tool.execute(
+                    {"limit": 1, "unread_only": True},
+                )
+                if result.success and "No new emails" not in result.data:
+                    count = result.data.count("From:")
+                    if count > 0:
+                        sections.append(
+                            f"## Email Inbox\n"
+                            f"- {count} unread email(s) in inbox"
+                        )
+            except Exception:
+                logger.debug(
+                    "Briefing: live email check failed",
+                    exc_info=True,
+                )
+
     # 6. Calendar events today (if calendar configured)
     if settings and getattr(settings, 'calendar', None) and settings.calendar.enabled:
         try:

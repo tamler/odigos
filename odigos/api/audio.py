@@ -1,4 +1,4 @@
-"""Audio endpoints: STT via provider abstraction, TTS via edge-tts."""
+"""Audio endpoints: STT + TTS via provider abstractions."""
 from __future__ import annotations
 
 import io
@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from odigos.api.deps import require_auth
 from odigos.providers.stt import DisabledSTT
+from odigos.providers.tts import DisabledTTS
 
 logger = logging.getLogger(__name__)
 
@@ -72,29 +73,29 @@ async def transcribe_audio(request: Request):
 
 @router.get("/audio/speak", dependencies=[Depends(require_auth)])
 async def speak(text: str, request: Request):
-    """Convert text to speech using edge-tts. Returns audio stream."""
-    settings = request.app.state.settings
-    voice_config = settings.voice
+    """Convert text to speech via the configured TTS provider."""
+    provider = request.app.state.tts_provider
 
-    if voice_config.tts_provider == "disabled":
-        return JSONResponse(status_code=404, content={"detail": "TTS is disabled"})
+    if isinstance(provider, DisabledTTS):
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "TTS is disabled"},
+        )
 
     if not text:
-        return StreamingResponse(io.BytesIO(b""), media_type="audio/mpeg")
+        return StreamingResponse(
+            io.BytesIO(b""), media_type="audio/mpeg"
+        )
 
     try:
-        import edge_tts
-        communicate = edge_tts.Communicate(text, voice=voice_config.tts_voice)
-        audio_data = bytearray()
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data.extend(chunk["data"])
-
+        audio_bytes = await provider.synthesize(text)
         return StreamingResponse(
-            io.BytesIO(bytes(audio_data)),
+            io.BytesIO(audio_bytes),
             media_type="audio/mpeg",
             headers={"Content-Disposition": "inline"},
         )
     except Exception as e:
         logger.warning("TTS failed: %s", e)
-        return StreamingResponse(io.BytesIO(b""), media_type="audio/mpeg")
+        return StreamingResponse(
+            io.BytesIO(b""), media_type="audio/mpeg"
+        )

@@ -41,6 +41,8 @@ async def test_tick_runs_strategist_when_should_run():
     heartbeat._outcome_interval_ticks = 10
     heartbeat._nudge_tick_counter = 0
     heartbeat._nudge_interval_ticks = 20
+    heartbeat._followup_tick_counter = 0
+    heartbeat._followup_interval_ticks = 30
     heartbeat._update_tick_counter = 0
     heartbeat._email_tick_counter = 0
     heartbeat.settings = None

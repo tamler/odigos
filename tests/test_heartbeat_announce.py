@@ -43,6 +43,8 @@ def _build_heartbeat(**overrides):
     hb._outcome_interval_ticks = 10
     hb._nudge_tick_counter = 0
     hb._nudge_interval_ticks = 20
+    hb._followup_tick_counter = 0
+    hb._followup_interval_ticks = 30
     hb._update_tick_counter = 0
     hb._email_tick_counter = 0
     hb.settings = None

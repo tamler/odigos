@@ -6,6 +6,7 @@ from starlette.testclient import TestClient
 
 from odigos.config import VoiceConfig
 from odigos.providers.stt import create_stt_provider
+from odigos.providers.tts import create_tts_provider
 
 
 AUTH = {"Authorization": "Bearer test-key"}
@@ -24,6 +25,9 @@ def _make_app(voice_config=None, groq_api_key=""):
     )
     app.state.stt_provider = create_stt_provider(
         voice_config=vc, groq_api_key=groq_api_key,
+    )
+    app.state.tts_provider = create_tts_provider(
+        voice_config=vc,
     )
     app.state.plugin_context = None
     return app

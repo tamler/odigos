@@ -24,6 +24,7 @@ from odigos.providers.embeddings import EmbeddingProvider
 from odigos.providers.llm import LLMClient
 from odigos.providers.sandbox import SandboxProvider
 from odigos.providers.stt import create_stt_provider
+from odigos.providers.tts import create_tts_provider
 from odigos.core.budget import BudgetTracker
 from odigos.core.plugin_context import PluginContext
 from odigos.core.plugins import PluginManager
@@ -411,6 +412,14 @@ async def lifespan(app: FastAPI):
     )
     logger.info(
         "STT provider: %s", app.state.stt_provider.name
+    )
+
+    app.state.tts_provider = create_tts_provider(
+        voice_config=settings.voice,
+        tts_config=settings.tts,
+    )
+    logger.info(
+        "TTS provider: %s", app.state.tts_provider.name
     )
 
     logger.info("Starting Odigos agent: %s", settings.agent.name)

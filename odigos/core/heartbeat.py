@@ -106,6 +106,8 @@ class Heartbeat:
         self._update_tick_counter: int = 0
         self._nudge_tick_counter: int = 0
         self._nudge_interval_ticks: int = 20
+        self._followup_tick_counter: int = 0
+        self._followup_interval_ticks: int = 30
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -174,6 +176,12 @@ class Heartbeat:
         if self._nudge_tick_counter >= self._nudge_interval_ticks:
             self._nudge_tick_counter = 0
             did_work |= await self._send_nudges()
+
+        # Phase 4d: Follow-up reminders (user commitments)
+        self._followup_tick_counter += 1
+        if self._followup_tick_counter >= self._followup_interval_ticks:
+            self._followup_tick_counter = 0
+            did_work |= await self._check_followups()
 
         # Phase 5: Idle thoughts (only if nothing ran above)
         if not did_work:
@@ -311,6 +319,30 @@ class Heartbeat:
                 return True
         except Exception:
             logger.debug("Nudge check failed", exc_info=True)
+        return False
+
+    async def _check_followups(self) -> bool:
+        """Check for user commitments that might need follow-up."""
+        try:
+            from odigos.core.followups import (
+                find_untracked_commitments,
+                format_followup_notification,
+            )
+            commitments = await find_untracked_commitments(self.db)
+            if not commitments:
+                return False
+            msg = format_followup_notification(commitments)
+            if msg and self.notifier:
+                await self.notifier.notify(
+                    title="Follow-up",
+                    body=msg,
+                    priority="low",
+                )
+                return True
+        except Exception:
+            logger.debug(
+                "Follow-up check failed", exc_info=True,
+            )
         return False
 
     async def _dispatch_as_subagent(self, instruction: str, conversation_id: str = "") -> str | None:
@@ -545,6 +577,26 @@ class Heartbeat:
             for g in goals
         )
 
+        # Augment with idle research opportunities
+        research_context = ""
+        try:
+            from odigos.core.idle_research import (
+                find_research_opportunities,
+                format_research_prompt,
+            )
+            opportunities = await find_research_opportunities(
+                self.db,
+            )
+            research_context = format_research_prompt(opportunities)
+        except Exception:
+            logger.debug(
+                "Idle research lookup failed", exc_info=True,
+            )
+
+        user_content = f"Active goals:\n{goal_text}"
+        if research_context:
+            user_content += f"\n\n{research_context}"
+
         try:
             idle_kwargs: dict = {"max_tokens": 200, "temperature": 0.3}
             if self._background_model:
@@ -555,7 +607,7 @@ class Heartbeat:
                         "role": "system",
                         "content": load_prompt("heartbeat_idle.md", _IDLE_THINK_FALLBACK),
                     },
-                    {"role": "user", "content": f"Active goals:\n{goal_text}"},
+                    {"role": "user", "content": user_content},
                 ],
                 **idle_kwargs,
             )
