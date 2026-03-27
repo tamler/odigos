@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PasswordInput } from '@/components/PasswordInput'
 import { login, setup, changePassword } from '@/lib/auth'
 
 interface Props {
@@ -83,8 +84,7 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
             <form onSubmit={handleChangePassword} className="space-y-4">
               <div className="space-y-2">
                 <Label>Current Password</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={currentPassword}
                   onChange={(e) => { setCurrentPassword(e.target.value); setError('') }}
                   autoFocus
@@ -92,16 +92,14 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
               </div>
               <div className="space-y-2">
                 <Label>New Password</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={newPassword}
                   onChange={(e) => { setNewPassword(e.target.value); setError('') }}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Confirm New Password</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={confirmNewPassword}
                   onChange={(e) => { setConfirmNewPassword(e.target.value); setError('') }}
                 />
@@ -136,16 +134,14 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
               </div>
               <div className="space-y-2">
                 <Label>Password</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError('') }}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Confirm Password</Label>
-                <Input
-                  type="password"
+                <PasswordInput
                   value={confirmPassword}
                   onChange={(e) => { setConfirmPassword(e.target.value); setError('') }}
                 />
@@ -179,8 +175,7 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
             </div>
             <div className="space-y-2">
               <Label>Password</Label>
-              <Input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError('') }}
               />

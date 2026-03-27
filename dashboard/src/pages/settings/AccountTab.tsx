@@ -7,6 +7,7 @@ import { get, put } from '@/lib/api'
 import { changePassword, logout } from '@/lib/auth'
 import { toast } from 'sonner'
 import { Copy, LogOut } from 'lucide-react'
+import { PasswordInput } from '@/components/PasswordInput'
 
 interface UserProfile {
   communication_style: string
@@ -219,8 +220,7 @@ export default function AccountTab({ active }: Props) {
       <SectionCard title="Change Password">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Current Password</Label>
-          <Input
-            type="password"
+          <PasswordInput
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             className="bg-muted/50 border-border/40"
@@ -229,8 +229,7 @@ export default function AccountTab({ active }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">New Password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className="bg-muted/50 border-border/40"
@@ -238,8 +237,7 @@ export default function AccountTab({ active }: Props) {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Confirm New Password</Label>
-            <Input
-              type="password"
+            <PasswordInput
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               className="bg-muted/50 border-border/40"

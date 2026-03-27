@@ -527,6 +527,13 @@ export default function AppLayout() {
   )
 
   useEffect(() => {
+    if (isSettings) {
+      setSidebarOpen(true)
+      setCollapsed(false)
+    }
+  }, [isSettings])
+
+  useEffect(() => {
     if (isNotebook && notebooks.length === 0) {
       get<{ notebooks: any[] }>('/api/notebooks').then(d => setNotebooks(d.notebooks))
     }
