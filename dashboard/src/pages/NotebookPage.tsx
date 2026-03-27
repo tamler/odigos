@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
-import { get, post, del } from '@/lib/api'
+import { get, post, del, patch } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Trash2, BookOpen, Share2, Globe } from 'lucide-react'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Loader2, Trash2, Plus, Share2, Globe, Maximize2, Minimize2 } from 'lucide-react'
+import { MarkdownEditor } from '@/components/Editor'
+import { AgentInputBar } from '@/components/AgentInputBar'
 import { ShareDialog } from '@/components/ShareDialog'
 
 interface Notebook {
@@ -23,334 +21,322 @@ interface Notebook {
 
 interface NotebookEntry {
   id: string
-  notebook_id: string
   content: string
   entry_type: string
   status: string
-  mood: string | null
+  mood?: string
   created_at: string
 }
 
+function EntryEditor({ 
+  entry, 
+  onSave, 
+  onDelete 
+}: { 
+  entry: NotebookEntry
+  onSave: (content: string) => void
+  onDelete: () => void
+}) {
+  const [content, setContent] = useState(entry.content)
+  const saveTimeout = useRef<any>(null)
 
+  // Sync with prop changes (e.g. from other users or agent)
+  useEffect(() => {
+    setContent(entry.content)
+  }, [entry.content])
+
+  const handleChange = (newContent: string) => {
+    setContent(newContent)
+    if (saveTimeout.current) clearTimeout(saveTimeout.current)
+    saveTimeout.current = setTimeout(() => {
+      if (newContent !== entry.content) {
+        onSave(newContent)
+      }
+    }, 1500)
+  }
+
+  return (
+    <div className="group relative border-b border-border/10 last:border-0">
+      <MarkdownEditor
+        content={content}
+        onChange={handleChange}
+      />
+      <button
+        onClick={onDelete}
+        className="absolute top-4 right-4 p-1 rounded-md opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all z-10"
+        title="Delete entry"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
 
 export default function NotebookPage() {
-  const { id } = useParams<{ id?: string }>()
-
-  if (id) {
-    return <NotebookEditor notebookId={id} />
-  }
-  return <NotebookAutoRedirect />
-}
-
-function NotebookAutoRedirect() {
+  const { id: notebookId } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  useEffect(() => {
-    get<{ notebooks: Notebook[] }>('/api/notebooks')
-      .then((data) => {
-        if (data.notebooks.length === 0) {
-          post<Notebook>('/api/notebooks', { title: 'My Notebook' })
-            .then(nb => navigate(`/notebooks/${nb.id}`, { replace: true }))
-        } else {
-          const latest = data.notebooks.sort((a,b) => new Date(b.updated_at + 'Z').getTime() - new Date(a.updated_at + 'Z').getTime())[0]
-          navigate(`/notebooks/${latest.id}`, { replace: true })
-        }
-      })
-      .catch(() => {})
-  }, [navigate])
-  return <div className="p-8 text-sm text-muted-foreground animate-pulse">Loading workspace...</div>
-}
+  const { 
+    socketRef, 
+    connected, 
+    agentName, 
+    setPageContextData,
+  } = useOutletContext<any>()
 
-function NotebookEditor({ notebookId }: { notebookId: string }) {
-  const navigate = useNavigate()
   const [notebook, setNotebook] = useState<Notebook | null>(null)
-  const [notebooksList, setNotebooksList] = useState<Notebook[]>([])
   const [entries, setEntries] = useState<NotebookEntry[]>([])
-  const [newEntry, setNewEntry] = useState('')
-  const [adding, setAdding] = useState(false)
   const [loading, setLoading] = useState(true)
   const [shareOpen, setShareOpen] = useState(false)
-  const [activeMobileTab, setActiveMobileTab] = useState<'write' | 'history'>('write')
-  const { setChatPanelOpen, setChatContext, isMobile, setPageContextData } = useOutletContext<any>()
-  const entriesEndRef = useRef<HTMLDivElement>(null)
+  const [focusMode, setFocusMode] = useState(false)
+  const [title, setTitle] = useState('')
+  const [newEntryContent, setNewEntryContent] = useState('')
+  const [creatingEntry, setCreatingEntry] = useState(false)
+
+  const loadNotebook = useCallback(async () => {
+    if (!notebookId) return
+    setLoading(true)
+    try {
+      const data = await get<any>(`/api/notebooks/${notebookId}`)
+      setNotebook(data.notebook)
+      setTitle(data.notebook.title)
+      setEntries(data.entries || [])
+    } catch {
+      toast.error('Failed to load notebook')
+      navigate('/notebooks')
+    } finally {
+      setLoading(false)
+    }
+  }, [notebookId, navigate])
+
+  useEffect(() => {
+    loadNotebook()
+  }, [loadNotebook])
 
   useEffect(() => {
     if (notebook) {
       setPageContextData({
         page_id: notebookId,
         page_title: notebook.title,
-        visible_data: `${entries.length} entries. Latest: "${entries[entries.length - 1]?.content.slice(0, 80)}..."`
+        visible_data: `${entries.length} entries. Latest content preview: "${entries[entries.length - 1]?.content.slice(0, 100)}..."`
       })
     }
     return () => setPageContextData({})
   }, [notebook, notebookId, entries, setPageContextData])
 
+  // Focus mode keyboard shortcut (G-W5)
   useEffect(() => {
-    get<{ notebooks: Notebook[] }>('/api/notebooks').then(data => {
-      setNotebooksList(data.notebooks.sort((a,b) => new Date(b.updated_at + 'Z').getTime() - new Date(a.updated_at + 'Z').getTime()))
-    }).catch(() => {})
-  }, [notebookId])
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+        e.preventDefault()
+        setFocusMode(prev => !prev)
+      }
+      if (e.key === 'Escape' && focusMode) {
+        setFocusMode(false)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [focusMode])
 
-  const loadNotebook = useCallback(() => {
-    setLoading(true)
-    get<Notebook & { entries: NotebookEntry[] }>(`/api/notebooks/${notebookId}`)
-      .then((data) => {
-        const { entries: loadedEntries, ...nb } = data
-        setNotebook(nb)
-        setEntries(loadedEntries)
-      })
-      .catch(() => toast.error('Failed to load notebook'))
-      .finally(() => setLoading(false))
-  }, [notebookId])
-
-  useEffect(() => { loadNotebook() }, [loadNotebook])
-
-  useEffect(() => {
-    entriesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [entries])
-
-  async function handleAddEntry() {
-    const content = newEntry.trim()
-    if (!content) return
-    setAdding(true)
+  const handleUpdateTitle = async () => {
+    if (!notebook || title === notebook.title || !title.trim()) return
     try {
-      const entry = await post<NotebookEntry>(`/api/notebooks/${notebookId}/entries`, {
-        content,
-        entry_type: 'user',
-      })
-      setEntries((prev) => [...prev, entry])
-      setNewEntry('')
+      await patch(`/api/notebooks/${notebookId}`, { title: title.trim() })
+      setNotebook({ ...notebook, title: title.trim() })
+      toast.success('Title updated')
     } catch {
-      toast.error('Failed to add entry')
-    } finally {
-      setAdding(false)
+      toast.error('Failed to update title')
+      setTitle(notebook.title)
     }
   }
 
-  async function handleDeleteEntry(entryId: string) {
+  const handlePatchEntry = async (entryId: string, content: string) => {
+    try {
+      await patch(`/api/notebooks/${notebookId}/entries/${entryId}`, { content })
+      setEntries(prev => prev.map(e => e.id === entryId ? { ...e, content } : e))
+    } catch {
+      toast.error('Failed to auto-save entry')
+    }
+  }
+
+  const handleDeleteEntry = async (entryId: string) => {
+    if (!confirm('Are you sure you want to delete this entry?')) return
     try {
       await del(`/api/notebooks/${notebookId}/entries/${entryId}`)
-      setEntries((prev) => prev.filter((e) => e.id !== entryId))
+      setEntries(prev => prev.filter(e => e.id !== entryId))
+      toast.success('Entry deleted')
     } catch {
       toast.error('Failed to delete entry')
     }
   }
 
-  async function handleAcceptSuggestion(entryId: string) {
+  const handleCreateEntry = async (content: string) => {
+    if (!content.trim() || creatingEntry) return
+    setCreatingEntry(true)
     try {
-      const updated = await post<NotebookEntry>(`/api/notebooks/${notebookId}/entries/${entryId}/accept`, {})
-      setEntries((prev) =>
-        prev.map((e) => e.id === entryId ? updated : e)
-      )
+      const res = await post<NotebookEntry>(`/api/notebooks/${notebookId}/entries`, { content })
+      setEntries(prev => [...prev, res])
+      setNewEntryContent('')
     } catch {
-      toast.error('Failed to accept suggestion')
+      toast.error('Failed to add entry')
+    } finally {
+      setCreatingEntry(false)
     }
   }
 
-  async function handleRejectSuggestion(entryId: string) {
-    try {
-      await post(`/api/notebooks/${notebookId}/entries/${entryId}/reject`, {})
-      setEntries((prev) => prev.filter((e) => e.id !== entryId))
-    } catch {
-      toast.error('Failed to reject suggestion')
-    }
+  const entriesByDate = useMemo(() => {
+    const groups: Record<string, NotebookEntry[]> = {}
+    entries.forEach(e => {
+      const date = new Date(e.created_at + 'Z').toLocaleDateString(undefined, { 
+        year: 'numeric', month: 'long', day: 'numeric' 
+      })
+      if (!groups[date]) groups[date] = []
+      groups[date].push(e)
+    })
+    return Object.entries(groups)
+  }, [entries])
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
   }
 
   return (
-    <div className="flex h-full overflow-hidden flex-col">
-      {/* Main editor panel */}
-      <div className={`flex flex-col flex-1 min-w-0 ${!isMobile ? 'border-r border-border/40' : ''}`}>
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
-          <DropdownMenu>
-            <DropdownMenuTrigger>
-              <Button variant="ghost" className="h-8 px-2 flex items-center gap-2 max-w-[200px] sm:max-w-[300px]">
-                <BookOpen className="h-4 w-4 shrink-0" />
-                <span className="truncate">{notebook ? notebook.title : 'Loading...'}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <ScrollArea className="max-h-[300px]">
-                {notebooksList.map(nb => (
-                  <DropdownMenuItem key={nb.id} onClick={() => navigate(`/notebooks/${nb.id}`)}>
-                    {nb.title}
-                  </DropdownMenuItem>
-                ))}
-              </ScrollArea>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={async () => {
-                try {
-                  const nb = await post<Notebook>('/api/notebooks', { title: 'New Notebook' })
-                  navigate(`/notebooks/${nb.id}`)
-                } catch {
-                  toast.error('Failed to create notebook')
-                }
-              }}>
-                <Plus className="h-4 w-4 mr-2" />
-                New Notebook
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Delete Button */}
-          {notebook && (
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={async () => {
-              try {
-                await del(`/api/notebooks/${notebookId}`)
-                toast.success('Notebook deleted')
-                navigate('/notebooks')
-              } catch {
-                toast.error('Failed to delete notebook')
-              }
-            }}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-
-          {/* Share Button */}
-          {notebook && (
+    <div className={`flex-1 flex flex-col h-full bg-background transition-all duration-300 ${focusMode ? 'fixed inset-0 z-[100] p-4 sm:p-12 overflow-y-auto' : 'overflow-hidden'}`}>
+      {/* Header */}
+      {!focusMode && (
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={handleUpdateTitle}
+            onKeyDown={(e) => e.key === 'Enter' && handleUpdateTitle()}
+            className="text-xl font-bold bg-transparent border-none focus:outline-none w-full max-w-md tracking-tight placeholder:text-muted-foreground/50"
+            placeholder="Untitled notebook"
+          />
+          
+          <div className="flex items-center gap-2">
             <Button 
               variant="ghost" 
               size="icon" 
-              className={`h-8 w-8 ${notebook.share_token ? 'text-primary' : 'text-muted-foreground'}`}
-              onClick={() => setShareOpen(true)}
-              title="Share notebook"
+              className="h-9 w-9 text-muted-foreground" 
+              onClick={() => setFocusMode(true)}
+              title="Focus Mode (Cmd+.)"
             >
-              {notebook.share_token ? <Globe className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+              <Maximize2 className="h-4 w-4" />
             </Button>
-          )}
-
-          {/* Info Badge (Desktop Only) */}
-          {notebook && !isMobile && (
-            <span className="text-xs text-muted-foreground ml-auto truncate">
-              {notebook.mode} &middot; {notebook.collaboration}
-            </span>
-          )}
-          
-          <Button variant="outline" size="sm" className={`ml-auto sm:ml-2 text-xs sm:text-sm h-8 sm:h-9 ${isMobile ? 'px-2' : ''}`} onClick={() => {
-            setChatContext({ notebook_id: notebookId })
-            setChatPanelOpen(true)
-          }}>
-            {isMobile ? 'Ask' : 'Ask Agent'}
-          </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`h-9 w-9 ${notebook?.share_token ? 'text-primary' : 'text-muted-foreground'}`}
+              onClick={() => setShareOpen(true)}
+              title="Share"
+            >
+              {notebook?.share_token ? <Globe className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-9 w-9 text-muted-foreground hover:text-destructive"
+              onClick={async () => {
+                if (confirm('Delete this entire notebook?')) {
+                  await del(`/api/notebooks/${notebookId}`)
+                  navigate('/notebooks')
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
+      )}
 
-        {/* Mobile Tab Switcher (G-P1) */}
-        {isMobile && (
-          <div className="flex p-1 bg-muted/30 border-b border-border/40">
-            <button
-              onClick={() => setActiveMobileTab('write')}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeMobileTab === 'write' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}
-            >
-              Write
-            </button>
-            <button
-              onClick={() => setActiveMobileTab('history')}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${activeMobileTab === 'history' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}
-            >
-              History ({entries.length})
-            </button>
-          </div>
-        )}
-
-        <ScrollArea className="flex-1 px-4">
-          <div className={`py-4 space-y-3 ${isMobile ? 'max-w-full' : 'max-w-2xl'}`}>
-            {loading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-md" />
-              ))
-            ) : entries.length === 0 ? (
-              <div className="text-muted-foreground text-sm text-center py-12 italic">No entries yet. Add one below.</div>
-            ) : (
-              // On mobile 'write' tab, we only show the last entry for context (G-P1)
-              (isMobile && activeMobileTab === 'write' ? [entries[entries.length - 1]] : entries).map((entry) => (
-                entry && (
-                  <div
-                    key={entry.id}
-                    className={`group relative rounded-xl border px-4 py-3 text-sm shadow-sm transition-all ${
-                      entry.entry_type === 'agent_suggestion'
-                        ? 'border-blue-500/40 bg-blue-500/5'
-                        : entry.entry_type === 'agent'
-                        ? 'border-primary/30 bg-primary/5'
-                        : 'border-border/50 bg-card/50'
-                    }`}
-                  >
-                    {entry.entry_type === 'agent_suggestion' && (
-                      <div className="text-xs text-blue-400 mb-1 font-medium">Agent suggestion</div>
-                    )}
-                    {entry.entry_type === 'agent' && (
-                      <div className="text-xs text-primary/60 mb-1 font-medium">Agent</div>
-                    )}
-                    {entry.mood && (
-                      <div className="text-xs text-muted-foreground mb-1">{entry.mood}</div>
-                    )}
-                    <div className="whitespace-pre-wrap leading-relaxed">{entry.content}</div>
-                    <div className="text-xs text-muted-foreground mt-2">
-                      {new Date(entry.created_at + 'Z').toLocaleString(undefined, {
-                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-                      })}
-                    </div>
-                    {entry.entry_type === 'agent_suggestion' && entry.status === 'pending' ? (
-                      <div className="flex gap-2 mt-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          onClick={() => handleAcceptSuggestion(entry.id)}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs text-muted-foreground"
-                          onClick={() => handleRejectSuggestion(entry.id)}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Delete entry"
-                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                        onClick={() => handleDeleteEntry(entry.id)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                )
-              ))
-            )}
-            <div ref={entriesEndRef} />
-          </div>
-        </ScrollArea>
-
-        {(!isMobile || activeMobileTab === 'write') && (
-          <div className="px-4 py-3 border-t border-border/40 shrink-0 bg-background/50 backdrop-blur-sm pb-safe">
-            <div className={`flex gap-2 ${isMobile ? 'max-w-full' : 'max-w-2xl mx-auto'}`}>
-              <Input
-                value={newEntry}
-                onChange={(e) => setNewEntry(e.target.value)}
-                placeholder="Add a note..."
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) handleAddEntry() }}
-                className="flex-1 text-base sm:text-sm h-11 sm:h-9"
-              />
-              <Button onClick={handleAddEntry} disabled={adding || !newEntry.trim()} size="icon" aria-label="Add entry" className="h-11 w-11 sm:h-9 sm:w-9 shrink-0 shadow-sm">
-                <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
-              </Button>
+      {/* Editor Content */}
+      <div className={`flex-1 overflow-y-auto custom-scrollbar ${focusMode ? 'max-w-4xl mx-auto w-full' : ''}`}>
+        <div className="pb-32">
+          {entriesByDate.map(([date, dateEntries]) => (
+            <div key={date}>
+              <div className="sticky top-0 z-10 bg-background/80 backdrop-blur-sm px-8 py-3 border-b border-border/5 flex items-center justify-between group">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{date}</span>
+                <div className="h-[1px] flex-1 mx-4 bg-border/10" />
+              </div>
+              {dateEntries.map(entry => (
+                <EntryEditor
+                  key={entry.id}
+                  entry={entry}
+                  onSave={(content) => handlePatchEntry(entry.id, content)}
+                  onDelete={() => handleDeleteEntry(entry.id)}
+                />
+              ))}
             </div>
+          ))}
+
+          {/* New Entry Editor at Bottom */}
+          <div className="border-t border-border/5 pt-4">
+            <div className="px-8 py-2 text-[10px] font-bold uppercase tracking-widest text-primary/40">New Entry</div>
+            <MarkdownEditor
+              content={newEntryContent}
+              onChange={setNewEntryContent}
+            />
+            {newEntryContent.trim() && (
+              <div className="px-8 pb-8 flex justify-end">
+                <Button 
+                  size="sm" 
+                  onClick={() => handleCreateEntry(newEntryContent)}
+                  disabled={creatingEntry}
+                >
+                  {creatingEntry ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Plus className="h-3 w-3 mr-2" />}
+                  Save Entry
+                </Button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Agent Input Bar (G-W3) */}
+      {!focusMode && (
+        <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none">
+          <div className="pointer-events-auto bg-gradient-to-t from-background via-background/90 to-transparent pt-12">
+            <AgentInputBar
+              agentName={agentName}
+              placeholder="Ask about this notebook..."
+              pageContext={{
+                page: 'notebook',
+                page_id: notebookId,
+                page_title: notebook?.title,
+                visible_data: `${entries.length} entries found.`
+              }}
+              socketRef={socketRef}
+              connected={connected}
+              sttAvailable={true} // assume true for now, can refine later
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Focus Mode Exit */}
+      {focusMode && (
+        <Button 
+          variant="secondary" 
+          size="sm" 
+          className="fixed top-6 right-6 z-[110] shadow-lg rounded-full"
+          onClick={() => setFocusMode(false)}
+        >
+          <Minimize2 className="h-4 w-4 mr-2" />
+          Exit Focus
+        </Button>
+      )}
 
       <ShareDialog
         type="notebook"
-        id={notebookId}
+        id={notebookId || ''}
         isOpen={shareOpen}
         onClose={() => {
           setShareOpen(false)
-          loadNotebook() // Refresh to get share_token state
+          loadNotebook()
         }}
         initialShareToken={notebook?.share_token}
       />

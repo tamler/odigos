@@ -15,8 +15,6 @@ interface OutletCtx {
 export default function ChatPage() {
   const {
     activeConversationId,
-    setActiveId,
-    refreshConversations,
     socketRef,
     connected,
     setChatPanelOpen,
@@ -31,8 +29,6 @@ export default function ChatPage() {
     <div className="flex-1 flex flex-col h-full bg-background relative z-10">
       <ChatPanel
         activeConversationId={activeConversationId}
-        setActiveId={setActiveId}
-        refreshConversations={refreshConversations}
         socketRef={socketRef}
         connected={connected}
         isSidePanel={false}

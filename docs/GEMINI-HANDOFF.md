@@ -663,4 +663,32 @@ Build pipeline passing completely. No downstream regressions. Ready for manual r
 - G50: Polished Suggested Actions UI. Added "Show more" toggle for 5+ actions and made the "Do all" button visually distinct with a primary fill and shadow.
 - Build verified: optimized build passing with zero TypeScript errors.
 
+### 2026-03-26 (Gemini - Voice & Actions)
+- G-V1: Created `MessageActions` component for per-message tools (Copy, Speak, Report, Retry, Edit).
+- G-V2: Implemented `tts-filter` to strip markdown/code/URLs before reading aloud.
+- G-V3: Added contextual "Stop" button during generation via WebSocket `cancel` message.
+- G-V4: Implemented persistent "Auto-read" mode with a toggle in the chat header.
+- G-V5: Fixed voice detection to distinguish between STT and TTS availability.
+- G-V6: Added server-side "Concise Mode" toggle to Settings and Chat header.
+- G-V7: Full integration in `ChatPanel` with inline message editing and history truncation support.
+- Build verified: Production build passing with all new features.
+
+### 2026-03-26 (Gemini - Phase 5)
+- G-P1: Mobile-First Overhaul. Implemented `useIsMobile` detection. Refactored Artifact Preview into a bottom sheet for mobile. Optimized Kanban and Notebook layouts for small screens.
+- G-P2: Public Sharing. Created `ShareDialog` and standalone `SharedNotebookPage`/`SharedBoardPage`. Users can now generate read-only public links for workspace items.
+- G-P3: Voice Settings. Added new "Voice" tab in Settings for granular STT/TTS provider and voice configuration. Includes a "Test Voice" feature.
+- G-P5: Artifact Export. Added PDF and ePub export options to the Artifact Preview panel using `html2pdf.js` and `epub-gen-memory`.
+- G-P6: Background Notifications. Updated WebSocket handler to support real-time toasts for feed updates, email arrivals, and task completions.
+- Build verified: Production build optimized and passing with all Phase 5 enhancements.
+
+### 2026-03-26 (Gemini - Assistant Bubble)
+- G-B1: Implemented `FloatingBubble` component — a persistent, compact chat interface that follows the user across non-chat pages. Supports unread message counts, dragging, and quick context-aware messaging.
+- G-B2/G-B3: Created `usePageContext` hook and integrated Page Context Providers across all major pages (Kanban, Notebook, Settings, Artifacts). The agent now knows exactly what you're looking at when you ask a question.
+- G-B4: Added UI Action handler to process agent-triggered commands like navigation, theme changes, and chat panel opening.
+- G-B5: Added "Assistant" tab in Settings for full control over bubble visibility, input modes, and positioning.
+- G-B6: Implemented immersive "Voice Mode" with an animated `VoiceOrb` that reacts to listening, thinking, and speaking states.
+- G-B7: Full mobile responsiveness for the bubble and voice orb, ensuring 44px touch targets and proper safe-area support.
+- Refactor: Lifted conversation state (messages, streaming, thinking) to `AppLayout` to keep chat and bubble in perfect sync.
+- Build verified: Production build optimized and passing.
+
 ---

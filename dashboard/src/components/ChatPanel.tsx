@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useSearchParams, useNavigate, useOutletContext } from 'react-router-dom'
+import { useSearchParams, useOutletContext } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
@@ -27,8 +27,6 @@ interface ChatMessage {
 
 interface ChatPanelProps {
   activeConversationId: string | null
-  setActiveId: (id: string | null) => void
-  refreshConversations: () => void
   socketRef: React.MutableRefObject<ChatSocket | null>
   connected: boolean
   chatContext?: Record<string, string>
@@ -71,7 +69,6 @@ function WelcomeView({ agentName, onSuggest }: { agentName: string; onSuggest: (
     </div>
   )
 }
-
 export function ChatPanel({
   activeConversationId,
   socketRef,
@@ -81,10 +78,7 @@ export function ChatPanel({
   onClose,
 }: ChatPanelProps) {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
   const { 
-    hasNewEmail, 
-    setHasNewEmail, 
     artifactPanelOpen, 
     setArtifactPanelOpen, 
     setActiveArtifactId,
@@ -690,36 +684,6 @@ export function ChatPanel({
                 </div>
               </div>
             </div>
-
-            {/* Quick Links */}
-            {!isSidePanel && (
-              <div className="flex justify-center gap-4 mt-3 text-xs text-muted-foreground/70 sm:text-[11px] font-medium tracking-wide">
-                <button onClick={() => navigate('/notebooks')} className="hover:text-foreground transition-colors">Journal</button>
-                <span>&middot;</span>
-                <button onClick={() => navigate('/kanban')} className="hover:text-foreground transition-colors">Board</button>
-                <span>&middot;</span>
-                <button onClick={() => navigate('/settings?tab=documents')} className="hover:text-foreground transition-colors">Documents</button>
-                <span>&middot;</span>
-                {sttAvailable && (
-                  <>
-                    <button onClick={() => voiceMode.enter()} className="hover:text-foreground transition-colors">Voice</button>
-                    <span>&middot;</span>
-                  </>
-                )}
-                <button 
-                  onClick={() => {
-                    setHasNewEmail(false)
-                    handleSend('Check my email')
-                  }} 
-                  className="hover:text-foreground transition-colors relative"
-                >
-                  Email
-                  {hasNewEmail && (
-                    <span className="absolute -top-1 -right-2 h-2 w-2 bg-red-500 rounded-full border border-background shadow-sm animate-pulse" />
-                  )}
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>

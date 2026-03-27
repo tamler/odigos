@@ -26,9 +26,11 @@ import {
   ArrowLeft,
   Link as LinkIcon,
   Rss,
-  Eye
+  Eye,
+  Columns3
 } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
+import { FloatingBubble } from '@/components/FloatingBubble'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
@@ -42,7 +44,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { get, patch, del } from '@/lib/api'
+import { get, patch, del, post } from '@/lib/api'
 import { ChatSocket } from '@/lib/ws'
 import { toast } from 'sonner'
 import { executeActions, UIAction } from '@/lib/actions'
@@ -101,6 +103,8 @@ export default function AppLayout() {
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false)
   const [searchQuery, setSearchQuery] = useState('')
   const [conversations, setConversations] = useState<Conversation[]>([])
+  const [notebooks, setNotebooks] = useState<{ id: string; title: string; updated_at: string }[]>([])
+  const [boards, setBoards] = useState<{ id: string; title: string; updated_at: string }[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingContent, setStreamingContent] = useState('')
@@ -115,7 +119,8 @@ export default function AppLayout() {
   const [chatPanelOpen, setChatPanelOpen] = useState(false)
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
-  const [_pageContextData, setPageContextData] = useState<Partial<PageContext>>({}); void _pageContextData
+  const [focusMode, setFocusMode] = useState(false)
+  const [pageContextData, setPageContextData] = useState<Partial<PageContext>>({})
   const [assistantConfig, setAssistantConfig] = useState<AssistantConfig>({
     enabled: false,
     show_transcript: true,
@@ -437,6 +442,21 @@ export default function AppLayout() {
       .catch(() => toast.error('Failed to export conversation'))
   }
 
+  const handleBubbleSend = useCallback((content: string, context?: Record<string, any>) => {
+    if (!content.trim()) return
+    setMessages((prev) => [...prev, {
+      role: 'user',
+      content,
+      timestamp: new Date().toISOString(),
+    }])
+    setThinking(true)
+    socketRef.current?.send('chat', {
+      content,
+      conversation_id: activeId || undefined,
+      context: { ...context, ...chatContext },
+    })
+  }, [activeId, chatContext, socketRef])
+
   function displayTitle(c: Conversation): string {
     if (c.title) return c.title
     const raw = c.last_message_at || c.started_at
@@ -451,34 +471,68 @@ export default function AppLayout() {
   )
 
   const isSettings = location.pathname.startsWith('/settings')
+  const isNotebook = location.pathname.startsWith('/notebooks')
+  const isKanban = location.pathname.startsWith('/kanban')
+  const isChat = !isSettings && !isNotebook && !isKanban
   const currentTab = location.pathname.split('/')[2] || 'general'
+
+  useEffect(() => {
+    if (isNotebook && notebooks.length === 0) {
+      get<{ notebooks: any[] }>('/api/notebooks').then(d => setNotebooks(d.notebooks))
+    }
+    if (isKanban && boards.length === 0) {
+      get<{ boards: any[] }>('/api/kanban/boards').then(d => setBoards(d.boards))
+    }
+  }, [isNotebook, isKanban, notebooks.length, boards.length])
+
+  async function handleCreateNotebook() {
+    try {
+      const res = await post<{ id: string }>('/api/notebooks', { title: 'New Notebook' })
+      setNotebooks(prev => [{ id: res.id, title: 'New Notebook', updated_at: new Date().toISOString() }, ...prev])
+      navigate(`/notebooks/${res.id}`)
+    } catch {
+      toast.error('Failed to create notebook')
+    }
+  }
+
+  async function handleCreateBoard() {
+    try {
+      const res = await post<{ id: string }>('/api/kanban/boards', { title: 'New Board' })
+      setBoards(prev => [{ id: res.id, title: 'New Board', updated_at: new Date().toISOString() }, ...prev])
+      navigate(`/kanban/${res.id}`)
+    } catch {
+      toast.error('Failed to create board')
+    }
+  }
 
   return (
     <TooltipProvider>
-      <div className="flex h-[100dvh] bg-background text-foreground">
+      <div className="flex h-[100dvh] bg-background text-foreground relative overflow-hidden">
         {/* Mobile top bar */}
-        <div className="flex items-center gap-2 p-3 pt-safe border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background">
-          <Button variant="ghost" size="icon" aria-label="Toggle mobile menu" className="h-11 w-11" onClick={() => setSidebarOpen(true)}>
-            <Menu className="h-5 w-5" />
-          </Button>
-          <button onClick={() => navigate('/')} className="text-sm font-semibold hover:text-muted-foreground transition-colors truncate max-w-[150px]">
-            {isSettings && isMobile ? (
-              <div className="flex items-center gap-2">
-                <ArrowLeft className="h-4 w-4" onClick={(e) => { e.stopPropagation(); navigate('/settings') }} />
-                <span>{SETTINGS_SECTIONS.find(s => s.id === currentTab)?.label || 'Settings'}</span>
-              </div>
-            ) : agentName}
-          </button>
-          <Button variant="ghost" size="icon" aria-label="New chat" className="h-11 w-11 ml-auto" onClick={handleNewChat}>
-            <Plus className="h-5 w-5" />
-          </Button>
-        </div>
+        {!focusMode && (
+          <div className="flex items-center gap-2 p-3 pt-safe border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background">
+            <Button variant="ghost" size="icon" aria-label="Toggle mobile menu" className="h-11 w-11" onClick={() => setSidebarOpen(true)}>
+              <Menu className="h-5 w-5" />
+            </Button>
+            <button onClick={() => navigate('/')} className="text-sm font-semibold hover:text-muted-foreground transition-colors truncate max-w-[150px]">
+              {isSettings && isMobile ? (
+                <div className="flex items-center gap-2">
+                  <ArrowLeft className="h-4 w-4" onClick={(e) => { e.stopPropagation(); navigate('/settings') }} />
+                  <span>{SETTINGS_SECTIONS.find(s => s.id === currentTab)?.label || 'Settings'}</span>
+                </div>
+              ) : agentName}
+            </button>
+            <Button variant="ghost" size="icon" aria-label="New chat" className="h-11 w-11 ml-auto" onClick={handleNewChat}>
+              <Plus className="h-5 w-5" />
+            </Button>
+          </div>
+        )}
 
         {/* Sidebar */}
-        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'}`}>
+        <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'} ${focusMode ? 'lg:hidden' : ''}`}>
           {/* Top: Logo + New Chat */}
           <div className="flex flex-col gap-2 p-3 mb-2">
-            {(!collapsed || isSettings) && (
+            {(!collapsed || isMobile || isSettings) && (
               <button 
                 onClick={() => navigate('/')} 
                 className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors text-left truncate"
@@ -486,6 +540,34 @@ export default function AppLayout() {
                 {agentName}
               </button>
             )}
+
+            {/* Workspace Tabs (G-W1) */}
+            {(!collapsed || isMobile) && !isSettings && (
+              <div className="flex items-center gap-1 px-3 pb-2">
+                <button
+                  onClick={() => navigate('/')}
+                  className={`flex-1 p-2 rounded-md flex items-center justify-center transition-colors ${isChat ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                  title="Chat"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => navigate('/notebooks')}
+                  className={`flex-1 p-2 rounded-md flex items-center justify-center transition-colors ${isNotebook ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                  title="Notebooks"
+                >
+                  <FileText className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => navigate('/kanban')}
+                  className={`flex-1 p-2 rounded-md flex items-center justify-center transition-colors ${isKanban ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                  title="Boards"
+                >
+                  <Columns3 className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -495,7 +577,7 @@ export default function AppLayout() {
                 </TooltipTrigger>
                 <TooltipContent side="right">{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
               </Tooltip>
-              {(!collapsed || isSettings) && (
+              {(!collapsed || isMobile || isSettings) && (
                 <Button variant="secondary" size="sm" className="flex-1 justify-start gap-2 h-8" onClick={handleNewChat}>
                   <Plus className="h-4 w-4" /> New Chat
                 </Button>
@@ -504,7 +586,7 @@ export default function AppLayout() {
           </div>
 
           {/* Conversation Search (Chat only) */}
-          {!collapsed && !isSettings && (
+          {(!collapsed || isMobile) && isChat && (
             <div className="px-3 pb-2 pt-1 mb-2">
               <Input 
                 placeholder="Search conversations..." 
@@ -516,7 +598,7 @@ export default function AppLayout() {
           )}
 
           {/* Sidebar Content (List) */}
-          {(!collapsed || isSettings) && (
+          {(!collapsed || isMobile || isSettings) && (
             <ScrollArea className="flex-1 px-2">
               <div className="space-y-0.5 pb-4">
                 {isSettings ? (
@@ -535,6 +617,46 @@ export default function AppLayout() {
                       <span>{s.label}</span>
                     </button>
                   ))
+                ) : isNotebook ? (
+                  // Notebook list
+                  <div className="space-y-1">
+                    <div className="px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-2">Notebooks</div>
+                    {notebooks.map(nb => (
+                      <button
+                        key={nb.id}
+                        onClick={() => { navigate(`/notebooks/${nb.id}`); setSidebarOpen(false) }}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors ${location.pathname.includes(nb.id) ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50'}`}
+                      >
+                        {nb.title}
+                      </button>
+                    ))}
+                    <button 
+                      onClick={handleCreateNotebook}
+                      className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                    >
+                      <Plus className="h-3 w-3" /> New notebook
+                    </button>
+                  </div>
+                ) : isKanban ? (
+                  // Board list
+                  <div className="space-y-1">
+                    <div className="px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-2">Boards</div>
+                    {boards.map(b => (
+                      <button
+                        key={b.id}
+                        onClick={() => { navigate(`/kanban/${b.id}`); setSidebarOpen(false) }}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors ${location.pathname.includes(b.id) ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50'}`}
+                      >
+                        {b.title}
+                      </button>
+                    ))}
+                    <button 
+                      onClick={handleCreateBoard}
+                      className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent/50 flex items-center gap-2 transition-colors"
+                    >
+                      <Plus className="h-3 w-3" /> New board
+                    </button>
+                  </div>
                 ) : (
                   // Conversation list
                   filteredConversations.length === 0 ? (
@@ -608,7 +730,7 @@ export default function AppLayout() {
             </ScrollArea>
           )}
 
-          {/* Bottom: Settings / Chat Toggle (G-P7) */}
+          {/* Bottom: Settings / Chat Toggle */}
           <div className="p-3 mt-auto">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -640,8 +762,6 @@ export default function AppLayout() {
               {artifactPanelOpen ? (
                 <ChatPanel
                   activeConversationId={activeId}
-                  setActiveId={setActiveId}
-                  refreshConversations={loadConversations}
                   socketRef={socketRef}
                   connected={connected}
                   chatContext={chatContext}
@@ -679,6 +799,8 @@ export default function AppLayout() {
                   playTTS,
                   stopTTS,
                   isTTSPlaying,
+                  focusMode,
+                  setFocusMode,
                 }} />
               )}
             </ErrorBoundary>
@@ -689,8 +811,6 @@ export default function AppLayout() {
             <aside className="fixed inset-0 z-50 lg:static lg:border-l lg:border-border/40 lg:w-[400px] lg:min-w-[400px] bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
               <ChatPanel
                 activeConversationId={activeId}
-                setActiveId={setActiveId}
-                refreshConversations={loadConversations}
                 socketRef={socketRef}
                 connected={connected}
                 chatContext={chatContext}
@@ -700,7 +820,7 @@ export default function AppLayout() {
             </aside>
           )}
 
-          {/* Artifact Preview Panel / Bottom Sheet (G-P1) */}
+          {/* Artifact Preview Panel / Bottom Sheet */}
           {artifactPanelOpen && activeArtifactId && (
             <>
               {isMobile ? (
@@ -729,6 +849,22 @@ export default function AppLayout() {
           )}
         </div>
 
+        {/* Floating Assistant Bubble (G-B1) */}
+        {!isChat && !chatPanelOpen && assistantConfig.enabled && (
+          <FloatingBubble
+            socketRef={socketRef}
+            connected={connected}
+            activeConversationId={activeId}
+            messages={messages}
+            onSend={handleBubbleSend}
+            pageContext={{ page: location.pathname.split('/')[1] || 'home', ...pageContextData } as any}
+            assistantConfig={assistantConfig}
+            agentName={agentName}
+            ttsAvailable={assistantConfig.enabled} 
+            sttAvailable={connected}
+            playTTS={playTTS}
+          />
+        )}
       </div>
     </TooltipProvider>
   )

@@ -103,7 +103,7 @@ Tell the agent to watch RSS feeds for topics you care about. "Follow TechCrunch 
 Google Workspace (Gmail, Calendar, Drive), browser automation, MCP server integration, file management. Extend with plugins -- no restart required.
 
 ### Speak and listen
-Optional voice: mic button for speech-to-text, speaker button for text-to-speech. Local models, no cloud dependency.
+Full voice mode: mic button records audio, transcribes it server-side, and edge-tts reads responses aloud. In continuous voice mode, the agent listens, transcribes, responds, and speaks in a loop -- hands-free conversation. 30 selectable voices, per-message speak buttons, and automatic TTS when voice mode is active. STT defaults to Groq Whisper but the provider is configurable -- additional STT plugins are planned.
 
 ### Cross-channel awareness
 Switch between web dashboard, Telegram, and API without losing context. The agent knows what you were last talking about regardless of which channel you were on.
@@ -229,13 +229,15 @@ Everything runs on a single VPS. 4 CPU, 16GB RAM is comfortable. No external dat
 
 The web dashboard features:
 
+- **Unified workspace** -- every page (notebooks, kanban, settings) has an agent input bar at the bottom with page context awareness. Press `/` to focus from anywhere. The agent knows what page you're on and what you're looking at.
 - **Chat** with streaming responses, file uploads, voice I/O
 - **Notebooks** with journal mode and contextual agent chat
 - **Kanban boards** with drag-and-drop columns and cards
-- **Cowork layout** -- any page can have a contextual agent chat panel alongside it
+- **Cowork layout** -- any page can have a slide-out chat panel alongside it
+- **Workspace search** -- the agent can search across notebooks, boards, and conversations via tools
 - **Contextual links** below the chat input for quick access to Journal, Board, Documents
 - **Settings** with analytics, mesh status, peer configuration, and all agent settings
-- **Keyboard shortcuts** -- Escape, Cmd+K, Cmd+N
+- **Keyboard shortcuts** -- Escape, Cmd+K, Cmd+N, `/` to focus agent input
 - **Dark/light theme**
 - **Mobile responsive**
 
@@ -260,7 +262,7 @@ Key settings:
 | `mesh` | Enable/disable agent mesh networking |
 | `email` | IMAP/SMTP credentials for agent email |
 | `access` | Supervised mode for managed agents |
-| `voice` | TTS/STT on/off |
+| `voice` | TTS/STT provider, voice selection, voice mode |
 
 ## Plugins
 
@@ -270,7 +272,7 @@ Key settings:
 | Google Workspace | Gmail, Calendar, Drive (requires gcloud setup) |
 | Agent Browser | Browser automation |
 | Telegram | Telegram bot interface |
-| TTS/STT | Voice input and output |
+| TTS/STT | Voice input (Groq Whisper) and output (edge-tts) |
 | Docling | Deep document extraction |
 
 Enable in the Plugins tab. Changes apply immediately.

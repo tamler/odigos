@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
-import { get, post, del } from '@/lib/api'
+import { get, post, del, patch } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Trash2, Columns3, Share2, Globe } from 'lucide-react'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Plus, Trash2, Share2, Globe, Maximize2, Minimize2 } from 'lucide-react'
 import { ShareDialog } from '@/components/ShareDialog'
+import { AgentInputBar } from '@/components/AgentInputBar'
 import {
   KanbanBoardProvider,
   KanbanBoard,
@@ -92,19 +91,53 @@ function BoardDetailInner({ boardId, board, setBoard }: {
   setBoard: React.Dispatch<React.SetStateAction<BoardDetail | null>>
 }) {
   const navigate = useNavigate()
-  const { setChatPanelOpen, setChatContext, isMobile, setPageContextData } = useOutletContext<any>()
+  const { 
+    isMobile, 
+    setPageContextData,
+    socketRef,
+    connected,
+    agentName,
+    sttAvailable,
+    focusMode,
+    setFocusMode
+  } = useOutletContext<any>()
   const [newCardTexts, setNewCardTexts] = useState<Record<string, string>>({})
   const [newColumnTitle, setNewColumnTitle] = useState('')
   const [addingColumn, setAddingColumn] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [title, setTitle] = useState(board.title)
   const { onDragEnd } = useDndEvents()
-  const [boardsList, setBoardsList] = useState<Board[]>([])
 
   useEffect(() => {
-    get<{ boards: Board[] }>('/api/kanban/boards').then(data => {
-      setBoardsList(data.boards.sort((a,b) => new Date(b.updated_at + 'Z').getTime() - new Date(a.updated_at + 'Z').getTime()))
-    }).catch(() => {})
-  }, [boardId])
+    setTitle(board.title)
+  }, [board.title])
+
+  // Focus mode keyboard shortcut (G-W5)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '.') {
+        e.preventDefault()
+        setFocusMode((prev: boolean) => !prev)
+      }
+      if (e.key === 'Escape' && focusMode) {
+        setFocusMode(false)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [focusMode, setFocusMode])
+
+  const handleUpdateTitle = async () => {
+    if (title === board.title || !title.trim()) return
+    try {
+      await patch(`/api/kanban/boards/${boardId}`, { title: title.trim() })
+      setBoard({ ...board, title: title.trim() })
+      toast.success('Title updated')
+    } catch {
+      toast.error('Failed to update title')
+      setTitle(board.title)
+    }
+  }
 
   const cardsByColumn = useMemo(() => {
     const map: Record<string, Card[]> = {}
@@ -239,77 +272,52 @@ function BoardDetailInner({ boardId, board, setBoard }: {
   const sortedColumns = [...board.columns].sort((a, b) => a.position - b.position)
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className={`flex-1 flex flex-col h-full bg-background transition-all duration-300 ${focusMode ? 'fixed inset-0 z-[100] p-4 sm:p-12 overflow-y-auto' : 'overflow-hidden'}`}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border/40 shrink-0">
-        <DropdownMenu>
-          <DropdownMenuTrigger>
-            <Button variant="ghost" className="h-8 px-2 flex items-center gap-2 max-w-[200px] sm:max-w-[300px]">
-              <Columns3 className="h-4 w-4 shrink-0" />
-              <span className="truncate">{board ? board.title : 'Loading...'}</span>
+      {!focusMode && (
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={handleUpdateTitle}
+            onKeyDown={(e) => e.key === 'Enter' && handleUpdateTitle()}
+            className="text-xl font-bold bg-transparent border-none focus:outline-none w-full max-w-md tracking-tight placeholder:text-muted-foreground/50"
+            placeholder="Untitled board"
+          />
+          
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-9 w-9 text-muted-foreground" 
+              onClick={() => setFocusMode(true)}
+              title="Focus Mode (Cmd+.)"
+            >
+              <Maximize2 className="h-4 w-4" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
-            <ScrollArea className="max-h-[300px]">
-              {boardsList.map(b => (
-                <DropdownMenuItem key={b.id} onClick={() => navigate(`/kanban/${b.id}`)}>
-                  {b.title}
-                </DropdownMenuItem>
-              ))}
-            </ScrollArea>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={async () => {
-              try {
-                const b = await post<Board>('/api/kanban/boards', { title: 'New Board' })
-                navigate(`/kanban/${b.id}`)
-              } catch {
-                toast.error('Failed to create board')
-              }
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`h-9 w-9 ${board.share_token ? 'text-primary' : 'text-muted-foreground'}`}
+              onClick={() => setShareOpen(true)}
+              title="Share board"
+            >
+              {board.share_token ? <Globe className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-destructive" onClick={async () => {
+               if (confirm('Delete this entire board?')) {
+                 await del(`/api/kanban/boards/${boardId}`)
+                 navigate('/kanban')
+               }
             }}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Board
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {/* Delete Button */}
-        {board && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={async () => {
-             try {
-               await del(`/api/kanban/boards/${boardId}`)
-               toast.success('Board deleted')
-               navigate('/kanban')
-             } catch {
-               toast.error('Failed to delete board')
-             }
-          }}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
-
-        {/* Share Button */}
-        {board && (
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className={`h-8 w-8 ${board.share_token ? 'text-primary' : 'text-muted-foreground'}`}
-            onClick={() => setShareOpen(true)}
-            title="Share board"
-          >
-            {board.share_token ? <Globe className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-          </Button>
-        )}
-
-        <Button variant="outline" size="sm" className="ml-auto text-xs sm:text-sm h-8 sm:h-9" onClick={() => {
-          setChatContext({ board_id: boardId })
-          setChatPanelOpen(true)
-        }}>
-          {isMobile ? 'Ask' : 'Ask Agent'}
-        </Button>
-      </div>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Board */}
-      <div className="flex-1 overflow-y-auto lg:overflow-hidden px-4 py-4 scrollbar-hide">
+      <div className={`flex-1 overflow-y-auto lg:overflow-hidden px-4 py-4 scrollbar-hide ${focusMode ? 'max-w-6xl mx-auto w-full' : ''}`}>
         <KanbanBoard className={isMobile ? "flex-col gap-8 pb-20" : "flex-row"}>
           {sortedColumns.map((col) => {
             const cards = cardsByColumn[col.id] ?? []
@@ -423,6 +431,40 @@ function BoardDetailInner({ boardId, board, setBoard }: {
           {!isMobile && <KanbanBoardExtraMargin />}
         </KanbanBoard>
       </div>
+
+      {/* Agent Input Bar (G-W3) */}
+      {!focusMode && (
+        <div className="bg-gradient-to-t from-background via-background/90 to-transparent pt-12 pb-4 pointer-events-none">
+          <div className="pointer-events-auto">
+            <AgentInputBar
+              agentName={agentName}
+              placeholder="Ask about this board..."
+              pageContext={{
+                page: 'kanban',
+                page_id: boardId,
+                page_title: board.title,
+                visible_data: `Columns: ${board.columns.map(c => c.title).join(', ')}. ${board.cards.length} cards.`
+              }}
+              socketRef={socketRef}
+              connected={connected}
+              sttAvailable={sttAvailable}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Focus Mode Exit */}
+      {focusMode && (
+        <Button 
+          variant="secondary" 
+          size="sm" 
+          className="fixed top-6 right-6 z-[110] shadow-lg rounded-full"
+          onClick={() => setFocusMode(false)}
+        >
+          <Minimize2 className="h-4 w-4 mr-2" />
+          Exit Focus
+        </Button>
+      )}
 
       <ShareDialog
         type="board"
