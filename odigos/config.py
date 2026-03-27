@@ -181,6 +181,13 @@ class CalendarConfig(BaseModel):
     password: str = ""
 
 
+class AutoUpdateConfig(BaseModel):
+    enabled: bool = False
+    check_interval_ticks: int = 60  # heartbeat ticks between checks (~30min at 30s)
+    auto_apply: bool = False  # True = apply immediately, False = notify only
+    branch: str = "main"
+
+
 class EmailConfig(BaseModel):
     enabled: bool = False
     address: str = ""
@@ -253,6 +260,7 @@ class Settings(BaseSettings):
     assistant: AssistantConfig = AssistantConfig()
     calendar: CalendarConfig = CalendarConfig()
     email: EmailConfig = EmailConfig()
+    auto_update: AutoUpdateConfig = AutoUpdateConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from odigos.config import VoiceConfig
+from odigos.providers.stt import create_stt_provider
 
 
 AUTH = {"Authorization": "Bearer test-key"}
@@ -12,13 +13,17 @@ AUTH = {"Authorization": "Bearer test-key"}
 
 def _make_app(voice_config=None, groq_api_key=""):
     from odigos.api.audio import router
+    vc = voice_config or VoiceConfig()
     app = FastAPI()
     app.include_router(router)
     app.state.settings = SimpleNamespace(
         api_key="test-key",
         session_secret="",
         groq_api_key=groq_api_key,
-        voice=voice_config or VoiceConfig(),
+        voice=vc,
+    )
+    app.state.stt_provider = create_stt_provider(
+        voice_config=vc, groq_api_key=groq_api_key,
     )
     app.state.plugin_context = None
     return app
@@ -65,13 +70,13 @@ class TestSTTTranscribe:
         assert resp.status_code == 404
 
     def test_stt_no_file_returns_400(self):
-        app = _make_app()
+        app = _make_app(groq_api_key="fake-key-for-test")
         client = TestClient(app)
         resp = client.post("/api/audio/transcribe", headers=AUTH)
         assert resp.status_code == 400
 
     def test_stt_short_audio_returns_empty(self):
-        app = _make_app()
+        app = _make_app(groq_api_key="fake-key-for-test")
         client = TestClient(app)
         resp = client.post(
             "/api/audio/transcribe",

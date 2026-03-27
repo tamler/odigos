@@ -103,6 +103,9 @@ class Heartbeat:
         self._outcome_interval_ticks: int = 10
         self._email_tick_counter: int = 0
         self._email_config = None  # Set from main.py if email is configured
+        self._update_tick_counter: int = 0
+        self._nudge_tick_counter: int = 0
+        self._nudge_interval_ticks: int = 20
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -166,6 +169,12 @@ class Heartbeat:
                 self._email_tick_counter = 0
                 did_work |= await self._check_email()
 
+        # Phase 4c: Proactive nudges (stale tasks, overdue goals)
+        self._nudge_tick_counter += 1
+        if self._nudge_tick_counter >= self._nudge_interval_ticks:
+            self._nudge_tick_counter = 0
+            did_work |= await self._send_nudges()
+
         # Phase 5: Idle thoughts (only if nothing ran above)
         if not did_work:
             await self._idle_think()
@@ -195,6 +204,18 @@ class Heartbeat:
         if self._outcome_tick_counter >= self._outcome_interval_ticks:
             self._outcome_tick_counter = 0
             await self._evaluate_plan_outcomes()
+
+        # Phase 11: Auto-update check (if enabled)
+        _update_cfg = (
+            getattr(self.settings, "auto_update", None)
+            if self.settings
+            else None
+        )
+        if _update_cfg and _update_cfg.enabled:
+            self._update_tick_counter += 1
+            if self._update_tick_counter >= _update_cfg.check_interval_ticks:
+                self._update_tick_counter = 0
+                await self._check_for_updates()
 
         if self.tracer:
             await self.tracer.emit("heartbeat_tick", None, {
@@ -266,6 +287,30 @@ class Heartbeat:
                     return True
         except Exception:
             logger.debug("Email check failed", exc_info=True)
+        return False
+
+    async def _send_nudges(self) -> bool:
+        """Check for stale tasks and overdue goals, notify user."""
+        try:
+            from odigos.core.nudger import (
+                format_nudge_notification,
+                get_nudge_items,
+            )
+
+            nudges = await get_nudge_items(self.db)
+            if not nudges:
+                return False
+
+            msg = format_nudge_notification(nudges)
+            if msg and self.notifier:
+                await self.notifier.notify(
+                    title="Reminder",
+                    body=msg,
+                    priority="normal",
+                )
+                return True
+        except Exception:
+            logger.debug("Nudge check failed", exc_info=True)
         return False
 
     async def _dispatch_as_subagent(self, instruction: str, conversation_id: str = "") -> str | None:
@@ -656,6 +701,75 @@ class Heartbeat:
             await self.agent_client.flush_outbox()
         except Exception:
             logger.debug("Peer maintenance failed", exc_info=True)
+
+    async def _check_for_updates(self) -> None:
+        """Check for code updates and optionally apply them."""
+        try:
+            from odigos.core.updater import (
+                apply_update,
+                check_for_updates,
+                restart_service,
+            )
+
+            update_cfg = self.settings.auto_update
+            info = await asyncio.to_thread(
+                check_for_updates, update_cfg.branch,
+            )
+            if not info:
+                return
+
+            logger.info(
+                "Update available: %s -> %s (%d commits)",
+                info["local"],
+                info["remote"],
+                info["commits"],
+            )
+
+            if update_cfg.auto_apply:
+                success, msg = await asyncio.to_thread(
+                    apply_update, update_cfg.branch,
+                )
+                if success:
+                    logger.info(
+                        "Update applied successfully, restarting...",
+                    )
+                    if self.notifier:
+                        await self.notifier.notify(
+                            title="Update Applied",
+                            body=(
+                                f"Applied {info['commits']} new "
+                                f"commit(s). Restarting now."
+                            ),
+                            priority="normal",
+                        )
+                    # Give notification time to deliver
+                    await asyncio.sleep(2)
+                    await asyncio.to_thread(restart_service)
+                else:
+                    logger.error("Update failed: %s", msg)
+                    if self.notifier:
+                        await self.notifier.notify(
+                            title="Update Failed",
+                            body=(
+                                f"Auto-update failed: "
+                                f"{msg[:200]}"
+                            ),
+                            priority="high",
+                        )
+            else:
+                # Notify only
+                if self.notifier:
+                    await self.notifier.notify(
+                        title="Update Available",
+                        body=(
+                            f"{info['commits']} new commit(s) "
+                            f"available. Latest: "
+                            f"{info['log'][:200]}"
+                        ),
+                        priority="normal",
+                    )
+        except Exception:
+            logger.debug("Update check failed", exc_info=True)
 
     async def _dream_analyze_user(self) -> None:
         """Analyze recent conversations to build/update the user profile."""

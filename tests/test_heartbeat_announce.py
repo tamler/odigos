@@ -41,6 +41,11 @@ def _build_heartbeat(**overrides):
     hb._experience_interval_ticks = 20
     hb._outcome_tick_counter = 0
     hb._outcome_interval_ticks = 10
+    hb._nudge_tick_counter = 0
+    hb._nudge_interval_ticks = 20
+    hb._update_tick_counter = 0
+    hb._email_tick_counter = 0
+    hb.settings = None
     hb._fire_reminders = AsyncMock(return_value=False)
     hb._work_todos = AsyncMock(return_value=False)
     hb._deliver_subagent_results = AsyncMock(return_value=False)
