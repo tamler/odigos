@@ -47,7 +47,7 @@ function WelcomeView({ agentName, onSuggest }: { agentName: string; onSuggest: (
       <div className="max-w-md space-y-6">
         <div className="space-y-2">
           <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl font-bold text-primary">{agentName[0]}</span>
+            <span className="text-2xl font-bold text-primary">{(agentName || 'O')[0]}</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight">Hello, I'm {agentName}</h1>
           <p className="text-muted-foreground">Your personal AI assistant that learns and improves over time. How can I help you today?</p>
@@ -79,22 +79,24 @@ export const ChatPanel = memo(({
   onClose,
 }: ChatPanelProps) => {
   const [searchParams] = useSearchParams()
-  const { 
-    artifactPanelOpen, 
-    setArtifactPanelOpen, 
-    setActiveArtifactId,
-    isMobile,
-    messages,
-    setMessages,
-    streamingContent,
-    thinking,
-    setThinking,
-    status,
-    setStatus,
-    queuedCount,
-    suggestedActions,
-    setSuggestedActions,
-  } = useOutletContext<any>()
+  let outletCtx: any = {}
+  try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
+  const {
+    artifactPanelOpen = false,
+    setArtifactPanelOpen = () => {},
+    setActiveArtifactId = () => {},
+    isMobile = false,
+    messages = [],
+    setMessages = () => {},
+    streamingContent = '',
+    thinking = false,
+    setThinking = () => {},
+    status = null,
+    setStatus = () => {},
+    queuedCount = 0,
+    suggestedActions = [],
+    setSuggestedActions = () => {},
+  } = outletCtx
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [inputValue, setInputValue] = useState('')

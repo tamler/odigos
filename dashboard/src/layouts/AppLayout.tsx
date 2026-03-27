@@ -614,6 +614,9 @@ export default function AppLayout() {
                   streamingContent, setStreamingContent, thinking, setThinking, status, setStatus,
                   queuedCount, setQueuedCount, suggestedActions, setSuggestedActions,
                   playTTS, stopTTS, isTTSPlaying, focusMode, setFocusMode,
+                  agentName,
+                  setPageContextData: setChatContext,
+                  sttAvailable: true,
                 }} />
               )}
             </ErrorBoundary>

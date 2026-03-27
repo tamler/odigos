@@ -129,7 +129,7 @@ export function AgentInputBar({
           >
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="h-6 w-6 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
-                <span className="text-[10px] font-black text-primary">{agentName[0]}</span>
+                <span className="text-[10px] font-black text-primary">{(agentName || 'O')[0]}</span>
               </div>
               <span className="text-sm text-muted-foreground/80 font-medium truncate italic">{placeholder || `Ask ${agentName}...`} <span className="ml-2 text-[10px] not-italic opacity-0 lg:group-hover:opacity-100 transition-opacity font-bold uppercase tracking-widest text-muted-foreground/40 hidden lg:inline">(Press /)</span></span>
             </div>

@@ -49,7 +49,21 @@ export default function NotebookPage() {
   const saveTimeout = useRef<any>(null)
 
   const loadNotebook = useCallback(async () => {
-    if (!notebookId) return
+    if (!notebookId) {
+      // No ID — redirect to create or pick a notebook
+      try {
+        const data = await get<{ notebooks: any[] }>('/api/notebooks')
+        if (data.notebooks.length > 0) {
+          navigate(`/notebooks/${data.notebooks[0].id}`, { replace: true })
+        } else {
+          const res = await post<{ id: string }>('/api/notebooks', { title: 'My Notebook' })
+          navigate(`/notebooks/${res.id}`, { replace: true })
+        }
+      } catch {
+        setLoading(false)
+      }
+      return
+    }
     setLoading(true)
     try {
       const data = await get<any>(`/api/notebooks/${notebookId}`)
