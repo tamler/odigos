@@ -1,7 +1,7 @@
 import { NavigateFunction } from 'react-router-dom'
 
 export interface UIAction {
-  action: 'navigate' | 'refresh' | 'open_chat' | 'create' | 'theme'
+  action: 'navigate' | 'refresh' | 'open_chat' | 'create' | 'theme' | 'navigate-to-notebook' | 'navigate-to-board'
   to?: string
   type?: string
   value?: string
@@ -21,6 +21,12 @@ export function executeActions(
     switch (a.action) {
       case 'navigate':
         if (a.to && a.to.startsWith('/')) navigate(a.to)
+        break
+      case 'navigate-to-notebook':
+        if (a.value) navigate(`/notebooks/${a.value}`)
+        break
+      case 'navigate-to-board':
+        if (a.value) navigate(`/kanban/${a.value}`)
         break
       case 'refresh':
         callbacks.refresh()

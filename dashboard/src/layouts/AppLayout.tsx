@@ -32,6 +32,7 @@ import {
 import { ChatPanel } from '@/components/ChatPanel'
 import { FloatingBubble } from '@/components/FloatingBubble'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
+import { QuickSwitcher } from '@/components/QuickSwitcher'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -120,6 +121,7 @@ export default function AppLayout() {
   const [artifactPanelOpen, setArtifactPanelOpen] = useState(false)
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
   const [focusMode, setFocusMode] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
   const [pageContextData, setPageContextData] = useState<Partial<PageContext>>({})
   const [assistantConfig, setAssistantConfig] = useState<AssistantConfig>({
     enabled: false,
@@ -186,9 +188,15 @@ export default function AppLayout() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Keyboard shortcuts (G14)
+  // Keyboard shortcuts (G14, G-W3)
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSwitcherOpen(true)
+        return
+      }
+
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) || (e.target as HTMLElement).isContentEditable) {
         if (e.key === 'Escape') {
           (e.target as HTMLElement).blur()
@@ -201,22 +209,14 @@ export default function AppLayout() {
       if (e.key === 'Escape') {
         setSidebarOpen(false)
         setChatPanelOpen(false)
-      } else if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        const textarea = document.querySelector('textarea')
-        if (textarea) textarea.focus()
       } else if (e.key === 'n' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         handleNewChat()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
-    // We intentionally don't add handleNewChat to the dep array if it's not useCallback, 
-    // but React might warn. We can ignore or wrap handleNewChat in useCallback.
-    // For now we'll just omit it from the deps array.
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [setSidebarOpen, setChatPanelOpen])
-
-
 
   useEffect(() => {
     get<any>('/api/settings')
@@ -249,44 +249,29 @@ export default function AppLayout() {
     else setMessages([])
   }, [activeId, loadMessages])
 
-  // Persistent WebSocket — lives at layout level, survives page navigation
+  // Persistent WebSocket
   useEffect(() => {
     const socket = new ChatSocket(
       (msg) => {
-        // Global notification handler -- toasts show on any page
         if (msg.type === 'notification') {
           const body = (msg.body || msg.message || '') as string
           const title = msg.title as string | undefined
           const label = title ? `${title}: ${body}` : body
           const priority = (msg.priority || 'info') as string
-
-          if (title?.toLowerCase().includes('email')) {
-            setHasNewEmail(true)
-          }
-
-          if (priority === 'urgent') {
-            toast.error(label)
-          } else if (priority === 'warning') {
-            toast.warning(label)
-          } else {
-            toast.info(label)
-          }
+          if (title?.toLowerCase().includes('email')) setHasNewEmail(true)
+          if (priority === 'urgent') toast.error(label)
+          else if (priority === 'warning') toast.warning(label)
+          else toast.info(label)
         }
-        if (msg.type === 'status') {
-          setStatus(msg.text as string)
-        }
+        if (msg.type === 'status') setStatus(msg.text as string)
         if (msg.type === 'chat_chunk') {
-          if (msg.conversation_id && activeId && msg.conversation_id !== activeId) {
-            return 
-          }
+          if (msg.conversation_id && activeId && msg.conversation_id !== activeId) return 
           setThinking(false)
           setStatus(null)
           setStreamingContent((prev) => prev + (msg.content as string))
         }
         if (msg.type === 'chat_response') {
-          if (msg.conversation_id && activeId && msg.conversation_id !== activeId) {
-            return 
-          }
+          if (msg.conversation_id && activeId && msg.conversation_id !== activeId) return 
           setThinking(false)
           setStatus(null)
           setStreamingContent('')
@@ -296,14 +281,10 @@ export default function AppLayout() {
             content,
             timestamp: new Date().toISOString(),
           }])
-
-          // Auto-read: play TTS if auto_read is on OR voice mode is active
           const voiceModeOn = localStorage.getItem('odigos-voice-mode') === 'true'
           if ((assistantConfig.auto_read || voiceModeOn) && shouldPlayTTS(content)) {
             playTTS(stripForTTS(content))
           }
-
-          // Handle UI Actions (G-B4)
           if (Array.isArray(msg.actions) && msg.actions.length > 0) {
             executeActions(msg.actions as UIAction[], navigate, {
               refresh: () => window.location.reload(),
@@ -312,67 +293,46 @@ export default function AppLayout() {
             })
           }
         }
-        if (msg.type === 'stream_end') {
-          setThinking(false)
-          setStatus(null)
-        }
+        if (msg.type === 'stream_end') { setThinking(false); setStatus(null) }
         if (msg.type === 'queue_update') {
           const queued = msg.queued as number
           setQueuedCount(queued)
           if (queued === 0) setThinking(false)
         }
-        if (msg.type === 'message_queued') {
-          setStatus(`Queued (${msg.queued as number} pending)`)
-        }
-        if (msg.type === 'queue_full') {
-          toast.warning('Message queue is full. Please wait.')
-        }
-        if (msg.type === 'suggested_actions' && msg.actions) {
-          setSuggestedActions(msg.actions as string[])
-        }
+        if (msg.type === 'message_queued') setStatus(`Queued (${msg.queued as number} pending)`)
+        if (msg.type === 'queue_full') toast.warning('Message queue is full. Please wait.')
+        if (msg.type === 'suggested_actions' && msg.actions) setSuggestedActions(msg.actions as string[])
         if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
           const cid = msg.conversation_id as string
           const title = msg.title as string
           pendingTitles.current[cid] = title
-          setConversations((prev) =>
-            prev.map((c) => (c.id === cid ? { ...c, title } : c))
-          )
+          setConversations((prev) => prev.map((c) => (c.id === cid ? { ...c, title } : c)))
         }
-        if (msg.type === 'feed_update') {
-          toast.info(`New feed items from ${msg.source || 'RSS feed'}`, { duration: 4000 })
-        }
+        if (msg.type === 'feed_update') toast.info(`New feed items from ${msg.source || 'RSS feed'}`, { duration: 4000 })
         if (msg.type === 'email_received') {
           setHasNewEmail(true)
           toast.info(`New email: ${msg.subject || 'New message'}`, { duration: 5000 })
         }
-        if (msg.type === 'task_completed') {
-          toast.success(`Completed: ${msg.task || 'Background task'}`, { duration: 3000 })
-        }
+        if (msg.type === 'task_completed') toast.success(`Completed: ${msg.task || 'Background task'}`, { duration: 3000 })
       },
       (isConnected) => {
         setConnected(isConnected)
-        if (!isConnected) {
-          toast.error('Disconnected from server', { duration: 5000 })
-        }
+        if (!isConnected) toast.error('Disconnected from server', { duration: 5000 })
       },
     )
     socket.connect()
     socketRef.current = socket
     return () => socket.disconnect()
-  }, [loadConversations])
+  }, [loadConversations, activeId, assistantConfig.auto_read, navigate, setTheme, playTTS])
 
-  useEffect(() => {
-    loadConversations()
-  }, [loadConversations])
+  useEffect(() => { loadConversations() }, [loadConversations])
 
   useEffect(() => {
     const cid = searchParams.get('c')
     if (cid) setActiveId(cid)
   }, [searchParams])
 
-  useEffect(() => {
-    if (editingId) editInputRef.current?.focus()
-  }, [editingId])
+  useEffect(() => { if (editingId) editInputRef.current?.focus() }, [editingId])
 
   function handleNewChat() {
     setActiveId(null)
@@ -394,18 +354,11 @@ export default function AppLayout() {
   }
 
   async function confirmRename() {
-    if (!editingId || !editTitle.trim()) {
-      setEditingId(null)
-      return
-    }
+    if (!editingId || !editTitle.trim()) { setEditingId(null); return }
     try {
       await patch(`/api/conversations/${editingId}`, { title: editTitle.trim() })
-      setConversations((prev) =>
-        prev.map((c) => (c.id === editingId ? { ...c, title: editTitle.trim() } : c))
-      )
-    } catch {
-      toast.error('Failed to rename conversation')
-    }
+      setConversations((prev) => prev.map((c) => (c.id === editingId ? { ...c, title: editTitle.trim() } : c)))
+    } catch { toast.error('Failed to rename conversation') }
     setEditingId(null)
   }
 
@@ -413,57 +366,41 @@ export default function AppLayout() {
     try {
       await del(`/api/conversations/${id}`)
       setConversations((prev) => prev.filter((c) => c.id !== id))
-      if (activeId === id) {
-        setActiveId(null)
-        navigate('/')
-      }
+      if (activeId === id) { setActiveId(null); navigate('/') }
       toast.success('Conversation deleted')
-    } catch {
-      toast.error('Failed to delete conversation')
-    }
+    } catch { toast.error('Failed to delete conversation') }
   }
 
   const handleExport = (id: string, format: 'markdown' | 'json') => {
     const url = `/api/conversations/${id}/export?format=${format}`
-    fetch(url)
-      .then((res) => {
-        if (!res.ok) throw new Error('Export failed')
-        return res.blob()
-      })
-      .then((blob) => {
-        const ext = format === 'json' ? 'json' : 'md'
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = `${id}.${ext}`
-        a.click()
-        URL.revokeObjectURL(a.href)
-        toast.success('Conversation exported')
-      })
-      .catch(() => toast.error('Failed to export conversation'))
+    fetch(url).then(res => res.blob()).then(blob => {
+      const ext = format === 'json' ? 'json' : 'md'
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${id}.${ext}`
+      a.click()
+      URL.revokeObjectURL(a.href)
+      toast.success('Conversation exported')
+    }).catch(() => toast.error('Failed to export conversation'))
   }
 
   const handleBubbleSend = useCallback((content: string, context?: Record<string, any>) => {
     if (!content.trim()) return
-    setMessages((prev) => [...prev, {
-      role: 'user',
-      content,
-      timestamp: new Date().toISOString(),
-    }])
+    setMessages((prev) => [...prev, { role: 'user', content, timestamp: new Date().toISOString() }])
     setThinking(true)
     socketRef.current?.send('chat', {
       content,
       conversation_id: activeId || undefined,
       context: { ...context, ...chatContext },
     })
-  }, [activeId, chatContext, socketRef])
+  }, [activeId, chatContext])
 
   function displayTitle(c: Conversation): string {
     if (c.title) return c.title
     const raw = c.last_message_at || c.started_at
     if (!raw) return 'New chat'
     const date = new Date(raw + 'Z')
-    const short = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-    return `Chat ${short}`
+    return `Chat ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
   }
 
   const filteredConversations = conversations.filter(c => 
@@ -487,27 +424,25 @@ export default function AppLayout() {
 
   async function handleCreateNotebook() {
     try {
-      const res = await post<{ id: string }>('/api/notebooks', { title: 'New Notebook' })
-      setNotebooks(prev => [{ id: res.id, title: 'New Notebook', updated_at: new Date().toISOString() }, ...prev])
+      const res = await post<{ id: string }>('/api/notebooks', { title: 'Untitled Note' })
+      setNotebooks(prev => [{ id: res.id, title: 'Untitled Note', updated_at: new Date().toISOString() }, ...prev])
       navigate(`/notebooks/${res.id}`)
-    } catch {
-      toast.error('Failed to create notebook')
-    }
+    } catch { toast.error('Failed to create notebook') }
   }
 
   async function handleCreateBoard() {
     try {
-      const res = await post<{ id: string }>('/api/kanban/boards', { title: 'New Board' })
-      setBoards(prev => [{ id: res.id, title: 'New Board', updated_at: new Date().toISOString() }, ...prev])
+      const res = await post<{ id: string }>('/api/kanban/boards', { title: 'Untitled Board' })
+      setBoards(prev => [{ id: res.id, title: 'Untitled Board', updated_at: new Date().toISOString() }, ...prev])
       navigate(`/kanban/${res.id}`)
-    } catch {
-      toast.error('Failed to create board')
-    }
+    } catch { toast.error('Failed to create board') }
   }
 
   return (
     <TooltipProvider>
       <div className="flex h-[100dvh] bg-background text-foreground relative overflow-hidden">
+        <QuickSwitcher open={switcherOpen} onOpenChange={setSwitcherOpen} />
+        
         {/* Mobile top bar */}
         {!focusMode && (
           <div className="flex items-center gap-2 p-3 pt-safe border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background">
@@ -522,7 +457,11 @@ export default function AppLayout() {
                 </div>
               ) : agentName}
             </button>
-            <Button variant="ghost" size="icon" aria-label="New chat" className="h-11 w-11 ml-auto" onClick={handleNewChat}>
+            <Button variant="ghost" size="icon" aria-label="New" className="h-11 w-11 ml-auto" onClick={() => {
+              if (isNotebook) handleCreateNotebook()
+              else if (isKanban) handleCreateBoard()
+              else handleNewChat()
+            }}>
               <Plus className="h-5 w-5" />
             </Button>
           </div>
@@ -530,41 +469,33 @@ export default function AppLayout() {
 
         {/* Sidebar */}
         <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col border-r border-border/40 bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'} ${focusMode ? 'lg:hidden' : ''}`}>
-          {/* Top: Logo + New Chat */}
           <div className="flex flex-col gap-2 p-3 mb-2">
-            {(!collapsed || isMobile || isSettings) && (
-              <button 
-                onClick={() => navigate('/')} 
-                className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors text-left truncate"
-              >
-                {agentName}
-              </button>
+            {!collapsed && (
+              <div className="flex items-center justify-between px-3 py-1 mb-1">
+                <span className="text-[10px] font-black tracking-widest uppercase text-muted-foreground/50">
+                  {isNotebook ? 'Notebooks' : isKanban ? 'Boards' : isChat ? 'Chats' : 'Settings'}
+                </span>
+                <div className="flex items-center gap-1">
+                  {!isSettings && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => {
+                      if (isNotebook) handleCreateNotebook()
+                      else if (isKanban) handleCreateBoard()
+                      else handleNewChat()
+                    }}><Plus className="h-4 w-4" /></Button>
+                  )}
+                </div>
+              </div>
             )}
 
-            {/* Workspace Tabs (G-W1) */}
-            {(!collapsed || isMobile) && !isSettings && (
+            {!collapsed && !isSettings && (
+              <button onClick={() => navigate('/')} className="text-lg font-bold tracking-tight px-3 py-1 hover:text-primary transition-colors text-left truncate">{agentName}</button>
+            )}
+
+            {!collapsed && !isSettings && (
               <div className="flex items-center gap-1 px-3 pb-2">
-                <button
-                  onClick={() => navigate('/')}
-                  className={`flex-1 p-2 rounded-md flex items-center justify-center transition-colors ${isChat ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
-                  title="Chat"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => navigate('/notebooks')}
-                  className={`flex-1 p-2 rounded-md flex items-center justify-center transition-colors ${isNotebook ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
-                  title="Notebooks"
-                >
-                  <FileText className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => navigate('/kanban')}
-                  className={`flex-1 p-2 rounded-md flex items-center justify-center transition-colors ${isKanban ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
-                  title="Boards"
-                >
-                  <Columns3 className="h-4 w-4" />
-                </button>
+                <button onClick={() => navigate('/')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isChat ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Chat"><MessageCircle className="h-4 w-4" /></button>
+                <button onClick={() => navigate('/notebooks')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isNotebook ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Notebooks"><FileText className="h-4 w-4" /></button>
+                <button onClick={() => navigate('/kanban')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isKanban ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Boards"><Columns3 className="h-4 w-4" /></button>
               </div>
             )}
 
@@ -577,292 +508,143 @@ export default function AppLayout() {
                 </TooltipTrigger>
                 <TooltipContent side="right">{collapsed ? 'Expand' : 'Collapse'}</TooltipContent>
               </Tooltip>
-              {(!collapsed || isMobile || isSettings) && (
-                <Button variant="secondary" size="sm" className="flex-1 justify-start gap-2 h-8" onClick={handleNewChat}>
+              {(!collapsed || isMobile) && isChat && (
+                <Button variant="secondary" size="sm" className="flex-1 justify-start gap-2 h-8 rounded-lg shadow-sm" onClick={handleNewChat}>
                   <Plus className="h-4 w-4" /> New Chat
                 </Button>
               )}
             </div>
           </div>
 
-          {/* Conversation Search (Chat only) */}
-          {(!collapsed || isMobile) && isChat && (
-            <div className="px-3 pb-2 pt-1 mb-2">
-              <Input 
-                placeholder="Search conversations..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 text-xs bg-muted/50 focus-visible:ring-1"
-              />
+          {!collapsed && isChat && (
+            <div className="px-3 pb-2 pt-1 mb-2 relative group">
+              <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 text-xs bg-muted/40 focus-visible:ring-1 border-none rounded-lg pr-8" />
+              <kbd className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none hidden group-focus-within:inline-flex h-4 select-none items-center gap-1 rounded border bg-muted px-1 font-mono text-[8px] font-medium text-muted-foreground opacity-100">⌘K</kbd>
             </div>
           )}
 
-          {/* Sidebar Content (List) */}
-          {(!collapsed || isMobile || isSettings) && (
-            <ScrollArea className="flex-1 px-2">
+          {!collapsed && (
+            <ScrollArea className="flex-1 px-3">
               <div className="space-y-0.5 pb-4">
                 {isSettings ? (
-                  // Settings Sections
                   SETTINGS_SECTIONS.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => { navigate(`/settings/${s.id}`); setSidebarOpen(false) }}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
-                        currentTab === s.id
-                          ? 'bg-accent text-accent-foreground font-medium'
-                          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                      }`}
-                    >
-                      <s.icon className="h-4 w-4 shrink-0" />
-                      <span>{s.label}</span>
-                    </button>
+                    <button key={s.id} onClick={() => { navigate(`/settings/${s.id}`); setSidebarOpen(false) }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${currentTab === s.id ? 'bg-accent text-accent-foreground font-medium shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}><s.icon className="h-4 w-4 shrink-0" /><span>{s.label}</span></button>
                   ))
                 ) : isNotebook ? (
-                  // Notebook list
                   <div className="space-y-1">
-                    <div className="px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-2">Notebooks</div>
                     {notebooks.map(nb => (
-                      <button
-                        key={nb.id}
-                        onClick={() => { navigate(`/notebooks/${nb.id}`); setSidebarOpen(false) }}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors ${location.pathname.includes(nb.id) ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50'}`}
-                      >
-                        {nb.title}
-                      </button>
+                      <button key={nb.id} onClick={() => { navigate(`/notebooks/${nb.id}`); setSidebarOpen(false) }} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${location.pathname.includes(nb.id) ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50'}`}>{nb.title}</button>
                     ))}
-                    <button 
-                      onClick={handleCreateNotebook}
-                      className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent/50 flex items-center gap-2 transition-colors"
-                    >
-                      <Plus className="h-3 w-3" /> New notebook
-                    </button>
                   </div>
                 ) : isKanban ? (
-                  // Board list
                   <div className="space-y-1">
-                    <div className="px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-2">Boards</div>
                     {boards.map(b => (
-                      <button
-                        key={b.id}
-                        onClick={() => { navigate(`/kanban/${b.id}`); setSidebarOpen(false) }}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors ${location.pathname.includes(b.id) ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50'}`}
-                      >
-                        {b.title}
-                      </button>
+                      <button key={b.id} onClick={() => { navigate(`/kanban/${b.id}`); setSidebarOpen(false) }} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${location.pathname.includes(b.id) ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50'}`}>{b.title}</button>
                     ))}
-                    <button 
-                      onClick={handleCreateBoard}
-                      className="w-full text-left px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-accent/50 flex items-center gap-2 transition-colors"
-                    >
-                      <Plus className="h-3 w-3" /> New board
-                    </button>
                   </div>
                 ) : (
-                  // Conversation list
                   filteredConversations.length === 0 ? (
-                    <div className="px-3 py-6 mt-4 text-center text-sm text-muted-foreground">
-                      {searchQuery ? 'No matching conversations' : 'Start a new conversation'}
-                    </div>
+                    <div className="px-3 py-6 mt-4 text-center text-xs text-muted-foreground italic">No conversations found</div>
                   ) : (
                     filteredConversations.map((c) => (
-                      <div key={c.id} className="group relative">
-                      {editingId === c.id ? (
-                        <div className="flex items-center gap-1 px-1 py-1">
-                          <Input
-                            ref={editInputRef}
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') confirmRename()
-                              if (e.key === 'Escape') setEditingId(null)
-                            }}
-                            className="h-7 text-sm"
-                          />
-                          <Button variant="ghost" size="icon" aria-label="Confirm rename" className="h-7 w-7 shrink-0" onClick={confirmRename}>
-                            <Check className="h-3 w-3" />
-                          </Button>
-                          <Button variant="ghost" size="icon" aria-label="Cancel rename" className="h-7 w-7 shrink-0" onClick={() => setEditingId(null)}>
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleSelectConversation(c.id)}
-                          className={`w-full text-left px-3 py-2 min-h-[44px] rounded-md text-sm truncate transition-colors pr-8 ${
-                            activeId === c.id
-                              ? 'bg-accent text-accent-foreground'
-                              : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                          }`}
-                        >
-                          {displayTitle(c)}
-                        </button>
-                      )}
-                      {editingId !== c.id && (
-                        <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger>
-                              <Button variant="ghost" size="icon" aria-label="Conversation options" className="h-6 w-6">
-                                <MoreHorizontal className="h-3 w-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
-                              <DropdownMenuItem onClick={() => startRename(c)}>
-                                <Pencil className="h-3 w-3 mr-2" /> Rename
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleExport(c.id, 'markdown')}>
-                                <Download className="h-3 w-3 mr-2" /> Export
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => handleDelete(c.id)}
-                                className="text-destructive focus:text-destructive"
-                              >
-                                <Trash2 className="h-3 w-3 mr-2" /> Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      )}
-                    </div>
-                  )))
+                      <div key={c.id} className="group relative mb-0.5">
+                        {editingId === c.id ? (
+                          <div className="flex items-center gap-1 px-1 py-1">
+                            <Input
+                              ref={editInputRef}
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') confirmRename()
+                                if (e.key === 'Escape') setEditingId(null)
+                              }}
+                              className="h-7 text-sm"
+                            />
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={confirmRename}><Check className="h-3 w-3" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingId(null)}><X className="h-3 w-3" /></Button>
+                          </div>
+                        ) : (
+                          <button onClick={() => handleSelectConversation(c.id)} className={`w-full text-left px-3 py-2 min-h-[40px] rounded-lg text-sm truncate transition-colors pr-8 ${activeId === c.id ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}>{displayTitle(c)}</button>
+                        )}
+                        {activeId === c.id && editingId !== c.id && (
+                          <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/20"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-xl">
+                                <DropdownMenuItem onClick={() => startRename(c)}><Pencil className="h-3.5 w-3.5 mr-2" /> Rename</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport(c.id, 'markdown')}><Download className="h-3.5 w-3.5 mr-2" /> Export</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleDelete(c.id)} className="text-destructive"><Trash2 className="h-3.5 w-3.5 mr-2" /> Delete</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )
                 )}
               </div>
             </ScrollArea>
           )}
 
-          {/* Bottom: Settings / Chat Toggle */}
-          <div className="p-3 mt-auto">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => { setSidebarOpen(false); setSearchQuery(''); navigate(isSettings ? '/' : '/settings') }}
-                  className={`flex items-center gap-2 p-2 rounded-md transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground ${collapsed ? 'justify-center' : 'w-10'}`}
-                  aria-label={isSettings ? "Chat" : "Settings"}
-                >
-                  {isSettings ? <MessageCircle className="h-4 w-4 shrink-0" /> : <Settings className="h-4 w-4 shrink-0" />}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">{isSettings ? "Chat" : "Settings"}</TooltipContent>
-            </Tooltip>
+          <div className="p-3 mt-auto border-t border-border/10">
+            <button onClick={() => { setSidebarOpen(false); navigate('/settings') }} className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition-all ${isSettings ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground hover:bg-muted'}`}>
+              <Settings className="h-4 w-4 shrink-0" />
+              {!collapsed && <span className="text-sm font-bold">Settings</span>}
+            </button>
           </div>
         </aside>
 
-        {/* Backdrop for mobile sidebar */}
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm transition-all duration-200 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
+        {sidebarOpen && <div className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
-        {/* Main layout container */}
         <div className="flex-1 flex overflow-hidden relative">
           <main className={`flex-1 flex flex-col min-w-0 overflow-hidden pt-[52px] lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
             <ErrorBoundary>
               {artifactPanelOpen ? (
-                <ChatPanel
-                  activeConversationId={activeId}
-                  socketRef={socketRef}
-                  connected={connected}
-                  chatContext={chatContext}
-                  isSidePanel={false}
-                />
+                <ChatPanel activeConversationId={activeId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={false} />
               ) : (
                 <Outlet context={{
-                  activeConversationId: activeId,
-                  setActiveId,
-                  refreshConversations: loadConversations,
-                  socketRef,
-                  connected,
-                  hasNewEmail,
-                  setHasNewEmail,
-                  setChatPanelOpen,
-                  artifactPanelOpen,
-                  setArtifactPanelOpen,
-                  activeArtifactId,
-                  setActiveArtifactId,
-                  setChatContext,
-                  isMobile,
-                  setPageContextData,
-                  messages,
-                  setMessages,
-                  streamingContent,
-                  setStreamingContent,
-                  thinking,
-                  setThinking,
-                  status,
-                  setStatus,
-                  queuedCount,
-                  setQueuedCount,
-                  suggestedActions,
-                  setSuggestedActions,
-                  playTTS,
-                  stopTTS,
-                  isTTSPlaying,
-                  focusMode,
-                  setFocusMode,
+                  activeConversationId: activeId, setActiveId, refreshConversations: loadConversations,
+                  socketRef, connected, hasNewEmail, setHasNewEmail, setChatPanelOpen,
+                  artifactPanelOpen, setArtifactPanelOpen, activeArtifactId, setActiveArtifactId,
+                  setChatContext, isMobile, setPageContextData, messages, setMessages,
+                  streamingContent, setStreamingContent, thinking, setThinking, status, setStatus,
+                  queuedCount, setQueuedCount, suggestedActions, setSuggestedActions,
+                  playTTS, stopTTS, isTTSPlaying, focusMode, setFocusMode,
                 }} />
               )}
             </ErrorBoundary>
           </main>
           
-          {/* Contextual Chat Panel (Cowork mode) */}
           {chatPanelOpen && !artifactPanelOpen && (
-            <aside className="fixed inset-0 z-50 lg:static lg:border-l lg:border-border/40 lg:w-[400px] lg:min-w-[400px] bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
-              <ChatPanel
-                activeConversationId={activeId}
-                socketRef={socketRef}
-                connected={connected}
-                chatContext={chatContext}
-                isSidePanel={true}
-                onClose={() => setChatPanelOpen(false)}
-              />
+            <aside className="fixed inset-0 z-50 lg:static lg:border-l lg:border-border/40 lg:w-[400px] lg:min-w-[400px] bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 shadow-2xl">
+              <ChatPanel activeConversationId={activeId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={true} onClose={() => setChatPanelOpen(false)} />
             </aside>
           )}
 
-          {/* Artifact Preview Panel / Bottom Sheet */}
           {artifactPanelOpen && activeArtifactId && (
             <>
               {isMobile ? (
-                <>
-                  <div 
-                    className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm animate-in fade-in duration-300"
-                    onClick={() => setArtifactPanelOpen(false)}
-                  />
-                  <aside className="fixed inset-x-0 bottom-0 z-50 h-[80vh] bg-background border-t border-border/40 rounded-t-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 ease-out">
-                    <div className="w-12 h-1 bg-muted rounded-full mx-auto my-3 shrink-0" />
-                    <ArtifactPreview 
-                      artifactId={activeArtifactId} 
-                      onClose={() => setArtifactPanelOpen(false)} 
-                    />
-                  </aside>
-                </>
+                <aside className="fixed inset-x-0 bottom-0 z-50 h-[85vh] bg-background border-t border-border/40 rounded-t-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 ease-out">
+                  <div className="w-12 h-1 bg-muted rounded-full mx-auto my-3 shrink-0" />
+                  <ArtifactPreview artifactId={activeArtifactId} onClose={() => setArtifactPanelOpen(false)} />
+                </aside>
               ) : (
-                <aside className="fixed inset-0 z-50 lg:static lg:flex-1 lg:min-w-0 bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
-                  <ArtifactPreview 
-                    artifactId={activeArtifactId} 
-                    onClose={() => setArtifactPanelOpen(false)} 
-                  />
+                <aside className="fixed inset-0 z-50 lg:static lg:flex-1 lg:min-w-0 bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 shadow-inner">
+                  <ArtifactPreview artifactId={activeArtifactId} onClose={() => setArtifactPanelOpen(false)} />
                 </aside>
               )}
             </>
           )}
         </div>
 
-        {/* Floating Assistant Bubble (G-B1) */}
         {!isChat && !chatPanelOpen && assistantConfig.enabled && (
           <FloatingBubble
-            socketRef={socketRef}
-            connected={connected}
-            activeConversationId={activeId}
-            messages={messages}
-            onSend={handleBubbleSend}
+            socketRef={socketRef} connected={connected} activeConversationId={activeId}
+            messages={messages} onSend={handleBubbleSend}
             pageContext={{ page: location.pathname.split('/')[1] || 'home', ...pageContextData } as any}
-            assistantConfig={assistantConfig}
-            agentName={agentName}
-            ttsAvailable={assistantConfig.enabled} 
-            sttAvailable={connected}
-            playTTS={playTTS}
+            assistantConfig={assistantConfig} agentName={agentName}
+            ttsAvailable={assistantConfig.enabled} sttAvailable={connected} playTTS={playTTS}
           />
         )}
       </div>

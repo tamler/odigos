@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { ArrowUp, Mic } from 'lucide-react'
+import { ArrowUp, Mic, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ChatSocket } from '@/lib/ws'
 import { Markdown } from '@/components/ui/markdown'
@@ -17,7 +17,7 @@ interface AgentInputBarProps {
 
 export function AgentInputBar({
   agentName,
-  placeholder = "Ask about this workspace...",
+  placeholder,
   pageContext,
   socketRef,
   connected,
@@ -78,48 +78,62 @@ export function AgentInputBar({
     setResponse(null)
   }, [input, connected, pageContext, socketRef])
 
+  // Handle global Escape to close response or blur input
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (response) setResponse(null)
+        else setFocused(false)
+      }
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [response])
+
   return (
-    <div className="relative w-full max-w-2xl mx-auto px-4 pb-4">
-      {/* Response Popover (G-W4) */}
-      {response && (
-        <div className="absolute bottom-full left-0 right-0 mx-4 mb-4 max-h-[400px] overflow-y-auto rounded-2xl border border-border/40 bg-background/95 backdrop-blur-md p-5 shadow-2xl animate-in slide-in-from-bottom-2 duration-300 z-50">
+    <div className="relative w-full max-w-2xl mx-auto px-4 pb-6">
+      {/* Response Area (G-W4) */}
+      <div className={`overflow-hidden transition-all duration-500 ease-in-out ${response ? 'max-h-[500px] opacity-100 mb-4' : 'max-h-0 opacity-0'}`}>
+        <div className="rounded-2xl border border-border/40 bg-background/95 backdrop-blur-md p-5 shadow-xl relative group/resp">
+          <button 
+            onClick={() => setResponse(null)}
+            className="absolute top-3 right-3 p-1 rounded-md opacity-0 group-hover/resp:opacity-100 hover:bg-muted transition-all"
+            title="Dismiss (Esc)"
+          >
+            <X className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <Markdown>{response}</Markdown>
+            <Markdown>{response || ''}</Markdown>
           </div>
-          <div className="flex items-center justify-end mt-4 pt-3 border-t border-border/20 gap-3">
-            <button 
-              onClick={() => setResponse(null)} 
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Dismiss
-            </button>
+          <div className="flex items-center justify-end mt-4 pt-3 border-t border-border/10 gap-3">
             <Button 
               size="sm" 
-              variant="secondary"
-              className="h-8 text-xs font-bold"
+              variant="ghost"
+              className="h-7 text-[11px] font-bold text-muted-foreground hover:text-foreground"
               onClick={() => {
-                // Navigate to main chat
-                navigate('/')
+                navigate(`/`) 
               }}
             >
               Continue in chat
             </Button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Input Bar */}
-      <div className={`rounded-2xl border transition-all duration-200 ${focused ? 'border-primary/50 bg-background shadow-lg ring-4 ring-primary/5' : 'border-border/40 bg-muted/30 hover:border-border/80'}`}>
+      <div className={`rounded-2xl border transition-all duration-300 ${focused ? 'border-primary/40 bg-background shadow-2xl ring-4 ring-primary/5' : 'border-border/40 bg-muted/20 hover:border-border/60 hover:bg-muted/30 shadow-sm'}`}>
         {!focused ? (
           <div 
-            className="flex items-center justify-between px-4 py-3 cursor-pointer"
+            className="flex items-center justify-between px-5 py-3 cursor-pointer group"
             onClick={() => setFocused(true)}
           >
-            <div className="flex items-center gap-2 overflow-hidden">
-              <span className="font-bold text-sm text-primary shrink-0">{agentName}</span>
-              <span className="text-sm text-muted-foreground truncate">type / or click to ask...</span>
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="h-6 w-6 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                <span className="text-[10px] font-black text-primary">{agentName[0]}</span>
+              </div>
+              <span className="text-sm text-muted-foreground/80 font-medium truncate italic">{placeholder || `Ask ${agentName}...`} <span className="ml-2 text-[10px] not-italic opacity-0 group-hover:opacity-100 transition-opacity font-bold uppercase tracking-widest text-muted-foreground/40">(Press /)</span></span>
             </div>
-            {sttAvailable && <Mic className="h-4 w-4 text-muted-foreground/60" />}
+            {sttAvailable && <Mic className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary transition-colors" />}
           </div>
         ) : (
           <div className="flex flex-col">
@@ -127,41 +141,43 @@ export function AgentInputBar({
               <textarea
                 ref={inputRef}
                 value={input}
-                onChange={e => setInput(e.target.value)}
+                onChange={e => {
+                  setInput(e.target.value)
+                  // Auto-resize
+                  e.target.style.height = 'auto'
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`
+                }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()
                     send()
                   }
-                  if (e.key === 'Escape') {
-                    setFocused(false)
-                  }
                 }}
-                placeholder={placeholder}
-                className="flex-1 bg-transparent border-none resize-none text-sm focus:outline-none min-h-[40px] py-1"
+                placeholder={placeholder || `What's on your mind, ${agentName}?`}
+                className="flex-1 bg-transparent border-none resize-none text-sm focus:outline-none min-h-[40px] py-1 custom-scrollbar"
                 rows={1}
               />
             </div>
             <div className="flex items-center justify-between px-3 pb-2">
               <div className="flex items-center">
                 {sttAvailable && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
                     <Mic className="h-4 w-4" />
                   </Button>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="h-8 text-xs text-muted-foreground"
+                  className="h-8 text-[11px] font-bold text-muted-foreground"
                   onClick={() => setFocused(false)}
                 >
-                  Cancel
+                  Close
                 </Button>
                 <Button 
                   size="icon" 
-                  className="h-8 w-8 rounded-xl"
+                  className="h-8 w-8 rounded-xl shadow-lg shadow-primary/20"
                   disabled={!input.trim() || waiting}
                   onClick={send}
                 >

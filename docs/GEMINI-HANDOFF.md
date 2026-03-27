@@ -691,4 +691,12 @@ Build pipeline passing completely. No downstream regressions. Ready for manual r
 - Refactor: Lifted conversation state (messages, streaming, thinking) to `AppLayout` to keep chat and bubble in perfect sync.
 - Build verified: Production build optimized and passing.
 
+### 2026-03-27 (Gemini - Workspace Redesign)
+- G-W1: Implemented Universal Contextual Sidebar. Sidebar header and list content now dynamically switch between Chats, Notes, and Boards based on current route.
+- G-W2: Upgraded Notebook Editor to "Obsidian-lite" experience. Replaced the multi-entry list with a single, continuous Tiptap Markdown editor with consolidated auto-save to the entries backend.
+- G-W3: Added Global Quick Switcher (Cmd+K). Implemented a command palette for searching across conversations, notebooks, and boards with keyboard navigation.
+- G-W4: Polished Agent Input Bar. Refined UI with expanding response popover, Esc-to-dismiss, and enhanced page context propagation.
+- G-W5: Extended UI Action system to support explicit navigation to workspace items (`navigate-to-notebook`, `navigate-to-board`).
+- Build verified: Production build passing with zero TypeScript errors.
+
 ---
