@@ -29,5 +29,25 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Chat",
+      "short_name": "Chat",
+      "url": "/",
+      "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "Journal",
+      "short_name": "Journal",
+      "url": "/notebooks",
+      "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "Board",
+      "short_name": "Board",
+      "url": "/kanban",
+      "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]
+    }
   ]
 }

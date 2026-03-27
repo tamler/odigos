@@ -69,6 +69,7 @@ from odigos.api.kanban import router as kanban_router
 from odigos.api.artifacts import router as artifacts_router
 from odigos.api.mesh import router as mesh_router
 from odigos.api.report import router as report_router
+from odigos.api.push import router as push_router
 from odigos.api.sharing import router as sharing_router, public_router as sharing_public_router
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
@@ -416,6 +417,13 @@ async def lifespan(app: FastAPI):
     app.state.config_path = config_path
     app.state.env_path = ".env"
     app.state.upload_dir = "data/uploads"
+
+    # Initialize VAPID keys for web push notifications
+    from odigos.core.webpush import get_or_create_vapid_keys
+    vapid_keys = get_or_create_vapid_keys()
+    app.state.vapid_keys = vapid_keys
+    if vapid_keys:
+        logger.info("VAPID keys loaded for web push notifications")
 
     app.state.stt_provider = create_stt_provider(
         voice_config=settings.voice,
@@ -814,8 +822,12 @@ async def lifespan(app: FastAPI):
     if reminder_tool:
         reminder_tool.scheduler = scheduler
 
-    # Initialize notifier
-    notifier = Notifier(channel_registry=channel_registry)
+    # Initialize notifier (with web push support if VAPID keys available)
+    notifier = Notifier(
+        channel_registry=channel_registry,
+        db=_db,
+        vapid_keys=vapid_keys,
+    )
     app.state.notifier = notifier
     logger.info("Notifier initialized")
 
@@ -971,6 +983,7 @@ app.include_router(kanban_router)
 app.include_router(artifacts_router)
 app.include_router(mesh_router)
 app.include_router(report_router)
+app.include_router(push_router)
 app.include_router(sharing_router)
 app.include_router(sharing_public_router)
 

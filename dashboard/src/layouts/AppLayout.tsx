@@ -50,6 +50,7 @@ import { toast } from 'sonner'
 import { executeActions, UIAction } from '@/lib/actions'
 import { useTheme } from 'next-themes'
 import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
+import { subscribeToPush } from '@/lib/push'
 
 interface Conversation {
   id: string
@@ -441,6 +442,16 @@ export default function AppLayout() {
     )
     socket.connect()
     socketRef.current = socket
+
+    // Request push notification permission and subscribe
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then((perm) => {
+        if (perm === 'granted') subscribeToPush()
+      })
+    } else if (Notification.permission === 'granted') {
+      subscribeToPush()
+    }
+
     return () => socket.disconnect()
   }, [loadConversations, playTTS])
 

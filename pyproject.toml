@@ -30,6 +30,8 @@ dependencies = [
     "edge-tts>=6.0.0",
     "groq>=0.4.0",
     "webrtcvad-wheels>=2.0.14",
+    "pywebpush>=2.3.0",
+    "py-vapid>=1.9.4",
 ]
 
 [project.optional-dependencies]
