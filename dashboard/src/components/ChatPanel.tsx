@@ -128,6 +128,13 @@ export const ChatPanel = memo(({
   })
   const handleSendRef = useRef<((text: string) => void) | null>(null)
 
+  // Auto-enter voice mode from PWA shortcut (?voice=1)
+  useEffect(() => {
+    if (searchParams.get('voice') === '1' && sttAvailable && !voiceMode.active) {
+      voiceMode.enter()
+    }
+  }, [searchParams, sttAvailable])
+
   // Sync voice mode phase with agent status
   useEffect(() => {
     if (!voiceMode.active) return
@@ -482,10 +489,18 @@ export const ChatPanel = memo(({
                           <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
                             <Markdown>{streamingContent}</Markdown>
                           </div>
+                          {isStreaming && (
+                            <div className="flex items-center gap-2 mt-2 pb-1">
+                              <Loader variant="typing" size="sm" />
+                              <span className="text-[10px] text-muted-foreground/60">
+                                {status || 'Generating...'}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
 
-                      {thinking && (
+                      {thinking && !streamingContent && (
                         <div className="flex items-center gap-2">
                           <Loader variant="typing" />
                           <span className="text-xs text-muted-foreground animate-pulse">

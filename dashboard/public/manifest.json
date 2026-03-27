@@ -48,6 +48,12 @@
       "short_name": "Board",
       "url": "/kanban",
       "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "Voice Memo",
+      "short_name": "Voice",
+      "url": "/?voice=1",
+      "icons": [{"src": "/icon-192.png", "sizes": "192x192"}]
     }
   ]
 }

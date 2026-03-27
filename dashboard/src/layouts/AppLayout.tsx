@@ -588,10 +588,10 @@ export default function AppLayout() {
                 </div>
               ) : agentName}
             </button>
-            <Button variant="ghost" size="icon" aria-label="New" className="h-11 w-11 ml-auto" onClick={() => {
-              if (isNotebook) handleCreateNotebook()
-              else if (isKanban) handleCreateBoard()
-              else handleNewChat()
+            <Button variant="ghost" size="icon" aria-label={isNotebook ? 'New Note' : isKanban ? 'New Board' : 'New Chat'} className="h-11 w-11 ml-auto" onClick={() => {
+              if (isNotebook) { handleCreateNotebook(); toast.success('Note created') }
+              else if (isKanban) { handleCreateBoard(); toast.success('Board created') }
+              else { handleNewChat(); toast.success('New chat') }
             }}>
               <Plus className="h-5 w-5" />
             </Button>
