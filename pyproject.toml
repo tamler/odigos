@@ -32,6 +32,8 @@ dependencies = [
     "webrtcvad-wheels>=2.0.14",
     "pywebpush>=2.3.0",
     "py-vapid>=1.9.4",
+    "deep-translator>=1.11.4",
+    "webauthn",
 ]
 
 [project.optional-dependencies]

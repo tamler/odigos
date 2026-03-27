@@ -4,12 +4,26 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/PasswordInput'
-import { login, setup, changePassword } from '@/lib/auth'
+import { login, setup, changePassword, webauthnLoginBegin, webauthnLoginComplete } from '@/lib/auth'
 
 interface Props {
   setupRequired: boolean
   mustChangePassword: boolean
   onAuth: () => void
+}
+
+function base64urlToBuffer(base64url: string): ArrayBuffer {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4))
+  const binary = atob(base64 + pad)
+  return Uint8Array.from(binary, c => c.charCodeAt(0)).buffer
+}
+
+function bufferToBase64url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  bytes.forEach(b => binary += String.fromCharCode(b))
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
 export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth }: Props) {
@@ -68,6 +82,45 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
       onAuth()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to change password')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleBiometricLogin() {
+    setError('')
+    setLoading(true)
+    try {
+      const options = await webauthnLoginBegin()
+      const publicKey: PublicKeyCredentialRequestOptions = {
+        challenge: base64urlToBuffer(options.challenge),
+        timeout: options.timeout,
+        rpId: options.rpId,
+        allowCredentials: (options.allowCredentials || []).map((c: any) => ({
+          id: base64urlToBuffer(c.id),
+          type: c.type,
+          transports: c.transports,
+        })),
+        userVerification: options.userVerification,
+      }
+      const assertion = await navigator.credentials.get({ publicKey }) as PublicKeyCredential
+      if (!assertion) throw new Error('No credential returned')
+      const assertionResponse = assertion.response as AuthenticatorAssertionResponse
+      const credential = {
+        id: assertion.id,
+        rawId: bufferToBase64url(assertion.rawId),
+        type: assertion.type,
+        response: {
+          authenticatorData: bufferToBase64url(assertionResponse.authenticatorData),
+          clientDataJSON: bufferToBase64url(assertionResponse.clientDataJSON),
+          signature: bufferToBase64url(assertionResponse.signature),
+          userHandle: assertionResponse.userHandle ? bufferToBase64url(assertionResponse.userHandle) : null,
+        },
+      }
+      await webauthnLoginComplete(credential)
+      onAuth()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Biometric login failed')
     } finally {
       setLoading(false)
     }
@@ -184,6 +237,18 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
             <Button type="submit" className="w-full" disabled={loading || !username || !password}>
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
+            {typeof window !== 'undefined' && window.PublicKeyCredential && (
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  onClick={handleBiometricLogin}
+                  disabled={loading}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Sign in with biometrics
+                </button>
+              </div>
+            )}
           </form>
         </CardContent>
       </Card>

@@ -71,6 +71,11 @@ from odigos.api.mesh import router as mesh_router
 from odigos.api.report import router as report_router
 from odigos.api.push import router as push_router
 from odigos.api.sharing import router as sharing_router, public_router as sharing_public_router
+try:
+    from odigos.api.webauthn import router as webauthn_router
+    _HAS_WEBAUTHN = True
+except ImportError:
+    _HAS_WEBAUTHN = False
 from odigos.tools.decompose import DecomposeQueryTool
 from odigos.tools.notify import NotifyTool
 from odigos.tools.peer import MessagePeerTool
@@ -277,6 +282,11 @@ async def _register_tools(
     from odigos.tools.workspace_search import WorkspaceSearchTool
     tool_registry.register(WorkspaceSearchTool(db=db))
     logger.info("Workspace search tool registered")
+
+    # Translation tool
+    from odigos.tools.translate import TranslateTool
+    tool_registry.register(TranslateTool())
+    logger.info("Translation tool registered")
 
     # Feed publish tool
     if settings.feed.enabled:
@@ -986,6 +996,8 @@ app.include_router(report_router)
 app.include_router(push_router)
 app.include_router(sharing_router)
 app.include_router(sharing_public_router)
+if _HAS_WEBAUTHN:
+    app.include_router(webauthn_router)
 
 
 @app.get("/health")

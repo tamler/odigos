@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { get, put } from '@/lib/api'
-import { changePassword, logout } from '@/lib/auth'
+import { changePassword, logout, webauthnRegisterBegin, webauthnRegisterComplete } from '@/lib/auth'
 import { toast } from 'sonner'
 import { Copy, LogOut } from 'lucide-react'
 import { PasswordInput } from '@/components/PasswordInput'
@@ -44,6 +44,20 @@ function SectionCard({ title, children }: { title: string; children: React.React
       </div>
     </div>
   )
+}
+
+function base64urlToBuffer(base64url: string): ArrayBuffer {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4))
+  const binary = atob(base64 + pad)
+  return Uint8Array.from(binary, c => c.charCodeAt(0)).buffer
+}
+
+function bufferToBase64url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  bytes.forEach(b => binary += String.fromCharCode(b))
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
 export default function AccountTab({ active }: Props) {
@@ -118,6 +132,45 @@ export default function AccountTab({ active }: Props) {
       window.location.href = '/login'
     } catch {
       toast.error('Failed to log out')
+    }
+  }
+
+  async function handleRegisterBiometric() {
+    try {
+      const options = await webauthnRegisterBegin()
+      const publicKey: PublicKeyCredentialCreationOptions = {
+        challenge: base64urlToBuffer(options.challenge),
+        rp: options.rp,
+        user: {
+          ...options.user,
+          id: base64urlToBuffer(options.user.id),
+        },
+        pubKeyCredParams: options.pubKeyCredParams,
+        timeout: options.timeout,
+        excludeCredentials: (options.excludeCredentials || []).map((c: any) => ({
+          id: base64urlToBuffer(c.id),
+          type: c.type,
+          transports: c.transports,
+        })),
+        authenticatorSelection: options.authenticatorSelection,
+        attestation: options.attestation,
+      }
+      const cred = await navigator.credentials.create({ publicKey }) as PublicKeyCredential
+      if (!cred) throw new Error('No credential created')
+      const attestation = cred.response as AuthenticatorAttestationResponse
+      const credential = {
+        id: cred.id,
+        rawId: bufferToBase64url(cred.rawId),
+        type: cred.type,
+        response: {
+          attestationObject: bufferToBase64url(attestation.attestationObject),
+          clientDataJSON: bufferToBase64url(attestation.clientDataJSON),
+        },
+      }
+      await webauthnRegisterComplete(credential)
+      toast.success('Biometric login registered')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Registration failed')
     }
   }
 
@@ -250,6 +303,20 @@ export default function AccountTab({ active }: Props) {
           </Button>
         </div>
       </SectionCard>
+
+      {/* Biometric Login */}
+      {typeof window !== 'undefined' && window.PublicKeyCredential && (
+        <SectionCard title="Biometric Login">
+          <p className="text-sm text-muted-foreground">
+            Use fingerprint or Face ID to sign in without a password.
+          </p>
+          <div className="flex justify-end">
+            <Button onClick={handleRegisterBiometric} size="sm">
+              Register Biometrics
+            </Button>
+          </div>
+        </SectionCard>
+      )}
 
       {/* API Key */}
       <SectionCard title="API Key">

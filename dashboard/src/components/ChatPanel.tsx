@@ -99,7 +99,9 @@ export const ChatPanel = memo(({
   } = outletCtx
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
-  const [inputValue, setInputValue] = useState('')
+  const [inputValue, setInputValue] = useState(
+    () => localStorage.getItem('odigos-draft') || ''
+  )
   const [pendingFiles, setPendingFiles] = useState<{ file: File; id?: string; uploading?: boolean; progress?: number }[]>([])
   const [sttAvailable, setSttAvailable] = useState(false)
   const [ttsAvailable, setTtsAvailable] = useState(false)
@@ -209,6 +211,15 @@ export const ChatPanel = memo(({
     if (!ta) return
     ta.style.height = 'auto'
     ta.style.height = Math.min(ta.scrollHeight, 200) + 'px'
+  }, [inputValue])
+
+  // Persist draft to localStorage
+  useEffect(() => {
+    if (inputValue) {
+      localStorage.setItem('odigos-draft', inputValue)
+    } else {
+      localStorage.removeItem('odigos-draft')
+    }
   }, [inputValue])
 
   // Timeout fallback for thinking state
@@ -347,6 +358,7 @@ export const ChatPanel = memo(({
     })
 
     setInputValue('')
+    localStorage.removeItem('odigos-draft')
     setPendingFiles([])
   }, [inputValue, pendingFiles, activeConversationId, chatContext, socketRef, setMessages, setThinking, setSuggestedActions])
 

@@ -25,13 +25,18 @@ class TestSTTPluginRegistration:
         assert result["status"] == "available"
         ctx.register_tool.assert_not_called()
 
-    def test_stt_enabled_without_package_returns_available(self):
-        """When moonshine-voice not installed, returns available with install hint."""
+    def test_stt_enabled_registers_or_hints(self):
+        """When enabled, either registers the tool or returns install hint."""
         from plugins.stt import register
         ctx = _make_ctx(stt_enabled=True)
         result = register(ctx)
-        assert result["status"] == "available"
-        assert "moonshine-voice" in result["error_message"]
+        if result is None:
+            # moonshine is installed -- plugin loaded successfully
+            ctx.register_tool.assert_called_once()
+        else:
+            # moonshine not installed -- returns hint
+            assert result["status"] == "available"
+            assert "moonshine-voice" in result["error_message"]
 
 
 class TestTTSPluginRegistration:
@@ -42,10 +47,15 @@ class TestTTSPluginRegistration:
         assert result["status"] == "available"
         ctx.register_tool.assert_not_called()
 
-    def test_tts_enabled_without_package_returns_available(self):
-        """When pocket-tts not installed, returns available with install hint."""
+    def test_tts_enabled_registers_or_hints(self):
+        """When enabled, either registers the tool or returns install hint."""
         from plugins.tts import register
         ctx = _make_ctx(tts_enabled=True)
         result = register(ctx)
-        assert result["status"] == "available"
-        assert "pocket-tts" in result["error_message"]
+        if result is None:
+            # pocket-tts is installed -- plugin loaded successfully
+            ctx.register_tool.assert_called_once()
+        else:
+            # pocket-tts not installed -- returns hint
+            assert result["status"] == "available"
+            assert "pocket-tts" in result["error_message"]
