@@ -101,17 +101,32 @@ async def update_artifact_content(
 @router.get("/{artifact_id}/download")
 async def download_artifact(artifact_id: str, db=Depends(get_db)):
     """Download an artifact file."""
-    row = await db.fetch_one("SELECT * FROM artifacts WHERE id = ?", (artifact_id,))
+    row = await db.fetch_one(
+        "SELECT * FROM artifacts WHERE id = ?", (artifact_id,),
+    )
     if not row:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+        raise HTTPException(status_code=404, detail="Not found")
 
-    file_path = ARTIFACTS_DIR / artifact_id / row["filename"]
+    filename = row["filename"]
+    file_path = ARTIFACTS_DIR / artifact_id / filename
+
+    # Fallback: check data/files (uploads and generated images)
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Artifact file missing from disk")
+        files_dir = Path("data/files")
+        for candidate in files_dir.glob(f"{artifact_id}_*"):
+            file_path = candidate
+            break
+        else:
+            alt = files_dir / filename
+            if alt.exists():
+                file_path = alt
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File missing")
 
     return FileResponse(
         path=str(file_path),
-        filename=row["filename"],
+        filename=filename,
         media_type=row["content_type"],
     )
 

@@ -142,14 +142,33 @@ async def upload_file(
             logger.warning("Ingestion failed for %s", safe_name, exc_info=True)
             status = "failed"
 
+    # Create artifact record so file appears in Documents/Images
+    import mimetypes as _mt
+    from datetime import datetime, timezone
+    content_type = _mt.guess_type(safe_name)[0] or "application/octet-stream"
+    artifact_id = file_id
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        await db.execute(
+            "INSERT OR IGNORE INTO artifacts "
+            "(id, filename, content_type, file_size, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (artifact_id, safe_name, content_type, len(content), now),
+        )
+    except Exception:
+        logger.debug("Artifact record creation failed", exc_info=True)
+
     result = {
         "id": file_id,
+        "artifact_id": artifact_id,
         "document_id": doc_id,
         "filename": file.filename,
         "size": len(content),
+        "content_type": content_type,
         "chunk_count": chunk_count,
         "status": status,
         "content_preview": extracted_text[:PREVIEW_CHARS] if extracted_text else None,
+        "download_url": f"/api/artifacts/{artifact_id}/download",
     }
     if storage_warning:
         result["storage_warning"] = storage_warning
