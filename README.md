@@ -117,6 +117,9 @@ Google Workspace (Gmail, Calendar, Drive), browser automation, MCP server integr
 ### Speak and listen
 Full voice mode: mic button records audio, transcribes it server-side, and edge-tts reads responses aloud. In continuous voice mode, the agent listens, transcribes, responds, and speaks in a loop -- hands-free conversation. 30 selectable voices, per-message speak buttons, and automatic TTS when voice mode is active. STT defaults to Groq Whisper but the provider is configurable -- additional STT plugins are planned.
 
+### Install as an app (PWA)
+Odigos is a Progressive Web App. On mobile or desktop, "Add to Home Screen" and it runs full-screen without browser chrome. Push notifications reach you when the app is closed -- task reminders, email alerts, follow-ups, morning briefings. Long-press the app icon for shortcuts: New Chat, Journal, Board, Voice Memo. Biometric login (fingerprint/Face ID) via WebAuthn passkeys -- register once, sign in without typing a password.
+
 ### Cross-channel awareness
 Switch between web dashboard, Telegram, and API without losing context. The agent knows what you were last talking about regardless of which channel you were on.
 
@@ -259,6 +262,8 @@ The web dashboard features:
 - **Contextual links** below the chat input for quick access to Journal, Board, Documents
 - **Settings** with analytics, mesh status, peer configuration, and all agent settings
 - **Keyboard shortcuts** -- Escape, Cmd+K, Cmd+N, `/` to focus agent input
+- **PWA** -- installable on mobile and desktop, push notifications, app shortcuts, biometric login
+- **Draft persistence** -- unsent messages survive tab closes and disconnects
 - **Dark/light theme**
 - **Mobile responsive**
 
