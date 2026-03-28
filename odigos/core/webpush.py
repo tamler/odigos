@@ -16,21 +16,32 @@ def get_or_create_vapid_keys() -> dict:
         return json.loads(VAPID_KEYS_PATH.read_text())
 
     try:
+        import base64
         from py_vapid import Vapid
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding,
+            PublicFormat,
+        )
 
         vapid = Vapid()
         vapid.generate_keys()
+        raw_pub = vapid.public_key.public_bytes(
+            encoding=Encoding.X962,
+            format=PublicFormat.UncompressedPoint,
+        )
+        pub_b64 = base64.urlsafe_b64encode(raw_pub).rstrip(b"=").decode()
         keys = {
             "private_key": vapid.private_pem().decode(),
-            "public_key": vapid.public_key_urlsafe_base64(),
+            "public_key": pub_b64,
         }
         VAPID_KEYS_PATH.parent.mkdir(parents=True, exist_ok=True)
         VAPID_KEYS_PATH.write_text(json.dumps(keys))
         logger.info("Generated new VAPID keys")
         return keys
-    except ImportError:
+    except (ImportError, Exception) as exc:
         logger.warning(
-            "pywebpush not installed, push notifications disabled"
+            "VAPID key generation failed, push notifications disabled: %s",
+            exc,
         )
         return {}
 
