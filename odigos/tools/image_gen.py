@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 
@@ -55,12 +56,14 @@ class GenerateImageTool(BaseTool):
         nsfw_filter: bool = True,
         max_poll_seconds: int = 120,
         output_dir: str = "data/files",
+        db=None,
     ):
         self._api_key = api_key
         self._default_ratio = default_ratio
         self._nsfw_filter = nsfw_filter
         self._max_poll = max_poll_seconds
         self._output_dir = output_dir
+        self._db = db
 
     async def execute(self, params: dict) -> ToolResult:
         prompt = (params.get("prompt") or "").strip()
@@ -93,19 +96,38 @@ class GenerateImageTool(BaseTool):
                     error="Image generation timed out or failed",
                 )
 
-            filename = f"generated_{uuid.uuid4().hex[:8]}.png"
+            artifact_id = uuid.uuid4().hex
+            filename = f"generated_{artifact_id[:8]}.png"
             filepath = await self._download_image(
                 image_url, filename,
             )
+            file_size = os.path.getsize(filepath)
+
+            # Register in artifacts database
+            if self._db:
+                now = datetime.now(timezone.utc).isoformat()
+                await self._db.execute(
+                    "INSERT INTO artifacts "
+                    "(id, filename, content_type, "
+                    "file_size, created_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (artifact_id, filename,
+                     "image/png", file_size, now),
+                )
 
             return ToolResult(
                 success=True,
-                data=f"Image generated: {filename}",
+                data=f"Image generated: {filename}"
+                f" ({file_size} bytes)",
                 side_effect={
                     "artifact": {
+                        "id": artifact_id,
                         "filename": filename,
                         "content_type": "image/png",
-                        "download_url": f"/api/files/{filename}",
+                        "file_size": file_size,
+                        "download_url":
+                            f"/api/artifacts/"
+                            f"{artifact_id}/download",
                         "path": filepath,
                     }
                 },

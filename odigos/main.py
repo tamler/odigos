@@ -187,8 +187,9 @@ async def _register_tools(
     logger.info("Kanban tools initialized")
 
     # Artifact tool
-    from odigos.tools.artifact import CreateArtifactTool
+    from odigos.tools.artifact import CreateArtifactTool, DeleteArtifactTool
     tool_registry.register(CreateArtifactTool(db=db))
+    tool_registry.register(DeleteArtifactTool(db=db))
     logger.info("Artifact tool initialized")
 
     # Suggest actions tool
@@ -331,6 +332,7 @@ async def _register_tools(
             max_poll_seconds=(
                 settings.image_generation.max_poll_seconds
             ),
+            db=_db,
         ))
         logger.info(
             "Image generation tool registered (Z-Image)"

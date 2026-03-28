@@ -132,3 +132,71 @@ class CreateArtifactTool(BaseTool):
                 },
             },
         )
+
+
+class DeleteArtifactTool(BaseTool):
+    name = "delete_artifact"
+    description = (
+        "Delete a file or image by its filename or artifact ID. "
+        "Use this when the user asks to remove, delete, or clean "
+        "up a generated image or file."
+    )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "filename": {
+                "type": "string",
+                "description": (
+                    "The filename or artifact ID to delete"
+                ),
+            },
+        },
+        "required": ["filename"],
+    }
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    async def execute(self, params: dict) -> ToolResult:
+        query = (params.get("filename") or "").strip()
+        if not query:
+            return ToolResult(
+                success=False, data="",
+                error="No filename provided",
+            )
+
+        # Find by ID or filename
+        row = await self.db.fetch_one(
+            "SELECT id, filename FROM artifacts "
+            "WHERE id = ? OR filename = ?",
+            (query, query),
+        )
+        if not row:
+            return ToolResult(
+                success=False, data="",
+                error=f"File not found: {query}",
+            )
+
+        artifact_id = row["id"]
+        filename = row["filename"]
+
+        # Delete from disk
+        import shutil
+        artifact_dir = ARTIFACTS_DIR / artifact_id
+        if artifact_dir.exists():
+            shutil.rmtree(artifact_dir)
+        # Also check data/files for generated images
+        files_path = Path("data/files") / filename
+        if files_path.exists():
+            files_path.unlink()
+
+        # Delete from database
+        await self.db.execute(
+            "DELETE FROM artifacts WHERE id = ?",
+            (artifact_id,),
+        )
+
+        return ToolResult(
+            success=True,
+            data=f"Deleted: {filename}",
+        )
