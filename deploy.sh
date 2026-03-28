@@ -11,11 +11,12 @@ ODIGOS_ONE="root@82.25.91.86"
 UXRLS="root@100.89.147.103"
 
 # Bare metal installs on odigos.one (systemd services)
+# Format: "directory:service_name:service_user"
 BARE_METAL=(
-  "/opt/odigos:odigos"
-  "/opt/odigos-honey:odigos-honey"
-  "/opt/odigos-rachel:odigos-rachel"
-  "/opt/odigos-sales:odigos-sales"
+  "/opt/odigos:odigos:odigos_agent"
+  "/opt/odigos-honey:odigos-honey:odigos_agent"
+  "/opt/odigos-rachel:odigos-rachel:odigos_agent"
+  "/opt/odigos-sales:odigos-sales:odigos_sales"
 )
 
 # Docker installs on uxrls.com
@@ -35,13 +36,12 @@ fail() { echo -e "${RED}[deploy]${NC} $1"; }
 log "Deploying to odigos.one (bare metal)..."
 
 for entry in "${BARE_METAL[@]}"; do
-  dir="${entry%%:*}"
-  service="${entry##*:}"
-  log "  $service ($dir)"
+  IFS=':' read -r dir service user <<< "$entry"
+  log "  $service ($dir) [user: $user]"
 
-  ssh "$ODIGOS_ONE" bash -s "$dir" "$service" "$SKIP_BUILD" <<'REMOTE'
+  ssh "$ODIGOS_ONE" bash -s "$dir" "$service" "$SKIP_BUILD" "$user" <<'REMOTE'
     set -euo pipefail
-    DIR="$1"; SVC="$2"; SKIP="$3"
+    DIR="$1"; SVC="$2"; SKIP="$3"; SVC_USER="$4"
     cd "$DIR"
 
     # Pull latest
@@ -54,6 +54,13 @@ for entry in "${BARE_METAL[@]}"; do
     fi
     git reset --hard origin/main
 
+    # Fix ownership -- git reset as root can break permissions
+    chown -R "$SVC_USER:$SVC_USER" .venv/ data/ 2>/dev/null || true
+    chown -R "$SVC_USER:$SVC_USER" dashboard/dist/ 2>/dev/null || true
+
+    # Sync dependencies (new packages from pyproject.toml)
+    uv sync --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
+
     # Rebuild dashboard
     if [ "$SKIP" != "true" ] && [ -d dashboard ]; then
       cd dashboard
@@ -61,9 +68,21 @@ for entry in "${BARE_METAL[@]}"; do
       cd ..
     fi
 
+    # Fix ownership again after build
+    chown -R "$SVC_USER:$SVC_USER" . 2>/dev/null || true
+
     # Restart service
     systemctl restart "$SVC"
-    echo "  Restarted $SVC"
+
+    # Wait and verify startup
+    sleep 3
+    if systemctl is-active --quiet "$SVC"; then
+      echo "  $SVC is running"
+    else
+      echo "  WARNING: $SVC failed to start!"
+      journalctl -u "$SVC" -n 5 --no-pager 2>&1 | tail -5
+      exit 1
+    fi
 REMOTE
 
   if [ $? -eq 0 ]; then
@@ -95,13 +114,28 @@ ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" <<'REMOTE'
   # Rebuild and restart the odigos service only (system Caddy handles TLS)
   docker compose up -d --build --no-deps odigos 2>&1 | tail -5
 
+  # Wait for main container to be healthy before recreating user containers
+  echo "  Waiting for main container health check..."
+  for i in $(seq 1 30); do
+    STATUS=$(docker inspect odigos --format '{{.State.Health.Status}}' 2>/dev/null || echo "none")
+    if [ "$STATUS" = "healthy" ]; then
+      echo "  Main container healthy"
+      break
+    fi
+    sleep 5
+  done
+
   # Recreate user containers with new image
-  IMAGE=$(docker compose images -q odigos 2>/dev/null || docker images ghcr.io/tamler/odigos:latest -q)
   for user in florence jessica jason klint; do
     CONTAINER="odigos-$user"
     if docker inspect "$CONTAINER" &>/dev/null; then
-      PORT=$(docker inspect "$CONTAINER" --format '{{(index (index .NetworkSettings.Ports "8000/tcp") 0).HostPort}}')
-      docker stop "$CONTAINER" && docker rm "$CONTAINER"
+      PORT=$(docker inspect "$CONTAINER" --format '{{(index (index .NetworkSettings.Ports "8000/tcp") 0).HostPort}}' 2>/dev/null || echo "")
+      if [ -z "$PORT" ]; then
+        echo "  WARNING: Could not get port for $CONTAINER, skipping"
+        continue
+      fi
+      docker stop "$CONTAINER" 2>/dev/null || true
+      docker rm "$CONTAINER" 2>/dev/null || true
       docker run -d \
         --name "$CONTAINER" \
         --restart unless-stopped \
@@ -136,13 +170,25 @@ log "Verifying services..."
 
 echo ""
 log "odigos.one:"
-ssh "$ODIGOS_ONE" 'for s in odigos odigos-honey odigos-rachel odigos-sales; do
-  printf "  %-20s %s\n" "$s" "$(systemctl is-active $s)"
-done'
+FAILURES=0
+while IFS= read -r line; do
+  if echo "$line" | grep -q "active"; then
+    echo -e "  ${GREEN}$line${NC}"
+  else
+    echo -e "  ${RED}$line${NC}"
+    FAILURES=$((FAILURES + 1))
+  fi
+done < <(ssh "$ODIGOS_ONE" 'for s in odigos odigos-honey odigos-rachel odigos-sales; do
+  printf "%-20s %s\n" "$s" "$(systemctl is-active $s)"
+done')
 
 echo ""
 log "uxrls.com:"
 ssh "$UXRLS" 'docker ps --format "  {{.Names}}\t{{.Status}}" | grep odigos'
 
 echo ""
-log "Deploy complete."
+if [ $FAILURES -gt 0 ]; then
+  fail "$FAILURES service(s) failed. Check logs above."
+  exit 1
+fi
+log "Deploy complete. All services running."
