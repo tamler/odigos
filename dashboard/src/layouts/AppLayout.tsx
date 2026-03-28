@@ -27,7 +27,9 @@ import {
   Link as LinkIcon,
   Rss,
   Eye,
-  Columns3
+  Columns3,
+  Image as ImageIcon,
+  Upload
 } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
@@ -44,13 +46,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { get, patch, del, post } from '@/lib/api'
+import { get, patch, del, post, uploadFile } from '@/lib/api'
 import { ChatSocket } from '@/lib/ws'
 import { toast } from 'sonner'
 import { executeActions, UIAction } from '@/lib/actions'
 import { useTheme } from 'next-themes'
 import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
 import { subscribeToPush } from '@/lib/push'
+import { Artifact } from '@/components/ArtifactCard'
 
 interface Conversation {
   id: string
@@ -100,12 +103,30 @@ export interface ChatMessage {
 const AppSidebar = memo(({
   collapsed, setCollapsed, sidebarOpen, setSidebarOpen, 
   isMobile, searchQuery, setSearchQuery, 
-  isSettings, isNotebook, isKanban, isChat, currentTab,
-  agentName, notebooks, boards, filteredConversations,
-  activeId, handleNewChat, handleSelectConversation, 
+  isSettings, isNotebook, isKanban, isChat, isImages, currentTab,
+  agentName, notebooks, boards, images, filteredConversations,
+  activeId, handleNewChat, handleSelectConversation, handleSelectImage,
   startRename, editingId, editTitle, setEditTitle,
   confirmRename, handleExport, handleDelete, displayTitle, navigate, location
 }: any) => {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      await uploadFile(file)
+      toast.success('Image uploaded')
+      window.location.reload() // Simple way to refresh for now
+    } catch {
+      toast.error('Upload failed')
+    }
+  }
+
   return (
     <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'}`}>
       <div className="flex flex-col gap-2 p-3 mb-2">
@@ -123,13 +144,25 @@ const AppSidebar = memo(({
             <button onClick={() => navigate('/')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isChat ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Chat"><MessageCircle className="h-4 w-4" /></button>
             <button onClick={() => navigate('/notebooks')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isNotebook ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Notebooks"><FileText className="h-4 w-4" /></button>
             <button onClick={() => navigate('/kanban')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isKanban ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Boards"><Columns3 className="h-4 w-4" /></button>
+            <button onClick={() => navigate('/images')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isImages ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Images"><ImageIcon className="h-4 w-4" /></button>
           </div>
         )}
 
-        {(!collapsed || isMobile) && isChat && (
-          <Button variant="secondary" size="sm" className="w-full justify-start gap-2 h-8 rounded-lg shadow-sm mb-2" onClick={handleNewChat}>
-            <Plus className="h-4 w-4" /> New Chat
-          </Button>
+        {(!collapsed || isMobile) && (isChat || isImages) && (
+          <div className="px-1">
+            {isChat ? (
+              <Button variant="secondary" size="sm" className="w-full justify-start gap-2 h-8 rounded-lg shadow-sm mb-2" onClick={handleNewChat}>
+                <Plus className="h-4 w-4" /> New Chat
+              </Button>
+            ) : (
+              <>
+                <Button variant="secondary" size="sm" className="w-full justify-start gap-2 h-8 rounded-lg shadow-sm mb-2" onClick={handleUploadClick}>
+                  <Upload className="h-4 w-4" /> Upload Image
+                </Button>
+                <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={onFileChange} />
+              </>
+            )}
+          </div>
         )}
       </div>
 
@@ -157,6 +190,18 @@ const AppSidebar = memo(({
               <div className="space-y-1">
                 {boards.map((b: any) => (
                   <button key={b.id} onClick={() => { navigate(`/kanban/${b.id}`); setSidebarOpen(false) }} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${location.pathname.includes(b.id) ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50'}`}>{b.title}</button>
+                ))}
+              </div>
+            ) : isImages ? (
+              <div className="grid grid-cols-2 gap-2 px-1">
+                {images.map((img: any) => (
+                  <button 
+                    key={img.id} 
+                    onClick={() => handleSelectImage(img.id)}
+                    className={`aspect-square rounded-lg border overflow-hidden transition-all ${activeId === img.id ? 'border-primary ring-2 ring-primary/20' : 'border-border/40 hover:border-border'}`}
+                  >
+                    <img src={`/api/files/${img.filename}`} alt={img.filename} className="w-full h-full object-cover" loading="lazy" />
+                  </button>
                 ))}
               </div>
             ) : (
@@ -228,6 +273,7 @@ export default function AppLayout() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [notebooks, setNotebooks] = useState<{ id: string; title: string; updated_at: string }[]>([])
   const [boards, setBoards] = useState<{ id: string; title: string; updated_at: string }[]>([])
+  const [images, setImages] = useState<Artifact[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingContent, setStreamingContent] = useState('')
@@ -478,6 +524,11 @@ export default function AppLayout() {
     navigate(`/?c=${id}`)
   }
 
+  const handleSelectImage = useCallback((id: string) => {
+    setActiveArtifactId(id)
+    setArtifactPanelOpen(true)
+  }, [])
+
   const startRename = useCallback((c: Conversation | null) => {
     if (!c) {
       setEditingId(null)
@@ -530,7 +581,8 @@ export default function AppLayout() {
   const isSettings = location.pathname.startsWith('/settings')
   const isNotebook = location.pathname.startsWith('/notebooks')
   const isKanban = location.pathname.startsWith('/kanban')
-  const isChat = !isSettings && !isNotebook && !isKanban
+  const isImages = location.pathname.startsWith('/images')
+  const isChat = !isSettings && !isNotebook && !isKanban && !isImages
   const currentTab = location.pathname.split('/')[2] || 'general'
 
   const filteredConversations = conversations.filter(c => 
@@ -551,7 +603,12 @@ export default function AppLayout() {
     if (isKanban && boards.length === 0) {
       get<{ boards: any[] }>('/api/kanban/boards').then(d => setBoards(d.boards))
     }
-  }, [isNotebook, isKanban, notebooks.length, boards.length])
+    if (isImages && images.length === 0) {
+      get<{ artifacts: Artifact[] }>('/api/artifacts').then(d => {
+        setImages((d.artifacts || []).filter(a => a.content_type?.startsWith('image/')).slice(0, 10))
+      })
+    }
+  }, [isNotebook, isKanban, isImages, notebooks.length, boards.length, images.length])
 
   const handleCreateNotebook = useCallback(async () => {
     try {
@@ -591,6 +648,7 @@ export default function AppLayout() {
             <Button variant="ghost" size="icon" aria-label={isNotebook ? 'New Note' : isKanban ? 'New Board' : 'New Chat'} className="h-11 w-11 ml-auto" onClick={() => {
               if (isNotebook) { handleCreateNotebook(); toast.success('Note created') }
               else if (isKanban) { handleCreateBoard(); toast.success('Board created') }
+              else if (isImages) { /* Upload handled in sidebar or page */ }
               else { handleNewChat(); toast.success('New chat') }
             }}>
               <Plus className="h-5 w-5" />
@@ -602,11 +660,13 @@ export default function AppLayout() {
           collapsed={collapsed} setCollapsed={setCollapsed} 
           sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
           isMobile={isMobile} searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-          isSettings={isSettings} isNotebook={isNotebook} isKanban={isKanban} isChat={isChat}
+          isSettings={isSettings} isNotebook={isNotebook} isKanban={isKanban} isChat={isChat} isImages={isImages}
           currentTab={currentTab} agentName={agentName}
-          notebooks={notebooks} boards={boards}
+          notebooks={notebooks} boards={boards} images={images}
           filteredConversations={filteredConversations} activeId={activeId}
-          handleNewChat={handleNewChat} handleSelectConversation={handleSelectConversation}
+          handleNewChat={handleNewChat} handleCreateNotebook={handleCreateNotebook}
+          handleCreateBoard={handleCreateBoard} handleSelectConversation={handleSelectConversation}
+          handleSelectImage={handleSelectImage}
           startRename={startRename} editingId={editingId} editTitle={editTitle}
           setEditTitle={setEditTitle} confirmRename={confirmRename}
           handleExport={handleExport} handleDelete={handleDelete}

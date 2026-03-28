@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback, memo } from 'react'
-import { useSearchParams, useOutletContext } from 'react-router-dom'
+import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera, Download, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { Loader } from '@/components/ui/loader'
@@ -32,6 +32,60 @@ interface ChatPanelProps {
   chatContext?: Record<string, string>
   isSidePanel?: boolean
   onClose?: () => void
+}
+
+const ImageArtifact = ({ artifact, onClick }: { artifact: Artifact, onClick: () => void }) => {
+  const downloadUrl = `/api/files/${artifact.filename}`
+  
+  const shareArtifact = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const url = `${window.location.origin}${downloadUrl}`
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: artifact.filename, url })
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') toast.error('Failed to share')
+      }
+    } else {
+      await navigator.clipboard.writeText(url)
+      toast.success('Link copied')
+    }
+  }
+
+  const downloadArtifact = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const link = document.createElement('a')
+    link.href = `/api/artifacts/${artifact.id}/download`
+    link.download = artifact.filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-border/40 max-w-sm cursor-pointer hover:opacity-95 transition-all bg-card shadow-sm group/img"
+         onClick={onClick}>
+      <div className="relative aspect-video bg-muted flex items-center justify-center overflow-hidden">
+        <img
+          src={downloadUrl}
+          alt={artifact.filename}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-105"
+          loading="lazy"
+        />
+      </div>
+      <div className="px-3 py-2 text-[10px] text-muted-foreground flex justify-between items-center bg-card/50 backdrop-blur-sm">
+        <span className="truncate max-w-[150px] font-medium">{artifact.filename}</span>
+        <div className="flex gap-3 opacity-0 group-hover/img:opacity-100 transition-opacity">
+          <button onClick={downloadArtifact} title="Download" className="hover:text-primary transition-colors">
+            <Download className="h-3 w-3" />
+          </button>
+          <button onClick={shareArtifact} title="Share" className="hover:text-primary transition-colors">
+            <Share2 className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function WelcomeView({ agentName, onSuggest }: { agentName: string; onSuggest: (text: string) => void }) {
@@ -79,6 +133,7 @@ export const ChatPanel = memo(({
   onClose,
 }: ChatPanelProps) => {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   let outletCtx: any = {}
   try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
   const {
@@ -526,7 +581,14 @@ export const ChatPanel = memo(({
                           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Generated Artifacts</h3>
                           <div className="flex flex-wrap gap-3">
                             {artifacts.map(a => (
-                              <ArtifactCard key={a.id} artifact={a} />
+                              a.content_type?.startsWith('image/') ? (
+                                <ImageArtifact key={a.id} artifact={a} onClick={() => {
+                                  setActiveArtifactId(a.id)
+                                  setArtifactPanelOpen(true)
+                                }} />
+                              ) : (
+                                <ArtifactCard key={a.id} artifact={a} />
+                              )
                             ))}
                           </div>
                         </div>
@@ -621,6 +683,17 @@ export const ChatPanel = memo(({
                 ))}
               </div>
             )}
+
+            {/* Contextual Workspace Links (G-I6) */}
+            <div className="flex items-center gap-3 px-1 mb-2">
+              <button onClick={() => navigate('/notebooks')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Journal</button>
+              <span className="text-muted-foreground/20 text-[10px]">·</span>
+              <button onClick={() => navigate('/kanban')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Board</button>
+              <span className="text-muted-foreground/20 text-[10px]">·</span>
+              <button onClick={() => navigate('/images')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Images</button>
+              <span className="text-muted-foreground/20 text-[10px]">·</span>
+              <button onClick={() => navigate('/artifacts')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Documents</button>
+            </div>
 
             {/* Composer */}
             <div className="relative rounded-2xl border border-border/50 bg-muted/30 focus-within:border-border/80 transition-colors shadow-sm">

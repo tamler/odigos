@@ -4,7 +4,7 @@ import { get, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { X, ExternalLink, Download, Code, Eye, FileText, Save, FileDown, BookOpen } from 'lucide-react'
+import { X, ExternalLink, Download, Code, Eye, FileText, Save, FileDown, BookOpen, Image as ImageIcon, Sparkles } from 'lucide-react'
 import { ArtifactCard } from './ArtifactCard'
 import { MarkdownEditor, CodeEditor } from './Editor'
 import {
@@ -34,7 +34,7 @@ interface ArtifactPreviewProps {
 type PreviewTab = 'preview' | 'code' | 'download'
 
 export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
-  const { setPageContextData } = useOutletContext<any>()
+  const { setPageContextData, setChatPanelOpen } = useOutletContext<any>()
   const [data, setData] = useState<ArtifactContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -182,7 +182,13 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   const isHtml = data.content_type === 'text/html'
   const isMarkdown = data.content_type === 'text/markdown'
   const isJson = data.content_type === 'application/json'
-  const isPreviewable = isHtml || isMarkdown || data.content_type.startsWith('text/') || isJson
+  const isImage = data.content_type.startsWith('image/')
+  const isPreviewable = isHtml || isMarkdown || data.content_type.startsWith('text/') || isJson || isImage
+
+  const handleEditWithAgent = () => {
+    setChatPanelOpen(true)
+    toast.info('Chat opened. Tell the agent how to edit this image.')
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background border-l border-border/40 overflow-hidden shadow-2xl">
@@ -190,7 +196,7 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
       <header className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-muted/5">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-            <FileText className="h-4 w-4 text-primary" />
+            {isImage ? <ImageIcon className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
           </div>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold truncate leading-tight">{data.filename}</h2>
@@ -199,6 +205,17 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
         </div>
         
         <div className="flex items-center gap-1">
+          {isImage && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 gap-1.5 mr-2 border-primary/20 text-primary hover:bg-primary/5"
+              onClick={handleEditWithAgent}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Edit with Agent
+            </Button>
+          )}
           {isDirty && (
             <Button 
               variant="default" 
@@ -258,7 +275,8 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
             onClick={() => setActiveTab('preview')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${activeTab === 'preview' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
           >
-            <Eye className="h-3.5 w-3.5" /> Preview
+            {isImage ? <ImageIcon className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />} 
+            {isImage ? 'View' : 'Preview'}
           </button>
         )}
         <button
@@ -279,7 +297,15 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
       <div className="flex-1 overflow-hidden relative">
         {activeTab === 'preview' && (
           <div className="h-full w-full">
-            {isHtml ? (
+            {isImage ? (
+              <div className="h-full w-full flex items-center justify-center p-4 lg:p-12 bg-muted/10">
+                <img 
+                  src={`/api/files/${data.filename}`} 
+                  alt={data.filename}
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
+                />
+              </div>
+            ) : isHtml ? (
               <iframe
                 srcDoc={editContent}
                 sandbox="allow-scripts"

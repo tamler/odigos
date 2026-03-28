@@ -13,6 +13,7 @@ import NotebookPage from './pages/NotebookPage'
 import KanbanPage from './pages/KanbanPage'
 import NotFoundPage from './pages/NotFoundPage'
 import ArtifactsPage from './pages/ArtifactsPage'
+import ImagesPage from './pages/ImagesPage'
 
 // Only lazy-load rarely visited pages
 const SharedNotebookPage = lazy(() => import('./pages/SharedNotebookPage'))
@@ -108,6 +109,7 @@ export default function App() {
               <Route path="/kanban" element={<KanbanPage />} />
               <Route path="/kanban/:id" element={<KanbanPage />} />
               <Route path="/artifacts" element={<ArtifactsPage />} />
+              <Route path="/images" element={<ImagesPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>
