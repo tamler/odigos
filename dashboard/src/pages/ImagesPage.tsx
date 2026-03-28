@@ -8,10 +8,117 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 
+function ImageCard({ img, selected, onTap, onLongPress, onDelete, onDownload, onShare, onDismiss }: {
+  img: Artifact
+  selected: boolean
+  onTap: () => void
+  onLongPress: () => void
+  onDelete: () => void
+  onDownload: (e: React.MouseEvent) => void
+  onShare: (e: React.MouseEvent) => void
+  onDismiss: () => void
+}) {
+  const lp = useLongPress(onLongPress, 400)
+
+  const handleClick = () => {
+    if (lp.wasLongPress()) return
+    if (selected) { onDismiss(); return }
+    onTap()
+  }
+
+  const formatDate = (dt: string | null | undefined) => {
+    if (!dt) return 'Recently'
+    try {
+      const d = new Date(dt.endsWith('Z') ? dt : dt + 'Z')
+      return isNaN(d.getTime()) ? 'Recently' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    } catch { return 'Recently' }
+  }
+
+  return (
+    <div
+      className={`group relative flex flex-col bg-card rounded-xl border overflow-hidden transition-all cursor-pointer ${selected ? 'border-primary ring-2 ring-primary/30 shadow-lg' : 'border-border/40 hover:shadow-md'}`}
+      onClick={handleClick}
+      {...lp}
+    >
+      <div className="aspect-square relative overflow-hidden bg-muted">
+        <img
+          src={`/api/files/${img.filename}`}
+          alt={img.filename}
+          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+          loading="lazy"
+        />
+        {/* Desktop: hover overlay */}
+        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity items-center justify-center gap-2 hidden lg:flex">
+          <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full" onClick={(e) => { e.stopPropagation(); onDownload(e) }}>
+            <Download className="h-4 w-4" />
+          </Button>
+          <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full" onClick={(e) => { e.stopPropagation(); onShare(e) }}>
+            <Share2 className="h-4 w-4" />
+          </Button>
+          <Button size="icon" variant="destructive" className="h-9 w-9 rounded-full" onClick={(e) => { e.stopPropagation(); onDelete() }}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Mobile: action bar on long-press */}
+      {selected && (
+        <div className="absolute bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t border-border/40 flex items-center justify-around py-3 px-2 lg:hidden animate-in slide-in-from-bottom duration-200">
+          <button onClick={(e) => { e.stopPropagation(); onDownload(e as any) }} className="flex flex-col items-center gap-1 text-muted-foreground active:text-primary transition-colors min-w-[60px]">
+            <Download className="h-5 w-5" />
+            <span className="text-[10px] font-bold uppercase">Save</span>
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onShare(e as any) }} className="flex flex-col items-center gap-1 text-muted-foreground active:text-primary transition-colors min-w-[60px]">
+            <Share2 className="h-5 w-5" />
+            <span className="text-[10px] font-bold uppercase">Share</span>
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="flex flex-col items-center gap-1 text-destructive/70 active:text-destructive transition-colors min-w-[60px]">
+            <Trash2 className="h-5 w-5" />
+            <span className="text-[10px] font-bold uppercase">Delete</span>
+          </button>
+        </div>
+      )}
+
+      <div className="p-3 bg-card/50 backdrop-blur-sm border-t border-border/5">
+        <p className="text-xs font-medium truncate mb-0.5">{img.filename}</p>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">
+          {formatDate(img.created_at)}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function useLongPress(callback: () => void, ms = 500) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const activeRef = useRef(false)
+
+  const start = useCallback(() => {
+    activeRef.current = false
+    timerRef.current = setTimeout(() => {
+      activeRef.current = true
+      callback()
+    }, ms)
+  }, [callback, ms])
+
+  const clear = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = null
+  }, [])
+
+  return {
+    onTouchStart: start,
+    onTouchEnd: clear,
+    onTouchMove: clear,
+    wasLongPress: () => activeRef.current,
+  }
+}
+
 export default function ImagesPage() {
   const [images, setImages] = useState<Artifact[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   
@@ -38,12 +145,13 @@ export default function ImagesPage() {
     loadImages()
   }, [loadImages])
 
-  async function handleDelete(e: React.MouseEvent, id: string) {
-    e.stopPropagation()
+  async function handleDelete(id: string, e?: React.MouseEvent) {
+    if (e) e.stopPropagation()
     if (!window.confirm('Delete this image?')) return
     try {
       await del(`/api/artifacts/${id}`)
       setImages((prev) => prev.filter((a) => a.id !== id))
+      setSelectedId(null)
       toast.success('Image deleted')
     } catch {
       toast.error('Failed to delete image')
@@ -140,51 +248,24 @@ export default function ImagesPage() {
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6 pb-8">
             {images.map((img) => (
-              <div 
-                key={img.id} 
-                className="group relative flex flex-col bg-card rounded-xl border border-border/40 overflow-hidden hover:shadow-md transition-all cursor-pointer"
-                onClick={() => openImage(img.id)}
-              >
-                <div className="aspect-square relative overflow-hidden bg-muted">
-                  <img 
-                    src={`/api/files/${img.filename}`} 
-                    alt={img.filename}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                    loading="lazy"
-                  />
-                  <div className="absolute top-2 right-2 flex gap-1">
-                    <button onClick={(e) => handleDelete(e, img.id)} className="p-1.5 rounded-md bg-black/50 text-white/70 hover:text-white hover:bg-destructive transition-all" aria-label="Delete">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
-                    <div className="pointer-events-auto flex gap-2">
-                      <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full" onClick={(e) => downloadImage(e, img)}>
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full" onClick={(e) => shareImage(e, img)}>
-                        <Share2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-3 bg-card/50 backdrop-blur-sm border-t border-border/5">
-                  <p className="text-xs font-medium truncate mb-0.5">{img.filename}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">
-                    {(() => {
-                      if (!img.created_at) return 'Recently'
-                      try {
-                        const d = new Date(img.created_at.endsWith('Z') ? img.created_at : img.created_at + 'Z')
-                        return isNaN(d.getTime()) ? 'Recently' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-                      } catch { return 'Recently' }
-                    })()}
-                  </p>
-                </div>
-              </div>
+              <ImageCard
+                key={img.id}
+                img={img}
+                selected={selectedId === img.id}
+                onTap={() => openImage(img.id)}
+                onLongPress={() => setSelectedId(img.id)}
+                onDelete={() => handleDelete(img.id)}
+                onDownload={(e) => downloadImage(e, img)}
+                onShare={(e) => shareImage(e, img)}
+                onDismiss={() => setSelectedId(null)}
+              />
             ))}
           </div>
         )}
       </ScrollArea>
+      {selectedId && (
+        <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setSelectedId(null)} />
+      )}
     </div>
   )
 }
