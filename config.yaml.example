@@ -299,3 +299,12 @@ browser:
 #   check_interval_ticks: 60        # Heartbeat ticks between checks (~30min at 30s interval)
 #   auto_apply: false               # true = apply immediately, false = notify only
 #   branch: "main"
+
+# Image generation via Kie.ai Z-Image API
+# Get an API key at https://kie.ai/api-key
+# image_generation:
+#   enabled: false
+#   api_key: ""                       # Kie.ai API key (or set KIE_API_KEY in .env)
+#   default_aspect_ratio: "1:1"       # 1:1, 4:3, 3:4, 16:9, 9:16
+#   nsfw_filter: true
+#   max_poll_seconds: 120

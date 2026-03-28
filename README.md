@@ -108,6 +108,9 @@ The agent can look up factual information from Grokipedia (primary) and Wikipedi
 ### Text analysis
 Built-in NLP via TextBlob: spell checking, sentiment analysis, language detection, and noun phrase extraction. Used throughout the system -- the evaluator tracks user sentiment, the entity graph extracts noun phrases, and commitment detection uses sentence-level analysis instead of regex.
 
+### Generate images
+Ask the agent to create images -- photos, illustrations, logos, charts, product mockups, storyboards, UI designs. Powered by Kie.ai Z-Image with a built-in prompt expansion guide that turns simple requests into detailed, optimized prompts. Generated images appear inline in chat with download and share options. The agent can also process existing images (resize, crop, convert, rotate, thumbnail) and chain generation with processing -- generate an image, then resize it for a specific platform.
+
 ### Image processing
 Resize, crop, convert, rotate, and thumbnail images. The agent can process uploaded images or prepare assets for artifacts. Path-restricted to the data directory.
 
@@ -292,6 +295,7 @@ Key settings:
 | `auto_update` | Automatic code updates from git |
 | `calendar` | CalDAV calendar integration |
 | `assistant` | Floating assistant bubble settings |
+| `image_generation` | Kie.ai Z-Image API for image creation |
 
 ## Plugins
 
