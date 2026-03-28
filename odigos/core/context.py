@@ -7,8 +7,10 @@ from typing import TYPE_CHECKING
 
 import tiktoken
 
+from odigos.core.profiler import UserProfile, format_profile_for_context
 from odigos.core.prompt_loader import load_prompt
 from odigos.core.queries import get_recent_tool_errors, get_user_facts, get_user_profile
+from odigos.core.relevance import prune_sections
 from odigos.core.routing import load_routing_rules
 from odigos.db import Database
 from odigos.personality.section_registry import SectionRegistry
@@ -233,6 +235,8 @@ class ContextAssembler:
         async def _user_profile():
             if not self.db or skip_profile:
                 return ""
+            parts = []
+            # Free-form profile (legacy)
             try:
                 profile_row = await get_user_profile(self.db)
                 if profile_row and profile_row.get("summary"):
@@ -240,15 +244,41 @@ class ContextAssembler:
                     if profile_row["summary"]:
                         lines.append(profile_row["summary"])
                     if profile_row.get("communication_style"):
-                        lines.append(f"Communication style: {profile_row['communication_style']}")
+                        lines.append(
+                            f"Communication style: "
+                            f"{profile_row['communication_style']}"
+                        )
                     if profile_row.get("preferences"):
-                        lines.append(f"Preferences: {profile_row['preferences']}")
+                        lines.append(
+                            f"Preferences: {profile_row['preferences']}"
+                        )
                     if profile_row.get("expertise_areas"):
-                        lines.append(f"Expertise: {profile_row['expertise_areas']}")
-                    return "\n".join(lines)
+                        lines.append(
+                            f"Expertise: {profile_row['expertise_areas']}"
+                        )
+                    parts.append("\n".join(lines))
             except Exception:
-                logger.debug("Could not load user profile", exc_info=True)
-            return ""
+                logger.debug(
+                    "Could not load user profile", exc_info=True,
+                )
+            # Structured profile (v2)
+            try:
+                v2_row = await self.db.fetch_one(
+                    "SELECT profile_json FROM user_profile_v2 "
+                    "WHERE id = 'owner'"
+                )
+                if v2_row and v2_row["profile_json"]:
+                    profile = UserProfile.from_json(
+                        v2_row["profile_json"]
+                    )
+                    structured = format_profile_for_context(profile)
+                    parts.append(structured)
+            except Exception:
+                logger.debug(
+                    "Could not load structured profile",
+                    exc_info=True,
+                )
+            return "\n\n".join(parts)
 
         async def _user_facts():
             if not self.db or skip_profile:
@@ -313,17 +343,33 @@ class ContextAssembler:
             _user_profile(), _user_facts(), _sections(), _last_interaction(),
         )
 
-        # Build skill catalog (sync, no DB call)
+        # Build skill catalog sorted by maturity (sync, no DB call)
         skill_catalog = ""
         if self.skill_registry:
-            skills = self.skill_registry.list()
+            _mat_order = {
+                "mature": 0, "committed": 1, "progenitor": 2,
+            }
+            skills = sorted(
+                self.skill_registry.list(),
+                key=lambda s: _mat_order.get(s.maturity, 2),
+            )
             if skills:
                 lines = [
                     "## Available skills",
-                    "Use activate_skill to load a skill's full instructions before starting the task.",
+                    "Use activate_skill to load a skill's "
+                    "full instructions before starting "
+                    "the task.",
                 ]
                 for s in skills:
-                    lines.append(f"- **{s.name}**: {s.description}")
+                    tag = ""
+                    if s.maturity == "mature":
+                        tag = " [mature]"
+                    elif s.maturity == "committed":
+                        tag = " [committed]"
+                    lines.append(
+                        f"- **{s.name}**{tag}:"
+                        f" {s.description}"
+                    )
                 skill_catalog = "\n".join(lines)
 
         # Add decomposition hints for complex queries
@@ -431,6 +477,46 @@ class ContextAssembler:
                     skill_catalog = img_guide
 
         concise_mode = getattr(getattr(self.settings, 'agent', None), 'concise_mode', False) if self.settings else False
+
+        # Prune low-relevance context sections
+        classification = (
+            query_analysis.classification if query_analysis else ""
+        )
+        prunable = {
+            "memory_context": memory_context,
+            "memory_index": memory_index,
+            "skill_catalog": skill_catalog,
+            "corrections": corrections_context,
+            "doc_listing": doc_listing,
+            "skill_hints": skill_hints,
+            "active_plan": active_plan,
+            "error_hints": error_hints,
+            "experiences": experiences_section,
+            "user_profile": user_profile,
+            "user_facts": user_facts,
+            "recovery_briefing": recovery_briefing,
+            "page_context": notebook_context,
+            "last_interaction": last_interaction,
+        }
+        pruned = prune_sections(
+            query=message_content,
+            sections=prunable,
+            classification=classification,
+        )
+        memory_context = pruned.get("memory_context", "")
+        memory_index = pruned.get("memory_index", "")
+        skill_catalog = pruned.get("skill_catalog", "")
+        corrections_context = pruned.get("corrections", "")
+        doc_listing = pruned.get("doc_listing", "")
+        skill_hints = pruned.get("skill_hints", "")
+        active_plan = pruned.get("active_plan", "")
+        error_hints = pruned.get("error_hints", "")
+        experiences_section = pruned.get("experiences", "")
+        user_profile = pruned.get("user_profile", "")
+        user_facts = pruned.get("user_facts", "")
+        recovery_briefing = pruned.get("recovery_briefing", "")
+        notebook_context = pruned.get("page_context", "")
+        last_interaction = pruned.get("last_interaction", "")
 
         system_prompt = build_system_prompt(
             sections=sections,

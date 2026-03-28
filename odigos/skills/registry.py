@@ -23,6 +23,12 @@ class Skill:
     verified: bool = False
     timeout: int = 10
     allow_network: bool = False
+    maturity: str = "progenitor"
+    usage_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    avg_score: float = 0.0
+    last_used_at: str = ""
 
 
 class SkillRegistry:
@@ -101,6 +107,11 @@ class SkillRegistry:
             "description": description,
             "tools": tools or [],
             "complexity": complexity,
+            "maturity": "progenitor",
+            "usage_count": 0,
+            "success_count": 0,
+            "failure_count": 0,
+            "avg_score": 0.0,
         }
         if code_relative:
             meta["code"] = code_relative
@@ -129,6 +140,7 @@ class SkillRegistry:
             verified=False,
             timeout=timeout if code_relative else 10,
             allow_network=allow_network if code_relative else False,
+            maturity="progenitor",
         )
         self._skills[name] = skill
         logger.info("Created skill: %s at %s", name, path)
@@ -208,7 +220,14 @@ class SkillRegistry:
             "description": skill.description,
             "tools": skill.tools,
             "complexity": skill.complexity,
+            "maturity": skill.maturity,
+            "usage_count": skill.usage_count,
+            "success_count": skill.success_count,
+            "failure_count": skill.failure_count,
+            "avg_score": skill.avg_score,
         }
+        if skill.last_used_at:
+            meta["last_used_at"] = skill.last_used_at
         if skill.code:
             meta["code"] = skill.code
             if skill.parameters:
@@ -224,6 +243,44 @@ class SkillRegistry:
 
         logger.info("Updated skill: %s", name)
         return skill
+
+    def save(self, name: str) -> None:
+        """Persist current skill state to disk (maturity, stats)."""
+        skill = self._skills.get(name)
+        if not skill:
+            return
+        target_dir = getattr(self, "skills_dir", None)
+        if not target_dir:
+            return
+        meta = {
+            "name": skill.name,
+            "description": skill.description,
+            "tools": skill.tools,
+            "complexity": skill.complexity,
+            "maturity": skill.maturity,
+            "usage_count": skill.usage_count,
+            "success_count": skill.success_count,
+            "failure_count": skill.failure_count,
+            "avg_score": skill.avg_score,
+        }
+        if skill.last_used_at:
+            meta["last_used_at"] = skill.last_used_at
+        if skill.code:
+            meta["code"] = skill.code
+            if skill.parameters:
+                meta["parameters"] = skill.parameters
+            meta["verified"] = skill.verified
+            meta["timeout"] = skill.timeout
+            meta["allow_network"] = skill.allow_network
+        content = (
+            f"---\n{yaml.dump(meta, default_flow_style=False)}"
+            f"---\n{skill.system_prompt}\n"
+        )
+        path = Path(target_dir) / f"{name}.md"
+        if path.resolve().is_relative_to(
+            Path(target_dir).resolve()
+        ):
+            path.write_text(content)
 
     def register_code_skills(self, tool_registry) -> int:
         """Register CodeSkillRunner tools for all skills that have a code field."""
@@ -302,4 +359,10 @@ class SkillRegistry:
             verified=meta.get("verified", False),
             timeout=meta.get("timeout", 10),
             allow_network=meta.get("allow_network", False),
+            maturity=meta.get("maturity", "progenitor"),
+            usage_count=meta.get("usage_count", 0),
+            success_count=meta.get("success_count", 0),
+            failure_count=meta.get("failure_count", 0),
+            avg_score=meta.get("avg_score", 0.0),
+            last_used_at=meta.get("last_used_at", ""),
         )

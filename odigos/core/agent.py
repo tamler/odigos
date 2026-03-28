@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from odigos.channels.base import UniversalMessage
 from odigos.core.context import ContextAssembler
 from odigos.core.executor import Executor
+from odigos.core.profiler import update_profile_from_message
 from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.providers.base import LLMProvider
@@ -131,6 +132,11 @@ class Agent:
         await self.db.execute(
             "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
             (message.id, conversation_id, "user", message.content),
+        )
+
+        # Fire-and-forget structured profile update
+        asyncio.create_task(
+            update_profile_from_message(self.db, message.content, "user")
         )
 
         if self.tracer:

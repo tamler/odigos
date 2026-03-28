@@ -804,6 +804,7 @@ async def lifespan(app: FastAPI):
         db=_db,
         provider=_provider,
         qualified_evaluator_min_score=settings.evolution.qualified_evaluator_min_score,
+        skill_registry=skill_registry,
     )
     evolution_engine = EvolutionEngine(
         db=_db,
@@ -813,6 +814,7 @@ async def lifespan(app: FastAPI):
         evolution_config=settings.evolution,
     )
     agent.context_assembler.checkpoint_manager = checkpoint_manager
+    agent.executor.evaluator = evaluator
     app.state.checkpoint_manager = checkpoint_manager
     app.state.evolution_engine = evolution_engine
     logger.info("Evolution engine initialized")

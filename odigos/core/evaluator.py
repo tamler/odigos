@@ -19,6 +19,7 @@ from odigos.core.llm_prompt import run_prompt
 if TYPE_CHECKING:
     from odigos.db import Database
     from odigos.providers.base import LLMProvider
+    from odigos.skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -221,11 +222,13 @@ class Evaluator:
         provider: LLMProvider,
         qualified_evaluator_min_score: float = 7.0,
         entity_graph=None,
+        skill_registry: SkillRegistry | None = None,
     ) -> None:
         self.db = db
         self.provider = provider
         self._qualified_evaluator_min_score = qualified_evaluator_min_score
         self.entity_graph = entity_graph
+        self.skill_registry = skill_registry
 
     async def get_unscored_messages(self, limit: int = 5) -> list[dict]:
         """Find assistant messages that haven't been evaluated yet."""
@@ -370,6 +373,11 @@ class Evaluator:
         except Exception:
             pass
 
+        # Update skill maturity stats
+        await self._update_skill_maturity(
+            conversation_id, overall,
+        )
+
         return {
             "eval_id": eval_id,
             "task_type": task_type,
@@ -387,6 +395,56 @@ class Evaluator:
             "bt_critique": bt_score,
             "user_sentiment": sentiment,
         }
+
+    async def _update_skill_maturity(
+        self, conversation_id: str, score: float,
+    ) -> None:
+        """Update maturity stats for skills used in this conversation."""
+        if not self.skill_registry:
+            return
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT skill_name FROM skill_usage "
+                "WHERE conversation_id = ?",
+                (conversation_id,),
+            )
+            if not rows:
+                return
+
+            from odigos.skills.maturity import (
+                evaluate_maturity,
+                update_skill_stats,
+            )
+
+            success = score >= 0.5
+            for row in rows:
+                skill_name = row["skill_name"]
+                skill = self.skill_registry.get(skill_name)
+                if not skill:
+                    continue
+                update_skill_stats(skill, success, score)
+                new_level = evaluate_maturity(skill)
+                if new_level == "apoptosis":
+                    try:
+                        self.skill_registry.delete(
+                            skill_name,
+                        )
+                        logger.info(
+                            "Apoptosis: removed skill '%s'",
+                            skill_name,
+                        )
+                    except ValueError:
+                        pass  # builtin or missing
+                elif new_level is not None:
+                    skill.maturity = new_level
+                    self.skill_registry.save(skill_name)
+                else:
+                    self.skill_registry.save(skill_name)
+        except Exception:
+            logger.debug(
+                "Failed to update skill maturity",
+                exc_info=True,
+            )
 
     async def _get_or_generate_rubric(
         self, user_content: str, assistant_content: str, feedback: float
@@ -440,6 +498,169 @@ class Evaluator:
             (task_type, self._qualified_evaluator_min_score),
         )
         return dict(row) if row else None
+
+    # -- Active tool output testing --
+
+    async def evaluate_tool_output(
+        self,
+        tool_name: str,
+        tool_params: dict,
+        tool_result: str,
+        user_query: str,
+    ) -> dict:
+        """Evaluate whether a tool output is relevant and useful.
+
+        Returns dict with quality (0-10), relevant, complete,
+        and issues fields.  Uses keyword overlap heuristics
+        (no LLM call) for speed.
+        """
+        quality = 5
+        relevant = True
+        complete = True
+        issues: str | None = None
+
+        result_lower = (tool_result or "").lower()
+        query_lower = (user_query or "").lower()
+        result_len = len(result_lower.strip())
+
+        # Empty / trivial result
+        if result_len < 5:
+            quality = 1
+            complete = False
+            issues = "empty or trivial result"
+            relevant = False
+        else:
+            # Error / traceback detection
+            _ERR_MARKERS = [
+                "traceback", "error:", "exception:",
+                "failed", "errno", "stack trace",
+            ]
+            has_error = any(
+                m in result_lower for m in _ERR_MARKERS
+            )
+            if has_error:
+                quality = max(quality - 4, 1)
+                issues = "result contains error/traceback"
+                complete = False
+
+            # Keyword overlap for relevance
+            query_words = {
+                w for w in query_lower.split()
+                if len(w) > 3
+            }
+            if query_words:
+                hits = sum(
+                    1 for w in query_words
+                    if w in result_lower
+                )
+                ratio = hits / len(query_words)
+                if ratio >= 0.3:
+                    quality = min(quality + 3, 10)
+                elif ratio == 0.0:
+                    quality = max(quality - 2, 1)
+                    relevant = False
+                    if issues is None:
+                        issues = "no keyword overlap with query"
+
+            # Search tool specifics
+            if "search" in tool_name.lower():
+                if "no results" in result_lower:
+                    quality = 2
+                    complete = False
+                    issues = "search returned no results"
+
+            # Code execution specifics
+            if tool_name in ("run_code", "execute_code"):
+                if has_error:
+                    quality = 2
+
+            # File creation check
+            if "create" in tool_name.lower():
+                if "created" in result_lower or "saved" in result_lower:
+                    quality = min(quality + 2, 10)
+                elif "error" not in result_lower:
+                    quality = min(quality + 1, 10)
+
+        evaluation = {
+            "quality": quality,
+            "relevant": relevant,
+            "complete": complete,
+            "issues": issues,
+        }
+
+        # Persist to tool_evaluations table
+        try:
+            await self.db.execute(
+                "INSERT INTO tool_evaluations "
+                "(id, tool_name, quality_score, relevant, "
+                "complete, issues, query_context, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
+                (
+                    str(uuid.uuid4()),
+                    tool_name,
+                    float(quality),
+                    1 if relevant else 0,
+                    1 if complete else 0,
+                    issues,
+                    user_query[:200] if user_query else None,
+                ),
+            )
+        except Exception:
+            logger.debug(
+                "Could not persist tool evaluation",
+                exc_info=True,
+            )
+
+        return evaluation
+
+    # -- Sprint contracts for multi-step plans --
+
+    _SPRINT_CONTRACT_FALLBACK = (
+        "Given this plan:\n"
+        "Goal: {goal}\n\n"
+        "Steps:\n{steps}\n\n"
+        "Generate testable success criteria for each step."
+        " Each criterion should be:\n"
+        "1. Specific and measurable\n"
+        "2. Verifiable without asking the user\n"
+        "3. Based on observable outcomes\n\n"
+        "Respond with JSON:\n"
+        '{{"criteria": [{{"step": 1, "test": "how to verify",'
+        ' "metric": "measurable outcome"}}],'
+        ' "overall_success": "what does done look like"}}'
+    )
+
+    async def generate_sprint_contract(
+        self,
+        goal: str,
+        steps: list[dict],
+    ) -> dict:
+        """Generate testable success criteria for a plan.
+
+        Returns dict with criteria list and overall_success.
+        Uses an LLM call via run_prompt.
+        """
+        steps_text = "\n".join(
+            f"{s.get('step', '?')}. {s.get('task', '')}"
+            for s in steps
+        )
+        result = await run_prompt(
+            self.provider,
+            "sprint_contract.md",
+            {"goal": goal, "steps": steps_text},
+            self._SPRINT_CONTRACT_FALLBACK,
+            model=getattr(
+                self.provider, "fallback_model", None
+            ),
+            max_tokens=500,
+            temperature=0.2,
+        )
+        if result and "criteria" in result:
+            return result
+        return {
+            "criteria": [],
+            "overall_success": "unknown",
+        }
 
     async def _cache_rubric(self, task_type: str, rubric: dict) -> None:
         try:

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetStatus, BudgetTracker
     from odigos.core.classifier import QueryAnalysis
+    from odigos.core.evaluator import Evaluator
     from odigos.core.trace import Tracer
     from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
@@ -73,6 +74,7 @@ class Executor:
         self.tracer = tracer
         self.approval_gate = approval_gate
         self._reasoning_model = reasoning_model
+        self.evaluator: Evaluator | None = None
         self._active_skill_name: str | None = None
         self._active_skill_tools: set[str] = set()
         self._pending_skill_prompt: str | None = None
@@ -238,6 +240,21 @@ class Executor:
                     "tool_call_id": tc.id,
                     "content": result_content,
                 })
+                # Active tool output evaluation
+                if self.evaluator:
+                    try:
+                        await self.evaluator.evaluate_tool_output(
+                            tc.name,
+                            tc.arguments,
+                            result_content,
+                            message_content,
+                        )
+                    except Exception:
+                        logger.debug(
+                            "Tool eval failed for %s",
+                            tc.name,
+                            exc_info=True,
+                        )
 
             # Stuck detection: warn if identical tool calls as previous turn
             current_turn_calls = {
@@ -413,11 +430,31 @@ class Executor:
                 try:
                     now = datetime.now(timezone.utc).isoformat()
                     if "plan_steps" in result.side_effect:
+                        plan_id = str(uuid.uuid4())
+                        plan_steps = result.side_effect["plan_steps"]
+                        # Generate sprint contract
+                        contract_json: str | None = None
+                        if self.evaluator:
+                            try:
+                                contract = await self.evaluator.generate_sprint_contract(
+                                    goal=message_content,
+                                    steps=plan_steps,
+                                )
+                                contract_json = json.dumps(contract)
+                            except Exception:
+                                logger.debug(
+                                    "Sprint contract gen failed",
+                                    exc_info=True,
+                                )
                         await self.db.execute(
-                            "INSERT INTO task_plans (id, conversation_id, steps, created_at, updated_at) "
-                            "VALUES (?, ?, ?, ?, ?)",
-                            (str(uuid.uuid4()), conversation_id,
-                             json.dumps(result.side_effect["plan_steps"]), now, now),
+                            "INSERT INTO task_plans "
+                            "(id, conversation_id, steps, "
+                            "sprint_contract, created_at, "
+                            "updated_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?)",
+                            (plan_id, conversation_id,
+                             json.dumps(plan_steps),
+                             contract_json, now, now),
                         )
                     elif "substeps" in result.side_effect and "parent_step" in result.side_effect:
                         # Attach substeps to an existing parent step
