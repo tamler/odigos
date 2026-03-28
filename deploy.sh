@@ -114,16 +114,8 @@ ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" <<'REMOTE'
   # Rebuild and restart the odigos service only (system Caddy handles TLS)
   docker compose up -d --build --no-deps odigos 2>&1 | tail -5
 
-  # Wait for main container to be healthy before recreating user containers
-  echo "  Waiting for main container health check..."
-  for i in $(seq 1 30); do
-    STATUS=$(docker inspect odigos --format '{{.State.Health.Status}}' 2>/dev/null || echo "none")
-    if [ "$STATUS" = "healthy" ]; then
-      echo "  Main container healthy"
-      break
-    fi
-    sleep 5
-  done
+  # Brief pause for image to be ready, don't block on health check
+  sleep 5
 
   # Recreate user containers with new image
   for user in florence jessica jason klint; do
