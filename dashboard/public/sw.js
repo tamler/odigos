@@ -1,14 +1,12 @@
-const CACHE_NAME = 'odigos-v1';
-const SHELL_URLS = ['/', '/index.html'];
+const CACHE_NAME = 'odigos-v2';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_URLS))
-  );
+  // Skip waiting to activate immediately
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  // Clear all old caches
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
@@ -20,39 +18,52 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Only handle http/https -- skip chrome-extension, etc.
+  // Only handle http/https
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return;
 
-  // Never cache API calls or WebSocket
+  // Never cache API calls, WebSocket, or HTML pages
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) return;
 
-  // SPA navigation routes -- serve index.html from cache
-  // (any path without a file extension is a client-side route)
-  const isNavigationRequest = event.request.mode === 'navigate';
+  // Navigation requests (HTML pages) -- always go to network
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('/') || new Response('Offline', { status: 503 }))
+    );
+    return;
+  }
 
+  // Static assets (JS/CSS with hashes) -- cache on first load
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Everything else (icons, manifest, etc.) -- network first, cache fallback
   event.respondWith(
-    caches.match(isNavigationRequest ? '/' : event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok && !isNavigationRequest) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => {
-        // Offline fallback for navigation -- serve cached shell
-        if (isNavigationRequest) return caches.match('/');
-        return new Response('', { status: 408 });
-      });
-    })
+    fetch(event.request).then((response) => {
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      }
+      return response;
+    }).catch(() => caches.match(event.request))
   );
 });
 
 self.addEventListener('push', (event) => {
   let data = { title: 'Odigos', body: 'New notification' };
-  try {
-    data = event.data.json();
-  } catch (e) {}
+  try { data = event.data.json(); } catch (e) {}
 
   event.waitUntil(
     self.registration.showNotification(data.title, {
