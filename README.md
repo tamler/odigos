@@ -99,6 +99,18 @@ Connect your calendar via CalDAV (Google, Apple, Outlook, Nextcloud). The agent 
 ### News monitoring
 Tell the agent to watch RSS feeds for topics you care about. "Follow TechCrunch for AI news." The agent checks feeds periodically, filters by your topics, and surfaces relevant articles with clickable links.
 
+### Translate
+Ask the agent to translate text between 100+ languages. Auto-detects the source language. Powered by Google Translate -- no API key needed.
+
+### Knowledge lookup
+The agent can look up factual information from Grokipedia (primary) and Wikipedia (fallback) before answering questions. Saves LLM tokens and improves accuracy on factual queries.
+
+### Text analysis
+Built-in NLP via TextBlob: spell checking, sentiment analysis, language detection, and noun phrase extraction. Used throughout the system -- the evaluator tracks user sentiment, the entity graph extracts noun phrases, and commitment detection uses sentence-level analysis instead of regex.
+
+### Image processing
+Resize, crop, convert, rotate, and thumbnail images. The agent can process uploaded images or prepare assets for artifacts. Path-restricted to the data directory.
+
 ### Work with your tools
 Google Workspace (Gmail, Calendar, Drive), browser automation, MCP server integration, file management. Extend with plugins -- no restart required.
 
@@ -208,7 +220,7 @@ The agent learns from its own tool usage. When a tool call succeeds or fails, th
 Spanning all layers, an entity graph tracks people, tools, documents, and concepts mentioned across conversations. Entities are linked with relationships and confidence scores. The graph enables the agent to answer "who is Sarah?" or "what documents mention the Q3 budget?" by traversing connections rather than relying solely on keyword matching.
 
 ### Active Reasoning Critique
-Inspired by [AREW](https://arxiv.org/abs/2603.12109), the evaluator scores two dimensions after every response: **Action Selection** (did the agent use appropriate tools to gather information?) and **Belief Tracking** (did the agent actually use the information it retrieved?). These signals feed into the strategist, which proposes improvements when the agent shows patterns of ignoring its own memory or tools.
+Inspired by [AREW](https://arxiv.org/abs/2603.12109), the evaluator scores two dimensions after every response: **Action Selection** (did the agent use appropriate tools to gather information?) and **Belief Tracking** (did the agent actually use the information it retrieved?). User sentiment is tracked on every message via TextBlob NLP -- polarity and subjectivity feed directly into the evolution engine. These signals feed into the strategist, which proposes improvements when the agent shows patterns of ignoring its own memory or tools.
 
 ## Architecture
 
@@ -218,6 +230,7 @@ One process. One database. No microservices.
 - **SQLite** with vector search (sqlite-vec) and full-text search (FTS5)
 - **Local embeddings** (nomic-embed-text-v1.5) on CPU -- no API calls for embedding
 - **Cross-encoder reranking** (ms-marco-MiniLM) for document retrieval accuracy
+- **NLP layer** (TextBlob) for sentiment analysis, entity extraction, spell checking, commitment detection
 - **Plugin system** for tools, channels, and providers
 - **Heartbeat loop** for background processing, goal tracking, evolution trials, proactive nudges, follow-up detection, idle research, auto-updates
 - **Parallel context assembly** -- 11 context queries run concurrently via asyncio.gather
@@ -303,7 +316,7 @@ Enable in the Plugins tab. Changes apply immediately.
 
 ```bash
 uv sync                        # Install dependencies
-uv run pytest                  # Run tests (1190+)
+uv run pytest                  # Run tests (1215+)
 uv run python -m odigos.main   # Start locally
 cd dashboard && npm run dev    # Dashboard dev server
 ```

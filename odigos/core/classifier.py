@@ -8,6 +8,11 @@ import struct
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+try:
+    from textblob import TextBlob
+except ImportError:  # pragma: no cover
+    TextBlob = None  # type: ignore[assignment,misc]
+
 from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 
@@ -128,7 +133,11 @@ class QueryClassifier:
             phrases = rules.get(category, [])
             if category == "simple":
                 # Simple uses word-level matching with length check
-                words = re.findall(r"\w+", lower)
+                if TextBlob is not None:
+                    blob = TextBlob(lower)
+                    words = list(blob.words)
+                else:
+                    words = re.findall(r"\w+", lower)
                 if len(words) <= 3 and "?" not in message:
                     simple_words = set(phrases)
                     if any(w in simple_words for w in words):

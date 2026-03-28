@@ -9,10 +9,14 @@ Default: https://github.com/msitarzewski/agency-agents
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
+
+try:
+    from textblob import TextBlob
+except ImportError:  # pragma: no cover
+    TextBlob = None  # type: ignore[assignment,misc]
 
 import httpx
 
@@ -52,7 +56,13 @@ def _parse_agent_name(filename: str) -> str:
 
 def _tokenize(text: str) -> set[str]:
     """Split text into lowercase keyword tokens."""
-    return set(re.findall(r"[a-z]+", text.lower()))
+    if TextBlob is not None:
+        return set(
+            str(w).lower() for w in TextBlob(text).words
+        )
+    # Fallback when textblob is not installed
+    import re as _re
+    return set(_re.findall(r"[a-z]+", text.lower()))
 
 
 class AgentTemplateIndex:

@@ -9,6 +9,11 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
+try:
+    from textblob import TextBlob
+except ImportError:  # pragma: no cover
+    TextBlob = None  # type: ignore[assignment,misc]
+
 from odigos.core.llm_prompt import run_prompt
 
 if TYPE_CHECKING:
@@ -34,6 +39,31 @@ FEEDBACK_NO_FOLLOWUP = -0.2
 FEEDBACK_CORRECTION = -0.7
 FEEDBACK_POSITIVE = 0.5
 FEEDBACK_NEUTRAL = 0.2
+
+def _analyze_user_sentiment(message: str) -> dict:
+    """Analyze sentiment of a user message via TextBlob."""
+    if TextBlob is not None:
+        try:
+            blob = TextBlob(message)
+            return {
+                "polarity": blob.sentiment.polarity,
+                "subjectivity": blob.sentiment.subjectivity,
+                "label": (
+                    "positive"
+                    if blob.sentiment.polarity > 0.1
+                    else "negative"
+                    if blob.sentiment.polarity < -0.1
+                    else "neutral"
+                ),
+            }
+        except Exception:
+            pass
+    return {
+        "polarity": 0.0,
+        "subjectivity": 0.0,
+        "label": "neutral",
+    }
+
 
 _RUBRIC_FALLBACK = (
     "You are evaluating an AI assistant's response. "
@@ -230,7 +260,12 @@ class Evaluator:
         )
         user_content = user_msg["content"] if user_msg else "(no user message)"
 
-        feedback = await infer_implicit_feedback(self.db, message_id, conversation_id)
+        feedback = await infer_implicit_feedback(
+            self.db, message_id, conversation_id,
+        )
+
+        # Sentiment analysis on user message
+        sentiment = _analyze_user_sentiment(user_content)
 
         rubric = await self._get_or_generate_rubric(user_content, asst_msg["content"], feedback)
         if rubric is None:
@@ -341,11 +376,16 @@ class Evaluator:
             "overall_score": overall,
             "implicit_feedback": feedback,
             "improvement_signal": scores.get("improvement_signal"),
-            "suggested_improvement": scores.get("suggested_improvement"),
-            "user_satisfaction_signal": scores.get("user_satisfaction_signal"),
+            "suggested_improvement": scores.get(
+                "suggested_improvement"
+            ),
+            "user_satisfaction_signal": scores.get(
+                "user_satisfaction_signal"
+            ),
             "key_entities": key_entities,
             "as_critique": as_score,
             "bt_critique": bt_score,
+            "user_sentiment": sentiment,
         }
 
     async def _get_or_generate_rubric(

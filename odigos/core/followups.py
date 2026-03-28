@@ -4,6 +4,11 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+try:
+    from textblob import TextBlob
+except ImportError:  # pragma: no cover
+    TextBlob = None  # type: ignore[assignment,misc]
+
 from odigos.db import Database
 
 logger = logging.getLogger(__name__)
@@ -24,6 +29,36 @@ COMMITMENT_PATTERNS = [
     "deadline",
     "due date",
 ]
+
+COMMITMENT_VERBS = {
+    "will", "going", "need", "should", "must",
+    "promise", "plan", "intend", "commit",
+}
+
+
+def _detect_commitment(content: str) -> str | None:
+    """Detect commitment language using TextBlob NLP."""
+    if TextBlob is not None:
+        try:
+            blob = TextBlob(content)
+            words = [str(w).lower() for w in blob.words]
+            for verb in COMMITMENT_VERBS:
+                if verb in words:
+                    for sentence in blob.sentences:
+                        s_words = [
+                            str(w).lower()
+                            for w in sentence.words
+                        ]
+                        if verb in s_words:
+                            return str(sentence)
+        except Exception:
+            pass
+    # Fallback: check original patterns
+    lower = content.lower()
+    for pattern in COMMITMENT_PATTERNS:
+        if pattern in lower:
+            return content[:200]
+    return None
 
 
 async def find_untracked_commitments(
@@ -60,16 +95,15 @@ async def find_untracked_commitments(
 
     commitments = []
     for row in rows:
-        content = (row["content"] or "").lower()
-        for pattern in COMMITMENT_PATTERNS:
-            if pattern in content:
-                commitments.append({
-                    "message_id": row["id"],
-                    "content": row["content"][:200],
-                    "pattern": pattern,
-                    "created_at": row["created_at"],
-                })
-                break  # one match per message is enough
+        content = row["content"] or ""
+        match = _detect_commitment(content)
+        if match:
+            commitments.append({
+                "message_id": row["id"],
+                "content": match[:200],
+                "pattern": "nlp",
+                "created_at": row["created_at"],
+            })
 
     return commitments[:5]  # cap at 5
 

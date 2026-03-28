@@ -10,6 +10,11 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+try:
+    from textblob import TextBlob
+except ImportError:  # pragma: no cover
+    TextBlob = None  # type: ignore[assignment,misc]
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,6 +83,30 @@ def _determine_risk(pattern_count: int) -> str:
     return "high"
 
 
+def _textblob_injection_check(text: str) -> str | None:
+    """Use TextBlob NLP to detect injection-like language."""
+    if TextBlob is None:
+        return None
+    try:
+        blob = TextBlob(text.lower())
+        words = [str(w) for w in blob.words]
+        if "ignore" in words and "instructions" in words:
+            return "instruction override detected"
+        if "you" in words and "are" in words and "now" in words:
+            idx_now = words.index("now")
+            if idx_now > 1:
+                return "role reassignment detected"
+        if "system" in words and "prompt" in words:
+            return "system prompt reference detected"
+        if "repeat" in words and (
+            "above" in words or "instructions" in words
+        ):
+            return "instruction extraction detected"
+    except Exception:
+        pass
+    return None
+
+
 class ContentFilter:
     """Scans text for common prompt injection patterns."""
 
@@ -97,6 +126,12 @@ class ContentFilter:
                 matched.append(label)
 
         matched.extend(_check_base64(text))
+
+        # TextBlob NLP injection check (supplement, not duplicate)
+        if not matched:
+            nlp_result = _textblob_injection_check(text)
+            if nlp_result:
+                matched.append(nlp_result)
 
         # Deduplicate while preserving order
         seen: set[str] = set()
