@@ -152,22 +152,32 @@ export default function ImagesPage() {
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full" onClick={(e) => downloadImage(e, img)}>
-                      <Download className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full" onClick={(e) => shareImage(e, img)}>
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                    <Button size="icon" variant="destructive" className="h-8 w-8 rounded-full" onClick={(e) => handleDelete(e, img.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <button onClick={(e) => handleDelete(e, img.id)} className="p-1.5 rounded-md bg-black/50 text-white/70 hover:text-white hover:bg-destructive transition-all" aria-label="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
+                    <div className="pointer-events-auto flex gap-2">
+                      <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full" onClick={(e) => downloadImage(e, img)}>
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      <Button size="icon" variant="secondary" className="h-9 w-9 rounded-full" onClick={(e) => shareImage(e, img)}>
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
                 <div className="p-3 bg-card/50 backdrop-blur-sm border-t border-border/5">
                   <p className="text-xs font-medium truncate mb-0.5">{img.filename}</p>
                   <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold opacity-60">
-                    {img.created_at ? new Date(img.created_at + 'Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently'}
+                    {(() => {
+                      if (!img.created_at) return 'Recently'
+                      try {
+                        const d = new Date(img.created_at.endsWith('Z') ? img.created_at : img.created_at + 'Z')
+                        return isNaN(d.getTime()) ? 'Recently' : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                      } catch { return 'Recently' }
+                    })()}
                   </p>
                 </div>
               </div>
