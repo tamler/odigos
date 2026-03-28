@@ -170,6 +170,14 @@ class KanbanConfig(BaseModel):
     enabled: bool = True
 
 
+class ImageGenerationConfig(BaseModel):
+    enabled: bool = False
+    api_key: str = ""  # Kie.ai API key
+    default_aspect_ratio: str = "1:1"
+    nsfw_filter: bool = True
+    max_poll_seconds: int = 120
+
+
 class AccessConfig(BaseModel):
     supervised: bool = False  # True = managed agent, protected settings locked. False = full admin access.
 
@@ -260,6 +268,7 @@ class Settings(BaseSettings):
     assistant: AssistantConfig = AssistantConfig()
     calendar: CalendarConfig = CalendarConfig()
     email: EmailConfig = EmailConfig()
+    image_generation: ImageGenerationConfig = ImageGenerationConfig()
     auto_update: AutoUpdateConfig = AutoUpdateConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

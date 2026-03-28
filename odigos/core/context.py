@@ -416,6 +416,20 @@ class ContextAssembler:
                 elif page_lines:
                     notebook_context = notebook_context + "\n\n" + "\n".join(page_lines)
 
+        # Image generation prompt guide (when tool is enabled)
+        if self.settings and getattr(
+            getattr(self.settings, "image_generation", None),
+            "enabled", False,
+        ):
+            img_guide = load_prompt(
+                "image_prompt_guide.md", ""
+            )
+            if img_guide:
+                if skill_catalog:
+                    skill_catalog += "\n\n" + img_guide
+                else:
+                    skill_catalog = img_guide
+
         concise_mode = getattr(getattr(self.settings, 'agent', None), 'concise_mode', False) if self.settings else False
 
         system_prompt = build_system_prompt(

@@ -316,6 +316,26 @@ async def _register_tools(
         tool_registry.register(feed_publish)
         logger.info("Feed publish tool registered")
 
+    # Image generation tool (only if configured)
+    if (
+        settings.image_generation.enabled
+        and settings.image_generation.api_key
+    ):
+        from odigos.tools.image_gen import GenerateImageTool
+        tool_registry.register(GenerateImageTool(
+            api_key=settings.image_generation.api_key,
+            default_ratio=(
+                settings.image_generation.default_aspect_ratio
+            ),
+            nsfw_filter=settings.image_generation.nsfw_filter,
+            max_poll_seconds=(
+                settings.image_generation.max_poll_seconds
+            ),
+        ))
+        logger.info(
+            "Image generation tool registered (Z-Image)"
+        )
+
     # MCP server bridges
     if settings.mcp.servers:
         from odigos.tools.mcp_bridge import MCPServer, MCPToolBridge, StdioTransport
