@@ -215,13 +215,12 @@ export default function ImagesPage() {
         </div>
         <div className="flex gap-2">
           {isMobile && (
-            <Button variant="outline" size="icon" onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="h-10 w-10">
-              <Camera className="h-5 w-5" />
+            <Button variant="ghost" size="icon" onClick={() => cameraInputRef.current?.click()} disabled={uploading} className="h-9 w-9 text-muted-foreground hover:text-foreground">
+              <Camera className="h-4 w-4" />
             </Button>
           )}
-          <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2 h-10 px-4">
+          <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="h-9 w-9 text-muted-foreground hover:text-foreground">
             <Upload className="h-4 w-4" />
-            <span className="hidden sm:inline">{uploading ? 'Uploading...' : 'Upload'}</span>
           </Button>
         </div>
         <input type="file" ref={fileInputRef} onChange={handleUpload} accept="image/*" className="hidden" />

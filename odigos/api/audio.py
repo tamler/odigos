@@ -74,9 +74,10 @@ async def transcribe_audio(request: Request):
 @router.get("/audio/speak", dependencies=[Depends(require_auth)])
 async def speak(text: str, request: Request):
     """Convert text to speech via the configured TTS provider."""
-    provider = request.app.state.tts_provider
+    settings = request.app.state.settings
+    voice_config = settings.voice
 
-    if isinstance(provider, DisabledTTS):
+    if voice_config.tts_provider == "disabled":
         return JSONResponse(
             status_code=404,
             content={"detail": "TTS is disabled"},
@@ -88,6 +89,10 @@ async def speak(text: str, request: Request):
         )
 
     try:
+        # Use current voice from settings (not the startup value)
+        # so voice changes take effect immediately
+        from odigos.providers.tts import create_tts_provider
+        provider = create_tts_provider(voice_config)
         audio_bytes = await provider.synthesize(text)
         return StreamingResponse(
             io.BytesIO(audio_bytes),
