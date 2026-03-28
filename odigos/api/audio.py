@@ -72,8 +72,12 @@ async def transcribe_audio(request: Request):
 # -- TTS: Text-to-Speech --
 
 @router.get("/audio/speak", dependencies=[Depends(require_auth)])
-async def speak(text: str, request: Request):
-    """Convert text to speech via the configured TTS provider."""
+async def speak(
+    text: str,
+    request: Request,
+    voice: str | None = None,
+):
+    """Convert text to speech. Optional voice param overrides config."""
     settings = request.app.state.settings
     voice_config = settings.voice
 
@@ -89,11 +93,24 @@ async def speak(text: str, request: Request):
         )
 
     try:
-        # Use current voice from settings (not the startup value)
-        # so voice changes take effect immediately
-        from odigos.providers.tts import create_tts_provider
-        provider = create_tts_provider(voice_config)
-        audio_bytes = await provider.synthesize(text)
+        # Use voice from query param, or current settings
+        tts_voice = voice or voice_config.tts_voice
+        logger.info("TTS: using voice %s", tts_voice)
+
+        if voice_config.tts_provider == "edge":
+            import edge_tts
+            communicate = edge_tts.Communicate(
+                text, voice=tts_voice,
+            )
+            audio_data = bytearray()
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data.extend(chunk["data"])
+            audio_bytes = bytes(audio_data)
+        else:
+            from odigos.providers.tts import create_tts_provider
+            provider = create_tts_provider(voice_config)
+            audio_bytes = await provider.synthesize(text)
         return StreamingResponse(
             io.BytesIO(audio_bytes),
             media_type="audio/mpeg",
