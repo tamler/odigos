@@ -68,7 +68,8 @@ RUN python -c "\
 from sentence_transformers import SentenceTransformer, CrossEncoder; \
 SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True); \
 CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')" && \
-    python -m textblob.download_corpora lite
+    mkdir -p /app/.cache/nltk_data && \
+    python -c "import nltk; nltk.download('punkt_tab', download_dir='/app/.cache/nltk_data'); nltk.download('averaged_perceptron_tagger_eng', download_dir='/app/.cache/nltk_data')"
 
 # Config file mount point
 VOLUME ["/app/data"]
