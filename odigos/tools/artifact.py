@@ -186,8 +186,9 @@ class DeleteArtifactTool(BaseTool):
         if artifact_dir.exists():
             shutil.rmtree(artifact_dir)
         # Also check data/files for generated images
-        files_path = Path("data/files") / filename
-        if files_path.exists():
+        safe_filename = Path(filename).name
+        files_path = Path("data/files") / safe_filename
+        if files_path.exists() and not files_path.is_symlink():
             files_path.unlink()
 
         # Delete from database

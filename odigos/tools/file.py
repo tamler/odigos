@@ -114,6 +114,8 @@ class FileTool(BaseTool):
             return ToolResult(success=False, data="", error=f"Not a directory: {path}")
         lines = []
         for entry in sorted(path.iterdir()):
+            if entry.is_symlink():
+                continue
             if entry.is_file():
                 size = entry.stat().st_size
                 lines.append(f"  {entry.name}  ({size} bytes)")

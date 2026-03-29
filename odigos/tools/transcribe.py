@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import logging
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
@@ -41,10 +42,19 @@ class TranscribeAudioTool(BaseTool):
         self.stt = stt_provider
         self.ingester = ingester
 
+    _ALLOWED_DIR = Path("data/files").resolve()
+
     async def execute(self, params: dict) -> ToolResult:
         source = params.get("source")
         if not source:
             return ToolResult(success=False, data="", error="No source audio path provided")
+
+        resolved = Path(source).resolve()
+        try:
+            resolved.relative_to(self._ALLOWED_DIR)
+        except ValueError:
+            return ToolResult(success=False, data="", error="Path outside allowed directory")
+        source = str(resolved)
 
         try:
             transcript = await asyncio.to_thread(self.stt.transcribe_file, source)

@@ -296,6 +296,7 @@ Key settings:
 | `calendar` | CalDAV calendar integration |
 | `assistant` | Floating assistant bubble settings |
 | `image_generation` | Kie.ai Z-Image API for image creation |
+| `storage` | Per-agent storage quota (warn/cap thresholds) |
 
 ## Plugins
 
@@ -315,8 +316,10 @@ Enable in the Plugins tab. Changes apply immediately.
 - **Auth:** Username/password with signed HTTP-only session cookies. API key for programmatic access. All endpoints require authentication.
 - **Sandbox:** Code runs in bubblewrap isolation with memory/timeout limits.
 - **Upload validation:** Blocked file extensions (.exe, .sh, .php, etc.) and magic byte detection for renamed executables.
+- **Path containment:** All file-access tools enforce boundary checks -- resolved paths must stay within allowed directories. Symlinks are skipped in directory listings and file operations to prevent traversal outside the data directory.
 - **Approval gates:** Dangerous tools require human sign-off.
 - **Budget controls:** Daily and monthly spending caps.
+- **Storage quotas:** Per-agent storage monitoring with configurable warning (10 GB) and soft cap (12 GB) thresholds. The heartbeat checks total data directory size periodically and notifies when approaching limits.
 - **SSRF protection:** Private IP ranges blocked in web scraping.
 - **Mesh auth:** Mutual API key authentication on WebSocket connections. Prompt injection scanning on all inbound peer messages.
 - **Single-user:** One agent, one owner. Multi-user is handled at the deployment layer.

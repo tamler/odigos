@@ -224,6 +224,11 @@ class VoiceConfig(BaseModel):
     groq_model: str = "whisper-large-v3-turbo"
 
 
+class StorageConfig(BaseModel):
+    warn_gb: float = 10.0
+    cap_gb: float = 12.0
+
+
 class Settings(BaseSettings):
     telegram_bot_token: str = ""
     llm_api_key: str = ""
@@ -270,6 +275,7 @@ class Settings(BaseSettings):
     email: EmailConfig = EmailConfig()
     image_generation: ImageGenerationConfig = ImageGenerationConfig()
     auto_update: AutoUpdateConfig = AutoUpdateConfig()
+    storage: StorageConfig = StorageConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

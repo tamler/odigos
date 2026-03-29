@@ -9,7 +9,7 @@ from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_DIR = os.path.join("data", "files")
+ALLOWED_DIR = os.path.realpath(os.path.join("data", "files"))
 
 
 def _safe_path(path: str, base: str | None = None) -> str:

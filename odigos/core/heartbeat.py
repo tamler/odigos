@@ -108,6 +108,7 @@ class Heartbeat:
         self._nudge_interval_ticks: int = 20
         self._followup_tick_counter: int = 0
         self._followup_interval_ticks: int = 30
+        self._quota_tick_counter: int = 0
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -224,6 +225,12 @@ class Heartbeat:
             if self._update_tick_counter >= _update_cfg.check_interval_ticks:
                 self._update_tick_counter = 0
                 await self._check_for_updates()
+
+        # Phase 12: Storage quota check (every 60 ticks ~= 30min at 30s interval)
+        self._quota_tick_counter += 1
+        if self._quota_tick_counter >= 60:
+            self._quota_tick_counter = 0
+            await self._check_storage_quota()
 
         if self.tracer:
             await self.tracer.emit("heartbeat_tick", None, {
@@ -822,6 +829,61 @@ class Heartbeat:
                     )
         except Exception:
             logger.debug("Update check failed", exc_info=True)
+
+    async def _check_storage_quota(self) -> None:
+        """Check data/ directory size against configured quota limits."""
+        try:
+            from pathlib import Path
+
+            quota = getattr(self.settings, "storage", None) if self.settings else None
+            warn_gb = quota.warn_gb if quota else 10.0
+            cap_gb = quota.cap_gb if quota else 12.0
+
+            data_dir = Path("data")
+            if not data_dir.exists():
+                return
+
+            def _calc_size() -> int:
+                return sum(
+                    f.stat(follow_symlinks=False).st_size
+                    for f in data_dir.rglob("*")
+                    if f.is_file() and not f.is_symlink()
+                )
+
+            total_bytes = await asyncio.to_thread(_calc_size)
+            total_gb = total_bytes / (1024 ** 3)
+
+            if total_gb >= cap_gb:
+                logger.warning("Storage quota exceeded: %.2f GB / %.1f GB cap", total_gb, cap_gb)
+                if self.notifier:
+                    await self.notifier.notify(
+                        title="Storage Limit Reached",
+                        body=(
+                            f"Storage usage is {total_gb:.1f} GB, exceeding the "
+                            f"{cap_gb:.0f} GB limit. File uploads and image generation "
+                            f"may be blocked until space is freed."
+                        ),
+                        priority="high",
+                    )
+            elif total_gb >= warn_gb:
+                logger.info("Storage warning: %.2f GB / %.1f GB warn threshold", total_gb, warn_gb)
+                if self.notifier:
+                    await self.notifier.notify(
+                        title="Storage Warning",
+                        body=(
+                            f"Storage usage is {total_gb:.1f} GB, approaching the "
+                            f"{cap_gb:.0f} GB limit. Consider cleaning up old files."
+                        ),
+                        priority="normal",
+                    )
+
+            # Store current usage for tools to check before writing
+            await self.db.execute(
+                """INSERT OR REPLACE INTO kv (key, value) VALUES ('storage_usage_gb', ?)""",
+                (f"{total_gb:.4f}",),
+            )
+        except Exception:
+            logger.debug("Storage quota check failed", exc_info=True)
 
     async def _dream_analyze_user(self) -> None:
         """Analyze recent conversations to build/update the user profile."""

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
+
+_ALLOWED_DIR = Path("data/files").resolve()
 
 
 class DocTool(BaseTool):
@@ -47,6 +50,15 @@ class DocTool(BaseTool):
         # Default: use MarkItDown
         return await self._convert_with_markitdown(source)
 
+    def _validate_local_path(self, source: str) -> str | None:
+        """Resolve a local file path and verify it's within the allowed directory."""
+        resolved = Path(source).resolve()
+        try:
+            resolved.relative_to(_ALLOWED_DIR)
+        except ValueError:
+            return None
+        return str(resolved)
+
     async def _convert_with_markitdown(self, source: str) -> ToolResult:
         if not self.markitdown:
             return ToolResult(success=False, data="", error="No document conversion provider available")
@@ -55,7 +67,10 @@ class DocTool(BaseTool):
             if source.startswith(("http://", "https://")):
                 content = await asyncio.to_thread(self.markitdown.convert_url, source)
             else:
-                content = await asyncio.to_thread(self.markitdown.convert_file, source)
+                safe = self._validate_local_path(source)
+                if not safe:
+                    return ToolResult(success=False, data="", error="Path outside allowed directory")
+                content = await asyncio.to_thread(self.markitdown.convert_file, safe)
         except Exception as e:
             logger.warning("MarkItDown conversion failed for %s: %s", source, e, exc_info=True)
             return ToolResult(success=False, data="", error=str(e))
@@ -65,6 +80,11 @@ class DocTool(BaseTool):
 
     async def _convert_with_docling(self, source: str) -> ToolResult:
         try:
+            if not source.startswith(("http://", "https://")):
+                safe = self._validate_local_path(source)
+                if not safe:
+                    return ToolResult(success=False, data="", error="Path outside allowed directory")
+                source = safe
             result = await asyncio.to_thread(self.docling.convert, source)
             content = result.content
         except Exception as e:

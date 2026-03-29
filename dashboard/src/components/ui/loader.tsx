@@ -16,6 +16,7 @@ export interface LoaderProps {
     | "text-blink"
     | "text-shimmer"
     | "loading-dots"
+    | "thinking"
   size?: "sm" | "md" | "lg"
   text?: string
   className?: string
@@ -459,6 +460,43 @@ export function TextDotsLoader({
   )
 }
 
+export function ThinkingLoader({
+  className,
+  size = "md",
+}: {
+  className?: string
+  size?: "sm" | "md" | "lg"
+}) {
+  const sizeClasses = {
+    sm: "gap-1.5",
+    md: "gap-2",
+    lg: "gap-3",
+  }
+
+  const blobSizes = {
+    sm: "size-1.5",
+    md: "size-2",
+    lg: "size-3",
+  }
+
+  return (
+    <div className={cn("flex items-center", sizeClasses[size], className)}>
+      <div className="relative flex items-center justify-center">
+        <div className={cn("absolute bg-primary rounded-full animate-fluid-pulse", blobSizes[size])} />
+        <div className={cn("relative bg-primary rounded-full opacity-80", blobSizes[size])} />
+      </div>
+      <div className="relative flex items-center justify-center">
+        <div className={cn("absolute bg-primary rounded-full animate-fluid-pulse", blobSizes[size])} style={{ animationDelay: '0.5s' }} />
+        <div className={cn("relative bg-primary rounded-full opacity-80", blobSizes[size])} style={{ animationDelay: '0.5s' }} />
+      </div>
+      <div className="relative flex items-center justify-center">
+        <div className={cn("absolute bg-primary rounded-full animate-fluid-pulse", blobSizes[size])} style={{ animationDelay: '1s' }} />
+        <div className={cn("relative bg-primary rounded-full opacity-80", blobSizes[size])} style={{ animationDelay: '1s' }} />
+      </div>
+    </div>
+  )
+}
+
 function Loader({
   variant = "circular",
   size = "md",
@@ -490,6 +528,8 @@ function Loader({
       return <TextShimmerLoader text={text} size={size} className={className} />
     case "loading-dots":
       return <TextDotsLoader text={text} size={size} className={className} />
+    case "thinking":
+      return <ThinkingLoader size={size} className={className} />
     default:
       return <CircularLoader size={size} className={className} />
   }

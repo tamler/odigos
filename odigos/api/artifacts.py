@@ -113,7 +113,8 @@ async def download_artifact(artifact_id: str, db=Depends(get_db)):
     # Fallback: check data/files (uploads and generated images)
     if not file_path.exists():
         files_dir = Path("data/files")
-        for candidate in files_dir.glob(f"{artifact_id}_*"):
+        import glob as globmod
+        for candidate in files_dir.glob(f"{globmod.escape(artifact_id)}_*"):
             file_path = candidate
             break
         else:

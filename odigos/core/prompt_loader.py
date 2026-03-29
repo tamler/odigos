@@ -11,6 +11,8 @@ _DEFAULT_BASE_DIR = "data/prompts"
 
 def load_prompt(name: str, fallback: str, base_dir: Optional[str] = None) -> str:
     """Load prompt from {base_dir}/{name}. Cached by mtime. Falls back if missing."""
+    if ".." in name or "/" in name or "\\" in name:
+        return fallback
     base = base_dir or _DEFAULT_BASE_DIR
     path = Path(base) / name
     if not path.exists():

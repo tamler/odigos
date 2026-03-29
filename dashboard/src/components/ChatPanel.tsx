@@ -527,7 +527,7 @@ export const ChatPanel = memo(({
                                 </div>
                               ) : (
                                 <div className="group/msg w-full overflow-hidden mb-4">
-                                  <div className="chat-text text-foreground break-words prose dark:prose-invert max-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
+                                  <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
                                     <Markdown>{msg.content}</Markdown>
                                   </div>
                                   <MessageActions
@@ -557,10 +557,10 @@ export const ChatPanel = memo(({
                             <Markdown>{streamingContent}</Markdown>
                           </div>
                           {isStreaming && (
-                            <div className="flex items-center gap-2 mt-2 pb-1">
-                              <Loader variant="typing" size="sm" />
-                              <span className="text-[10px] text-muted-foreground/60">
-                                {status || 'Generating...'}
+                            <div className="flex items-center gap-2 mt-3 pb-1 opacity-50 hover:opacity-100 transition-opacity duration-500">
+                              <div className="size-1.5 bg-primary rounded-full animate-pulse" />
+                              <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground/80">
+                                {status || 'Generating'}
                               </span>
                             </div>
                           )}
@@ -568,11 +568,13 @@ export const ChatPanel = memo(({
                       )}
 
                       {thinking && !streamingContent && (
-                        <div className="flex items-center gap-2">
-                          <Loader variant="typing" />
-                          <span className="text-xs text-muted-foreground animate-pulse">
-                            {status || 'Thinking...'}
-                          </span>
+                        <div className="flex flex-col gap-3 py-4 animate-in fade-in slide-in-from-bottom-2 duration-700">
+                          <div className="flex items-center gap-3">
+                            <Loader variant="thinking" size="md" />
+                            <span className="text-[13px] font-medium text-muted-foreground/70 tracking-tight">
+                              {status || 'Thinking...'}
+                            </span>
+                          </div>
                         </div>
                       )}
 
