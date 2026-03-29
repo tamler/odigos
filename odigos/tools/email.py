@@ -14,6 +14,8 @@ from email.header import decode_header
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from odigos.tools.content_filter_helper import filter_external_content
+
 from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
@@ -137,7 +139,8 @@ class CheckEmailTool(BaseTool):
                 lines.append(f"Preview: {body[:300]}")
                 lines.append("")
 
-            return ToolResult(success=True, data="\n".join(lines))
+            raw_output = "\n".join(lines)
+            return filter_external_content(raw_output, "email inbox")
         finally:
             try:
                 conn.logout()

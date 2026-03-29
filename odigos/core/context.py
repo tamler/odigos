@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import tiktoken
 
+from odigos.core.content_filter import ContentFilter
 from odigos.core.profiler import UserProfile, format_profile_for_context
 from odigos.core.prompt_loader import load_prompt
 from odigos.core.queries import get_recent_tool_errors, get_user_facts, get_user_profile
@@ -15,6 +16,8 @@ from odigos.core.routing import load_routing_rules
 from odigos.db import Database
 from odigos.personality.section_registry import SectionRegistry
 from odigos.personality.prompt_builder import build_system_prompt
+
+_context_filter = ContentFilter()
 
 if TYPE_CHECKING:
     from odigos.core.checkpoint import CheckpointManager
@@ -452,11 +455,14 @@ class ContextAssembler:
                 page_title = context_metadata.get("page_title", "")
                 visible_data = context_metadata.get("visible_data", "")
                 if page_title:
-                    page_lines.append(f"## User is currently viewing: {page_title} ({page} page)")
+                    scan = _context_filter.scan(page_title)
+                    safe_title = scan.sanitized_text
+                    page_lines.append(f"## User is currently viewing: {safe_title} ({page} page)")
                 elif page:
                     page_lines.append(f"## User is currently on the {page} page")
                 if visible_data:
-                    page_lines.append(visible_data)
+                    scan = _context_filter.scan(visible_data)
+                    page_lines.append(scan.sanitized_text)
                 if page_lines and not notebook_context:
                     notebook_context = "\n".join(page_lines)
                 elif page_lines:
@@ -555,9 +561,10 @@ class ContextAssembler:
         )
         if summaries:
             combined = "\n\n".join(row["summary"] for row in summaries)
+            scan = _context_filter.scan(combined)
             messages.append({
                 "role": "system",
-                "content": f"[Previous conversation summary]:\n\n{combined}",
+                "content": f"[Previous conversation summary]:\n\n{scan.sanitized_text}",
             })
 
         # Conversation history

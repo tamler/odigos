@@ -4,6 +4,7 @@ import logging
 
 from sentence_transformers import CrossEncoder
 
+from odigos.core.content_filter import ContentFilter
 from odigos.memory.chunking import ChunkingService
 from odigos.memory.graph import EntityGraph
 from odigos.memory.resolver import EntityResolver
@@ -11,6 +12,8 @@ from odigos.memory.summarizer import ConversationSummarizer
 from odigos.memory.vectors import VectorMemory
 
 logger = logging.getLogger(__name__)
+
+_recall_filter = ContentFilter()
 
 _reranker: CrossEncoder | None = None
 
@@ -144,7 +147,15 @@ class MemoryManager:
         if entity_lines:
             sections.append("## Known entities\n" + "\n".join(entity_lines))
 
-        return "\n\n".join(sections)
+        combined = "\n\n".join(sections)
+        if combined:
+            scan = _recall_filter.scan(combined)
+            if scan.is_suspicious:
+                logger.warning(
+                    "Content filter flagged RAG recall: %s", scan.matched_patterns,
+                )
+            return scan.sanitized_text
+        return combined
 
     async def store(
         self,

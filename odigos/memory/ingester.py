@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import logging
 import uuid
+
+from odigos.core.content_filter import ContentFilter
 from odigos.db import Database
 from odigos.memory.chunking import ChunkingService
 from odigos.memory.vectors import VectorMemory
 
 logger = logging.getLogger(__name__)
+
+_ingest_filter = ContentFilter()
 
 
 class DocumentIngester:
@@ -73,6 +77,13 @@ class DocumentIngester:
 
         stored_count = 0
         for chunk_text in chunks:
+            scan = _ingest_filter.scan(chunk_text)
+            if scan.is_suspicious:
+                logger.warning(
+                    "Content filter flagged chunk in '%s': %s",
+                    filename, scan.matched_patterns,
+                )
+                chunk_text = scan.sanitized_text
             when_to_use = f"when referencing content from '{filename}': {chunk_text[:100]}"
             try:
                 await self.vector_memory.store(

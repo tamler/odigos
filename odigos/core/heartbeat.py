@@ -536,6 +536,16 @@ class Heartbeat:
                 logger.debug("Skipped non-content peer message from %s: %s", peer, msg_type)
                 continue
 
+            # Re-scan for injection on replay (annotation may have been lost in DB round-trip)
+            from odigos.core.content_filter import ContentFilter
+            _peer_filter = ContentFilter()
+            scan = _peer_filter.scan(message_text)
+            if scan.risk_level == "high":
+                logger.warning("Blocked peer message from %s: high injection risk", peer)
+                await self.agent_client.mark_processed(msg["message_id"])
+                continue
+            message_text = scan.sanitized_text
+
             logger.info(
                 "Processing inbound %s from peer %s: %s",
                 msg_type, peer, message_text[:100],

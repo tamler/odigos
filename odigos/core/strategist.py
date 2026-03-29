@@ -244,10 +244,20 @@ class Strategist:
             if target == "new_skill" and h.get("skill_name") and h.get("skill_instructions"):
                 if self.skill_registry:
                     try:
+                        from odigos.core.content_filter import ContentFilter
+                        _skill_filter = ContentFilter()
+                        scan = _skill_filter.scan(h["skill_instructions"])
+                        if scan.risk_level == "high":
+                            logger.warning(
+                                "Blocked auto-skill %s: high injection risk -- %s",
+                                h["skill_name"], scan.matched_patterns,
+                            )
+                            continue
+                        instructions = scan.sanitized_text
                         self.skill_registry.create(
                             name=h["skill_name"],
                             description=h.get("description", "Auto-generated skill"),
-                            system_prompt=h["skill_instructions"],
+                            system_prompt=instructions,
                         )
                         logger.info("Strategist created new skill: %s", h["skill_name"])
                     except Exception:
