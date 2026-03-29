@@ -490,12 +490,14 @@ export default function AppLayout() {
     socketRef.current = socket
 
     // Request push notification permission and subscribe
-    if (Notification.permission === 'default') {
-      Notification.requestPermission().then((perm) => {
-        if (perm === 'granted') subscribeToPush()
-      })
-    } else if (Notification.permission === 'granted') {
-      subscribeToPush()
+    if (typeof Notification !== 'undefined') {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then((perm) => {
+          if (perm === 'granted') subscribeToPush()
+        }).catch(() => {})
+      } else if (Notification.permission === 'granted') {
+        subscribeToPush()
+      }
     }
 
     return () => socket.disconnect()
