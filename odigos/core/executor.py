@@ -36,6 +36,99 @@ def _estimate_cost(tokens_in: int, tokens_out: int) -> float:
     return (tokens_in * _INPUT_RATE_PER_M + tokens_out * _OUTPUT_RATE_PER_M) / 1_000_000
 
 
+import random
+
+_TOOL_STATUS_MAP: dict[str, list[str]] = {
+    "generate_image": [
+        "Painting something up...",
+        "Conjuring pixels...",
+        "Firing up the art studio...",
+        "Crafting your image...",
+        "Bringing your vision to life...",
+    ],
+    "web_search": [
+        "Searching the web...",
+        "Digging through the internet...",
+        "Scouring the web...",
+        "Looking that up...",
+    ],
+    "web_scrape": [
+        "Reading that page...",
+        "Pulling content...",
+        "Grabbing the details...",
+    ],
+    "execute_code": [
+        "Running some code...",
+        "Crunching numbers...",
+        "Executing...",
+    ],
+    "check_email": [
+        "Checking your inbox...",
+        "Peeking at emails...",
+    ],
+    "send_email": [
+        "Sending that off...",
+        "Dispatching your message...",
+    ],
+    "check_calendar": [
+        "Checking your schedule...",
+        "Looking at your calendar...",
+    ],
+    "process_document": [
+        "Reading that document...",
+        "Digesting the content...",
+        "Processing the file...",
+    ],
+    "remember_fact": [
+        "Noted. Committing to memory...",
+        "Saving that...",
+    ],
+    "recall_memory": [
+        "Searching my memory...",
+        "Let me think back...",
+    ],
+    "decompose_query": [
+        "Breaking this down...",
+        "Planning the approach...",
+    ],
+    "file_read": [
+        "Reading that file...",
+    ],
+    "file_write": [
+        "Writing the file...",
+    ],
+    "translate": [
+        "Translating...",
+    ],
+    "knowledge_lookup": [
+        "Looking that up...",
+        "Checking the encyclopedia...",
+    ],
+    "image_process": [
+        "Processing the image...",
+    ],
+    "create_artifact": [
+        "Creating your file...",
+        "Putting it together...",
+    ],
+    "workspace_search": [
+        "Searching your workspace...",
+    ],
+}
+
+_GENERIC_STATUSES = [
+    "Working on it...",
+    "On it...",
+    "One moment...",
+    "Handling that...",
+]
+
+
+def _friendly_tool_status(tool_name: str) -> str:
+    options = _TOOL_STATUS_MAP.get(tool_name, _GENERIC_STATUSES)
+    return random.choice(options)
+
+
 @dataclass
 class ExecuteResult:
     """Result from executor: LLM response + metadata."""
@@ -98,10 +191,6 @@ class Executor:
         self._active_skill_tools = set()
         self._pending_skill_prompt = None
         self._pending_suggested_actions: list[str] | None = None
-
-        # Emit classification status
-        if status_callback and query_analysis:
-            await status_callback(f"Classified as {query_analysis.classification}")
 
         # Build initial context
         messages = await self.context_assembler.build(
@@ -231,7 +320,7 @@ class Executor:
             for tc in response.tool_calls:
                 tools_used.add(tc.name)
                 if status_callback:
-                    await status_callback(f"Using {tc.name}...")
+                    await status_callback(_friendly_tool_status(tc.name))
                 result_content = await self._execute_tool(
                     conversation_id, tc, message_content=message_content,
                 )
