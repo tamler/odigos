@@ -300,7 +300,7 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
             {isImage ? (
               <div className="h-full w-full flex items-center justify-center p-4 lg:p-12 bg-muted/10">
                 <img 
-                  src={`/api/artifacts/${data.id}/download`}
+                  src={`/api/artifacts/${artifactId}/download`}
                   alt={data.filename}
                   className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
                 />
