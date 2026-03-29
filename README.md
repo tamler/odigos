@@ -325,7 +325,7 @@ Enable in the Plugins tab. Changes apply immediately.
 
 ```bash
 uv sync                        # Install dependencies
-uv run pytest                  # Run tests (1215+)
+uv run pytest                  # Run tests (1260+)
 uv run python -m odigos.main   # Start locally
 cd dashboard && npm run dev    # Dashboard dev server
 ```
@@ -344,6 +344,10 @@ cd dashboard && npm run dev    # Dashboard dev server
 - Evolution engine improvements informed by [VISTA](https://arxiv.org/abs/2603.18388) (parallel trials, decoupled hypothesis/rewrite, random restarts)
 - Strategist trial-pattern learning informed by [Self-Evolve](https://arxiv.org/abs/2603.18620) and [AutoPrompter](https://github.com/gauravvij/autoprompter) (learning from trial history, optimization ledger)
 - Goal-directed evolution informed by [GOAL.md](https://github.com/jmilinovich/goal-md) (explicit fitness functions, operating modes, action catalogs)
+- Context pruning informed by [Chroma Context-1](https://www.trychroma.com/research/context-1) (multi-hop retrieval, self-editing context) and [Context Rot](https://www.trychroma.com/research/context-rot) (performance degrades with context length)
+- Evaluator V2 and sprint contracts informed by [Anthropic Harness Design](https://www.anthropic.com/engineering/harness-design-long-running-apps) (generator-evaluator separation, context resets)
+- Skill maturity lifecycle and structured profiling informed by [STEM Agent](https://github.com/alfredcs/stem-agent) (pluripotent skill lifecycle, 20+ dimension caller profiler)
+- Legal analysis skills adapted from [ai-legal-claude](https://github.com/zubair-trabzada/ai-legal-claude) (contract review, compliance checking, negotiation prompts)
 
 ## License
 
