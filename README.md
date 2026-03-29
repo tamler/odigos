@@ -321,7 +321,8 @@ Enable in the Plugins tab. Changes apply immediately.
 - **Budget controls:** Daily and monthly spending caps.
 - **Storage quotas:** Per-agent storage monitoring with configurable warning (10 GB) and soft cap (12 GB) thresholds. The heartbeat checks total data directory size periodically and notifies when approaching limits.
 - **SSRF protection:** Private IP ranges blocked in web scraping.
-- **Mesh auth:** Mutual API key authentication on WebSocket connections. Prompt injection scanning on all inbound peer messages.
+- **Prompt injection defense:** Multi-layer protection against prompt injection in external content (emails, documents, web pages, peer messages, RAG recall). Regex patterns, base64 probe detection, TextBlob NLP analysis, and structural separation (`<external_data>` tags with instruction hierarchy). Canary tokens detect system prompt exfiltration -- leaked tokens are auto-redacted from output. Auto-generated skills are blocked if high-risk injection patterns are detected.
+- **Mesh auth:** Mutual API key authentication on WebSocket connections. Prompt injection scanning on all inbound peer messages with re-scan on DB replay.
 - **Single-user:** One agent, one owner. Multi-user is handled at the deployment layer.
 
 ## Development
