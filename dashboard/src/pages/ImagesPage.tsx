@@ -42,7 +42,7 @@ function ImageCard({ img, selected, onTap, onLongPress, onDelete, onDownload, on
     >
       <div className="aspect-square relative overflow-hidden bg-muted">
         <img
-          src={`/api/files/${img.filename}`}
+          src={`/api/artifacts/${img.id}/download`}
           alt={img.filename}
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
@@ -183,7 +183,7 @@ export default function ImagesPage() {
 
   const shareImage = async (e: React.MouseEvent, artifact: Artifact) => {
     e.stopPropagation()
-    const url = `${window.location.origin}/api/files/${artifact.filename}`
+    const url = `${window.location.origin}/api/artifacts/${artifact.id}/download`
     if (navigator.share) {
       try {
         await navigator.share({ title: artifact.filename, url })

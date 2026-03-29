@@ -66,6 +66,7 @@ class GenerateImageTool(BaseTool):
         self._db = db
 
     async def execute(self, params: dict) -> ToolResult:
+        conversation_id = params.pop("_conversation_id", None)
         prompt = (params.get("prompt") or "").strip()
         if not prompt:
             return ToolResult(
@@ -108,10 +109,10 @@ class GenerateImageTool(BaseTool):
                 now = datetime.now(timezone.utc).isoformat()
                 await self._db.execute(
                     "INSERT INTO artifacts "
-                    "(id, filename, content_type, "
+                    "(id, conversation_id, filename, content_type, "
                     "file_size, created_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (artifact_id, filename,
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (artifact_id, conversation_id, filename,
                      "image/png", file_size, now),
                 )
 

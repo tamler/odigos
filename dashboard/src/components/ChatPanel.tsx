@@ -35,7 +35,7 @@ interface ChatPanelProps {
 }
 
 const ImageArtifact = ({ artifact, onClick }: { artifact: Artifact, onClick: () => void }) => {
-  const downloadUrl = `/api/files/${artifact.filename}`
+  const downloadUrl = `/api/artifacts/${artifact.id}/download`
   
   const shareArtifact = async (e: React.MouseEvent) => {
     e.stopPropagation()
