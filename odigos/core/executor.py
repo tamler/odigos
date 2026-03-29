@@ -358,8 +358,18 @@ class Executor:
                 model="system", tokens_in=0, tokens_out=0, cost_usd=0.0,
             )
 
+        # Check for canary token leak (system prompt exfiltration)
+        content = last_response.content or ""
+        try:
+            from odigos.personality.prompt_builder import CANARY_TOKEN
+            if CANARY_TOKEN in content:
+                logger.warning("CANARY TOKEN DETECTED in LLM output -- possible prompt exfiltration")
+                content = content.replace(CANARY_TOKEN, "[REDACTED]")
+        except Exception:
+            pass
+
         aggregated = LLMResponse(
-            content=last_response.content,
+            content=content,
             model=last_response.model,
             tokens_in=total_tokens_in,
             tokens_out=total_tokens_out,

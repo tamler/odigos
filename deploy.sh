@@ -61,6 +61,9 @@ for entry in "${BARE_METAL[@]}"; do
     # Sync dependencies (new packages from pyproject.toml)
     uv sync --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
 
+    # Ensure TextBlob NLTK data is present
+    sudo -u "$SVC_USER" bash -c "cd $DIR && source .venv/bin/activate && python -m textblob.download_corpora lite" &>/dev/null || true
+
     # Rebuild dashboard
     if [ "$SKIP" != "true" ] && [ -d dashboard ]; then
       cd dashboard

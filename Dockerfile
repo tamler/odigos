@@ -66,7 +66,8 @@ USER odigos
 RUN python -c "\
 from sentence_transformers import SentenceTransformer, CrossEncoder; \
 SentenceTransformer('nomic-ai/nomic-embed-text-v1.5', trust_remote_code=True); \
-CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')" && \
+    python -m textblob.download_corpora lite
 
 # Config file mount point
 VOLUME ["/app/data"]

@@ -57,7 +57,7 @@ def score_section_relevance(
         # Combined score (phrases weighted higher)
         base_score = (overlap_score * 0.4) + (phrase_score * 0.6)
 
-    except ImportError:
+    except (ImportError, Exception):
         base_score = 0.5  # Fallback: include everything
 
     # Classification-based boosting
