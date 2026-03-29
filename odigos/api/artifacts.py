@@ -110,20 +110,22 @@ async def download_artifact(artifact_id: str, db=Depends(get_db)):
     filename = row["filename"]
     file_path = ARTIFACTS_DIR / artifact_id / filename
 
-    # Fallback: check data/files and data/uploads
+    # Check data/files/ (all uploads and generated images land here)
     if not file_path.exists():
-        for search_dir in [Path("data/files"), Path("data/uploads")]:
-            if not search_dir.exists():
-                continue
-            import glob as globmod
-            for candidate in search_dir.glob(f"{globmod.escape(artifact_id)}_*"):
+        files_dir = Path("data/files")
+        import glob as globmod
+        for candidate in files_dir.glob(f"{globmod.escape(artifact_id)}_*"):
+            file_path = candidate
+            break
+        else:
+            alt = files_dir / filename
+            if alt.exists():
+                file_path = alt
+        # Legacy: check data/uploads/ for files created before consolidation
+        if not file_path.exists():
+            uploads_dir = Path("data/uploads")
+            for candidate in uploads_dir.glob(f"{globmod.escape(artifact_id)}_*"):
                 file_path = candidate
-                break
-            else:
-                alt = search_dir / filename
-                if alt.exists():
-                    file_path = alt
-            if file_path.exists():
                 break
 
     if not file_path.exists():

@@ -466,7 +466,7 @@ async def lifespan(app: FastAPI):
     app.state.settings = settings
     app.state.config_path = config_path
     app.state.env_path = ".env"
-    app.state.upload_dir = "data/uploads"
+    app.state.upload_dir = "data/files"
 
     # Initialize VAPID keys for web push notifications
     from odigos.core.webpush import get_or_create_vapid_keys
@@ -763,7 +763,7 @@ async def lifespan(app: FastAPI):
     )
     agent_service.doc_ingester = doc_ingester
     agent_service.markitdown_provider = markitdown_provider
-    agent_service.upload_dir = "data/uploads"
+    agent_service.upload_dir = "data/files"
     plugin_context.set_service(agent_service)
     app.state.agent_service = agent_service
 

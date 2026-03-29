@@ -170,7 +170,7 @@ class TelegramChannel(Channel):
             return
 
         # Copy to persistent uploads and auto-ingest into memory
-        upload_dir = getattr(self.service, "upload_dir", "data/uploads")
+        upload_dir = getattr(self.service, "upload_dir", "data/files")
         os.makedirs(upload_dir, exist_ok=True)
         persistent_name = f"{secrets.token_hex(8)}_{os.path.basename(file_path)}"
         persistent_path = os.path.join(upload_dir, persistent_name)
@@ -249,7 +249,7 @@ class TelegramChannel(Channel):
             return
 
         # Save to persistent uploads
-        upload_dir = getattr(self.service, "upload_dir", "data/uploads")
+        upload_dir = getattr(self.service, "upload_dir", "data/files")
         os.makedirs(upload_dir, exist_ok=True)
         persistent_name = f"{secrets.token_hex(8)}_{os.path.basename(file_path)}"
         persistent_path = os.path.join(upload_dir, persistent_name)
