@@ -80,12 +80,8 @@ export default function SettingsPage() {
     return (
       <div className="flex-1 flex flex-col bg-background overflow-y-auto">
         <div className="px-4 py-6">
-          <div className="flex items-center justify-between mb-6 pl-10">
+          <div className="mb-6 pl-10">
             <h1 className="text-2xl font-bold">Settings</h1>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="text-muted-foreground">
-              <MessageCircle className="h-4 w-4 mr-1.5" />
-              Chat
-            </Button>
           </div>
           <div className="space-y-1">
             {SECTIONS.map((s) => (

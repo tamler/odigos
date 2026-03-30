@@ -580,11 +580,11 @@ export default function AppLayout() {
   )
 
   useEffect(() => {
-    if (isSettings) {
+    if (isSettings && !isMobile) {
       setSidebarOpen(true)
       setCollapsed(false)
     }
-  }, [isSettings])
+  }, [isSettings, isMobile])
 
   useEffect(() => {
     if (isNotebook && notebooks.length === 0) {
@@ -626,12 +626,12 @@ export default function AppLayout() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Open menu"
+            aria-label={isSettings ? "Back to chat" : "Open menu"}
             className="lg:hidden fixed top-3 left-3 z-20 h-9 w-9 text-muted-foreground/50 hover:text-foreground"
             style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => isSettings ? navigate('/') : setSidebarOpen(true)}
           >
-            <Menu className="h-4 w-4" />
+            {isSettings ? <MessageCircle className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </Button>
         )}
 

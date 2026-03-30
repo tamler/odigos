@@ -141,10 +141,9 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
             }
             // Restart listening and monitoring if still active
             if (activeRef.current && streamRef.current) {
-              const newRecorder = new MediaRecorder(streamRef.current, {
-                mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                  ? 'audio/webm;codecs=opus' : 'audio/webm',
-              })
+              const restartMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg', '']
+                .find(m => !m || MediaRecorder.isTypeSupported(m)) || ''
+              const newRecorder = new MediaRecorder(streamRef.current, restartMime ? { mimeType: restartMime } : {})
               recorderRef.current = newRecorder
               startListening()
               // Restart the monitoring loop
@@ -183,11 +182,10 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       source.connect(analyser)
       analyserRef.current = analyser
 
-      // Set up MediaRecorder
-      const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus' : 'audio/webm',
-      })
+      // Set up MediaRecorder -- pick best supported format
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg', '']
+        .find(m => !m || MediaRecorder.isTypeSupported(m)) || ''
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       recorderRef.current = recorder
 
       activeRef.current = true
@@ -197,8 +195,10 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       // Start the monitoring loop and recording
       startListening()
       animFrameRef.current = requestAnimationFrame(monitorLoop)
-    } catch {
-      console.error('Failed to start voice mode')
+    } catch (err) {
+      console.error('Failed to start voice mode:', err)
+      setActive(false)
+      activeRef.current = false
     }
   }, [startListening, monitorLoop])
 
