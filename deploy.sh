@@ -61,6 +61,9 @@ for entry in "${BARE_METAL[@]}"; do
     # Sync dependencies (new packages from pyproject.toml)
     uv sync --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
 
+    # Force CPU-only PyTorch (uv pulls CUDA by default, servers have no GPU)
+    uv pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --quiet 2>&1 | tail -1 || true
+
     # Ensure TextBlob NLTK data is present
     sudo -u "$SVC_USER" bash -c "cd $DIR && source .venv/bin/activate && python -m textblob.download_corpora lite" &>/dev/null || true
 
