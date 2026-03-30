@@ -162,6 +162,21 @@ Odigos improves itself without human intervention. The evolution engine runs a c
 | Prompt sections | Identity, voice, meta instructions in `data/agent/*.md` |
 | Skills | New skills auto-created from detected patterns |
 | Experiences | Tactical lessons stored and injected into future context |
+| Evolution parameters | The strategist tunes its own confidence thresholds, trial durations, and evaluation minimums |
+
+### Tool Execution Contracts
+
+Every tool has an execution contract that defines retry behavior, timeouts, and failure handling. When a tool fails, the error is classified into a failure taxonomy (transient, input, permission, unavailable, unknown) with per-category recovery strategies. Transient failures (timeouts, rate limits, connection resets) are retried transparently with exponential backoff -- the LLM never sees the retry. Input and permission errors surface immediately. This makes the agent resilient to flaky APIs without wasting tool turns.
+
+### Autonomous Behavior
+
+The agent works proactively during idle time. When no user messages are pending, the heartbeat picks up in-progress plans and executes the next pending step autonomously. Every tool call carries goal ancestry -- a reference to the user goal or plan step that motivated it -- so the evaluator scores actions against the original intent, not just keyword overlap. Completed autonomous work is logged in a session table and injected into context for the next cycle, so the agent picks up where it left off.
+
+Near budget limits, the agent throttles gracefully: it switches to the background model, caps remaining tool turns, and injects a conciseness instruction. This is a gradual degradation, not a hard wall.
+
+### Meta-Improvement
+
+The strategist doesn't just improve the agent -- it improves how improvement works. When domain performance trends suggest the evolution system itself is miscalibrated (e.g., trials are too short to accumulate enough data, or confidence thresholds are too permissive), the strategist proposes changes to its own parameters. These meta-proposals become trials evaluated by the same system. If the change produces better outcomes, it's promoted. If not, it's reverted. The agent literally tunes its own improvement process.
 
 ## Skill System
 
@@ -238,8 +253,9 @@ One process. One database. No microservices.
 - **Cross-encoder reranking** (ms-marco-MiniLM) for document retrieval accuracy
 - **NLP layer** (TextBlob) for sentiment analysis, entity extraction, spell checking, commitment detection
 - **Plugin system** for tools, channels, and providers
-- **Heartbeat loop** for background processing, goal tracking, evolution trials, proactive nudges, follow-up detection, idle research, auto-updates
-- **Parallel context assembly** -- 11 context queries run concurrently via asyncio.gather
+- **Heartbeat loop** for background processing, goal tracking, evolution trials, proactive plan execution, nudges, follow-up detection, idle research, auto-updates, storage quota monitoring
+- **Failure taxonomy** classifies tool errors (transient, input, permission, unavailable) with per-category retry strategies and exponential backoff
+- **Parallel context assembly** -- 13 context queries run concurrently via asyncio.gather
 - **Message queue** -- WebSocket chat messages never dropped, processed sequentially
 
 Everything runs on a single VPS. 4 CPU, 16GB RAM is comfortable. No external databases, no message queues, no container orchestration.
@@ -352,6 +368,9 @@ cd dashboard && npm run dev    # Dashboard dev server
 - Evaluator V2 and sprint contracts informed by [Anthropic Harness Design](https://www.anthropic.com/engineering/harness-design-long-running-apps) (generator-evaluator separation, context resets)
 - Skill maturity lifecycle and structured profiling informed by [STEM Agent](https://github.com/alfredcs/stem-agent) (pluripotent skill lifecycle, 20+ dimension caller profiler)
 - Legal analysis skills adapted from [ai-legal-claude](https://github.com/zubair-trabzada/ai-legal-claude) (contract review, compliance checking, negotiation prompts)
+- Agent harness execution contracts and failure taxonomy informed by [NLAH](https://arxiv.org/html/2603.25723v1) (natural-language agent harnesses, execution contracts, stage structure)
+- Autonomous agent behavior and goal ancestry informed by [Paperclip](https://github.com/paperclipai/paperclip) (goal-directed work cycles, budget-aware behavior, session persistence)
+- Meta-improvement and recursive self-modification informed by [Hyperagents](https://arxiv.org/abs/2603.19461) (self-referential agents, metacognitive self-modification)
 
 ## License
 
