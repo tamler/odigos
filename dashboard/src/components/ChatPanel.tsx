@@ -269,7 +269,7 @@ export const ChatPanel = memo(({
     }).catch(() => {})
   }, [activeConversationId, searchParams, setMessages])
 
-  // Fetch artifacts when thinking completes (with delayed retry for async generation)
+  // Fetch artifacts when thinking completes + poll for async generation (images take 30-60s)
   useEffect(() => {
     if (!thinking && loadedConvRef.current) {
       const cid = loadedConvRef.current
@@ -278,9 +278,10 @@ export const ChatPanel = memo(({
           .then(res => { if (res?.artifacts) setArtifacts(res.artifacts) })
           .catch(() => {})
       fetchArtifacts()
-      // Retry after 3s in case image gen was still downloading
-      const timer = setTimeout(fetchArtifacts, 3000)
-      return () => clearTimeout(timer)
+      // Poll every 5s for up to 90s to catch async image generation
+      const interval = setInterval(fetchArtifacts, 5000)
+      const timeout = setTimeout(() => clearInterval(interval), 90000)
+      return () => { clearInterval(interval); clearTimeout(timeout) }
     }
   }, [thinking])
 
