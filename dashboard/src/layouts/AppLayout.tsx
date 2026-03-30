@@ -23,7 +23,6 @@ import {
   FileText,
   Terminal,
   User,
-  ArrowLeft,
   Link as LinkIcon,
   Rss,
   Eye,
