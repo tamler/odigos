@@ -170,7 +170,6 @@ export const ChatPanel = memo(({
   const [voiceAmplitude, setVoiceAmplitude] = useState(0)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Voice mode: continuous listen → transcribe → send → TTS → repeat
   const voiceMode = useVoiceMode({
@@ -305,49 +304,10 @@ export const ChatPanel = memo(({
     handleSendRef.current = (text: string) => handleSend(text)
   })
 
-  // Use shared TTS from AppLayout when available (prevents duplicate audio refs)
-  const [localTTSPlaying, setLocalTTSPlaying] = useState(false)
-  const isTTSPlaying = outletTTSPlaying ?? localTTSPlaying
-
-  const playTTS = useCallback(async (text: string) => {
-    if (outletPlayTTS) { outletPlayTTS(text); return }
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause()
-      currentAudioRef.current.src = ''
-      currentAudioRef.current = null
-      setLocalTTSPlaying(false)
-    }
-    if (!text) return
-    try {
-      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`, {
-        credentials: 'include',
-      })
-      if (!res.ok) return
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      currentAudioRef.current = audio
-      setLocalTTSPlaying(true)
-      audio.onended = () => {
-        URL.revokeObjectURL(url)
-        currentAudioRef.current = null
-        setLocalTTSPlaying(false)
-      }
-      audio.play()
-    } catch {
-      setLocalTTSPlaying(false)
-    }
-  }, [outletPlayTTS])
-
-  const stopTTS = useCallback(() => {
-    if (outletStopTTS) { outletStopTTS(); return }
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause()
-      currentAudioRef.current.src = ''
-      currentAudioRef.current = null
-    }
-    setLocalTTSPlaying(false)
-  }, [])
+  // TTS -- always use shared audio system from AppLayout via outlet context
+  const playTTS = outletPlayTTS || (() => {})
+  const stopTTS = outletStopTTS || (() => {})
+  const isTTSPlaying = outletTTSPlaying ?? false
 
   const handleEdit = useCallback((messageIndex: number, content: string) => {
     socketRef.current?.send('edit', {
@@ -768,10 +728,7 @@ export const ChatPanel = memo(({
                       onClick={() => {
                         socketRef.current?.send('cancel')
                         setIsStreaming(false)
-                        if (currentAudioRef.current) {
-                          currentAudioRef.current.pause()
-                          currentAudioRef.current = null
-                        }
+                        stopTTS()
                       }}
                     >
                       <Square className="h-5 w-5 lg:h-4 lg:w-4 fill-current" />

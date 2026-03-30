@@ -52,6 +52,7 @@ import { toast } from 'sonner'
 import { executeActions, UIAction } from '@/lib/actions'
 import { useTheme } from 'next-themes'
 import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
+import { useAudio } from '@/hooks/useAudio'
 import { subscribeToPush } from '@/lib/push'
 import { Artifact } from '@/components/ArtifactCard'
 
@@ -302,53 +303,16 @@ export default function AppLayout() {
   const { setTheme } = useTheme()
   const setThemeRef = useRef(setTheme)
   setThemeRef.current = setTheme
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
   const pendingTitles = useRef<Record<string, string>>({})
 
-  const [isTTSPlaying, setIsTTSPlaying] = useState(false)
+  // Shared audio system -- single source of truth for all TTS
+  const { play: playTTS, stop: stopTTS, playing: isTTSPlaying } = useAudio()
+
   const activeIdRef = useRef(activeId)
 
   useEffect(() => {
     activeIdRef.current = activeId
   }, [activeId])
-
-  const playTTS = useCallback(async (text: string) => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause()
-      currentAudioRef.current.src = ''
-      currentAudioRef.current = null
-      setIsTTSPlaying(false)
-    }
-    if (!text) return
-    try {
-      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`, {
-        credentials: 'include',
-      })
-      if (!res.ok) return
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const audio = new Audio(url)
-      currentAudioRef.current = audio
-      setIsTTSPlaying(true)
-      audio.onended = () => {
-        URL.revokeObjectURL(url)
-        currentAudioRef.current = null
-        setIsTTSPlaying(false)
-      }
-      audio.play()
-    } catch {
-      setIsTTSPlaying(false)
-    }
-  }, [])
-
-  const stopTTS = useCallback(() => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause()
-      currentAudioRef.current.src = ''
-      currentAudioRef.current = null
-    }
-    setIsTTSPlaying(false)
-  }, [])
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024)
