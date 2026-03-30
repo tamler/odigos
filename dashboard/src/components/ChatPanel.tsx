@@ -203,6 +203,17 @@ export const ChatPanel = memo(({
     if (!thinking && isStreaming) setIsStreaming(false)
   }, [thinking, isStreaming])
 
+  // Safety: clear thinking after 120s if server never responds
+  useEffect(() => {
+    if (!thinking) return
+    const timer = setTimeout(() => {
+      setThinking(false)
+      setIsStreaming(false)
+      setStatus(null)
+    }, 120000)
+    return () => clearTimeout(timer)
+  }, [thinking])
+
   // Sync voice mode phase with agent status
   useEffect(() => {
     if (!voiceMode.active) return

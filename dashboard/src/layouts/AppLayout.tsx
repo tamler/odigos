@@ -689,8 +689,7 @@ export default function AppLayout() {
           {artifactPanelOpen && activeArtifactId && (
             <>
               {isMobile ? (
-                <aside className="fixed inset-x-0 bottom-0 z-50 h-[85vh] bg-background border-t border-border/40 rounded-t-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 ease-out">
-                  <div className="w-12 h-1 bg-muted rounded-full mx-auto my-3 shrink-0" />
+                <aside className="fixed inset-0 z-50 bg-background flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 ease-out">
                   <ArtifactPreview artifactId={activeArtifactId} onClose={() => setArtifactPanelOpen(false)} />
                 </aside>
               ) : (
