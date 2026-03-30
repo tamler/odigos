@@ -1,4 +1,4 @@
-"""Image processing tool using Pillow."""
+"""Image processing tool using Pillow + Tesseract OCR."""
 from __future__ import annotations
 
 import asyncio
@@ -8,6 +8,12 @@ import os
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
+
+try:
+    import pytesseract
+    _OCR_AVAILABLE = True
+except ImportError:
+    _OCR_AVAILABLE = False
 
 from odigos.storage import FILES_DIR
 ALLOWED_DIR = os.path.realpath(str(FILES_DIR))
@@ -109,12 +115,24 @@ def _rotate(path: str, output: str, angle: int):
         return (rotated.width, rotated.height)
 
 
+def _ocr(path: str, lang: str = "eng") -> str:
+    """Extract text from an image using Tesseract OCR."""
+    from PIL import Image
+
+    if not _OCR_AVAILABLE:
+        raise RuntimeError("pytesseract not installed")
+    with Image.open(path) as img:
+        text = pytesseract.image_to_string(img, lang=lang)
+    return text.strip()
+
+
 class ImageTool(BaseTool):
     name = "process_image"
     category = "media"
     description = (
-        "Process existing images: resize, crop, convert format, create thumbnails, or rotate. "
-        "Use when you have an image file that needs modification. "
+        "Process existing images: resize, crop, convert, thumbnail, rotate, or extract text (OCR). "
+        "Use when you have an image file that needs modification or text extraction. "
+        "Use action=ocr to read text from screenshots, receipts, documents, signs, or photos. "
         "Do not use to create new images from text — use generate_image for that."
     )
     parameters_schema = {
@@ -131,7 +149,7 @@ class ImageTool(BaseTool):
                 "type": "string",
                 "enum": [
                     "info", "resize", "crop",
-                    "thumbnail", "convert", "rotate",
+                    "thumbnail", "convert", "rotate", "ocr",
                 ],
                 "description": "Action to perform on the image",
             },
@@ -163,6 +181,10 @@ class ImageTool(BaseTool):
                 "description": (
                     "Crop coordinates: 'left,top,right,bottom'"
                 ),
+            },
+            "lang": {
+                "type": "string",
+                "description": "OCR language code (e.g. eng, fra, deu, spa, chi_sim). Default: eng.",
             },
         },
         "required": ["input_path", "action"],
@@ -313,6 +335,26 @@ class ImageTool(BaseTool):
                     success=True,
                     data=f"Rotated {angle} degrees ({size[0]}x{size[1]})",
                     side_effect={"output_path": resolved_out},
+                )
+
+            elif action == "ocr":
+                if not _OCR_AVAILABLE:
+                    return ToolResult(
+                        success=False, data="",
+                        error="OCR not available (pytesseract not installed)",
+                    )
+                lang = params.get("lang", "eng")
+                text = await asyncio.to_thread(
+                    _ocr, resolved_in, lang,
+                )
+                if not text:
+                    return ToolResult(
+                        success=True,
+                        data="No text found in the image.",
+                    )
+                return ToolResult(
+                    success=True,
+                    data=f"Extracted text:\n\n{text}",
                 )
 
             else:

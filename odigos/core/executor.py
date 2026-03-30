@@ -104,6 +104,8 @@ _TOOL_STATUS_MAP: dict[str, list[str]] = {
     ],
     "process_image": [
         "Processing the image...",
+        "Looking at that image...",
+        "Reading the image...",
     ],
     "create_artifact": [
         "Creating your file...",
