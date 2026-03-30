@@ -156,6 +156,7 @@ class Executor:
         tracer: Tracer | None = None,
         approval_gate: ApprovalGate | None = None,
         reasoning_model: str = "",
+        background_model: str = "",
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
@@ -167,6 +168,7 @@ class Executor:
         self.tracer = tracer
         self.approval_gate = approval_gate
         self._reasoning_model = reasoning_model
+        self._background_model = background_model
         self.evaluator: Evaluator | None = None
         self._active_skill_name: str | None = None
         self._active_skill_tools: set[str] = set()
@@ -228,7 +230,11 @@ class Executor:
         budget_warning: BudgetStatus | None = None
         prev_turn_calls: set[str] = set()
 
-        for turn in range(self._max_tool_turns):
+        # Budget-aware strategy: throttle when near limits
+        effective_max_turns = self._max_tool_turns
+        budget_throttled = False
+
+        for turn in range(effective_max_turns):
             # Check abort flag
             if abort_event and abort_event.is_set():
                 logger.info("Run aborted at turn %d", turn)
@@ -256,12 +262,24 @@ class Executor:
                             tool_calls=None,
                         )
                     break
-                if status.warning:
+                if status.warning and not budget_throttled:
                     budget_warning = status
+                    budget_throttled = True
+                    effective_max_turns = min(effective_max_turns, turn + 5)
+                    messages.append({
+                        "role": "system",
+                        "content": (
+                            "Budget is near its limit. Be concise -- respond in 2-3 sentences. "
+                            "Avoid tool calls unless strictly necessary."
+                        ),
+                    })
+                    logger.info("Budget throttle engaged at turn %d, max turns capped at %d", turn, effective_max_turns)
 
-            # Call LLM -- use reasoning model for complex/document queries
+            # Call LLM -- use reasoning model for complex queries, downgrade on budget warning
             model_kwargs: dict = {}
-            if query_analysis and query_analysis.classification in ("document_query", "complex", "planning"):
+            if budget_throttled and self._background_model:
+                model_kwargs["model"] = self._background_model
+            elif query_analysis and query_analysis.classification in ("document_query", "complex", "planning"):
                 if self._reasoning_model:
                     model_kwargs["model"] = self._reasoning_model
             try:
@@ -321,8 +339,9 @@ class Executor:
                 tools_used.add(tc.name)
                 if status_callback:
                     await status_callback(_friendly_tool_status(tc.name))
+                goal_id = (context_metadata or {}).get("goal_id")
                 result_content = await self._execute_tool(
-                    conversation_id, tc, message_content=message_content,
+                    conversation_id, tc, message_content=message_content, goal_id=goal_id,
                 )
                 messages.append({
                     "role": "tool",
@@ -471,6 +490,7 @@ class Executor:
 
     async def _execute_tool(
         self, conversation_id: str, tool_call: ToolCall, *, message_content: str = "",
+        goal_id: str | None = None,
     ) -> str:
         """Execute a single tool call and return the result string."""
         if not self.tool_registry:
@@ -507,7 +527,7 @@ class Executor:
         from odigos.tools.base import ToolContract
 
         contract = getattr(tool, "contract", None) or ToolContract()
-        args = {**tool_call.arguments, "_conversation_id": conversation_id}
+        args = {**tool_call.arguments, "_conversation_id": conversation_id, "_goal_id": goal_id}
         attempt = 0
 
         while True:

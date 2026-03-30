@@ -184,6 +184,10 @@ class Heartbeat:
             self._followup_tick_counter = 0
             did_work |= await self._check_followups()
 
+        # Phase 4e: Proactive plan execution (work on in-progress plans during idle)
+        if not did_work:
+            did_work |= await self._work_in_progress_plans()
+
         # Phase 5: Idle thoughts (only if nothing ran above)
         if not did_work:
             await self._idle_think()
@@ -473,21 +477,31 @@ class Heartbeat:
     async def _execute_todo(self, todo: dict) -> None:
         todo_id = todo["id"]
         description = todo["description"] or ""
+        goal_id = todo.get("goal_id")
 
         try:
+            metadata = {"todo_id": todo_id}
+            if goal_id:
+                metadata["goal_id"] = goal_id
             message = UniversalMessage(
                 id=str(uuid.uuid4()),
                 channel="heartbeat",
                 sender="system",
                 content=description,
                 timestamp=datetime.now(timezone.utc),
-                metadata={"todo_id": todo_id},
+                metadata=metadata,
             )
             result = await self.agent.handle_message(message)
             await self.goal_store.complete_todo(
                 todo_id, result=result[:4000] if result else None
             )
             logger.info("Todo %s completed: %s", todo_id[:8], description[:50])
+
+            # Session persistence: log idle work for future context
+            await self._log_heartbeat_session(
+                goal_id=goal_id, todo_id=todo_id,
+                summary=f"Completed: {description[:200]}. Result: {(result or '')[:300]}",
+            )
 
             if todo.get("conversation_id"):
                 await self._send_notification(
@@ -577,6 +591,104 @@ class Heartbeat:
             await self.agent_client.mark_processed(msg["message_id"])
 
         return True
+
+    async def _work_in_progress_plans(self) -> bool:
+        """Phase 4e: Pick up in-progress plans and execute the next pending step."""
+        try:
+            row = await self.db.fetch_one(
+                "SELECT id, conversation_id, steps, goal FROM task_plans "
+                "WHERE status = 'in_progress' "
+                "ORDER BY updated_at ASC LIMIT 1",
+            )
+            if not row:
+                return False
+
+            steps = json.loads(row["steps"])
+            next_step = None
+            for s in steps:
+                if s.get("status") in (None, "pending"):
+                    next_step = s
+                    break
+                for sub in s.get("substeps", []):
+                    if sub.get("status") in (None, "pending"):
+                        next_step = sub
+                        break
+                if next_step:
+                    break
+
+            if not next_step:
+                # All steps done, mark plan complete
+                await self.db.execute(
+                    "UPDATE task_plans SET status = 'done', updated_at = ? WHERE id = ?",
+                    (datetime.now(timezone.utc).isoformat(), row["id"]),
+                )
+                return False
+
+            # Execute the next step using the original conversation context
+            step_desc = next_step.get("task", "")
+            step_num = str(next_step.get("step", ""))
+            plan_id = row["id"]
+            conversation_id = row["conversation_id"]
+            goal = row.get("goal")
+
+            content = (
+                f"Continue working on the plan. Execute step {step_num}: {step_desc}\n"
+                f"When done, use update_plan to mark step {step_num} as done with your result."
+            )
+
+            metadata = {"plan_id": plan_id, "step": step_num}
+            if goal:
+                metadata["goal_id"] = goal
+
+            message = UniversalMessage(
+                id=str(uuid.uuid4()),
+                channel="heartbeat",
+                sender="system",
+                content=content,
+                timestamp=datetime.now(timezone.utc),
+                metadata=metadata,
+            )
+
+            # Mark step as in_progress
+            next_step["status"] = "in_progress"
+            await self.db.execute(
+                "UPDATE task_plans SET steps = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(steps), datetime.now(timezone.utc).isoformat(), plan_id),
+            )
+
+            result = await self.agent.handle_message(message)
+
+            await self._log_heartbeat_session(
+                goal_id=goal, plan_id=plan_id,
+                conversation_id=conversation_id,
+                summary=f"Plan step {step_num}: {step_desc[:100]}. Result: {(result or '')[:300]}",
+            )
+
+            logger.info("Proactive plan step %s executed for plan %s", step_num, plan_id[:8])
+            return True
+        except Exception:
+            logger.debug("Proactive plan execution failed", exc_info=True)
+            return False
+
+    async def _log_heartbeat_session(
+        self,
+        goal_id: str | None = None,
+        todo_id: str | None = None,
+        plan_id: str | None = None,
+        conversation_id: str | None = None,
+        summary: str = "",
+    ) -> None:
+        """Log autonomous work for session persistence across heartbeat cycles."""
+        try:
+            await self.db.execute(
+                "INSERT INTO heartbeat_sessions "
+                "(id, goal_id, todo_id, plan_id, conversation_id, summary, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (str(uuid.uuid4()), goal_id, todo_id, plan_id, conversation_id,
+                 summary[:2000], datetime.now(timezone.utc).isoformat()),
+            )
+        except Exception:
+            logger.debug("Could not log heartbeat session", exc_info=True)
 
     async def _idle_think(self) -> None:
         now = time.monotonic()

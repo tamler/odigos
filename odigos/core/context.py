@@ -335,15 +335,32 @@ class ContextAssembler:
                 logger.debug("Could not load last interaction", exc_info=True)
                 return ""
 
+        async def _heartbeat_context() -> str:
+            """Load recent autonomous work summaries from heartbeat sessions."""
+            try:
+                rows = await self.db.fetch_all(
+                    "SELECT summary, created_at FROM heartbeat_sessions "
+                    "ORDER BY created_at DESC LIMIT 5",
+                )
+                if not rows:
+                    return ""
+                lines = ["## Recent autonomous work"]
+                for r in rows:
+                    lines.append(f"- [{r['created_at'][:16]}] {r['summary'][:300]}")
+                return "\n".join(lines)
+            except Exception:
+                return ""
+
         # Run all context queries in parallel
         (
             recovery_briefing, memory_context, memory_index, doc_listing,
             skill_hints, corrections_context, error_hints, experiences_section,
-            user_profile, user_facts, sections, last_interaction,
+            user_profile, user_facts, sections, last_interaction, heartbeat_ctx,
         ) = await asyncio.gather(
             _recovery_briefing(), _memory_context(), _memory_index(), _doc_listing(),
             _skill_hints(), _corrections(), _error_hints(), _experiences(),
             _user_profile(), _user_facts(), _sections(), _last_interaction(),
+            _heartbeat_context(),
         )
 
         # Build skill catalog sorted by maturity (sync, no DB call)
@@ -521,6 +538,8 @@ class ContextAssembler:
         user_profile = pruned.get("user_profile", "")
         user_facts = pruned.get("user_facts", "")
         recovery_briefing = pruned.get("recovery_briefing", "")
+        if heartbeat_ctx:
+            recovery_briefing = (recovery_briefing + "\n\n" + heartbeat_ctx).strip()
         notebook_context = pruned.get("page_context", "")
         last_interaction = pruned.get("last_interaction", "")
 
