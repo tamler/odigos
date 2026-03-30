@@ -55,23 +55,19 @@ async def transcribe_audio(request: Request):
     )
 
     if len(audio_bytes) < 1000:
-        logger.info(
-            "STT: audio too short (%d bytes), skipping",
-            len(audio_bytes),
-        )
+        logger.info("STT: audio too short (%d bytes), skipping", len(audio_bytes))
         return {"text": ""}
 
-    # Server-side VAD: check if audio contains speech before sending to Whisper
+    # VAD: check for actual human speech before calling Whisper
     try:
         from odigos.core.vad import contains_speech
         import asyncio
         has_speech = await asyncio.to_thread(contains_speech, audio_bytes, filename)
         if not has_speech:
-            logger.info("STT: VAD detected no speech, skipping transcription")
+            logger.info("STT: VAD detected no speech, skipping Whisper")
             return {"text": ""}
     except Exception:
-        # VAD failed, proceed with transcription anyway
-        logger.debug("VAD check failed, proceeding", exc_info=True)
+        logger.warning("VAD unavailable, sending to Whisper without check")
 
     try:
         text = await provider.transcribe(audio_bytes, filename)
