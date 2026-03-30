@@ -164,6 +164,16 @@ Odigos improves itself without human intervention. The evolution engine runs a c
 | Experiences | Tactical lessons stored and injected into future context |
 | Evolution parameters | The strategist tunes its own confidence thresholds, trial durations, and evaluation minimums |
 
+### Smart Tool Registry
+
+The agent has 45+ tools but never presents them all at once. Research shows LLM tool selection degrades above 15-20 tools in context. The registry uses a three-layer filtering system:
+
+1. **Always-available set** -- 6 core tools (web search, memory, planning, tool discovery) are present in every turn regardless of query type.
+2. **Classification-based filtering** -- each query classification (simple, standard, complex, planning, document_query) maps to relevant tool categories. Simple queries see ~8 tools, not 45.
+3. **Progressive discovery** -- the `find_tools` meta-tool lets the agent search for specialized capabilities by description ("send email", "create kanban card"). Matching tools are returned with descriptions so the agent knows what's available without loading every schema.
+
+Every tool declares a category (search, create, productivity, communication, code, memory, analysis, media) and follows a strict description format: what it does, when to use it, when NOT to use it. Parameter schemas use enum constraints wherever values are finite, reducing parameter hallucination by 60% (per Gorilla research). Tool results over 4000 characters are truncated to preserve context for reasoning.
+
 ### Tool Execution Contracts
 
 <p align="center">
@@ -261,10 +271,14 @@ One process. One database. No microservices.
 - **Cross-encoder reranking** (ms-marco-MiniLM) for document retrieval accuracy
 - **NLP layer** (TextBlob) for sentiment analysis, entity extraction, spell checking, commitment detection
 - **Plugin system** for tools, channels, and providers
+- **Smart tool registry** with classification-based filtering, progressive discovery, and always-available core set
+- **Unified storage layer** (`storage.py`) -- single source of truth for all file paths and operations
+- **Unified LLM wrapper** (`call_llm`) -- standard retry, logging, and cost tracking for all secondary LLM calls
 - **Heartbeat loop** for background processing, goal tracking, evolution trials, proactive plan execution, nudges, follow-up detection, idle research, auto-updates, storage quota monitoring
 - **Failure taxonomy** classifies tool errors (transient, input, permission, unavailable) with per-category retry strategies and exponential backoff
 - **Parallel context assembly** -- 13 context queries run concurrently via asyncio.gather
 - **Message queue** -- WebSocket chat messages never dropped, processed sequentially
+- **Config backup** -- settings are backed up before every write (3 versions retained)
 
 Everything runs on a single VPS. 4 CPU, 16GB RAM is comfortable. No external databases, no message queues, no container orchestration.
 
@@ -353,7 +367,7 @@ Enable in the Plugins tab. Changes apply immediately.
 
 ```bash
 uv sync                        # Install dependencies
-uv run pytest                  # Run tests (1260+)
+uv run pytest                  # Run tests
 uv run python -m odigos.main   # Start locally
 cd dashboard && npm run dev    # Dashboard dev server
 ```
