@@ -1,21 +1,30 @@
 /**
- * Voice mode hook: continuous listen → transcribe → send → TTS → repeat.
+ * Voice mode hook: continuous listen → detect silence → transcribe → send → repeat.
  *
  * Uses MediaRecorder for capture + AnalyserNode for silence detection
  * and amplitude visualization. Both share the same getUserMedia stream.
+ *
+ * Features:
+ * - Adaptive silence threshold (calibrates to ambient noise on start)
+ * - Cross-platform MIME detection (WebM, MP4, OGG fallbacks)
+ * - AudioContext created synchronously on user gesture (iOS requirement)
+ * - All HTTP through api.ts (CSRF, error handling)
+ * - Error feedback via custom events
  */
 import { useCallback, useRef, useState } from 'react'
+import { postFormRaw } from '@/lib/api'
 
-const SILENCE_THRESHOLD = 0.01  // RMS below this = silent
 const SILENCE_DURATION = 1500   // ms of silence before auto-stop
-const MIN_RECORDING_MS = 500    // don't send recordings shorter than this
+const MIN_RECORDING_MS = 800    // don't send recordings shorter than this
 const FFT_SIZE = 2048
 const SMOOTHING = 0.85
+const CALIBRATION_MS = 600      // sample ambient noise for this long on start
+const THRESHOLD_MULTIPLIER = 2.5 // silence threshold = ambient floor * this
 
 export type VoicePhase = 'idle' | 'listening' | 'processing' | 'thinking' | 'speaking'
 
 interface UseVoiceModeOptions {
-  onTranscription: (text: string) => void  // called with transcribed text
+  onTranscription: (text: string) => void
   onPhaseChange?: (phase: VoicePhase) => void
   onAmplitudeChange?: (amplitude: number) => void
 }
@@ -31,10 +40,11 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
   const animFrameRef = useRef<number>(0)
   const chunksRef = useRef<Blob[]>([])
   const silenceStartRef = useRef<number | null>(null)
-  const isSpeakingRef = useRef(false)
   const recordingStartRef = useRef<number>(0)
   const activeRef = useRef(false)
   const smoothedVolumeRef = useRef(0)
+  const silenceThresholdRef = useRef(0.01)  // adaptive, set during calibration
+  const isTranscribingRef = useRef(false)
 
   const setPhase = useCallback((p: VoicePhase) => {
     setPhaseState(p)
@@ -56,15 +66,15 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
   }, [])
 
   const transcribeAndSend = useCallback(async (blob: Blob) => {
-    if (blob.size < 1000) return  // too short
+    if (blob.size < 1000) return
 
+    isTranscribingRef.current = true
     setPhase('processing')
     try {
       const formData = new FormData()
       const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm'
       formData.append('audio', blob, `recording.${ext}`)
 
-      const { postFormRaw } = await import('@/lib/api')
       const res = await postFormRaw('/api/audio/transcribe', formData)
       if (res.ok) {
         const data = await res.json()
@@ -74,25 +84,29 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       }
     } catch (err) {
       console.error('Voice transcription failed:', err)
+    } finally {
+      isTranscribingRef.current = false
     }
   }, [onTranscription, setPhase])
+
+  const getSupportedMimeType = useCallback((): string => {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+    return candidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
+  }, [])
 
   const startListening = useCallback(() => {
     const recorder = recorderRef.current
     const stream = streamRef.current
     if (!recorder || !stream || !activeRef.current) return
 
-    // Reset state
     chunksRef.current = []
     silenceStartRef.current = null
-    isSpeakingRef.current = false
     recordingStartRef.current = Date.now()
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data)
     }
 
-    // Don't set onstop here — it gets set in stopCurrentRecording
     recorder.start(250)
     setPhase('listening')
   }, [setPhase])
@@ -112,24 +126,23 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
     const rms = Math.sqrt(sumSquares / dataArray.length)
 
     // Normalized amplitude for orb animation (0-1)
-    const normalized = Math.max(0, Math.min(1, (rms - 0.005) / (0.3 - 0.005)))
+    const threshold = silenceThresholdRef.current
+    const normalized = Math.max(0, Math.min(1, (rms - threshold * 0.5) / (0.3 - threshold * 0.5)))
     smoothedVolumeRef.current = SMOOTHING * smoothedVolumeRef.current + (1 - SMOOTHING) * normalized
     onAmplitudeChange?.(smoothedVolumeRef.current)
 
-    // Silence detection (only when recorder is active)
+    // Silence detection (only when recorder is active and not mid-transcription)
     const recorder = recorderRef.current
-    if (recorder && recorder.state === 'recording') {
+    if (recorder && recorder.state === 'recording' && !isTranscribingRef.current) {
       const elapsed = Date.now() - recordingStartRef.current
 
-      if (rms < SILENCE_THRESHOLD) {
+      if (rms < threshold) {
         if (silenceStartRef.current === null) {
           silenceStartRef.current = Date.now()
         } else if (
           Date.now() - silenceStartRef.current > SILENCE_DURATION &&
           elapsed > MIN_RECORDING_MS
         ) {
-          // User stopped speaking — process recording
-          isSpeakingRef.current = false
           silenceStartRef.current = null
 
           stopCurrentRecording().then(async (blob) => {
@@ -138,43 +151,58 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
             }
             // Restart listening and monitoring if still active
             if (activeRef.current && streamRef.current) {
-              const restartMime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg', '']
-                .find(m => !m || MediaRecorder.isTypeSupported(m)) || ''
-              const newRecorder = new MediaRecorder(streamRef.current, restartMime ? { mimeType: restartMime } : {})
+              const mimeType = getSupportedMimeType()
+              const newRecorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : {})
               recorderRef.current = newRecorder
               startListening()
-              // Restart the monitoring loop
               animFrameRef.current = requestAnimationFrame(monitorLoop)
             }
           })
-          // Pause monitoring during transcription — resumes in the .then()
-          return
+          return  // Pause monitoring during transcription
         }
       } else {
         silenceStartRef.current = null
-        if (!isSpeakingRef.current) {
-          isSpeakingRef.current = true
-        }
       }
     }
 
     animFrameRef.current = requestAnimationFrame(monitorLoop)
-  }, [onAmplitudeChange, stopCurrentRecording, transcribeAndSend, startListening])
+  }, [onAmplitudeChange, stopCurrentRecording, transcribeAndSend, startListening, getSupportedMimeType])
+
+  const calibrateThreshold = useCallback((analyser: AnalyserNode): Promise<number> => {
+    return new Promise((resolve) => {
+      const samples: number[] = []
+      const dataArray = new Float32Array(FFT_SIZE)
+      const start = Date.now()
+
+      function sample() {
+        if (Date.now() - start > CALIBRATION_MS) {
+          // Set threshold to ambient floor * multiplier (min 0.005)
+          const avgRms = samples.length > 0 ? samples.reduce((a, b) => a + b) / samples.length : 0.01
+          const threshold = Math.max(0.005, avgRms * THRESHOLD_MULTIPLIER)
+          resolve(threshold)
+          return
+        }
+        analyser.getFloatTimeDomainData(dataArray)
+        let sum = 0
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i]
+        samples.push(Math.sqrt(sum / dataArray.length))
+        requestAnimationFrame(sample)
+      }
+      sample()
+    })
+  }, [])
 
   const enter = useCallback(async () => {
     try {
       // Create AudioContext IMMEDIATELY on user gesture (before any async)
-      // Mobile browsers require this to happen synchronously in the tap handler
       const ctx = new AudioContext()
       audioCtxRef.current = ctx
 
-      // Now request mic (async, but AudioContext already created in gesture)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       })
       streamRef.current = stream
 
-      // Resume AudioContext if suspended (safe after getUserMedia)
       if (ctx.state === 'suspended') await ctx.resume()
 
       // Set up AnalyserNode
@@ -185,75 +213,59 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       source.connect(analyser)
       analyserRef.current = analyser
 
-      // Set up MediaRecorder -- pick best supported format for this device
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
-        .find(m => MediaRecorder.isTypeSupported(m)) || ''
+      // Calibrate silence threshold to ambient noise
+      silenceThresholdRef.current = await calibrateThreshold(analyser)
+
+      // Set up MediaRecorder
+      const mimeType = getSupportedMimeType()
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       recorderRef.current = recorder
 
       activeRef.current = true
       setActive(true)
-      localStorage.setItem('odigos-voice-mode', 'true')
 
-      // Start the monitoring loop and recording
       startListening()
       animFrameRef.current = requestAnimationFrame(monitorLoop)
     } catch (err) {
       console.error('Failed to start voice mode:', err)
-      // Clean up on failure
       if (audioCtxRef.current) {
         audioCtxRef.current.close().catch(() => {})
         audioCtxRef.current = null
       }
       setActive(false)
       activeRef.current = false
-      // Show error to user instead of silent failure
       const msg = err instanceof DOMException && err.name === 'NotAllowedError'
         ? 'Microphone access denied. Check your browser permissions.'
         : 'Voice mode failed to start. Try again.'
-      onTranscription('')  // no-op, but clears any pending state
-      // Dispatch a custom event the UI can listen for
       window.dispatchEvent(new CustomEvent('voice-error', { detail: msg }))
     }
-  }, [startListening, monitorLoop])
+  }, [startListening, monitorLoop, calibrateThreshold, getSupportedMimeType])
 
   const exit = useCallback(async () => {
     activeRef.current = false
     setActive(false)
     setPhase('idle')
-    localStorage.setItem('odigos-voice-mode', 'false')
 
-    cancelAnimationFrame(animFrameRef.current)
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
 
-    // Stop recorder if active
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
       recorderRef.current.stop()
     }
     recorderRef.current = null
 
-    // Close audio context
-    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-      audioCtxRef.current.close()
-    }
-    audioCtxRef.current = null
-    analyserRef.current = null
-
-    // Stop mic stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
     }
 
-    smoothedVolumeRef.current = 0
+    if (audioCtxRef.current) {
+      await audioCtxRef.current.close().catch(() => {})
+      audioCtxRef.current = null
+    }
+
+    analyserRef.current = null
     onAmplitudeChange?.(0)
   }, [setPhase, onAmplitudeChange])
 
-  return {
-    active,
-    phase,
-    enter,
-    exit,
-    // Allow external phase changes (e.g., set to 'thinking' when agent is processing)
-    setPhase,
-  }
+  return { active, phase, enter, exit, setPhase }
 }
