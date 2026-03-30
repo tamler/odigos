@@ -67,7 +67,7 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       const res = await fetch('/api/audio/transcribe', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        // CSRF header added by global fetch interceptor (main.tsx)
         body: formData,
       })
       if (res.ok) {

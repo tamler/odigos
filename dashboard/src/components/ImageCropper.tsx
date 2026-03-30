@@ -58,7 +58,7 @@ export function ImageCropper({ imageUrl, artifactId: _artifactId, filename, onCl
       // Send to backend process_image tool via API
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           content: `Crop the image ${filename} with coordinates: ${cropBox}`,

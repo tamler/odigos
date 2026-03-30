@@ -1,10 +1,7 @@
 const BASE = ''  // Same origin
 
 function headers(): HeadersInit {
-  return {
-    'Content-Type': 'application/json',
-    'X-Requested-With': 'XMLHttpRequest',  // CSRF protection: browsers don't send this cross-origin
-  }
+  return { 'Content-Type': 'application/json' }
 }
 
 export async function get<T>(path: string): Promise<T> {
@@ -74,6 +71,8 @@ export async function uploadFile(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${BASE}/api/upload`)
+    // CSRF header added by global fetch interceptor (main.tsx)
+    // XHR needs it manually since interceptor only covers fetch
     xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest')
     
     if (onProgress) {
