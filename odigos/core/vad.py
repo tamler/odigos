@@ -1,12 +1,10 @@
-"""Server-side Voice Activity Detection using Silero VAD.
+"""Server-side Voice Activity Detection using Silero VAD v6.
 
-Preprocesses audio before sending to Whisper. Detects whether audio
-contains human speech. Saves Whisper API calls (and cost) on silent
-or noise-only recordings.
+Preprocesses audio before Whisper. Detects whether audio contains
+human speech. Saves Whisper API calls on silent/noise recordings.
 """
 from __future__ import annotations
 
-import io
 import logging
 import tempfile
 from pathlib import Path
@@ -14,29 +12,22 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _model = None
-_utils = None
 
 
 def load_model():
-    """Load Silero VAD model. Call at startup."""
-    global _model, _utils
+    """Load Silero VAD model. Call at startup when voice is enabled."""
+    global _model
     if _model is not None:
-        return _model, _utils
+        return _model
 
     try:
-        import torch
-        model, utils = torch.hub.load(
-            repo_or_dir='snakers4/silero-vad',
-            model='silero_vad',
-            trust_repo=True,
-        )
-        _model = model
-        _utils = utils
+        from silero_vad import load_silero_vad
+        _model = load_silero_vad()
         logger.info("Silero VAD model loaded")
-        return model, utils
+        return _model
     except Exception:
         logger.warning("Silero VAD not available — voice will skip speech detection")
-        return None, None
+        return None
 
 
 def contains_speech(audio_bytes: bytes, filename: str = "audio.webm") -> bool:
@@ -45,21 +36,19 @@ def contains_speech(audio_bytes: bytes, filename: str = "audio.webm") -> bool:
     Returns True if speech detected, False if silent/noise only.
     Falls back to True (assume speech) if VAD is unavailable.
     """
+    model = load_model()
+    if model is None:
+        return True
+
     try:
-        model, utils = load_model()
-        if model is None:
-            return True  # Can't check, assume speech
+        from silero_vad import read_audio, get_speech_timestamps
 
-        (get_speech_timestamps, _, read_audio, _, _) = utils
-
-        # Write bytes to temp file for read_audio
         suffix = Path(filename).suffix or '.webm'
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
             f.write(audio_bytes)
             tmp_path = f.name
 
         try:
-            import torch
             wav = read_audio(tmp_path, sampling_rate=16000)
             timestamps = get_speech_timestamps(wav, model, sampling_rate=16000)
             has_speech = len(timestamps) > 0
@@ -81,4 +70,4 @@ def contains_speech(audio_bytes: bytes, filename: str = "audio.webm") -> bool:
 
     except Exception:
         logger.debug("VAD check failed", exc_info=True)
-        return True  # Fail open -- assume speech
+        return True  # Fail open

@@ -17,6 +17,7 @@ import { Artifact, ArtifactCard, getFileIcon, formatFileSize } from '@/component
 import { MessageActions } from '@/components/MessageActions'
 import { VoiceOrb } from '@/components/VoiceOrb'
 import { useVoiceMode } from '@/hooks/useVoiceMode'
+import { usePushToTalk } from '@/hooks/usePushToTalk'
 import type { ChatMessage } from '@/layouts/AppLayout'
 
 interface ChatPanelProps {
@@ -181,6 +182,11 @@ export const ChatPanel = memo(({
     onAmplitudeChange: setVoiceAmplitude,
   })
   const handleSendRef = useRef<((text: string) => void) | null>(null)
+
+  // Push-to-talk: hold mic → record → release → transcribe → insert into input
+  const pushToTalk = usePushToTalk((text) => {
+    setInputValue(prev => prev ? `${prev} ${text}` : text)
+  })
 
   // Voice error feedback
   useEffect(() => {
@@ -702,10 +708,14 @@ export const ChatPanel = memo(({
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label="Voice mode"
-                      className="h-11 w-11 lg:h-8 lg:w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                      aria-label={pushToTalk.recording ? "Release to send" : "Hold to speak"}
+                      className={`h-11 w-11 lg:h-8 lg:w-8 rounded-lg transition-colors ${pushToTalk.recording ? 'bg-red-500 text-white' : 'text-muted-foreground hover:text-foreground'}`}
                       disabled={!connected}
-                      onClick={() => { stopTTS(); voiceMode.enter() }}
+                      onMouseDown={() => { stopTTS(); pushToTalk.start() }}
+                      onMouseUp={() => pushToTalk.stop()}
+                      onMouseLeave={() => { if (pushToTalk.recording) pushToTalk.stop() }}
+                      onTouchStart={(e) => { e.preventDefault(); stopTTS(); pushToTalk.start() }}
+                      onTouchEnd={(e) => { e.preventDefault(); pushToTalk.stop() }}
                     >
                       <Mic className="h-5 w-5 lg:h-4 lg:w-4" />
                     </Button>

@@ -99,25 +99,20 @@ class GroqSTT(STTProvider):
             else:
                 result = raw_text.strip()
 
-            # Drop known hallucination phrases when confidence
-            # is low
+            # Drop known hallucination phrases
             _HALLUCINATIONS = {
-                "thank you.",
-                "thanks for watching.",
-                "please subscribe.",
+                "thank you", "thanks for watching",
+                "please subscribe", "thanks for listening",
+                "thank you for watching",
+                "thank you for listening",
+                "you", "bye", "goodbye",
             }
-            if result.lower() in _HALLUCINATIONS:
-                avg_no_speech = sum(
-                    s.get("no_speech_prob", 0) for s in segments
-                ) / max(len(segments), 1)
-                if avg_no_speech > 0.5:
-                    logger.info(
-                        "STT: dropping likely hallucination"
-                        " '%s' (avg_no_speech=%.2f)",
-                        result,
-                        avg_no_speech,
-                    )
-                    result = ""
+            cleaned = result.lower().strip().rstrip('.!,')
+            if cleaned in _HALLUCINATIONS:
+                logger.info(
+                    "STT: dropping hallucination '%s'", result,
+                )
+                result = ""
 
             logger.info(
                 "STT result: '%s'",
