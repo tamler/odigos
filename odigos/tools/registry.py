@@ -79,26 +79,19 @@ class ToolRegistry:
     def _filter_tools(
         self,
         classification: str | None,
-        routing_rules: dict | None,
+        routing_rules: dict | None = None,
     ) -> list[BaseTool]:
-        """Filter tools based on routing rules and category relevance."""
+        """Filter tools by category relevance to the classification.
+
+        Tool filtering is handled ONLY by categories on the tools themselves.
+        Routing rules (routing_rules.md) control context (RAG, documents, profile)
+        but NEVER control which tools are available. One system, one place.
+        """
         all_tools = list(self._tools.values())
 
         if not classification:
             return all_tools
 
-        # Check explicit routing rules first (takes precedence)
-        if routing_rules:
-            route = routing_rules.get(classification, {})
-            allowed = route.get("tools", "all")
-            if allowed != "all":
-                if isinstance(allowed, str):
-                    allowed_set = {t.strip() for t in allowed.split(",")}
-                else:
-                    allowed_set = set(allowed)
-                return [t for t in all_tools if t.name in allowed_set]
-
-        # Fall back to category-based filtering
         relevant_categories = CLASSIFICATION_CATEGORIES.get(classification)
         if not relevant_categories:
             return all_tools  # complex or unknown = all tools

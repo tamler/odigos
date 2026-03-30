@@ -201,16 +201,11 @@ class Executor:
             context_metadata=context_metadata,
         )
 
-        # Load routing rules and get filtered tool definitions
-        from odigos.core.routing import load_routing_rules
-        routing = load_routing_rules()
-
+        # Tool filtering by category (routing_rules.md controls context, not tools)
         tools = None
         if self.tool_registry and self.tool_registry.list():
             classification = query_analysis.classification if query_analysis else None
-            tools = self.tool_registry.tool_definitions(
-                classification=classification, routing_rules=routing,
-            )
+            tools = self.tool_registry.tool_definitions(classification=classification)
 
         # Count context tokens for efficiency tracking
         context_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)
