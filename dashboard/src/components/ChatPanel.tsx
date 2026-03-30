@@ -182,12 +182,15 @@ export const ChatPanel = memo(({
   })
   const handleSendRef = useRef<((text: string) => void) | null>(null)
 
-  // Auto-enter voice mode from PWA shortcut (?voice=1)
+  // Voice error feedback
   useEffect(() => {
-    if (searchParams.get('voice') === '1' && sttAvailable && !voiceMode.active) {
-      voiceMode.enter()
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail
+      if (msg) toast.error(msg)
     }
-  }, [searchParams, sttAvailable])
+    window.addEventListener('voice-error', handler)
+    return () => window.removeEventListener('voice-error', handler)
+  }, [])
 
   // Sync voice mode phase with agent status
   useEffect(() => {

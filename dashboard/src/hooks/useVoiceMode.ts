@@ -166,15 +166,21 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
 
   const enter = useCallback(async () => {
     try {
+      // Create AudioContext IMMEDIATELY on user gesture (before any async)
+      // Mobile browsers require this to happen synchronously in the tap handler
+      const ctx = new AudioContext()
+      audioCtxRef.current = ctx
+
+      // Now request mic (async, but AudioContext already created in gesture)
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       })
       streamRef.current = stream
 
-      // Set up AnalyserNode
-      const ctx = new AudioContext()
+      // Resume AudioContext if suspended (safe after getUserMedia)
       if (ctx.state === 'suspended') await ctx.resume()
-      audioCtxRef.current = ctx
+
+      // Set up AnalyserNode
       const source = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
       analyser.fftSize = FFT_SIZE
@@ -182,9 +188,9 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       source.connect(analyser)
       analyserRef.current = analyser
 
-      // Set up MediaRecorder -- pick best supported format
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg', '']
-        .find(m => !m || MediaRecorder.isTypeSupported(m)) || ''
+      // Set up MediaRecorder -- pick best supported format for this device
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+        .find(m => MediaRecorder.isTypeSupported(m)) || ''
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       recorderRef.current = recorder
 
@@ -197,8 +203,20 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       animFrameRef.current = requestAnimationFrame(monitorLoop)
     } catch (err) {
       console.error('Failed to start voice mode:', err)
+      // Clean up on failure
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {})
+        audioCtxRef.current = null
+      }
       setActive(false)
       activeRef.current = false
+      // Show error to user instead of silent failure
+      const msg = err instanceof DOMException && err.name === 'NotAllowedError'
+        ? 'Microphone access denied. Check your browser permissions.'
+        : 'Voice mode failed to start. Try again.'
+      onTranscription('')  // no-op, but clears any pending state
+      // Dispatch a custom event the UI can listen for
+      window.dispatchEvent(new CustomEvent('voice-error', { detail: msg }))
     }
   }, [startListening, monitorLoop])
 

@@ -161,7 +161,10 @@ export function AgentInputBar({
             <div className="flex items-center justify-between px-3 pb-2">
               <div className="flex items-center">
                 {sttAvailable && (
-                  <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8 text-muted-foreground hover:text-primary">
+                  <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-8 lg:w-8 text-muted-foreground hover:text-primary"
+                    onClick={() => { window.location.href = '/' }}
+                    title="Open voice mode in chat"
+                  >
                     <Mic className="h-5 w-5 lg:h-4 lg:w-4" />
                   </Button>
                 )}

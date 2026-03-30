@@ -187,7 +187,10 @@ export const FloatingBubble = memo(({
                 </div>
               )}
               {assistantConfig.voice_input && sttAvailable && (
-                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-xl shrink-0">
+                <Button size="icon" variant="ghost" className="h-8 w-8 rounded-xl shrink-0"
+                  onClick={() => { window.location.href = '/' }}
+                  title="Open voice mode in chat"
+                >
                   <Mic className="h-4 w-4" />
                 </Button>
               )}
