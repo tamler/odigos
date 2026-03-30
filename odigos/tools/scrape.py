@@ -35,11 +35,12 @@ class ScrapeTool(BaseTool):
 
     name = "read_page"
     category = "search"
-    description = "Read and extract content from a web page URL."
+    description = "Fetch and read the full content of a specific web page by URL. Use when you have a URL and need its content. Do not use for general topic searches — use web_search instead."
     parameters_schema = {
         "type": "object",
         "properties": {
             "url": {"type": "string", "description": "The URL to read"},
+            "tier": {"type": "string", "enum": ["standard", "js"], "description": "Rendering mode: standard for static pages, js for JavaScript-heavy SPAs. Default: standard."},
         },
         "required": ["url"],
     }

@@ -337,6 +337,10 @@ class Executor:
                 result_content = await self._execute_tool(
                     conversation_id, tc, message_content=message_content, goal_id=goal_id,
                 )
+                # Truncate large tool results to preserve context
+                MAX_TOOL_RESULT = 4000
+                if len(result_content) > MAX_TOOL_RESULT:
+                    result_content = result_content[:MAX_TOOL_RESULT] + f"\n\n[Truncated — {len(result_content)} chars total. Use file tool to read full content if needed.]"
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc.id,

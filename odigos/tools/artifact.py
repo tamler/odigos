@@ -143,21 +143,19 @@ class DeleteArtifactTool(BaseTool):
     parameters_schema = {
         "type": "object",
         "properties": {
-            "filename": {
+            "identifier": {
                 "type": "string",
-                "description": (
-                    "The filename or artifact ID to delete"
-                ),
+                "description": "Filename (e.g. 'report.csv') or artifact UUID to delete",
             },
         },
-        "required": ["filename"],
+        "required": ["identifier"],
     }
 
     def __init__(self, db: Database):
         self.db = db
 
     async def execute(self, params: dict) -> ToolResult:
-        query = (params.get("filename") or "").strip()
+        query = (params.get("identifier") or params.get("filename") or "").strip()
         if not query:
             return ToolResult(
                 success=False, data="",

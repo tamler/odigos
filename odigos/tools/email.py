@@ -69,9 +69,9 @@ class CheckEmailTool(BaseTool):
     category = "communication"
     contract = ToolContract(timeout_seconds=30, max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     description = (
-        "Check the email inbox for new messages. Returns a summary of unread emails "
-        "including sender, subject, date, and a preview of the content. "
-        "Use this to stay on top of incoming communications."
+        "Check the email inbox for new messages and return a summary. "
+        "Use when the user asks about their email or you need to check for new messages. "
+        "Do not use for advanced Gmail operations like managing labels or drafts — use Google Workspace tools for those."
     )
     parameters_schema = {
         "type": "object",
@@ -176,7 +176,7 @@ class SendEmailTool(BaseTool):
             },
             "reply_to": {
                 "type": "string",
-                "description": "Optional: message ID to reply to (for threading)",
+                "description": "RFC 2822 Message-ID header value of the email to reply to for proper thread linking",
             },
         },
         "required": ["to", "subject", "body"],

@@ -20,6 +20,7 @@ class TextAnalysisTool(BaseTool):
         "'sentiment' (positive/negative/neutral score), 'language' "
         "(detect language), 'noun_phrases' (extract key noun "
         "phrases), 'all' (run all analyses)."
+        " Do not use for translation — use translate_text instead."
     )
     parameters_schema = {
         "type": "object",

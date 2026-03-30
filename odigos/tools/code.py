@@ -15,14 +15,14 @@ class CodeTool(BaseTool):
     """Execute Python or shell code in a sandboxed environment."""
 
     name = "run_code"
-    description = "Execute Python or shell code in a sandboxed environment with resource limits"
+    description = "Execute Python or shell code in a sandboxed environment with resource limits. Use when computation, data transformation, or scripting is needed. Do not use for simple arithmetic or text operations you can answer directly."
     category = "code"
     contract = ToolContract(timeout_seconds=120, max_retries={"transient": 1, "input": 0, "permission": 0, "unavailable": 0, "unknown": 0})
     parameters_schema = {
         "type": "object",
         "properties": {
-            "code": {"type": "string", "description": "Code to execute"},
-            "language": {"type": "string", "description": "Programming language (python or shell)"},
+            "code": {"type": "string", "description": "The code to run. Python has standard library and installed packages available. Shell uses POSIX sh."},
+            "language": {"type": "string", "enum": ["python", "shell"], "description": "Programming language (python or shell)"},
         },
         "required": ["code"],
     }

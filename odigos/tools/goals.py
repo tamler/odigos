@@ -64,7 +64,7 @@ class CreateReminderTool(BaseTool):
 class CreateTodoTool(BaseTool):
     name = "create_todo"
     category = "productivity"
-    description = "Create a concrete work item for the agent to complete. Use for 'do X', 'look up Y', 'research Z'."
+    description = "Create an actionable work item for the agent's to-do queue. Use for tasks to handle at the next available opportunity. Do not use for time-sensitive items — use create_reminder instead."
     parameters_schema = {
         "type": "object",
         "properties": {
@@ -97,7 +97,7 @@ class CreateTodoTool(BaseTool):
 class CreateGoalTool(BaseTool):
     name = "create_goal"
     category = "productivity"
-    description = "Record a long-term goal or aspiration. Use for 'I want to X', 'my goal is', 'I'm working towards'."
+    description = "Record a long-term aspiration or objective. Use when the user expresses a goal, intention, or thing they are working toward. Do not use for immediate tasks — use create_todo instead."
     parameters_schema = {
         "type": "object",
         "properties": {

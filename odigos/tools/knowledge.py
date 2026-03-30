@@ -91,13 +91,12 @@ def _search_wikipedia(query: str) -> dict | None:
 
 
 class LookupTool(BaseTool):
-    name = "lookup"
+    name = "lookup_fact"
     category = "search"
     description = (
-        "Look up factual information about a topic. Searches "
-        "Grokipedia first (comprehensive knowledge base), falls "
-        "back to Wikipedia. Use this before answering factual "
-        "questions to get accurate, sourced information."
+        "Search an encyclopedic knowledge base (Grokipedia, Wikipedia) for factual information. "
+        "Use for stable factual questions about people, places, concepts, or history. "
+        "Do not use for recent events or time-sensitive queries — use web_search instead."
     )
     parameters_schema = {
         "type": "object",

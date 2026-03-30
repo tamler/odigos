@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class KanbanListBoardsTool(BaseTool):
     name = "kanban_list_boards"
     category = "productivity"
-    description = "List all kanban boards with card counts."
+    description = "List all kanban boards. Use to discover available boards before getting details."
     parameters_schema = {
         "type": "object",
         "properties": {},
@@ -45,11 +45,11 @@ class KanbanListBoardsTool(BaseTool):
 class KanbanGetBoardTool(BaseTool):
     name = "kanban_get_board"
     category = "productivity"
-    description = "Get a kanban board with its columns and cards formatted as text."
+    description = "Get a kanban board with all columns and cards. Use to see current board state before creating or moving cards."
     parameters_schema = {
         "type": "object",
         "properties": {
-            "board_id": {"type": "string", "description": "The board id"},
+            "board_id": {"type": "string", "description": "UUID of the board (from kanban_list_boards)"},
         },
         "required": ["board_id"],
     }
@@ -96,12 +96,12 @@ class KanbanGetBoardTool(BaseTool):
 class KanbanCreateCardTool(BaseTool):
     name = "kanban_create_card"
     category = "productivity"
-    description = "Create a new card in a kanban column."
+    description = "Create a new card on a kanban board. Use when the user wants to add a task or item to a board."
     parameters_schema = {
         "type": "object",
         "properties": {
-            "board_id": {"type": "string", "description": "The board id"},
-            "column_id": {"type": "string", "description": "The column id"},
+            "board_id": {"type": "string", "description": "UUID of the board (from kanban_list_boards)"},
+            "column_id": {"type": "string", "description": "UUID of the target column (from kanban_get_board)"},
             "title": {"type": "string", "description": "Card title"},
             "description": {"type": "string", "description": "Card description"},
             "priority": {"type": "string", "description": "Priority: low, medium, high", "enum": ["low", "medium", "high"]},
@@ -141,13 +141,13 @@ class KanbanCreateCardTool(BaseTool):
 class KanbanMoveCardTool(BaseTool):
     name = "kanban_move_card"
     category = "productivity"
-    description = "Move a kanban card to a different column."
+    description = "Move a card to a different column on a kanban board. Use to update task status by moving between columns."
     parameters_schema = {
         "type": "object",
         "properties": {
-            "board_id": {"type": "string", "description": "The board id"},
-            "card_id": {"type": "string", "description": "The card id"},
-            "column_id": {"type": "string", "description": "The destination column id"},
+            "board_id": {"type": "string", "description": "UUID of the board (from kanban_list_boards)"},
+            "card_id": {"type": "string", "description": "UUID of the card (from kanban_get_board)"},
+            "column_id": {"type": "string", "description": "UUID of the target column (from kanban_get_board)"},
         },
         "required": ["board_id", "card_id", "column_id"],
     }
@@ -181,12 +181,12 @@ class KanbanMoveCardTool(BaseTool):
 class KanbanUpdateCardTool(BaseTool):
     name = "kanban_update_card"
     category = "productivity"
-    description = "Update a kanban card's title, description, or priority."
+    description = "Update a card's title or description. Use to modify existing card content."
     parameters_schema = {
         "type": "object",
         "properties": {
-            "board_id": {"type": "string", "description": "The board id"},
-            "card_id": {"type": "string", "description": "The card id"},
+            "board_id": {"type": "string", "description": "UUID of the board (from kanban_list_boards)"},
+            "card_id": {"type": "string", "description": "UUID of the card (from kanban_get_board)"},
             "title": {"type": "string", "description": "New title"},
             "description": {"type": "string", "description": "New description"},
             "priority": {"type": "string", "description": "New priority: low, medium, high", "enum": ["low", "medium", "high"]},
@@ -221,12 +221,12 @@ class KanbanUpdateCardTool(BaseTool):
 class KanbanDeleteCardTool(BaseTool):
     name = "kanban_delete_card"
     category = "productivity"
-    description = "Delete a kanban card."
+    description = "Delete a card from a kanban board. Use when the user explicitly asks to remove a card."
     parameters_schema = {
         "type": "object",
         "properties": {
-            "board_id": {"type": "string", "description": "The board id"},
-            "card_id": {"type": "string", "description": "The card id"},
+            "board_id": {"type": "string", "description": "UUID of the board (from kanban_list_boards)"},
+            "card_id": {"type": "string", "description": "UUID of the card (from kanban_get_board)"},
         },
         "required": ["board_id", "card_id"],
     }

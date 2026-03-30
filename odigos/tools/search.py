@@ -15,13 +15,13 @@ class SearchTool(BaseTool):
     """Web search tool backed by any SearchProvider."""
 
     name = "web_search"
-    description = "Search the web for current information on any topic."
+    description = "Search the web for current information on any topic. Use for recent events, news, or queries needing multiple source perspectives. Do not use when a single authoritative source suffices — prefer lookup_fact for encyclopedic facts or read_page when you have a specific URL."
     category = "search"
     contract = ToolContract(timeout_seconds=30, max_retries={"transient": 3, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     parameters_schema = {
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "The search query"},
+            "query": {"type": "string", "description": "Natural language question or search terms to find on the web"},
         },
         "required": ["query"],
     }

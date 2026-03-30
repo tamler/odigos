@@ -32,7 +32,7 @@ BLOCKED_PREFIXES = ["api_key", "llm_api_key", "budget", "llm"]
 
 
 class ManageSettingsTool(BaseTool):
-    name = "manage_settings"
+    name = "configure_settings"
     category = "memory"
     description = (
         "Read and update the agent's own configuration. "
@@ -51,6 +51,7 @@ class ManageSettingsTool(BaseTool):
                 "description": "Dotted setting key, e.g. 'browser.enabled'. Required for read/write.",
             },
             "value": {
+                "type": "string",
                 "description": "New value to set. Required for write.",
             },
         },

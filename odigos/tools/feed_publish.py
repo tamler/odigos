@@ -17,6 +17,7 @@ class PublishToFeedTool(BaseTool):
     description = (
         "Publish an entry to your RSS feed. Subscribers with subscribe cards "
         "will see this in their feed reader."
+        " Do not use to read or subscribe to feeds — use read_feed or watch_feed for those."
     )
     parameters_schema = {
         "type": "object",

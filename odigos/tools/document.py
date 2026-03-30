@@ -18,7 +18,8 @@ class DocTool(BaseTool):
     category = "analysis"
     description = (
         "Process a document (PDF, Word, Excel, HTML, image, etc.) and ingest it into memory. "
-        "Pass 'deep: true' for complex PDFs with tables/figures (requires docling plugin)."
+        "Use for extracting text from rich document formats. "
+        "Do not use for plain text files — use manage_files read operation instead."
     )
     parameters_schema = {
         "type": "object",

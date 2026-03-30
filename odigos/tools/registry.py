@@ -14,9 +14,15 @@ from odigos.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
+# Tools always available regardless of classification
+ALWAYS_AVAILABLE = {
+    "web_search", "remember_fact", "find_tools",
+    "decompose_query", "check_plan", "update_plan",
+}
+
 # Which categories are relevant to each query classification
 CLASSIFICATION_CATEGORIES: dict[str, set[str]] = {
-    "simple": {"search", "memory", "communication"},
+    "simple": {"search", "memory"},
     "standard": {"search", "memory", "create", "productivity", "communication", "media"},
     "document_query": {"search", "memory", "analysis", "create"},
     "complex": set(),  # all tools
@@ -99,7 +105,9 @@ class ToolRegistry:
 
         return [
             t for t in all_tools
-            if not t.category or t.category in relevant_categories
+            if t.name in ALWAYS_AVAILABLE
+            or not t.category
+            or t.category in relevant_categories
         ]
 
     def validate_routing_rules(self, routing_rules: dict) -> list[str]:

@@ -20,6 +20,7 @@ class RememberFactTool(BaseTool):
         "Save an explicit fact about the user for future reference. "
         "Use when the user says 'remember that...', 'I prefer...', 'I am...', "
         "or any personal information they want you to retain."
+        " Do not use for task requests or goals — use create_goal or create_todo for those."
     )
     parameters_schema = {
         "type": "object",
@@ -35,7 +36,7 @@ class RememberFactTool(BaseTool):
                     "location",
                     "general",
                 ],
-                "description": "Category of the fact",
+                "description": "Semantic category to help organize and recall the fact later",
             },
         },
         "required": ["fact"],

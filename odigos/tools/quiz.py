@@ -19,7 +19,7 @@ class CreateQuizTool(BaseTool):
     description = (
         "Create a quiz or assessment for the student. Provide a title, questions "
         "with multiple choice options, and correct answers. The quiz is presented "
-        "to the student interactively. Use suggest_actions to present each question."
+        "to the student interactively. Do not use for free-form Q&A — this tool is for structured multiple-choice assessments only."
     )
     parameters_schema = {
         "type": "object",

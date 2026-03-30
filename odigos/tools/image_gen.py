@@ -42,6 +42,7 @@ class GenerateImageTool(BaseTool):
             },
             "aspect_ratio": {
                 "type": "string",
+                "enum": ["1:1", "4:3", "3:4", "16:9", "9:16"],
                 "description": (
                     "Image aspect ratio: 1:1, 4:3, 3:4, 16:9, "
                     "or 9:16. Default: 1:1"

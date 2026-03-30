@@ -116,6 +116,7 @@ class CheckFeedsTool(BaseTool):
     description = (
         "Check all monitored feeds for new articles. Returns recent items "
         "filtered by the user's topic preferences."
+        " Do not use for one-off feeds not in the monitored list — use read_feed for those."
     )
     parameters_schema = {
         "type": "object",

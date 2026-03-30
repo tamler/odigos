@@ -113,9 +113,9 @@ class ImageTool(BaseTool):
     name = "process_image"
     category = "media"
     description = (
-        "Process images: resize, crop, convert format, get info, "
-        "create thumbnails. Works with images in the data/files "
-        "directory."
+        "Process existing images: resize, crop, convert format, create thumbnails, or rotate. "
+        "Use when you have an image file that needs modification. "
+        "Do not use to create new images from text — use generate_image for that."
     )
     parameters_schema = {
         "type": "object",
@@ -156,7 +156,7 @@ class ImageTool(BaseTool):
             },
             "angle": {
                 "type": "integer",
-                "description": "Rotation angle in degrees",
+                "description": "Rotation angle in degrees, counter-clockwise positive",
             },
             "crop_box": {
                 "type": "string",

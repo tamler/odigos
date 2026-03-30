@@ -284,6 +284,11 @@ async def _register_tools(
     tool_registry.register(WorkspaceSearchTool(db=db))
     logger.info("Workspace search tool registered")
 
+    # Tool discovery meta-tool (progressive disclosure)
+    from odigos.tools.find_tools import FindToolsTool
+    tool_registry.register(FindToolsTool(registry=tool_registry))
+    logger.info("Tool discovery registered (find_tools)")
+
     # Image processing tool
     from odigos.tools.image import ImageTool
     tool_registry.register(ImageTool())

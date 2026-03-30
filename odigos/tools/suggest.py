@@ -26,6 +26,8 @@ class SuggestActionsTool(BaseTool):
             "actions": {
                 "type": "array",
                 "items": {"type": "string"},
+                "minItems": 2,
+                "maxItems": 5,
                 "description": "List of 2-5 action descriptions the user can choose from",
             },
         },

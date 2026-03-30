@@ -13,8 +13,8 @@ class MessagePeerTool(BaseTool):
     name = "message_peer"
     category = "communication"
     description = (
-        "Send a message to a peer agent. Use this to communicate, "
-        "request help, share knowledge, or delegate tasks to other agents."
+        "Send a message to a registered peer agent. Use to communicate with an already-registered peer. "
+        "Do not use to create a new subagent — use spawn_subagent for that."
     )
     parameters_schema = {
         "type": "object",
@@ -29,11 +29,13 @@ class MessagePeerTool(BaseTool):
             },
             "message_type": {
                 "type": "string",
+                "enum": ["message", "help_request", "knowledge_share", "task_delegation", "status"],
                 "description": "Type of message: message, help_request, knowledge_share, task_delegation, status",
                 "default": "message",
             },
             "priority": {
                 "type": "string",
+                "enum": ["low", "normal", "high"],
                 "description": "Message priority: low, normal, high",
                 "default": "normal",
             },

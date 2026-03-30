@@ -28,7 +28,7 @@ class NotifyTool(BaseTool):
         "properties": {
             "message": {
                 "type": "string",
-                "description": "The notification message to send.",
+                "description": "The notification body text shown to the user. Keep concise and actionable.",
             },
             "priority": {
                 "type": "string",

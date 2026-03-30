@@ -13,7 +13,7 @@ MAX_READ_SIZE = 500_000  # 500KB
 class FileTool(BaseTool):
     """Read, write, and list files within configured allowed paths."""
 
-    name = "file"
+    name = "manage_files"
     category = "media"
     description = (
         "Read, write, or list files. Operations: read (returns text content), "
@@ -30,7 +30,7 @@ class FileTool(BaseTool):
             },
             "path": {
                 "type": "string",
-                "description": "File or directory path",
+                "description": "Path to the file or directory. Must be within configured allowed directories.",
             },
             "content": {
                 "type": "string",

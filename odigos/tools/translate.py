@@ -15,6 +15,7 @@ class TranslateTool(BaseTool):
     description = (
         "Translate text between languages. Auto-detects the source "
         "language if not specified. Supports 100+ languages."
+        " Do not use for language detection alone — use analyze_text with action language instead."
     )
     parameters_schema = {
         "type": "object",
