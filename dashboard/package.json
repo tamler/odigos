@@ -21,6 +21,7 @@
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@ricky0123/vad-web": "^0.0.30",
     "@tailwindcss/vite": "^4.2.1",
     "@tiptap/extension-code-block": "^3.20.5",
     "@tiptap/extension-link": "^3.20.5",

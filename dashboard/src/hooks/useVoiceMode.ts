@@ -1,27 +1,64 @@
 /**
- * Voice mode hook: continuous listen → detect silence → transcribe → send → repeat.
+ * Voice mode hook: continuous listen → detect speech end → transcribe → send → repeat.
  *
- * Uses MediaRecorder for capture + AnalyserNode for silence detection
- * and amplitude visualization. Both share the same getUserMedia stream.
+ * Uses Silero VAD (via @ricky0123/vad-web) for speech detection instead of
+ * RMS amplitude. VAD detects actual human speech, not just loudness -- works
+ * in noisy environments, ignores keyboard typing, AC hum, etc.
  *
- * Features:
- * - Adaptive silence threshold (calibrates to ambient noise on start)
- * - Cross-platform MIME detection (WebM, MP4, OGG fallbacks)
- * - AudioContext created synchronously on user gesture (iOS requirement)
- * - All HTTP through api.ts (CSRF, error handling)
- * - Error feedback via custom events
+ * Falls back to RMS-based detection if VAD fails to load.
  */
 import { useCallback, useRef, useState } from 'react'
 import { postFormRaw } from '@/lib/api'
 
-const SILENCE_DURATION = 1500   // ms of silence before auto-stop
-const MIN_RECORDING_MS = 800    // don't send recordings shorter than this
 const FFT_SIZE = 2048
 const SMOOTHING = 0.85
-const CALIBRATION_MS = 600      // sample ambient noise for this long on start
-const THRESHOLD_MULTIPLIER = 2.5 // silence threshold = ambient floor * this
+
+// RMS fallback constants (used if VAD unavailable)
+const SILENCE_DURATION = 1500
+const MIN_RECORDING_MS = 800
+const CALIBRATION_MS = 600
+const THRESHOLD_MULTIPLIER = 2.5
 
 export type VoicePhase = 'idle' | 'listening' | 'processing' | 'thinking' | 'speaking'
+
+/** Convert Float32Array PCM to WAV blob */
+function float32ToWav(samples: Float32Array, sampleRate: number): Blob {
+  const numChannels = 1
+  const bitsPerSample = 16
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8)
+  const blockAlign = numChannels * (bitsPerSample / 8)
+  const dataSize = samples.length * (bitsPerSample / 8)
+  const buffer = new ArrayBuffer(44 + dataSize)
+  const view = new DataView(buffer)
+
+  // WAV header
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
+  }
+  writeString(0, 'RIFF')
+  view.setUint32(4, 36 + dataSize, true)
+  writeString(8, 'WAVE')
+  writeString(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true) // PCM
+  view.setUint16(22, numChannels, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, byteRate, true)
+  view.setUint16(32, blockAlign, true)
+  view.setUint16(34, bitsPerSample, true)
+  writeString(36, 'data')
+  view.setUint32(40, dataSize, true)
+
+  // PCM data
+  let offset = 44
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]))
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true)
+    offset += 2
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' })
+}
 
 interface UseVoiceModeOptions {
   onTranscription: (text: string) => void
@@ -43,8 +80,10 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
   const recordingStartRef = useRef<number>(0)
   const activeRef = useRef(false)
   const smoothedVolumeRef = useRef(0)
-  const silenceThresholdRef = useRef(0.01)  // adaptive, set during calibration
+  const silenceThresholdRef = useRef(0.01)
   const isTranscribingRef = useRef(false)
+  const vadRef = useRef<any>(null)
+  const useVadRef = useRef(false)
 
   const setPhase = useCallback((p: VoicePhase) => {
     setPhaseState(p)
@@ -94,10 +133,15 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
     return candidates.find(m => MediaRecorder.isTypeSupported(m)) || ''
   }, [])
 
+  const createRecorder = useCallback(() => {
+    if (!streamRef.current) return null
+    const mimeType = getSupportedMimeType()
+    return new MediaRecorder(streamRef.current, mimeType ? { mimeType } : {})
+  }, [getSupportedMimeType])
+
   const startListening = useCallback(() => {
     const recorder = recorderRef.current
-    const stream = streamRef.current
-    if (!recorder || !stream || !activeRef.current) return
+    if (!recorder || !activeRef.current) return
 
     chunksRef.current = []
     silenceStartRef.current = null
@@ -111,6 +155,26 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
     setPhase('listening')
   }, [setPhase])
 
+  // Called by VAD when speech ends
+  const handleSpeechEnd = useCallback(async () => {
+    if (!activeRef.current || isTranscribingRef.current) return
+
+    const blob = await stopCurrentRecording()
+    if (blob && blob.size > 1000) {
+      await transcribeAndSend(blob)
+    }
+
+    // Restart recording if still active
+    if (activeRef.current && streamRef.current) {
+      const newRecorder = createRecorder()
+      if (newRecorder) {
+        recorderRef.current = newRecorder
+        startListening()
+      }
+    }
+  }, [stopCurrentRecording, transcribeAndSend, createRecorder, startListening])
+
+  // RMS monitoring loop (fallback when VAD unavailable)
   const monitorLoop = useCallback(() => {
     const analyser = analyserRef.current
     if (!analyser || !activeRef.current) return
@@ -118,20 +182,15 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
     const dataArray = new Float32Array(FFT_SIZE)
     analyser.getFloatTimeDomainData(dataArray)
 
-    // Calculate RMS
     let sumSquares = 0
-    for (let i = 0; i < dataArray.length; i++) {
-      sumSquares += dataArray[i] * dataArray[i]
-    }
+    for (let i = 0; i < dataArray.length; i++) sumSquares += dataArray[i] * dataArray[i]
     const rms = Math.sqrt(sumSquares / dataArray.length)
 
-    // Normalized amplitude for orb animation (0-1)
     const threshold = silenceThresholdRef.current
     const normalized = Math.max(0, Math.min(1, (rms - threshold * 0.5) / (0.3 - threshold * 0.5)))
     smoothedVolumeRef.current = SMOOTHING * smoothedVolumeRef.current + (1 - SMOOTHING) * normalized
     onAmplitudeChange?.(smoothedVolumeRef.current)
 
-    // Silence detection (only when recorder is active and not mid-transcription)
     const recorder = recorderRef.current
     if (recorder && recorder.state === 'recording' && !isTranscribingRef.current) {
       const elapsed = Date.now() - recordingStartRef.current
@@ -139,26 +198,10 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       if (rms < threshold) {
         if (silenceStartRef.current === null) {
           silenceStartRef.current = Date.now()
-        } else if (
-          Date.now() - silenceStartRef.current > SILENCE_DURATION &&
-          elapsed > MIN_RECORDING_MS
-        ) {
+        } else if (Date.now() - silenceStartRef.current > SILENCE_DURATION && elapsed > MIN_RECORDING_MS) {
           silenceStartRef.current = null
-
-          stopCurrentRecording().then(async (blob) => {
-            if (blob && blob.size > 1000) {
-              await transcribeAndSend(blob)
-            }
-            // Restart listening and monitoring if still active
-            if (activeRef.current && streamRef.current) {
-              const mimeType = getSupportedMimeType()
-              const newRecorder = new MediaRecorder(streamRef.current, mimeType ? { mimeType } : {})
-              recorderRef.current = newRecorder
-              startListening()
-              animFrameRef.current = requestAnimationFrame(monitorLoop)
-            }
-          })
-          return  // Pause monitoring during transcription
+          handleSpeechEnd()
+          return
         }
       } else {
         silenceStartRef.current = null
@@ -166,7 +209,26 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
     }
 
     animFrameRef.current = requestAnimationFrame(monitorLoop)
-  }, [onAmplitudeChange, stopCurrentRecording, transcribeAndSend, startListening, getSupportedMimeType])
+  }, [onAmplitudeChange, handleSpeechEnd])
+
+  // Amplitude-only monitoring (when VAD handles speech detection)
+  const amplitudeLoop = useCallback(() => {
+    const analyser = analyserRef.current
+    if (!analyser || !activeRef.current) return
+
+    const dataArray = new Float32Array(FFT_SIZE)
+    analyser.getFloatTimeDomainData(dataArray)
+
+    let sumSquares = 0
+    for (let i = 0; i < dataArray.length; i++) sumSquares += dataArray[i] * dataArray[i]
+    const rms = Math.sqrt(sumSquares / dataArray.length)
+
+    const normalized = Math.max(0, Math.min(1, (rms - 0.005) / 0.295))
+    smoothedVolumeRef.current = SMOOTHING * smoothedVolumeRef.current + (1 - SMOOTHING) * normalized
+    onAmplitudeChange?.(smoothedVolumeRef.current)
+
+    animFrameRef.current = requestAnimationFrame(amplitudeLoop)
+  }, [onAmplitudeChange])
 
   const calibrateThreshold = useCallback((analyser: AnalyserNode): Promise<number> => {
     return new Promise((resolve) => {
@@ -176,10 +238,8 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
 
       function sample() {
         if (Date.now() - start > CALIBRATION_MS) {
-          // Set threshold to ambient floor * multiplier (min 0.005)
           const avgRms = samples.length > 0 ? samples.reduce((a, b) => a + b) / samples.length : 0.01
-          const threshold = Math.max(0.005, avgRms * THRESHOLD_MULTIPLIER)
-          resolve(threshold)
+          resolve(Math.max(0.005, avgRms * THRESHOLD_MULTIPLIER))
           return
         }
         analyser.getFloatTimeDomainData(dataArray)
@@ -194,7 +254,7 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
 
   const enter = useCallback(async () => {
     try {
-      // Create AudioContext IMMEDIATELY on user gesture (before any async)
+      // Create AudioContext synchronously on user gesture (iOS requirement)
       const ctx = new AudioContext()
       audioCtxRef.current = ctx
 
@@ -205,7 +265,7 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
 
       if (ctx.state === 'suspended') await ctx.resume()
 
-      // Set up AnalyserNode
+      // Set up AnalyserNode (for amplitude visualization)
       const source = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
       analyser.fftSize = FFT_SIZE
@@ -213,19 +273,49 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       source.connect(analyser)
       analyserRef.current = analyser
 
-      // Calibrate silence threshold to ambient noise
-      silenceThresholdRef.current = await calibrateThreshold(analyser)
-
-      // Set up MediaRecorder
-      const mimeType = getSupportedMimeType()
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
-      recorderRef.current = recorder
+      // Try to initialize Silero VAD
+      let vadAvailable = false
+      try {
+        const { MicVAD } = await import('@ricky0123/vad-web')
+        const vad = await MicVAD.new({
+          onSpeechEnd: async (audio: Float32Array) => {
+            if (!activeRef.current || isTranscribingRef.current) return
+            // Convert Float32Array to WAV blob
+            const wavBlob = float32ToWav(audio, 16000)
+            if (wavBlob.size > 1000) {
+              await transcribeAndSend(wavBlob)
+            }
+            if (activeRef.current) setPhase('listening')
+          },
+          positiveSpeechThreshold: 0.8,
+          negativeSpeechThreshold: 0.3,
+        })
+        vad.start()
+        vadRef.current = vad
+        useVadRef.current = true
+        vadAvailable = true
+        console.log('[Voice] Silero VAD active')
+      } catch (err) {
+        console.warn('[Voice] VAD unavailable, falling back to RMS:', err)
+        useVadRef.current = false
+      }
 
       activeRef.current = true
       setActive(true)
 
-      startListening()
-      animFrameRef.current = requestAnimationFrame(monitorLoop)
+      if (vadAvailable) {
+        // VAD handles speech detection and gives us audio directly -- no MediaRecorder needed
+        setPhase('listening')
+        animFrameRef.current = requestAnimationFrame(amplitudeLoop)
+      } else {
+        // Fallback: RMS-based silence detection with MediaRecorder
+        const recorder = createRecorder()
+        if (!recorder) throw new Error('MediaRecorder not available')
+        recorderRef.current = recorder
+        silenceThresholdRef.current = await calibrateThreshold(analyser)
+        startListening()
+        animFrameRef.current = requestAnimationFrame(monitorLoop)
+      }
     } catch (err) {
       console.error('Failed to start voice mode:', err)
       if (audioCtxRef.current) {
@@ -239,7 +329,7 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
         : 'Voice mode failed to start. Try again.'
       window.dispatchEvent(new CustomEvent('voice-error', { detail: msg }))
     }
-  }, [startListening, monitorLoop, calibrateThreshold, getSupportedMimeType])
+  }, [startListening, monitorLoop, amplitudeLoop, calibrateThreshold, createRecorder, handleSpeechEnd])
 
   const exit = useCallback(async () => {
     activeRef.current = false
@@ -247,6 +337,12 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
     setPhase('idle')
 
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+
+    // Stop VAD
+    if (vadRef.current) {
+      vadRef.current.destroy?.() || vadRef.current.pause?.()
+      vadRef.current = null
+    }
 
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
       recorderRef.current.stop()
@@ -264,6 +360,7 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
     }
 
     analyserRef.current = null
+    useVadRef.current = false
     onAmplitudeChange?.(0)
   }, [setPhase, onAmplitudeChange])
 
