@@ -502,6 +502,11 @@ export default function AppLayout() {
 
   function handleNewChat() {
     setActiveId(null)
+    setMessages([])
+    setStreamingContent('')
+    setThinking(false)
+    setStatus(null)
+    setSuggestedActions([])
     setSidebarOpen(false)
     setSearchQuery('')
     navigate('/')

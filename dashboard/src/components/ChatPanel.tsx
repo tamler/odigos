@@ -6,7 +6,6 @@ import { toast } from 'sonner'
 import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera, Download, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
-import { Loader } from '@/components/ui/loader'
 import {
   ChatContainerRoot,
   ChatContainerContent,
@@ -198,10 +197,11 @@ export const ChatPanel = memo(({
     return () => window.removeEventListener('voice-error', handler)
   }, [])
 
-  // Reset streaming when thinking ends (response complete)
+  // Streaming starts when content arrives, ends when thinking stops
   useEffect(() => {
+    if (streamingContent && !isStreaming) setIsStreaming(true)
     if (!thinking && isStreaming) setIsStreaming(false)
-  }, [thinking, isStreaming])
+  }, [thinking, streamingContent, isStreaming])
 
   // Safety: clear thinking after 120s if server never responds
   useEffect(() => {
@@ -392,7 +392,6 @@ export const ChatPanel = memo(({
       attachments: attachments.length > 0 ? attachments : undefined,
     }])
     setThinking(true)
-    setIsStreaming(true)
     setSuggestedActions([])
 
     socketRef.current?.send('chat', {
@@ -552,13 +551,15 @@ export const ChatPanel = memo(({
                       )}
 
                       {thinking && !streamingContent && (
-                        <div className="flex flex-col gap-3 py-4 animate-in fade-in slide-in-from-bottom-2 duration-700">
-                          <div className="flex items-center gap-3">
-                            <Loader variant="thinking" size="md" />
-                            <span className="text-[13px] font-medium text-muted-foreground/70 tracking-tight">
-                              {status || 'Thinking...'}
-                            </span>
+                        <div className="flex items-center gap-2 py-3 animate-in fade-in duration-500">
+                          <div className="flex gap-1">
+                            <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }} />
+                            <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: '200ms', animationDuration: '1s' }} />
+                            <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: '400ms', animationDuration: '1s' }} />
                           </div>
+                          <span className="text-xs text-muted-foreground/60">
+                            {status || 'Thinking...'}
+                          </span>
                         </div>
                       )}
 
