@@ -357,6 +357,11 @@ export default function AppLayout() {
       .catch(() => {})
   }, [])
 
+  // Auto-close sidebar on mobile when navigating to any page
+  useEffect(() => {
+    if (isMobile) setSidebarOpen(false)
+  }, [location.pathname, isMobile])
+
   const loadConversations = useCallback(() => {
     get<{ conversations: Conversation[] }>('/api/conversations?limit=50')
       .then((data) => {
