@@ -16,7 +16,7 @@ interface ImageCropperProps {
   onCropped?: () => void
 }
 
-export function ImageCropper({ imageUrl, artifactId, filename, onClose, onCropped }: ImageCropperProps) {
+export function ImageCropper({ imageUrl, artifactId: _artifactId, filename, onClose, onCropped }: ImageCropperProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const cropperRef = useRef<any>(null)
   const [saving, setSaving] = useState(false)
