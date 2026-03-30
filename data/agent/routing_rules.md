@@ -20,16 +20,16 @@ tools: all
 skip_rag: false
 skip_documents: false
 skip_profile: false
-tools: run_code, activate_skill, send_notification, check_plan, update_plan, remember_fact
+tools: all
 
 [complex]
 skip_rag: false
 skip_documents: false
 skip_profile: false
-tools: run_code, decompose_query, check_plan, update_plan, activate_skill, send_notification, remember_fact
+tools: all
 
 [planning]
 skip_rag: false
 skip_documents: true
 skip_profile: false
-tools: decompose_query, check_plan, update_plan, activate_skill, send_notification, create_goal, create_todo, create_reminder
+tools: all
