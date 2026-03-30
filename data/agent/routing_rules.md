@@ -8,7 +8,7 @@ skip_reranker: true
 skip_documents: true
 skip_profile: true
 skip_experiences: true
-tools: activate_skill, send_notification
+tools: all
 
 [standard]
 skip_rag: false
