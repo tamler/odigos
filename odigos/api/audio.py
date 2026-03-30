@@ -61,6 +61,18 @@ async def transcribe_audio(request: Request):
         )
         return {"text": ""}
 
+    # Server-side VAD: check if audio contains speech before sending to Whisper
+    try:
+        from odigos.core.vad import contains_speech
+        import asyncio
+        has_speech = await asyncio.to_thread(contains_speech, audio_bytes, filename)
+        if not has_speech:
+            logger.info("STT: VAD detected no speech, skipping transcription")
+            return {"text": ""}
+    except Exception:
+        # VAD failed, proceed with transcription anyway
+        logger.debug("VAD check failed, proceeding", exc_info=True)
+
     try:
         text = await provider.transcribe(audio_bytes, filename)
         return {"text": text}
