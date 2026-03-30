@@ -600,21 +600,18 @@ export default function AppLayout() {
       <div className="flex h-[100dvh] bg-background text-foreground relative overflow-hidden">
         <QuickSwitcher open={switcherOpen} onOpenChange={setSwitcherOpen} />
         
-        {/* Mobile top bar -- compact, toggles sidebar */}
-        {!focusMode && (
-          <div className="flex items-center gap-1.5 px-2 py-1.5 pt-safe border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background/95 backdrop-blur-sm">
-            <Button variant="ghost" size="icon" aria-label="Toggle mobile menu" className="h-9 w-9" onClick={() => setSidebarOpen(!sidebarOpen)}>
-              <Menu className="h-4 w-4" />
-            </Button>
-            <button onClick={() => navigate('/')} className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors truncate max-w-[180px]">
-              {isSettings && isMobile ? (
-                <div className="flex items-center gap-1.5">
-                  <ArrowLeft className="h-3.5 w-3.5" onClick={(e) => { e.stopPropagation(); navigate('/settings') }} />
-                  <span>{SETTINGS_SECTIONS.find(s => s.id === currentTab)?.label || 'Settings'}</span>
-                </div>
-              ) : agentName}
-            </button>
-          </div>
+        {/* Mobile menu -- floating button only, no header bar */}
+        {!focusMode && !sidebarOpen && (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Open menu"
+            className="lg:hidden fixed top-3 left-3 z-20 h-9 w-9 text-muted-foreground/50 hover:text-foreground"
+            style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="h-4 w-4" />
+          </Button>
         )}
 
         <AppSidebar 
@@ -637,7 +634,7 @@ export default function AppLayout() {
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
         <div className="flex-1 flex overflow-hidden relative">
-          <main className={`flex-1 flex flex-col min-w-0 overflow-hidden pt-[40px] lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
+          <main className={`flex-1 flex flex-col min-w-0 overflow-hidden lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
             <ErrorBoundary>
               {artifactPanelOpen ? (
                 <ChatPanel activeConversationId={activeId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={false} />

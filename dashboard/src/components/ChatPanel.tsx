@@ -154,6 +154,7 @@ export const ChatPanel = memo(({
     playTTS: outletPlayTTS,
     stopTTS: outletStopTTS,
     isTTSPlaying: outletTTSPlaying,
+    agentName: outletAgentName,
   } = outletCtx
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -164,7 +165,7 @@ export const ChatPanel = memo(({
   const [sttAvailable, setSttAvailable] = useState(false)
   const [ttsAvailable, setTtsAvailable] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
-  const [agentName, setAgentName] = useState('Odigos')
+  const [agentName, setAgentName] = useState(outletAgentName || 'Odigos')
   const [showAllActions, setShowAllActions] = useState(false)
   const [useCamera, setUseCamera] = useState<boolean | 'environment'>(false)
   const [voiceAmplitude, setVoiceAmplitude] = useState(0)
@@ -671,7 +672,7 @@ export const ChatPanel = memo(({
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Send a message..."
+                placeholder={`Message ${agentName}...`}
                 disabled={!connected}
                 rows={1}
                 className="w-full resize-none bg-transparent px-4 pt-3 pb-14 sm:pb-12 text-base sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50 min-h-[52px]"
