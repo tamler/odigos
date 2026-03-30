@@ -327,38 +327,42 @@ class Executor:
             messages.append(assistant_msg)
 
             # Execute each tool call and append results
-            for tc in response.tool_calls:
+            # Execute tool calls -- parallel when multiple, sequential when single
+            goal_id = (context_metadata or {}).get("goal_id")
+            MAX_TOOL_RESULT = 4000
+
+            async def _run_tool(tc):
                 tools_used.add(tc.name)
                 if status_callback:
                     await status_callback(_friendly_tool_status(tc.name))
-                goal_id = (context_metadata or {}).get("goal_id")
                 result_content = await self._execute_tool(
                     conversation_id, tc, message_content=message_content, goal_id=goal_id,
                 )
-                # Truncate large tool results to preserve context
-                MAX_TOOL_RESULT = 4000
                 if len(result_content) > MAX_TOOL_RESULT:
                     result_content = result_content[:MAX_TOOL_RESULT] + f"\n\n[Truncated — {len(result_content)} chars total. Use file tool to read full content if needed.]"
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result_content,
-                })
-                # Active tool output evaluation
                 if self.evaluator:
                     try:
                         await self.evaluator.evaluate_tool_output(
-                            tc.name,
-                            tc.arguments,
-                            result_content,
-                            message_content,
+                            tc.name, tc.arguments, result_content, message_content,
                         )
                     except Exception:
-                        logger.debug(
-                            "Tool eval failed for %s",
-                            tc.name,
-                            exc_info=True,
-                        )
+                        logger.debug("Tool eval failed for %s", tc.name, exc_info=True)
+                return tc, result_content
+
+            if len(response.tool_calls) > 1:
+                results = await asyncio.gather(
+                    *[_run_tool(tc) for tc in response.tool_calls],
+                    return_exceptions=True,
+                )
+                for r in results:
+                    if isinstance(r, Exception):
+                        logger.error("Parallel tool execution failed: %s", r)
+                        continue
+                    tc, result_content = r
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_content})
+            else:
+                tc, result_content = await _run_tool(response.tool_calls[0])
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_content})
 
             # Stuck detection: warn if identical tool calls as previous turn
             current_turn_calls = {

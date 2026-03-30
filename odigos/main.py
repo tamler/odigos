@@ -49,6 +49,7 @@ from odigos.api.evolution import router as evolution_router
 from odigos.api.agents import router as agents_router
 from odigos.api.state import router as state_router
 from odigos.api.upload import router as upload_router
+from odigos.api.diagnostic import router as diagnostic_router
 from odigos.channels.web import WebChannel
 from odigos.core.agent_client import AgentClient
 from odigos.core.cron import CronManager
@@ -1036,6 +1037,7 @@ app.include_router(evolution_router)
 app.include_router(agents_router)
 app.include_router(cron_router)
 app.include_router(state_router)
+app.include_router(diagnostic_router)
 app.include_router(agent_ws_router)
 app.include_router(ws_router)
 app.include_router(feed_router)

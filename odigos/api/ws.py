@@ -350,12 +350,73 @@ async def websocket_endpoint(websocket: WebSocket):
                         chat_queue.put_nowait({"type": "chat", "content": edit_content,
                                                "conversation_id": data.get("conversation_id")})
 
+            elif msg_type == "undo":
+                # Remove the last user+assistant exchange
+                try:
+                    db = websocket.app.state.agent_service.agent.db
+                    last_two = await db.fetch_all(
+                        "SELECT id, role FROM messages WHERE conversation_id = ? "
+                        "ORDER BY timestamp DESC LIMIT 2",
+                        (conversation_id,),
+                    )
+                    if last_two:
+                        ids = [r["id"] for r in last_two]
+                        placeholders = ",".join("?" * len(ids))
+                        await db.execute(
+                            f"DELETE FROM messages WHERE id IN ({placeholders})", ids,
+                        )
+                        await websocket.send_json({
+                            "type": "undo_complete",
+                            "conversation_id": conversation_id,
+                            "removed": len(ids),
+                        })
+                except Exception as e:
+                    logger.warning("Undo failed: %s", e)
+
             elif msg_type == "retry":
-                # Re-send content as a new chat message
-                retry_content = data.get("content", "")
-                if retry_content and not chat_queue.full():
-                    chat_queue.put_nowait({"type": "chat", "content": retry_content,
-                                           "conversation_id": data.get("conversation_id")})
+                # Remove last assistant response, then re-send the last user message
+                try:
+                    db = websocket.app.state.agent_service.agent.db
+                    last_asst = await db.fetch_one(
+                        "SELECT id FROM messages WHERE conversation_id = ? AND role = 'assistant' "
+                        "ORDER BY timestamp DESC LIMIT 1",
+                        (conversation_id,),
+                    )
+                    if last_asst:
+                        await db.execute("DELETE FROM messages WHERE id = ?", (last_asst["id"],))
+                    last_user = await db.fetch_one(
+                        "SELECT content FROM messages WHERE conversation_id = ? AND role = 'user' "
+                        "ORDER BY timestamp DESC LIMIT 1",
+                        (conversation_id,),
+                    )
+                    if last_user and not chat_queue.full():
+                        chat_queue.put_nowait({
+                            "type": "chat",
+                            "content": last_user["content"],
+                            "conversation_id": conversation_id,
+                        })
+                except Exception as e:
+                    logger.warning("Retry failed: %s", e)
+
+            elif msg_type == "compress":
+                # User-triggered context compression
+                try:
+                    agent = websocket.app.state.agent_service.agent
+                    if hasattr(agent, 'context_assembler') and agent.context_assembler.summarizer:
+                        await agent.context_assembler.summarizer.summarize_if_needed(
+                            conversation_id, force=True,
+                        )
+                        await websocket.send_json({
+                            "type": "compress_complete",
+                            "conversation_id": conversation_id,
+                        })
+                    else:
+                        await websocket.send_json({
+                            "type": "status",
+                            "text": "Compression not available",
+                        })
+                except Exception as e:
+                    logger.warning("Compress failed: %s", e)
 
             elif msg_type == "subscribe":
                 channels = data.get("channels", [])

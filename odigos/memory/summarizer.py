@@ -32,7 +32,7 @@ class ConversationSummarizer:
         self.llm_provider = llm_provider
         self.context_window = context_window
 
-    async def summarize_if_needed(self, conversation_id: str) -> None:
+    async def summarize_if_needed(self, conversation_id: str, force: bool = False) -> None:
         """Check if there are messages beyond the context window that need summarizing."""
         # Get total message count
         row = await self.db.fetch_one(
@@ -41,7 +41,7 @@ class ConversationSummarizer:
         )
         total = row["cnt"] if row else 0
 
-        if total <= self.context_window:
+        if total <= self.context_window and not force:
             return
 
         # Find the highest end_message_idx already summarized

@@ -191,6 +191,10 @@ class Strategist:
         # Domain performance trends (last 14 days)
         domain_perf = await self._get_domain_performance()
 
+        # Trajectory patterns (repeated tool sequences)
+        from odigos.core.trajectory import get_trajectory_summary
+        trajectory_summary = await get_trajectory_summary(self.db)
+
         # Current evolution parameters (for meta-improvement awareness)
         current_params = (
             f"auto_trial_confidence={self._config.auto_trial_confidence}, "
