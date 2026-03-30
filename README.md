@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hero-banner.jpg" alt="Odigos" width="100%">
+  <img src="docs/images/hero-banner-v2.jpg" alt="Odigos" width="100%">
 </p>
 
 <h1 align="center">Odigos</h1>
@@ -132,7 +132,7 @@ Mesh networking with WebSocket auto-connect, mutual authentication, and heartbea
 ## Evolution Engine
 
 <p align="center">
-  <img src="docs/images/evolution-loop.jpg" alt="Evolution Loop" width="80%">
+  <img src="docs/images/evolution-loop-v2.jpg" alt="Evolution Loop" width="80%">
 </p>
 
 Odigos improves itself without human intervention. The evolution engine runs a continuous loop:
@@ -166,6 +166,10 @@ Odigos improves itself without human intervention. The evolution engine runs a c
 
 ### Tool Execution Contracts
 
+<p align="center">
+  <img src="docs/images/tool-execution-v4.jpg" alt="Tool Execution Flow" width="80%">
+</p>
+
 Every tool has an execution contract that defines retry behavior, timeouts, and failure handling. When a tool fails, the error is classified into a failure taxonomy (transient, input, permission, unavailable, unknown) with per-category recovery strategies. Transient failures (timeouts, rate limits, connection resets) are retried transparently with exponential backoff -- the LLM never sees the retry. Input and permission errors surface immediately. This makes the agent resilient to flaky APIs without wasting tool turns.
 
 ### Autonomous Behavior
@@ -175,6 +179,10 @@ The agent works proactively during idle time. When no user messages are pending,
 Near budget limits, the agent throttles gracefully: it switches to the background model, caps remaining tool turns, and injects a conciseness instruction. This is a gradual degradation, not a hard wall.
 
 ### Meta-Improvement
+
+<p align="center">
+  <img src="docs/images/meta-improvement-v4.jpg" alt="Meta-Improvement Loop" width="80%">
+</p>
 
 The strategist doesn't just improve the agent -- it improves how improvement works. When domain performance trends suggest the evolution system itself is miscalibrated (e.g., trials are too short to accumulate enough data, or confidence thresholds are too permissive), the strategist proposes changes to its own parameters. These meta-proposals become trials evaluated by the same system. If the change produces better outcomes, it's promoted. If not, it's reverted. The agent literally tunes its own improvement process.
 
@@ -217,7 +225,7 @@ When all steps are done, the plan outcome is evaluated: did the plan achieve its
 ## Memory System
 
 <p align="center">
-  <img src="docs/images/memory-system.jpg" alt="Memory System" width="80%">
+  <img src="docs/images/memory-system-v2.jpg" alt="Memory System" width="80%">
 </p>
 
 Odigos has a five-layer memory architecture. Each layer serves a different purpose and operates at a different timescale.
