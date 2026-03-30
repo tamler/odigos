@@ -198,6 +198,11 @@ export const ChatPanel = memo(({
     return () => window.removeEventListener('voice-error', handler)
   }, [])
 
+  // Reset streaming when thinking ends (response complete)
+  useEffect(() => {
+    if (!thinking && isStreaming) setIsStreaming(false)
+  }, [thinking, isStreaming])
+
   // Sync voice mode phase with agent status
   useEffect(() => {
     if (!voiceMode.active) return
