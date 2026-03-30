@@ -22,7 +22,7 @@ ALWAYS_AVAILABLE = {
 
 # Which categories are relevant to each query classification
 CLASSIFICATION_CATEGORIES: dict[str, set[str]] = {
-    "simple": {"search", "memory"},
+    "simple": {"search", "memory", "create"},
     "standard": {"search", "memory", "create", "productivity", "communication", "media"},
     "document_query": {"search", "memory", "analysis", "create"},
     "complex": set(),  # all tools
