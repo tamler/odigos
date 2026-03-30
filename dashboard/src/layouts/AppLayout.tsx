@@ -431,7 +431,8 @@ export default function AppLayout() {
             content,
             timestamp: new Date().toISOString(),
           }])
-          if (shouldPlayTTS(content)) {
+          // Only auto-play TTS when voice mode is active (focusMode)
+          if (focusMode && shouldPlayTTS(content)) {
             playTTS(stripForTTS(content))
           }
           if (Array.isArray(msg.actions) && msg.actions.length > 0) {

@@ -129,7 +129,6 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
           silenceStartRef.current = Date.now()
         } else if (
           Date.now() - silenceStartRef.current > SILENCE_DURATION &&
-          isSpeakingRef.current &&
           elapsed > MIN_RECORDING_MS
         ) {
           // User stopped speaking — process recording
@@ -139,32 +138,20 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
           stopCurrentRecording().then(async (blob) => {
             if (blob && blob.size > 1000) {
               await transcribeAndSend(blob)
-              // Restart listening if still active
-              if (activeRef.current && recorderRef.current) {
-                // Need a fresh MediaRecorder since the old one is stopped
-                const stream = streamRef.current
-                if (stream) {
-                  const newRecorder = new MediaRecorder(stream, {
-                    mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                      ? 'audio/webm;codecs=opus' : 'audio/webm',
-                  })
-                  recorderRef.current = newRecorder
-                  startListening()
-                }
-              }
-            } else {
-              // Recording too short, restart
-              if (activeRef.current && streamRef.current) {
-                const newRecorder = new MediaRecorder(streamRef.current, {
-                  mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-                    ? 'audio/webm;codecs=opus' : 'audio/webm',
-                })
-                recorderRef.current = newRecorder
-                startListening()
-              }
+            }
+            // Restart listening and monitoring if still active
+            if (activeRef.current && streamRef.current) {
+              const newRecorder = new MediaRecorder(streamRef.current, {
+                mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                  ? 'audio/webm;codecs=opus' : 'audio/webm',
+              })
+              recorderRef.current = newRecorder
+              startListening()
+              // Restart the monitoring loop
+              animFrameRef.current = requestAnimationFrame(monitorLoop)
             }
           })
-          // Don't continue monitoring during transcription — it restarts after
+          // Pause monitoring during transcription — resumes in the .then()
           return
         }
       } else {
