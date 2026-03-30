@@ -177,16 +177,19 @@ class DeleteArtifactTool(BaseTool):
         artifact_id = row["id"]
         filename = row["filename"]
 
-        # Delete from disk
+        # Delete from disk using unified path resolution
+        row_full = await self.db.fetch_one(
+            "SELECT file_path FROM artifacts WHERE id = ?", (artifact_id,),
+        )
+        from odigos.storage import resolve_artifact_path
+        resolved = resolve_artifact_path(artifact_id, filename, row_full.get("file_path") if row_full else None)
+        if resolved and resolved.exists() and not resolved.is_symlink():
+            resolved.unlink()
+        # Also clean up legacy artifact directory if it exists
         import shutil
-        artifact_dir = ARTIFACTS_DIR / artifact_id
-        if artifact_dir.exists():
-            shutil.rmtree(artifact_dir)
-        # Also check data/files for generated images
-        safe_filename = Path(filename).name
-        files_path = Path("data/files") / safe_filename
-        if files_path.exists() and not files_path.is_symlink():
-            files_path.unlink()
+        legacy_dir = ARTIFACTS_DIR / artifact_id
+        if legacy_dir.exists():
+            shutil.rmtree(legacy_dir)
 
         # Delete from database
         await self.db.execute(

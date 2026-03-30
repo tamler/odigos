@@ -420,6 +420,7 @@ export default function AppLayout() {
               refresh: () => window.location.reload(),
               openChat: () => setChatPanelOpen(true),
               setTheme: (t) => setThemeRef.current(t),
+              stopTTS,
             })
           }
         }

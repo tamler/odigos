@@ -715,7 +715,7 @@ export const ChatPanel = memo(({
                       aria-label="Voice mode"
                       className="h-11 w-11 lg:h-8 lg:w-8 rounded-lg text-muted-foreground hover:text-foreground"
                       disabled={!connected}
-                      onClick={() => voiceMode.enter()}
+                      onClick={() => { stopTTS(); voiceMode.enter() }}
                     >
                       <Mic className="h-5 w-5 lg:h-4 lg:w-4" />
                     </Button>

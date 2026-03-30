@@ -1,7 +1,7 @@
 import { NavigateFunction } from 'react-router-dom'
 
 export interface UIAction {
-  action: 'navigate' | 'refresh' | 'open_chat' | 'create' | 'theme' | 'navigate-to-notebook' | 'navigate-to-board'
+  action: 'navigate' | 'refresh' | 'open_chat' | 'create' | 'theme' | 'navigate-to-notebook' | 'navigate-to-board' | 'stop_tts'
   to?: string
   type?: string
   value?: string
@@ -14,10 +14,10 @@ export function executeActions(
     refresh: () => void
     openChat: () => void
     setTheme: (theme: string) => void
+    stopTTS: () => void
   }
 ): void {
   for (const a of actions) {
-    console.log('[Actions] Executing:', a)
     switch (a.action) {
       case 'navigate':
         if (a.to && a.to.startsWith('/')) navigate(a.to)
@@ -37,8 +37,10 @@ export function executeActions(
       case 'theme':
         if (a.value) callbacks.setTheme(a.value)
         break
+      case 'stop_tts':
+        callbacks.stopTTS()
+        break
       case 'create':
-        // Future: handle specialized creation if needed
         break
     }
   }
