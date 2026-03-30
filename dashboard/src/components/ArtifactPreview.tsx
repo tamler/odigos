@@ -4,16 +4,10 @@ import { get, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { X, ExternalLink, Download, Code, Eye, FileText, Save, FileDown, BookOpen, Image as ImageIcon, Sparkles, Crop } from 'lucide-react'
+import { X, ExternalLink, Download, Code, Eye, FileText, Save } from 'lucide-react'
 import { ImageCropper } from './ImageCropper'
 import { ArtifactCard } from './ArtifactCard'
 import { MarkdownEditor, CodeEditor } from './Editor'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 
 // @ts-ignore
 import html2pdf from 'html2pdf.js'
@@ -37,14 +31,13 @@ type PreviewTab = 'preview' | 'code' | 'download'
 export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   let outletCtx: any = {}
   try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
-  const { setPageContextData = () => {}, setChatPanelOpen = () => {} } = outletCtx
+  const { setPageContextData = () => {} } = outletCtx
   const [data, setData] = useState<ArtifactContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<PreviewTab>('preview')
   const [editContent, setEditContent] = useState('')
   const [isDirty, setIsDirty] = useState(false)
-  const [exporting, setExporting] = useState(false)
   const [cropOpen, setCropOpen] = useState(false)
 
   useEffect(() => {
@@ -105,83 +98,6 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
     setIsDirty(true)
   }
 
-  const handleExportPDF = async () => {
-    if (!data) return
-    setExporting(true)
-    try {
-      const element = document.createElement('div')
-      element.className = 'prose prose-sm p-8 bg-white text-black'
-      
-      // Sanitize content before setting innerHTML to prevent XSS
-      const sanitize = (html: string) => {
-        const div = document.createElement('div')
-        div.textContent = html
-        return div.innerHTML
-      }
-      if (data.content_type === 'text/markdown') {
-        element.innerHTML = `<h1 style="font-size: 24px; margin-bottom: 20px;">${sanitize(data.filename)}</h1>` +
-                           sanitize(editContent).replace(/\n/g, '<br/>')
-      } else if (data.content_type === 'text/html') {
-        // HTML content: use DOMParser to strip scripts
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(editContent, 'text/html')
-        doc.querySelectorAll('script, iframe, object, embed').forEach(el => el.remove())
-        element.innerHTML = doc.body.innerHTML
-      } else {
-        element.textContent = editContent
-      }
-
-      const opt = {
-        margin: 1,
-        filename: `${data.filename.split('.')[0]}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'in' as const, format: 'letter' as const, orientation: 'portrait' as const }
-      }
-
-      await html2pdf().from(element).set(opt).save()
-      toast.success('PDF exported')
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to export PDF')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  const handleExportEPUB = async () => {
-    if (!data) return
-    setExporting(true)
-    try {
-      const content = [
-        {
-          title: data.filename,
-          data: editContent.replace(/\n/g, '<br/>')
-        }
-      ]
-      
-      const option = {
-        title: data.filename.split('.')[0],
-        author: 'Odigos Agent',
-        content
-      }
-
-      const result = await epub(option, [])
-      const blob = new Blob([result], { type: 'application/epub+zip' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${data.filename.split('.')[0]}.epub`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success('ePub exported')
-    } catch (err) {
-      console.error(err)
-      toast.error('Failed to export ePub')
-    } finally {
-      setExporting(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -202,109 +118,100 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   const isImage = data.content_type.startsWith('image/')
   const isPreviewable = isHtml || isMarkdown || data.content_type.startsWith('text/') || isJson || isImage
 
-  const handleEditWithAgent = () => {
-    setChatPanelOpen(true)
-    toast.info('Chat opened. Tell the agent how to edit this image.')
+
+  // Images get a clean, simple header. Text files get tabs.
+  if (isImage) {
+    return (
+      <div className="flex-1 flex flex-col h-full bg-black">
+        {/* Close button top-left, minimal */}
+        <div className="absolute top-4 left-4 z-10">
+          <Button variant="ghost" size="icon" className="h-10 w-10 text-white/50 hover:text-white bg-black/30 rounded-full" onClick={onClose}>
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Image centered */}
+        <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+          <img
+            src={`/api/artifacts/${artifactId}/download`}
+            alt={data.filename}
+            className="max-w-full max-h-full object-contain"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement
+              target.style.display = 'none'
+              target.parentElement!.insertAdjacentHTML('beforeend', '<p class="text-white/50 text-sm">Failed to load image</p>')
+            }}
+          />
+        </div>
+
+        {/* Action buttons at the bottom where thumbs are */}
+        <div className="flex items-center justify-center gap-6 px-6 py-4 pb-safe bg-black/90 shrink-0">
+          <Button variant="ghost" size="icon" className="h-12 w-12 text-white/70 hover:text-white rounded-full"
+            onClick={() => { const a = document.createElement('a'); a.href = `/api/artifacts/${artifactId}/download`; a.download = data.filename; a.click() }}
+          >
+            <Download className="h-6 w-6" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-12 w-12 text-white/70 hover:text-white rounded-full"
+            onClick={async () => {
+              const url = `${window.location.origin}/api/artifacts/${artifactId}/download`
+              if (navigator.share) { try { await navigator.share({ title: data.filename, url }) } catch {} }
+              else { await navigator.clipboard.writeText(url); toast.success('Link copied') }
+            }}
+          >
+            <ExternalLink className="h-6 w-6" />
+          </Button>
+        </div>
+
+        {cropOpen && (
+          <ImageCropper
+            imageUrl={`/api/artifacts/${artifactId}/download`}
+            artifactId={artifactId}
+            filename={data.filename}
+            onClose={() => setCropOpen(false)}
+            onCropped={() => { setCropOpen(false); window.location.reload() }}
+          />
+        )}
+      </div>
+    )
   }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-background border-l border-border/40 overflow-hidden shadow-2xl">
-      {/* Header */}
+      {/* Header for text/document files */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-muted/5">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-            {isImage ? <ImageIcon className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-primary" />}
+            <FileText className="h-4 w-4 text-primary" />
           </div>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold truncate leading-tight">{data.filename}</h2>
-            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">{data.content_type}</p>
           </div>
         </div>
-        
         <div className="flex items-center gap-1">
-          {isImage && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 mr-1 border-primary/20 text-primary hover:bg-primary/5"
-                onClick={() => setCropOpen(true)}
-              >
-                <Crop className="h-3.5 w-3.5" />
-                Crop
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1.5 mr-2 border-primary/20 text-primary hover:bg-primary/5"
-                onClick={handleEditWithAgent}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Edit with Agent
-              </Button>
-            </>
-          )}
           {isDirty && (
-            <Button 
-              variant="default" 
-              size="sm" 
-              className="h-8 gap-1.5 mr-2"
-              onClick={handleSave}
-              disabled={saving}
-            >
+            <Button variant="default" size="sm" className="h-8 gap-1.5 mr-2" onClick={handleSave} disabled={saving}>
               <Save className="h-3.5 w-3.5" />
               {saving ? 'Saving...' : 'Save'}
             </Button>
           )}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                <FileDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => window.open(`/api/artifacts/${artifactId}/download`)}>
-                <Download className="h-4 w-4 mr-2" /> Download Raw
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportPDF} disabled={exporting}>
-                <FileText className="h-4 w-4 mr-2" /> Export as PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportEPUB} disabled={exporting}>
-                <BookOpen className="h-4 w-4 mr-2" /> Export as ePub
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={() => window.open(`/api/artifacts/${artifactId}/download`)}
-            title="Open in new tab"
-          >
-            <ExternalLink className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={() => window.open(`/api/artifacts/${artifactId}/download`)} title="Download">
+            <Download className="h-4 w-4" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={onClose}
-          >
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
       </header>
 
-      {/* Tabs */}
+      {/* Tabs for text files only */}
       <div className="flex items-center gap-1 px-4 py-1.5 border-b border-border/40 bg-muted/5">
         {isPreviewable && (
           <button
             onClick={() => setActiveTab('preview')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${activeTab === 'preview' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
           >
-            {isImage ? <ImageIcon className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />} 
-            {isImage ? 'View' : 'Preview'}
+            <Eye className="h-3.5 w-3.5" /> Preview
           </button>
         )}
         <button

@@ -3,7 +3,7 @@ import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera, Download, Share2 } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import {
@@ -29,54 +29,17 @@ interface ChatPanelProps {
 }
 
 const ImageArtifact = ({ artifact, onClick }: { artifact: Artifact, onClick: () => void }) => {
-  const downloadUrl = `/api/artifacts/${artifact.id}/download`
-  
-  const shareArtifact = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    const url = `${window.location.origin}${downloadUrl}`
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: artifact.filename, url })
-      } catch (err) {
-        if ((err as Error).name !== 'AbortError') toast.error('Failed to share')
-      }
-    } else {
-      await navigator.clipboard.writeText(url)
-      toast.success('Link copied')
-    }
-  }
-
-  const downloadArtifact = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    const link = document.createElement('a')
-    link.href = `/api/artifacts/${artifact.id}/download`
-    link.download = artifact.filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
 
   return (
-    <div className="rounded-xl overflow-hidden border border-border/40 max-w-sm cursor-pointer hover:opacity-95 transition-all bg-card shadow-sm group/img"
+    <div className="rounded-xl overflow-hidden border border-border/40 max-w-xs cursor-pointer hover:opacity-95 transition-all shadow-sm group/img"
          onClick={onClick}>
-      <div className="relative aspect-video bg-muted flex items-center justify-center overflow-hidden">
+      <div className="relative aspect-square bg-muted flex items-center justify-center overflow-hidden">
         <img
-          src={`/api/artifacts/${artifact.id}/thumbnail?size=600`}
+          src={`/api/artifacts/${artifact.id}/thumbnail?size=400`}
           alt={artifact.filename}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-105"
+          className="w-full h-full object-cover"
           loading="lazy"
         />
-      </div>
-      <div className="px-3 py-2 text-[10px] text-muted-foreground flex justify-between items-center bg-card/50 backdrop-blur-sm">
-        <span className="truncate max-w-[150px] font-medium">{artifact.filename}</span>
-        <div className="flex gap-3 opacity-0 group-hover/img:opacity-100 transition-opacity">
-          <button onClick={downloadArtifact} title="Download" className="hover:text-primary transition-colors">
-            <Download className="h-3 w-3" />
-          </button>
-          <button onClick={shareArtifact} title="Share" className="hover:text-primary transition-colors">
-            <Share2 className="h-3 w-3" />
-          </button>
-        </div>
       </div>
     </div>
   )
