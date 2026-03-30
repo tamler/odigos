@@ -57,7 +57,7 @@ _TOOL_STATUS_MAP: dict[str, list[str]] = {
         "Pulling content...",
         "Grabbing the details...",
     ],
-    "execute_code": [
+    "run_code": [
         "Running some code...",
         "Crunching numbers...",
         "Executing...",
@@ -83,35 +83,33 @@ _TOOL_STATUS_MAP: dict[str, list[str]] = {
         "Noted. Committing to memory...",
         "Saving that...",
     ],
-    "recall_memory": [
-        "Searching my memory...",
-        "Let me think back...",
+    "remember_fact": [
+        "Noted. Committing to memory...",
+        "Saving that...",
     ],
     "decompose_query": [
         "Breaking this down...",
         "Planning the approach...",
     ],
-    "file_read": [
-        "Reading that file...",
-    ],
-    "file_write": [
-        "Writing the file...",
+    "manage_files": [
+        "Working with files...",
+        "Accessing the file...",
     ],
     "translate": [
         "Translating...",
     ],
-    "knowledge_lookup": [
+    "lookup_fact": [
         "Looking that up...",
         "Checking the encyclopedia...",
     ],
-    "image_process": [
+    "process_image": [
         "Processing the image...",
     ],
     "create_artifact": [
         "Creating your file...",
         "Putting it together...",
     ],
-    "workspace_search": [
+    "search_workspace": [
         "Searching your workspace...",
     ],
 }

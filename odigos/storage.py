@@ -110,9 +110,13 @@ def write_upload(file_id: str, filename: str, content: bytes) -> Path:
 
 def write_artifact(artifact_id: str, filename: str, content: str) -> Path:
     """Write a text artifact to its subdirectory. Returns the full path."""
-    artifact_dir = ARTIFACTS_DIR / artifact_id
+    safe_name = Path(filename).name
+    artifact_dir = ARTIFACTS_DIR / Path(artifact_id).name
+    resolved = artifact_dir.resolve()
+    if not str(resolved).startswith(str(ARTIFACTS_DIR.resolve())):
+        raise ValueError("Invalid artifact ID")
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    dest = artifact_dir / filename
+    dest = artifact_dir / safe_name
     dest.write_text(content)
     return dest
 

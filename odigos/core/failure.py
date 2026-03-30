@@ -10,26 +10,26 @@ import re
 
 TRANSIENT_PATTERNS = [
     re.compile(r"timeout|timed?\s*out", re.IGNORECASE),
-    re.compile(r"rate.?limit|429|too many requests", re.IGNORECASE),
+    re.compile(r"rate.?limit|\b429\b|too many requests", re.IGNORECASE),
     re.compile(r"connection.?(reset|refused|error|closed)", re.IGNORECASE),
-    re.compile(r"503|service unavailable|temporarily unavailable", re.IGNORECASE),
-    re.compile(r"502|bad gateway", re.IGNORECASE),
+    re.compile(r"\b503\b|service unavailable|temporarily unavailable", re.IGNORECASE),
+    re.compile(r"\b502\b|bad gateway", re.IGNORECASE),
     re.compile(r"ECONNRESET|ETIMEDOUT|ECONNREFUSED", re.IGNORECASE),
-    re.compile(r"server error|internal server error|500", re.IGNORECASE),
+    re.compile(r"server error|internal server error|\b500\b", re.IGNORECASE),
 ]
 
 INPUT_PATTERNS = [
     re.compile(r"missing\s+(required\s+)?param", re.IGNORECASE),
     re.compile(r"invalid\s+(input|param|argument|value)", re.IGNORECASE),
     re.compile(r"validation\s+(error|fail)", re.IGNORECASE),
-    re.compile(r"400|bad request", re.IGNORECASE),
+    re.compile(r"\b400\b|bad request", re.IGNORECASE),
     re.compile(r"no\s+\w+\s+provided", re.IGNORECASE),
     re.compile(r"must\s+be\s+a\s+", re.IGNORECASE),
 ]
 
 PERMISSION_PATTERNS = [
     re.compile(r"permission\s+denied|access\s+denied", re.IGNORECASE),
-    re.compile(r"401|unauthorized|403|forbidden", re.IGNORECASE),
+    re.compile(r"\b401\b|unauthorized|\b403\b|forbidden", re.IGNORECASE),
     re.compile(r"not\s+allowed|not\s+authorized", re.IGNORECASE),
     re.compile(r"approval.?(denied|rejected|required)", re.IGNORECASE),
     re.compile(r"path\s+outside\s+allowed", re.IGNORECASE),

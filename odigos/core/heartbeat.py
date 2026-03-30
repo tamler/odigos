@@ -613,7 +613,25 @@ class Heartbeat:
                     break
 
             if not next_step:
-                # All steps done, mark plan complete
+                # Check for stuck in_progress steps (reset them to pending)
+                has_stuck = False
+                for s in steps:
+                    if s.get("status") == "in_progress":
+                        s["status"] = "pending"
+                        has_stuck = True
+                    for sub in s.get("substeps", []):
+                        if sub.get("status") == "in_progress":
+                            sub["status"] = "pending"
+                            has_stuck = True
+                if has_stuck:
+                    await self.db.execute(
+                        "UPDATE task_plans SET steps = ?, updated_at = ? WHERE id = ?",
+                        (json.dumps(steps), datetime.now(timezone.utc).isoformat(), row["id"]),
+                    )
+                    logger.info("Reset stuck in_progress steps for plan %s", row["id"][:8])
+                    return False
+
+                # All steps truly done, mark plan complete
                 await self.db.execute(
                     "UPDATE task_plans SET status = 'done', updated_at = ? WHERE id = ?",
                     (datetime.now(timezone.utc).isoformat(), row["id"]),

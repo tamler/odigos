@@ -14,7 +14,7 @@ class FileTool(BaseTool):
     """Read, write, and list files within configured allowed paths."""
 
     name = "manage_files"
-    category = "media"
+    category = "create"
     description = (
         "Read, write, or list files. Operations: read (returns text content), "
         "write (creates or overwrites a file), list (shows directory contents). "

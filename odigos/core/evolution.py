@@ -43,6 +43,9 @@ class EvolutionEngine:
 
     async def get_effective_param(self, param_name: str) -> float | int:
         """Get an evolution parameter, checking for active trial overrides and promoted values."""
+        if not hasattr(self._config, param_name):
+            raise ValueError(f"Unknown evolution parameter: {param_name}")
+
         # Check active trial overrides first
         try:
             trial = await self.checkpoint_manager.get_active_trial()
@@ -89,9 +92,9 @@ class EvolutionEngine:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         try:
             rows = await self.db.fetch_all(
-                "SELECT classification, AVG(score) as avg_score, COUNT(*) as cnt, "
+                "SELECT classification, AVG(evaluation_score) as avg_score, COUNT(*) as cnt, "
                 "AVG(duration_ms) as avg_dur "
-                "FROM query_log WHERE date(created_at) = ? AND score IS NOT NULL "
+                "FROM query_log WHERE date(created_at) = ? AND evaluation_score IS NOT NULL "
                 "GROUP BY classification",
                 (today,),
             )
