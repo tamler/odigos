@@ -45,7 +45,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { get, patch, del, post, uploadFile } from '@/lib/api'
+import { get, getBlob, patch, del, post, uploadFile } from '@/lib/api'
 import { ChatSocket } from '@/lib/ws'
 import { toast } from 'sonner'
 import { executeActions, UIAction } from '@/lib/actions'
@@ -549,7 +549,7 @@ export default function AppLayout() {
 
   const handleExport = useCallback((id: string, format: 'markdown' | 'json') => {
     const url = `/api/conversations/${id}/export?format=${format}`
-    fetch(url).then(res => res.blob()).then(blob => {
+    getBlob(url).then(blob => {
       const ext = format === 'json' ? 'json' : 'md'
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
