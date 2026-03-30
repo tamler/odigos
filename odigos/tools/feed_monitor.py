@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class WatchFeedTool(BaseTool):
     name = "watch_feed"
+    category = "search"
     description = (
         "Add an RSS/Atom feed to the monitored feeds list. The agent will check it "
         "periodically and surface relevant articles based on the user's interests. "
@@ -77,6 +78,7 @@ class WatchFeedTool(BaseTool):
 
 class ListFeedsTool(BaseTool):
     name = "list_feeds"
+    category = "search"
     description = "List all monitored RSS/Atom feeds."
     parameters_schema = {"type": "object", "properties": {}}
 
@@ -110,6 +112,7 @@ class ListFeedsTool(BaseTool):
 
 class CheckFeedsTool(BaseTool):
     name = "check_feeds"
+    category = "search"
     description = (
         "Check all monitored feeds for new articles. Returns recent items "
         "filtered by the user's topic preferences."

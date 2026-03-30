@@ -12,6 +12,7 @@ class ActivateSkillTool(BaseTool):
     """Tool that activates a skill by loading its full instructions."""
 
     name = "activate_skill"
+    category = "memory"
     description = (
         "Load a skill's detailed instructions for the current task. "
         "Call this before starting a task that matches a skill in the catalog. "

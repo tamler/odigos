@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 class MessagePeerTool(BaseTool):
     name = "message_peer"
+    category = "communication"
     description = (
         "Send a message to a peer agent. Use this to communicate, "
         "request help, share knowledge, or delegate tasks to other agents."

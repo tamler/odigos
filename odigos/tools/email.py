@@ -66,6 +66,7 @@ def _extract_text(msg: email.message.Message) -> str:
 
 class CheckEmailTool(BaseTool):
     name = "check_email"
+    category = "communication"
     contract = ToolContract(timeout_seconds=30, max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     description = (
         "Check the email inbox for new messages. Returns a summary of unread emails "
@@ -152,6 +153,7 @@ class CheckEmailTool(BaseTool):
 
 class SendEmailTool(BaseTool):
     name = "send_email"
+    category = "communication"
     description = (
         "Send an email. Provide recipient, subject, and body. "
         "The email will be sent from the agent's configured email address. "

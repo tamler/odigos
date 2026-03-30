@@ -70,29 +70,29 @@ def resolve_artifact_path(
     """Find an artifact file on disk. Returns the resolved Path or None.
 
     Checks in order:
-    1. Explicit file_path from DB (if stored)
-    2. data/artifacts/{id}/{filename} (text artifacts from create_artifact tool)
-    3. data/files/{id}_{anything} (uploads with ID prefix)
-    4. data/files/{filename} (generated images by bare filename)
+    1. Explicit file_path from DB (preferred -- always set for new records)
+    2. data/files/{id}_{anything} (uploads and new artifacts)
+    3. data/files/{filename} (generated images by bare filename)
+    4. data/artifacts/{id}/{filename} (pre-merge artifacts, will phase out)
     """
-    # 1. Explicit path from DB
+    # 1. Explicit path from DB (set by migration 052 and all new writes)
     if file_path:
         p = Path(file_path)
         if p.exists():
             return p
 
-    # 2. Artifact subdirectory
-    p = ARTIFACTS_DIR / artifact_id / filename
-    if p.exists():
-        return p
-
-    # 3. Files dir with ID prefix
+    # 2. Files dir with ID prefix
     import glob as globmod
     for candidate in FILES_DIR.glob(f"{globmod.escape(artifact_id)}_*"):
         return candidate
 
-    # 4. Files dir by bare filename
+    # 3. Files dir by bare filename
     p = FILES_DIR / filename
+    if p.exists():
+        return p
+
+    # 4. Pre-merge artifacts (data/artifacts/{id}/{filename})
+    p = ARTIFACTS_DIR / artifact_id / filename
     if p.exists():
         return p
 

@@ -14,6 +14,8 @@ _DANGEROUS_PATTERNS = ("--output", "../", "..\\")
 class SubprocessTool(BaseTool):
     """Base class for tools that wrap a CLI binary with subcommand validation."""
 
+    category = "code"
+
     def __init__(
         self,
         *,

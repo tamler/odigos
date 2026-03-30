@@ -16,6 +16,7 @@ class CodeTool(BaseTool):
 
     name = "run_code"
     description = "Execute Python or shell code in a sandboxed environment with resource limits"
+    category = "code"
     contract = ToolContract(timeout_seconds=120, max_retries={"transient": 1, "input": 0, "permission": 0, "unavailable": 0, "unknown": 0})
     parameters_schema = {
         "type": "object",

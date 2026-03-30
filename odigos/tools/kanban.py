@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 class KanbanListBoardsTool(BaseTool):
     name = "kanban_list_boards"
+    category = "productivity"
     description = "List all kanban boards with card counts."
     parameters_schema = {
         "type": "object",
@@ -43,6 +44,7 @@ class KanbanListBoardsTool(BaseTool):
 
 class KanbanGetBoardTool(BaseTool):
     name = "kanban_get_board"
+    category = "productivity"
     description = "Get a kanban board with its columns and cards formatted as text."
     parameters_schema = {
         "type": "object",
@@ -93,6 +95,7 @@ class KanbanGetBoardTool(BaseTool):
 
 class KanbanCreateCardTool(BaseTool):
     name = "kanban_create_card"
+    category = "productivity"
     description = "Create a new card in a kanban column."
     parameters_schema = {
         "type": "object",
@@ -137,6 +140,7 @@ class KanbanCreateCardTool(BaseTool):
 
 class KanbanMoveCardTool(BaseTool):
     name = "kanban_move_card"
+    category = "productivity"
     description = "Move a kanban card to a different column."
     parameters_schema = {
         "type": "object",
@@ -176,6 +180,7 @@ class KanbanMoveCardTool(BaseTool):
 
 class KanbanUpdateCardTool(BaseTool):
     name = "kanban_update_card"
+    category = "productivity"
     description = "Update a kanban card's title, description, or priority."
     parameters_schema = {
         "type": "object",
@@ -215,6 +220,7 @@ class KanbanUpdateCardTool(BaseTool):
 
 class KanbanDeleteCardTool(BaseTool):
     name = "kanban_delete_card"
+    category = "productivity"
     description = "Delete a kanban card."
     parameters_schema = {
         "type": "object",

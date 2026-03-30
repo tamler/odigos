@@ -20,6 +20,7 @@ VALID_RATIOS = {"1:1", "4:3", "3:4", "16:9", "9:16"}
 
 class GenerateImageTool(BaseTool):
     name = "generate_image"
+    category = "create"
     contract = ToolContract(timeout_seconds=180, max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     description = (
         "Generate an image from a text description using Z-Image AI. "

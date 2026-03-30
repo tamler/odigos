@@ -13,6 +13,7 @@ VALID_ACTIONS = ("spellcheck", "sentiment", "language", "noun_phrases", "all")
 
 class TextAnalysisTool(BaseTool):
     name = "analyze_text"
+    category = "analysis"
     description = (
         "Analyze text for spelling, sentiment, language, and key "
         "phrases. Actions: 'spellcheck' (correct spelling errors), "

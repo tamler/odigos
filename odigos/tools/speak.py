@@ -17,6 +17,7 @@ class SpeakTool(BaseTool):
     """Generate speech audio from text using local TTS."""
 
     name = "speak"
+    category = "communication"
     description = (
         "Convert text to speech audio. Returns a WAV file path and duration. "
         "Available voices: alba, marius, javert, jean, fantine, cosette, eponine, azelma."

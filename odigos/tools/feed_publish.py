@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 class PublishToFeedTool(BaseTool):
     name = "publish_to_feed"
+    category = "communication"
     description = (
         "Publish an entry to your RSS feed. Subscribers with subscribe cards "
         "will see this in their feed reader."

@@ -154,11 +154,14 @@ class QueryClassifier:
             prompt_template = load_prompt("classifier.md", fallback=_FALLBACK_PROMPT)
             prompt = prompt_template.replace("{message}", message)
 
-            response = await self.provider.complete(
+            from odigos.core.llm_prompt import call_llm
+            response = await call_llm(
+                self.provider,
                 [{"role": "user", "content": prompt}],
-                temperature=0.0,
-                max_tokens=512,
+                temperature=0.0, max_tokens=512, log_name="classifier",
             )
+            if not response:
+                return QueryAnalysis(classification="standard", confidence=0.5, tier=2)
 
             data = parse_json_response(response.content)
             if data is None:

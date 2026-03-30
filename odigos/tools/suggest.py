@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 class SuggestActionsTool(BaseTool):
     name = "suggest_actions"
+    category = "productivity"
     description = (
         "Present the user with clickable action buttons for next steps. "
         "Use this when you want to offer the user 2-5 options they can choose from. "

@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class WorkspaceSearchTool(BaseTool):
     name = "search_workspace"
+    category = "search"
     description = (
         "Search for notebooks and kanban boards by name. "
         "Use when the user refers to a workspace item by name "

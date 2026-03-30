@@ -6,23 +6,21 @@ so simple queries don't get 45 tool schemas in context.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from odigos.tools.base import BaseTool
 
+logger = logging.getLogger(__name__)
 
-# Core tools always available regardless of classification
-CORE_TOOLS = {
-    "web_search", "web_scrape", "run_code", "file_read", "file_write",
-    "file_list", "remember_fact", "decompose_query", "check_plan",
-    "update_plan", "activate_skill",
-}
-
-# Lightweight tools safe for simple queries (fast, no side effects)
-SIMPLE_TOOLS = {
-    "web_search", "remember_fact", "knowledge_lookup", "translate",
-    "check_calendar", "check_email",
+# Which categories are relevant to each query classification
+CLASSIFICATION_CATEGORIES: dict[str, set[str]] = {
+    "simple": {"search", "memory", "communication"},
+    "standard": {"search", "memory", "create", "productivity", "communication", "media"},
+    "document_query": {"search", "memory", "analysis", "create"},
+    "complex": set(),  # all tools
+    "planning": {"search", "productivity", "create", "code", "analysis"},
 }
 
 
@@ -77,22 +75,53 @@ class ToolRegistry:
         classification: str | None,
         routing_rules: dict | None,
     ) -> list[BaseTool]:
-        """Filter tools based on classification routing rules."""
-        if not classification or not routing_rules:
-            return list(self._tools.values())
+        """Filter tools based on routing rules and category relevance."""
+        all_tools = list(self._tools.values())
 
-        route = routing_rules.get(classification, {})
-        allowed = route.get("tools", "all")
+        if not classification:
+            return all_tools
 
-        if allowed == "all":
-            return list(self._tools.values())
+        # Check explicit routing rules first (takes precedence)
+        if routing_rules:
+            route = routing_rules.get(classification, {})
+            allowed = route.get("tools", "all")
+            if allowed != "all":
+                if isinstance(allowed, str):
+                    allowed_set = {t.strip() for t in allowed.split(",")}
+                else:
+                    allowed_set = set(allowed)
+                return [t for t in all_tools if t.name in allowed_set]
 
-        if isinstance(allowed, str):
-            allowed_set = {t.strip() for t in allowed.split(",")}
-        else:
-            allowed_set = set(allowed)
+        # Fall back to category-based filtering
+        relevant_categories = CLASSIFICATION_CATEGORIES.get(classification)
+        if not relevant_categories:
+            return all_tools  # complex or unknown = all tools
 
-        return [t for t in self._tools.values() if t.name in allowed_set]
+        return [
+            t for t in all_tools
+            if not t.category or t.category in relevant_categories
+        ]
+
+    def validate_routing_rules(self, routing_rules: dict) -> list[str]:
+        """Validate that routing rules reference tools that actually exist.
+        Returns list of warning messages for unknown tool references.
+        """
+        warnings = []
+        tool_names = set(self._tools.keys())
+        for classification, route in routing_rules.items():
+            allowed = route.get("tools", "all")
+            if allowed == "all":
+                continue
+            if isinstance(allowed, str):
+                referenced = {t.strip() for t in allowed.split(",")}
+            else:
+                referenced = set(allowed)
+            unknown = referenced - tool_names
+            for name in unknown:
+                warnings.append(f"Routing rule [{classification}] references unknown tool '{name}'")
+        for w in warnings:
+            logger.warning(w)
+        return warnings
 
     def register_from_specs(self, specs: list[ToolSpec], context: Any) -> int:
         """Register tools from a declarative spec list. Returns count registered."""

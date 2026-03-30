@@ -165,13 +165,13 @@ class Spawner:
             specialty=specialty or 'general',
             template_content=template_content,
         )
-        response = await self.provider.complete(
+        from odigos.core.llm_prompt import call_llm
+        response = await call_llm(
+            self.provider,
             [{"role": "user", "content": prompt}],
-            model=getattr(self.provider, "fallback_model", None),
-            max_tokens=1500,
-            temperature=0.4,
+            max_tokens=1500, temperature=0.4, log_name="spawner_adapt",
         )
-        return response.content.strip()
+        return response.content.strip() if response else template_content
 
 
     async def gather_seed_knowledge(

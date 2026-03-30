@@ -111,6 +111,7 @@ def _rotate(path: str, output: str, angle: int):
 
 class ImageTool(BaseTool):
     name = "process_image"
+    category = "media"
     description = (
         "Process images: resize, crop, convert format, get info, "
         "create thumbnails. Works with images in the data/files "

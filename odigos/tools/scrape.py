@@ -34,6 +34,7 @@ class ScrapeTool(BaseTool):
     """Page scraping tool -- fetches and extracts content from a URL."""
 
     name = "read_page"
+    category = "search"
     description = "Read and extract content from a web page URL."
     parameters_schema = {
         "type": "object",

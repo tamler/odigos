@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 class CreateReminderTool(BaseTool):
     name = "create_reminder"
+    category = "productivity"
     description = "Set a time-based reminder that fires after a delay. Use for 'remind me', 'don't forget', 'in X hours tell me'."
     parameters_schema = {
         "type": "object",
@@ -62,6 +63,7 @@ class CreateReminderTool(BaseTool):
 
 class CreateTodoTool(BaseTool):
     name = "create_todo"
+    category = "productivity"
     description = "Create a concrete work item for the agent to complete. Use for 'do X', 'look up Y', 'research Z'."
     parameters_schema = {
         "type": "object",
@@ -94,6 +96,7 @@ class CreateTodoTool(BaseTool):
 
 class CreateGoalTool(BaseTool):
     name = "create_goal"
+    category = "productivity"
     description = "Record a long-term goal or aspiration. Use for 'I want to X', 'my goal is', 'I'm working towards'."
     parameters_schema = {
         "type": "object",

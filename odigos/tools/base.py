@@ -30,9 +30,21 @@ class ToolResult:
     failure_category: str | None = None  # transient, input, permission, unavailable, unknown
 
 
+# Tool categories for smart filtering
+CATEGORY_SEARCH = "search"         # web search, knowledge lookup, workspace search
+CATEGORY_CREATE = "create"         # file creation, image gen, artifacts
+CATEGORY_PRODUCTIVITY = "productivity"  # goals, todos, reminders, kanban, plans
+CATEGORY_COMMUNICATION = "communication"  # email, notifications
+CATEGORY_CODE = "code"             # code execution, sandbox
+CATEGORY_MEMORY = "memory"         # remember facts, skills
+CATEGORY_ANALYSIS = "analysis"     # document processing, text analysis, transcription
+CATEGORY_MEDIA = "media"           # image processing, translation
+
+
 class BaseTool(ABC):
     name: str
     description: str
+    category: str = ""  # One of the CATEGORY_* constants
     parameters_schema: dict = {"type": "object", "properties": {}}
     contract: ToolContract = ToolContract()
 

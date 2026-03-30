@@ -92,6 +92,7 @@ def _search_wikipedia(query: str) -> dict | None:
 
 class LookupTool(BaseTool):
     name = "lookup"
+    category = "search"
     description = (
         "Look up factual information about a topic. Searches "
         "Grokipedia first (comprehensive knowledge base), falls "

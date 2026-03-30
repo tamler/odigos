@@ -43,6 +43,7 @@ class DecomposeQueryTool(BaseTool):
     """Break a complex question or task into simpler sub-tasks."""
 
     name = "decompose_query"
+    category = "productivity"
     description = (
         "Break a complex question or task into simpler sub-tasks for systematic analysis. "
         "Use when a request has multiple parts, requires step-by-step processing, or "
@@ -80,11 +81,14 @@ class DecomposeQueryTool(BaseTool):
             prompt_template = load_prompt("decompose.md", fallback=_FALLBACK_PROMPT)
             prompt = prompt_template.replace("{query}", query)
 
-            response = await self._provider.complete(
+            from odigos.core.llm_prompt import call_llm
+            response = await call_llm(
+                self._provider,
                 [{"role": "user", "content": prompt}],
-                temperature=0.0,
-                max_tokens=1024,
+                temperature=0.0, max_tokens=1024, log_name="decompose",
             )
+            if not response:
+                return self._single_step_fallback(query)
 
             steps = parse_json_response(response.content)
             if not isinstance(steps, list) or not steps:

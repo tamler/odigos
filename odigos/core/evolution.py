@@ -289,7 +289,9 @@ class EvolutionEngine:
 
     async def _generate_lessons(self, trial: dict) -> str:
         try:
-            response = await self.provider.complete(
+            from odigos.core.llm_prompt import call_llm
+            response = await call_llm(
+                self.provider,
                 [{"role": "user", "content": (
                     f"A self-improvement trial failed.\n"
                     f"Hypothesis: {trial['hypothesis']}\n"
@@ -298,9 +300,7 @@ class EvolutionEngine:
                     "In 1-2 sentences, what should be learned from this failure? "
                     "What does it suggest about what to try differently?"
                 )}],
-                model=getattr(self.provider, "fallback_model", None),
-                max_tokens=150,
-                temperature=0.3,
+                max_tokens=150, temperature=0.3, log_name="evolution_lessons",
             )
             return response.content.strip()
         except Exception:

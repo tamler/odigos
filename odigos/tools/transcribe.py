@@ -23,6 +23,7 @@ class TranscribeAudioTool(BaseTool):
     """Transcribe an audio file to text using local STT."""
 
     name = "transcribe_audio"
+    category = "analysis"
     description = (
         "Transcribe an audio file (WAV, MP3, OGG, M4A, FLAC, WebM) to text. "
         "Returns the full transcript. Also ingests it into memory for future recall."

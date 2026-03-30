@@ -33,6 +33,7 @@ BLOCKED_PREFIXES = ["api_key", "llm_api_key", "budget", "llm"]
 
 class ManageSettingsTool(BaseTool):
     name = "manage_settings"
+    category = "memory"
     description = (
         "Read and update the agent's own configuration. "
         "Actions: list (show allowed keys), read (get a value), write (set a value and persist)."

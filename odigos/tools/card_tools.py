@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 class GenerateCardTool(BaseTool):
     name = "generate_card"
+    category = "communication"
     description = (
         "Generate a contact card to share with another agent or user. "
         "The card contains a scoped API key for establishing a relationship."
@@ -65,6 +66,7 @@ class GenerateCardTool(BaseTool):
 
 class ImportCardTool(BaseTool):
     name = "import_card"
+    category = "communication"
     description = (
         "Import a contact card received from another agent. "
         "Accepts YAML or compact (odigos-card:...) format."

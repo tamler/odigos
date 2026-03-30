@@ -12,6 +12,7 @@ class SpawnSubagentTool(BaseTool):
     """Tool that spawns a background subagent to handle a delegated task."""
 
     name = "spawn_subagent"
+    category = "productivity"
     description = (
         "Delegate a task to a background subagent. The subagent will work "
         "independently and report results when done. Use this for tasks that "

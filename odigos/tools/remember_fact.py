@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class RememberFactTool(BaseTool):
     name = "remember_fact"
+    category = "memory"
     description = (
         "Save an explicit fact about the user for future reference. "
         "Use when the user says 'remember that...', 'I prefer...', 'I am...', "

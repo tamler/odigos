@@ -51,6 +51,7 @@ def _write_docx(file_path: Path, content: str) -> None:
 
 class CreateArtifactTool(BaseTool):
     name = "create_artifact"
+    category = "create"
     description = (
         "Create a downloadable file for the user. Use this when the user asks you to "
         "generate a spreadsheet, document, report, data export, or any file they can download. "
@@ -133,6 +134,7 @@ class CreateArtifactTool(BaseTool):
 
 class DeleteArtifactTool(BaseTool):
     name = "delete_artifact"
+    category = "create"
     description = (
         "Delete a file or image by its filename or artifact ID. "
         "Use this when the user asks to remove, delete, or clean "

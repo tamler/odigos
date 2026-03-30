@@ -15,6 +15,7 @@ class DocTool(BaseTool):
     """Convert a document to readable text using MarkItDown (default) or Docling (deep mode)."""
 
     name = "process_document"
+    category = "analysis"
     description = (
         "Process a document (PDF, Word, Excel, HTML, image, etc.) and ingest it into memory. "
         "Pass 'deep: true' for complex PDFs with tables/figures (requires docling plugin)."

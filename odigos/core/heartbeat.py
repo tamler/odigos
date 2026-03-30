@@ -723,10 +723,9 @@ class Heartbeat:
             user_content += f"\n\n{research_context}"
 
         try:
-            idle_kwargs: dict = {"max_tokens": 200, "temperature": 0.3}
-            if self._background_model:
-                idle_kwargs["model"] = self._background_model
-            response = await self.provider.complete(
+            from odigos.core.llm_prompt import call_llm
+            response = await call_llm(
+                self.provider,
                 [
                     {
                         "role": "system",
@@ -734,8 +733,12 @@ class Heartbeat:
                     },
                     {"role": "user", "content": user_content},
                 ],
-                **idle_kwargs,
+                max_tokens=200, temperature=0.3,
+                model=self._background_model or None,
+                log_name="idle_think",
             )
+            if not response:
+                return
             logger.debug("Idle thought: %s", response.content[:100])
             await self._process_idle_response(response.content, goals)
         except Exception:

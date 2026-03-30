@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class TranslateTool(BaseTool):
     name = "translate_text"
+    category = "media"
     description = (
         "Translate text between languages. Auto-detects the source "
         "language if not specified. Supports 100+ languages."

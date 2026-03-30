@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class CreateQuizTool(BaseTool):
     name = "create_quiz"
+    category = "analysis"
     description = (
         "Create a quiz or assessment for the student. Provide a title, questions "
         "with multiple choice options, and correct answers. The quiz is presented "
@@ -92,6 +93,7 @@ class CreateQuizTool(BaseTool):
 
 class GradeResponseTool(BaseTool):
     name = "grade_response"
+    category = "analysis"
     description = (
         "Grade a student's answer to a quiz question. Provide feedback and "
         "track their score. Use this after the student answers a question."

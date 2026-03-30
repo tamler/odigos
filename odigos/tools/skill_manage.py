@@ -16,6 +16,7 @@ class CreateSkillTool(BaseTool):
     """Tool that creates a new reusable skill."""
 
     name = "create_skill"
+    category = "memory"
     description = (
         "Create a new reusable skill with instructions for a specific task type. "
         "Use this when you notice a recurring pattern that would benefit from "
@@ -134,6 +135,7 @@ class UpdateSkillTool(BaseTool):
     """Tool that updates an existing agent-created skill."""
 
     name = "update_skill"
+    category = "memory"
     description = (
         "Update an existing skill you created. Use this to refine instructions "
         "based on corrections or learned improvements. Cannot modify built-in skills."

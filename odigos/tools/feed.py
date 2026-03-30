@@ -18,6 +18,7 @@ class FeedTool(BaseTool):
     """Fetch and parse RSS/Atom feeds."""
 
     name = "read_feed"
+    category = "search"
     description = (
         "Fetch an RSS or Atom feed and return the latest entries. "
         "Useful for monitoring news, blogs, release notes, or any public feed."

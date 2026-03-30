@@ -23,6 +23,7 @@ class CheckPlanTool(BaseTool):
     """Check the current task plan for the active conversation."""
 
     name = "check_plan"
+    category = "productivity"
     description = (
         "Review the current task plan and see which steps are pending, in progress, "
         "or done. Use periodically when working through a multi-step task to stay "
@@ -96,6 +97,7 @@ class UpdatePlanTool(BaseTool):
     """Mark a plan step as done or add a note."""
 
     name = "update_plan"
+    category = "productivity"
     description = (
         "Update the status of a step in the current task plan. "
         "Mark steps as done when completed, or add result notes."

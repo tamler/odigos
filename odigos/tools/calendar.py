@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class CheckCalendarTool(BaseTool):
     name = "check_calendar"
+    category = "communication"
     description = (
         "Check upcoming calendar events. Shows events for today and tomorrow by default, "
         "or a custom number of days ahead. Use this to check schedules, find free time, "

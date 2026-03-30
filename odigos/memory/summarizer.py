@@ -77,12 +77,17 @@ class ConversationSummarizer:
         conversation_text = "\n".join(text_parts)
 
         # Call LLM to summarize
-        summary_response = await self.llm_provider.complete(
-            messages=[
+        from odigos.core.llm_prompt import call_llm
+        summary_response = await call_llm(
+            self.llm_provider,
+            [
                 {"role": "system", "content": load_prompt("summarizer.md", STRUCTURED_COMPACTION_PROMPT)},
                 {"role": "user", "content": conversation_text},
-            ]
+            ],
+            log_name="summarizer",
         )
+        if not summary_response:
+            return
 
         raw_content = summary_response.content
 

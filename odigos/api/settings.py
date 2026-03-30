@@ -126,6 +126,16 @@ async def update_settings_endpoint(
                     detail=f"Invalid settings for '{section}': {exc.errors()}",
                 )
 
+    # Backup config before writing (keep last 3 versions)
+    if config_path.exists():
+        import shutil
+        for i in range(2, 0, -1):
+            src = config_path.with_suffix(f".yaml.bak{i}")
+            dst = config_path.with_suffix(f".yaml.bak{i + 1}")
+            if src.exists():
+                shutil.move(str(src), str(dst))
+        shutil.copy2(str(config_path), str(config_path.with_suffix(".yaml.bak1")))
+
     # Write config.yaml once with all updates (only after validation succeeds)
     with open(config_path, "w") as f:
         yaml.dump(yaml_config, f, default_flow_style=False)

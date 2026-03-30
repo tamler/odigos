@@ -960,6 +960,12 @@ async def lifespan(app: FastAPI):
             "Use a reverse proxy with TLS in production, or bind to 127.0.0.1 for local-only access."
         )
 
+    # Validate routing rules against registered tools
+    from odigos.core.routing import load_routing_rules
+    _routing_warnings = tool_registry.validate_routing_rules(load_routing_rules())
+    if _routing_warnings:
+        logger.warning("Routing rule warnings: %d issues found", len(_routing_warnings))
+
     logger.info("Odigos is ready.")
 
     yield

@@ -16,6 +16,7 @@ class NotifyTool(BaseTool):
     """Send a notification to the user across all connected channels."""
 
     name = "send_notification"
+    category = "communication"
     description = (
         "Send a notification message to the user. Use for important updates: "
         "task completions, warnings, reminders, or anything the user should know "
