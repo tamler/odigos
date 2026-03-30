@@ -48,36 +48,11 @@ class GroqSTT(STTProvider):
             f.flush()
             temp_path = f.name
 
-        # Convert to mp3 for reliable Groq compatibility
-        import subprocess
-        mp3_path = temp_path + ".mp3"
         try:
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", temp_path, "-ar", "16000",
-                 "-ac", "1", "-b:a", "64k", mp3_path],
-                capture_output=True, timeout=10,
-            )
-            if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 100:
-                send_path = mp3_path
-                send_name = "recording.mp3"
-            else:
-                send_path = temp_path
-                send_name = filename
-        except Exception:
-            send_path = temp_path
-            send_name = filename
-
-        try:
-            logger.info(
-                "STT: sending %d bytes (%s) to Groq %s",
-                os.path.getsize(send_path),
-                os.path.splitext(send_name)[1],
-                self._model,
-            )
-            with open(send_path, "rb") as af:
+            with open(temp_path, "rb") as af:
                 transcription = (
                     await client.audio.transcriptions.create(
-                        file=(send_name, af),
+                        file=(filename, af),
                         model=self._model,
                         language="en",
                         response_format="verbose_json",
@@ -85,48 +60,10 @@ class GroqSTT(STTProvider):
                     )
                 )
 
-            raw_text = getattr(transcription, "text", "") or ""
-            segments = (
-                getattr(transcription, "segments", None) or []
-            )
-            logger.info(
-                "STT raw: '%s' (%d segments)",
-                raw_text[:200],
-                len(segments),
-            )
-
-            for i, seg in enumerate(segments):
-                logger.info(
-                    "STT seg[%d]: text='%s' no_speech=%.2f"
-                    " compress=%.1f",
-                    i,
-                    seg.get("text", "")[:80],
-                    seg.get("no_speech_prob", 0),
-                    seg.get("compression_ratio", 0),
-                )
-
-            # Filter segments by no_speech_prob
-            if segments:
-                clean = []
-                for seg in segments:
-                    if seg.get("no_speech_prob", 0) > 0.9:
-                        continue
-                    text = seg.get("text", "").strip()
-                    if text:
-                        clean.append(text)
-                result = " ".join(clean).strip()
-            else:
-                result = raw_text.strip()
-
-            logger.info(
-                "STT result: '%s'",
-                result[:200] if result else "(empty)",
-            )
-            return result
+            text = getattr(transcription, "text", "") or ""
+            return text.strip()
         finally:
             os.unlink(temp_path)
-            if os.path.exists(mp3_path):
-                os.unlink(mp3_path)
 
 
 class LocalSTT(STTProvider):

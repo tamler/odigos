@@ -976,11 +976,6 @@ async def lifespan(app: FastAPI):
     if _routing_warnings:
         logger.warning("Routing rule warnings: %d issues found", len(_routing_warnings))
 
-    # Pre-load VAD model if voice is enabled
-    if settings.voice.stt_provider != "disabled":
-        from odigos.core.vad import load_model as load_vad
-        load_vad()
-
     logger.info("Odigos is ready.")
 
     yield
