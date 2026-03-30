@@ -39,6 +39,8 @@ dependencies = [
     "textblob>=0.19.0",
     "pytesseract>=0.3.10",
     "openpyxl>=3.1.0",
+    "qrcode[pil]>=7.4",
+    "icalendar>=5.0.0",
 ]
 
 [project.optional-dependencies]

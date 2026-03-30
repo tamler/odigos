@@ -300,6 +300,16 @@ async def _register_tools(
     tool_registry.register(DataTableTool(db=db))
     logger.info("Data table tool registered")
 
+    # QR code generation
+    from odigos.tools.qr import QRCodeTool
+    tool_registry.register(QRCodeTool(db=db))
+    logger.info("QR code tool registered")
+
+    # Calendar event (.ics) generation
+    from odigos.tools.ics import CalendarEventTool
+    tool_registry.register(CalendarEventTool(db=db))
+    logger.info("Calendar event tool registered")
+
     # Translation tool
     from odigos.tools.translate import TranslateTool
     tool_registry.register(TranslateTool())

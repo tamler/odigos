@@ -111,8 +111,17 @@ Built-in NLP via TextBlob: spell checking, sentiment analysis, language detectio
 ### Generate images
 Ask the agent to create images -- photos, illustrations, logos, charts, product mockups, storyboards, UI designs. Powered by Kie.ai Z-Image with a built-in prompt expansion guide that turns simple requests into detailed, optimized prompts. Generated images appear inline in chat with download and share options. The agent can also process existing images (resize, crop, convert, rotate, thumbnail) and chain generation with processing -- generate an image, then resize it for a specific platform.
 
-### Image processing
-Resize, crop, convert, rotate, and thumbnail images. The agent can process uploaded images or prepare assets for artifacts. Path-restricted to the data directory.
+### Image processing and OCR
+Resize, crop, convert, rotate, thumbnail, and extract text (OCR) from images. Upload a receipt and the agent reads it. Photo a sign in another language and the agent translates it. Scan a document and the agent ingests the text. Powered by Tesseract OCR with multi-language support.
+
+### Data tracking
+The agent can create and maintain structured data tables -- budgets, expense logs, reading lists, workout trackers, habit logs, inventory. Data lives in the database, not files. The agent queries it, summarizes it ("you spent $247 today"), and exports to Excel on demand. Combined with OCR, the agent scans receipts and automatically logs expenses.
+
+### QR codes
+Generate QR codes for URLs, WiFi credentials, contact info, or any text. The agent produces a downloadable PNG. Share a link, a WiFi password, or a vCard via QR.
+
+### Calendar events
+Create downloadable .ics calendar event files importable into any calendar app (Apple Calendar, Google Calendar, Outlook). The agent generates events with title, time, location, and description.
 
 ### Work with your tools
 Google Workspace (Gmail, Calendar, Drive), browser automation, MCP server integration, file management. Extend with plugins -- no restart required.
