@@ -4,6 +4,7 @@
  */
 import { useCallback, useRef, useState } from 'react'
 import { postFormRaw } from '@/lib/api'
+import { hasSpeechEnergy } from '@/lib/audio-utils'
 
 export function usePushToTalk(onResult: (text: string) => void) {
   const [recording, setRecording] = useState(false)
@@ -39,6 +40,10 @@ export function usePushToTalk(onResult: (text: string) => void) {
         setRecording(false)
 
         if (blob.size < 1000) return
+
+        // Check for actual audio energy before sending to server
+        const hasEnergy = await hasSpeechEnergy(blob)
+        if (!hasEnergy) return
 
         // Transcribe
         const formData = new FormData()

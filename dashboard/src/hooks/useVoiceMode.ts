@@ -9,6 +9,7 @@
  */
 import { useCallback, useRef, useState } from 'react'
 import { postFormRaw } from '@/lib/api'
+import { hasSpeechEnergy } from '@/lib/audio-utils'
 
 const SILENCE_DURATION = 1500
 const MIN_RECORDING_MS = 800
@@ -62,6 +63,8 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
 
   const transcribeAndSend = useCallback(async (blob: Blob) => {
     if (blob.size < 1000) return
+    const hasEnergy = await hasSpeechEnergy(blob)
+    if (!hasEnergy) return
     isTranscribingRef.current = true
     setPhase('processing')
     try {
