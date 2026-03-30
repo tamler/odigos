@@ -20,7 +20,7 @@ export async function subscribeToPush(): Promise<boolean> {
     await fetch('/api/push/subscribe', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       body: JSON.stringify({ subscription: subscription.toJSON() }),
     })
 
@@ -42,7 +42,7 @@ export async function unsubscribeFromPush(): Promise<void> {
       await fetch('/api/push/subscribe', {
         method: 'DELETE',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify({ endpoint }),
       })
     }

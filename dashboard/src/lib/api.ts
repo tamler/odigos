@@ -74,6 +74,7 @@ export async function uploadFile(
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${BASE}/api/upload`)
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest')
     
     if (onProgress) {
       xhr.upload.onprogress = (e) => {

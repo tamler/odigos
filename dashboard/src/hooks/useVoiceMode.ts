@@ -67,6 +67,7 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       const res = await fetch('/api/audio/transcribe', {
         method: 'POST',
         credentials: 'include',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
         body: formData,
       })
       if (res.ok) {
