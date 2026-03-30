@@ -708,16 +708,19 @@ export const ChatPanel = memo(({
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={pushToTalk.recording ? "Release to send" : "Hold to speak"}
-                      className={`h-11 w-11 lg:h-8 lg:w-8 rounded-lg transition-colors ${pushToTalk.recording ? 'bg-red-500 text-white' : 'text-muted-foreground hover:text-foreground'}`}
+                      aria-label={pushToTalk.recording ? "Tap to stop" : "Tap to speak"}
+                      className={`h-11 w-11 lg:h-8 lg:w-8 rounded-lg transition-colors ${pushToTalk.recording ? 'bg-red-500 text-white animate-pulse' : 'text-muted-foreground hover:text-foreground'}`}
                       disabled={!connected}
-                      onMouseDown={() => { stopTTS(); pushToTalk.start() }}
-                      onMouseUp={() => pushToTalk.stop()}
-                      onMouseLeave={() => { if (pushToTalk.recording) pushToTalk.stop() }}
-                      onTouchStart={(e) => { e.preventDefault(); stopTTS(); pushToTalk.start() }}
-                      onTouchEnd={(e) => { e.preventDefault(); pushToTalk.stop() }}
+                      onClick={() => {
+                        stopTTS()
+                        if (pushToTalk.recording) {
+                          pushToTalk.stop()
+                        } else {
+                          pushToTalk.start()
+                        }
+                      }}
                     >
-                      <Mic className="h-5 w-5 lg:h-4 lg:w-4" />
+                      {pushToTalk.recording ? <Square className="h-4 w-4 lg:h-3.5 lg:w-3.5" /> : <Mic className="h-5 w-5 lg:h-4 lg:w-4" />}
                     </Button>
                   )}
                   {isStreaming ? (
