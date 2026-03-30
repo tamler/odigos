@@ -278,6 +278,9 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       try {
         const { MicVAD } = await import('@ricky0123/vad-web')
         const vad = await MicVAD.new({
+          baseAssetPath: '/vad/',
+          onnxWASMBasePath: '/vad/',
+          model: 'v5',
           onSpeechEnd: async (audio: Float32Array) => {
             if (!activeRef.current || isTranscribingRef.current) return
             // Convert Float32Array to WAV blob
