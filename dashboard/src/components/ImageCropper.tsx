@@ -56,21 +56,10 @@ export function ImageCropper({ imageUrl, artifactId: _artifactId, filename, onCl
       const cropBox = `${Math.round(data.x)},${Math.round(data.y)},${Math.round(data.x + data.width)},${Math.round(data.y + data.height)}`
 
       // Send to backend process_image tool via API
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          content: `Crop the image ${filename} with coordinates: ${cropBox}`,
-        }),
-      })
-
-      if (res.ok) {
-        toast.success('Image cropped')
-        onCropped?.()
-      } else {
-        toast.error('Failed to crop image')
-      }
+      const { post } = await import('@/lib/api')
+      await post('/api/chat', { content: `Crop the image ${filename} with coordinates: ${cropBox}` })
+      toast.success('Image cropped')
+      onCropped?.()
     } catch {
       toast.error('Crop failed')
     } finally {

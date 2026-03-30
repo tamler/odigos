@@ -22,11 +22,8 @@ export function useAudio() {
     if (!text) return
 
     try {
-      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent(text)}`, {
-        credentials: 'include',
-      })
-      if (!res.ok) return
-      const blob = await res.blob()
+      const { getBlob } = await import('@/lib/api')
+      const blob = await getBlob(`/api/audio/speak?text=${encodeURIComponent(text)}`)
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       audioRef.current = audio

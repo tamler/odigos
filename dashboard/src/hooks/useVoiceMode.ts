@@ -64,12 +64,8 @@ export function useVoiceMode({ onTranscription, onPhaseChange, onAmplitudeChange
       const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm'
       formData.append('audio', blob, `recording.${ext}`)
 
-      const res = await fetch('/api/audio/transcribe', {
-        method: 'POST',
-        credentials: 'include',
-        // CSRF header added by global fetch interceptor (main.tsx)
-        body: formData,
-      })
+      const { postFormRaw } = await import('@/lib/api')
+      const res = await postFormRaw('/api/audio/transcribe', formData)
       if (res.ok) {
         const data = await res.json()
         if (data.text && data.text.trim()) {

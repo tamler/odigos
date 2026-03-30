@@ -1,10 +1,10 @@
+import { get, post, del } from './api'
+
 export async function subscribeToPush(): Promise<boolean> {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
 
   try {
-    const res = await fetch('/api/push/vapid-key', { credentials: 'include' })
-    if (!res.ok) return false
-    const { public_key } = await res.json()
+    const { public_key } = await get<{ public_key: string }>('/api/push/vapid-key')
     if (!public_key) return false
 
     const registration = await navigator.serviceWorker.ready
@@ -17,13 +17,7 @@ export async function subscribeToPush(): Promise<boolean> {
       })
     }
 
-    await fetch('/api/push/subscribe', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subscription: subscription.toJSON() }),
-    })
-
+    await post('/api/push/subscribe', { subscription: subscription.toJSON() })
     return true
   } catch (err) {
     console.error('Push subscription failed:', err)
@@ -39,12 +33,7 @@ export async function unsubscribeFromPush(): Promise<void> {
     if (subscription) {
       const endpoint = subscription.endpoint
       await subscription.unsubscribe()
-      await fetch('/api/push/subscribe', {
-        method: 'DELETE',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint }),
-      })
+      await del(`/api/push/subscribe?endpoint=${encodeURIComponent(endpoint)}`)
     }
   } catch (err) {
     console.error('Push unsubscribe failed:', err)

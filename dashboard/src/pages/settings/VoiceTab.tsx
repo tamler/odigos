@@ -91,9 +91,8 @@ export default function VoiceTab({ active: isActive }: { active?: boolean }) {
     if (!settings || testing) return
     setTesting(true)
     try {
-      const res = await fetch(`/api/audio/speak?text=${encodeURIComponent('Hello, I am your AI assistant.')}&voice=${settings.tts_voice}`)
-      if (!res.ok) throw new Error('Test failed')
-      const blob = await res.blob()
+      const { getBlob } = await import('@/lib/api')
+      const blob = await getBlob(`/api/audio/speak?text=${encodeURIComponent('Hello, I am your AI assistant.')}&voice=${settings.tts_voice}`)
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       audio.onended = () => {
