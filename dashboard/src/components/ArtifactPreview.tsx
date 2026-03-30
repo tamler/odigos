@@ -296,15 +296,20 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="flex-1 overflow-hidden relative min-h-0">
         {activeTab === 'preview' && (
-          <div className="h-full w-full">
+          <div className="absolute inset-0">
             {isImage ? (
-              <div className="h-full w-full flex items-center justify-center p-4 lg:p-12 bg-muted/10">
-                <img 
+              <div className="absolute inset-0 flex items-center justify-center p-4 lg:p-12 bg-muted/10">
+                <img
                   src={`/api/artifacts/${artifactId}/download`}
                   alt={data.filename}
                   className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement
+                    target.style.display = 'none'
+                    target.parentElement!.innerHTML = '<p class="text-muted-foreground text-sm">Failed to load image</p>'
+                  }}
                 />
               </div>
             ) : isHtml ? (
