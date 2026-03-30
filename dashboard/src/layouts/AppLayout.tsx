@@ -635,7 +635,7 @@ export default function AppLayout() {
           displayTitle={displayTitle} navigate={navigate} location={location}
         />
 
-        {sidebarOpen && <div className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
+        {sidebarOpen && <div className="fixed inset-0 z-30 bg-background lg:hidden" onClick={() => setSidebarOpen(false)} onTouchMove={(e) => e.preventDefault()} />}
 
         <div className="flex-1 flex overflow-hidden relative">
           <main className={`flex-1 flex flex-col min-w-0 overflow-hidden lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
