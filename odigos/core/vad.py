@@ -17,8 +17,8 @@ _model = None
 _utils = None
 
 
-def _load_model():
-    """Lazy-load Silero VAD model."""
+def load_model():
+    """Load Silero VAD model. Call at startup."""
     global _model, _utils
     if _model is not None:
         return _model, _utils
@@ -35,7 +35,7 @@ def _load_model():
         logger.info("Silero VAD model loaded")
         return model, utils
     except Exception:
-        logger.debug("Silero VAD not available", exc_info=True)
+        logger.warning("Silero VAD not available — voice will skip speech detection")
         return None, None
 
 
@@ -46,7 +46,7 @@ def contains_speech(audio_bytes: bytes, filename: str = "audio.webm") -> bool:
     Falls back to True (assume speech) if VAD is unavailable.
     """
     try:
-        model, utils = _load_model()
+        model, utils = load_model()
         if model is None:
             return True  # Can't check, assume speech
 
