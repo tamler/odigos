@@ -71,9 +71,9 @@ def resolve_artifact_path(
 
     Checks in order:
     1. Explicit file_path from DB (preferred -- always set for new records)
-    2. data/files/{id}_{anything} (uploads and new artifacts)
-    3. data/files/{filename} (generated images by bare filename)
-    4. data/artifacts/{id}/{filename} (pre-merge artifacts, will phase out)
+    2. data/files/ glob for ID anywhere in filename (handles both {id}_{name} and {name}_{id})
+    3. data/files/{filename} (bare filename match)
+    4. data/artifacts/{id}/{filename} (pre-merge legacy)
     """
     # 1. Explicit path from DB (set by migration 052 and all new writes)
     if file_path:
@@ -81,10 +81,12 @@ def resolve_artifact_path(
         if p.exists():
             return p
 
-    # 2. Files dir with ID prefix
+    # 2. Files dir -- search for ID anywhere in filename
     import glob as globmod
-    for candidate in FILES_DIR.glob(f"{globmod.escape(artifact_id)}_*"):
-        return candidate
+    short_id = artifact_id[:16]
+    for candidate in FILES_DIR.glob(f"*{globmod.escape(short_id)}*"):
+        if candidate.is_file():
+            return candidate
 
     # 3. Files dir by bare filename
     p = FILES_DIR / filename

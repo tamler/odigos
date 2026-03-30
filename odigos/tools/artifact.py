@@ -98,7 +98,10 @@ class CreateArtifactTool(BaseTool):
         # Create artifact -- write to unified data/files/ directory
         artifact_id = str(uuid.uuid4())
         FILES_DIR.mkdir(parents=True, exist_ok=True)
-        file_path = FILES_DIR / f"{artifact_id}_{filename}"
+        # Name first for easy visual filtering, ID suffix for uniqueness
+        name_part = Path(filename).stem
+        ext_part = Path(filename).suffix
+        file_path = FILES_DIR / f"{name_part}_{artifact_id[:16]}{ext_part}"
 
         if ext == ".docx":
             _write_docx(file_path, content)

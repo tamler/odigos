@@ -101,7 +101,7 @@ class GenerateImageTool(BaseTool):
                 )
 
             artifact_id = uuid.uuid4().hex
-            filename = f"{artifact_id[:16]}_generated.png"
+            filename = f"generated_{artifact_id[:16]}.png"
             filepath = await self._download_image(
                 image_url, filename,
             )

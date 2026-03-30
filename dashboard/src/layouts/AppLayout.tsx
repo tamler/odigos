@@ -132,7 +132,7 @@ const AppSidebar = memo(({
     <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'}`}>
       <div className="flex flex-col gap-2 p-3 mb-2">
         <div className="flex items-center gap-1 mb-2 px-1 min-h-[32px]">
-          <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="shrink-0 h-8 w-8">
+          <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => isMobile ? setSidebarOpen(false) : setCollapsed(!collapsed)} className="shrink-0 h-8 w-8">
             {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </Button>
           {!collapsed && (
@@ -600,21 +600,20 @@ export default function AppLayout() {
       <div className="flex h-[100dvh] bg-background text-foreground relative overflow-hidden">
         <QuickSwitcher open={switcherOpen} onOpenChange={setSwitcherOpen} />
         
-        {/* Mobile top bar */}
+        {/* Mobile top bar -- compact, toggles sidebar */}
         {!focusMode && (
-          <div className="flex items-center gap-2 p-3 pt-safe border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background">
-            <Button variant="ghost" size="icon" aria-label="Toggle mobile menu" className="h-11 w-11" onClick={() => setSidebarOpen(true)}>
-              <Menu className="h-5 w-5" />
+          <div className="flex items-center gap-1.5 px-2 py-1.5 pt-safe border-b border-border/40 lg:hidden fixed top-0 left-0 right-0 z-20 bg-background/95 backdrop-blur-sm">
+            <Button variant="ghost" size="icon" aria-label="Toggle mobile menu" className="h-9 w-9" onClick={() => setSidebarOpen(!sidebarOpen)}>
+              <Menu className="h-4 w-4" />
             </Button>
-            <button onClick={() => navigate('/')} className="text-sm font-semibold hover:text-muted-foreground transition-colors truncate max-w-[150px]">
+            <button onClick={() => navigate('/')} className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors truncate max-w-[180px]">
               {isSettings && isMobile ? (
-                <div className="flex items-center gap-2">
-                  <ArrowLeft className="h-4 w-4" onClick={(e) => { e.stopPropagation(); navigate('/settings') }} />
+                <div className="flex items-center gap-1.5">
+                  <ArrowLeft className="h-3.5 w-3.5" onClick={(e) => { e.stopPropagation(); navigate('/settings') }} />
                   <span>{SETTINGS_SECTIONS.find(s => s.id === currentTab)?.label || 'Settings'}</span>
                 </div>
               ) : agentName}
             </button>
-            <div className="h-11 w-11 ml-auto" />
           </div>
         )}
 
@@ -638,7 +637,7 @@ export default function AppLayout() {
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-background/80 backdrop-blur-sm lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
         <div className="flex-1 flex overflow-hidden relative">
-          <main className={`flex-1 flex flex-col min-w-0 overflow-hidden pt-[52px] lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
+          <main className={`flex-1 flex flex-col min-w-0 overflow-hidden pt-[40px] lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
             <ErrorBoundary>
               {artifactPanelOpen ? (
                 <ChatPanel activeConversationId={activeId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={false} />

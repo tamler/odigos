@@ -78,7 +78,9 @@ async def upload_file(
 
     file_id = secrets.token_hex(8)
     safe_name = os.path.basename(file.filename or "upload")
-    dest = os.path.join(upload_dir, f"{file_id}_{safe_name}")
+    # Name first for easy visual filtering, ID suffix for uniqueness
+    name_part, ext = os.path.splitext(safe_name)
+    dest = os.path.join(upload_dir, f"{name_part}_{file_id}{ext}")
 
     # Read with strict size enforcement
     content = await file.read(MAX_UPLOAD_BYTES + 1)
