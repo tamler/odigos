@@ -99,21 +99,6 @@ class GroqSTT(STTProvider):
             else:
                 result = raw_text.strip()
 
-            # Drop known hallucination phrases
-            _HALLUCINATIONS = {
-                "thank you", "thanks for watching",
-                "please subscribe", "thanks for listening",
-                "thank you for watching",
-                "thank you for listening",
-                "you", "bye", "goodbye",
-            }
-            cleaned = result.lower().strip().rstrip('.!,')
-            if cleaned in _HALLUCINATIONS:
-                logger.info(
-                    "STT: dropping hallucination '%s'", result,
-                )
-                result = ""
-
             logger.info(
                 "STT result: '%s'",
                 result[:200] if result else "(empty)",
