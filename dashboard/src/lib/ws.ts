@@ -71,7 +71,7 @@ export class ChatSocket {
         const msg = JSON.parse(e.data)
         this.baseHandler(msg)
         if (this.onMessage) this.onMessage(msg)
-      } catch { /* ignore parse errors */ }
+      } catch (err) { console.warn('[WS] Parse error:', err, e.data?.slice?.(0, 200)) }
     }
   }
 

@@ -110,12 +110,23 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
       const element = document.createElement('div')
       element.className = 'prose prose-sm p-8 bg-white text-black'
       
-      // Simple markdown to basic HTML conversion if it's markdown
+      // Sanitize content before setting innerHTML to prevent XSS
+      const sanitize = (html: string) => {
+        const div = document.createElement('div')
+        div.textContent = html
+        return div.innerHTML
+      }
       if (data.content_type === 'text/markdown') {
-        element.innerHTML = `<h1 style="font-size: 24px; margin-bottom: 20px;">${data.filename}</h1>` + 
-                           editContent.replace(/\n/g, '<br/>')
+        element.innerHTML = `<h1 style="font-size: 24px; margin-bottom: 20px;">${sanitize(data.filename)}</h1>` +
+                           sanitize(editContent).replace(/\n/g, '<br/>')
+      } else if (data.content_type === 'text/html') {
+        // HTML content: use DOMParser to strip scripts
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(editContent, 'text/html')
+        doc.querySelectorAll('script, iframe, object, embed').forEach(el => el.remove())
+        element.innerHTML = doc.body.innerHTML
       } else {
-        element.innerHTML = editContent
+        element.textContent = editContent
       }
 
       const opt = {

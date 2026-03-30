@@ -1,7 +1,10 @@
 const BASE = ''  // Same origin
 
 function headers(): HeadersInit {
-  return { 'Content-Type': 'application/json' }
+  return {
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',  // CSRF protection: browsers don't send this cross-origin
+  }
 }
 
 export async function get<T>(path: string): Promise<T> {

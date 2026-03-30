@@ -41,6 +41,10 @@ async def require_auth(request: Request):
         secret = settings.session_secret
         session = _validate_session(secret, cookie)
         if session:
+            # CSRF check: state-changing requests via cookie must include X-Requested-With
+            if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+                if not request.headers.get("X-Requested-With"):
+                    raise HTTPException(status_code=403, detail="Missing CSRF header")
             request.state.user = session
             return
 

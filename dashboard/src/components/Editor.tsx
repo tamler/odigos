@@ -20,6 +20,8 @@ interface EditorProps {
 }
 
 export function MarkdownEditor({ content, onChange, readOnly = false }: Omit<EditorProps, 'contentType'>) {
+  const isInternalUpdate = useRef(false)
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -30,6 +32,7 @@ export function MarkdownEditor({ content, onChange, readOnly = false }: Omit<Edi
     content: content,
     editable: !readOnly,
     onUpdate: ({ editor }) => {
+      isInternalUpdate.current = true
       onChange((editor.storage as any).markdown.getMarkdown())
     },
     editorProps: {
@@ -39,8 +42,13 @@ export function MarkdownEditor({ content, onChange, readOnly = false }: Omit<Edi
     },
   })
 
-  // Sync content if it changes externally (e.g. from CodeMirror tab)
+  // Sync content only when changed externally (e.g. from CodeMirror tab)
+  // Skip if the change came from the user typing (prevents cursor jump)
   useEffect(() => {
+    if (isInternalUpdate.current) {
+      isInternalUpdate.current = false
+      return
+    }
     if (editor && content !== (editor.storage as any).markdown.getMarkdown()) {
       editor.commands.setContent(content)
     }
