@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
@@ -12,6 +14,28 @@ if TYPE_CHECKING:
     from odigos.db import Database
 
 logger = logging.getLogger(__name__)
+
+PLAN_FILES_DIR = Path("data/files/plans")
+RESULT_FILE_THRESHOLD = 500  # chars -- results longer than this get filed
+
+
+def _write_step_result(plan_id: str, step_num: str, content: str) -> str:
+    """Write a step result to a file and return the relative path."""
+    plan_dir = PLAN_FILES_DIR / plan_id
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    safe_step = step_num.replace(".", "_")
+    filename = f"step_{safe_step}.md"
+    filepath = plan_dir / filename
+    filepath.write_text(content)
+    return str(filepath)
+
+
+def _read_step_result(path: str) -> str | None:
+    """Read a filed step result. Returns None if missing."""
+    p = Path(path)
+    if p.exists() and p.is_file():
+        return p.read_text()
+    return None
 
 
 class CheckPlanTool(BaseTool):
@@ -61,14 +85,22 @@ class CheckPlanTool(BaseTool):
             else:
                 marker = " "
                 pending_count += 1
-            result_note = f" -- {s['result']}" if s.get("result") else ""
+            result_note = ""
+            if s.get("result_file"):
+                result_note = f" -- [full result in {s['result_file']}]"
+            elif s.get("result"):
+                result_note = f" -- {s['result']}"
             lines.append(f"- [{marker}] Step {s['step']}: {s['task']}{result_note}")
 
             # Display substeps if present
             for sub in s.get("substeps", []):
                 sub_status = sub.get("status", "pending")
                 sub_marker = "x" if sub_status == "done" else " "
-                sub_result = f" -- {sub['result']}" if sub.get("result") else ""
+                sub_result = ""
+                if sub.get("result_file"):
+                    sub_result = f" -- [full result in {sub['result_file']}]"
+                elif sub.get("result"):
+                    sub_result = f" -- {sub['result']}"
                 lines.append(f"    - [{sub_marker}] Step {sub['step']}: {sub['task']}{sub_result}")
                 if sub_status == "done":
                     done_count += 1
@@ -119,7 +151,6 @@ class UpdatePlanTool(BaseTool):
         if not conversation_id or not step_raw:
             return ToolResult(success=False, data="", error="Missing step number or conversation context")
 
-        # Normalise step identifier to string for comparison
         step_num = str(step_raw)
 
         try:
@@ -134,28 +165,37 @@ class UpdatePlanTool(BaseTool):
         if not row:
             return ToolResult(success=False, data="", error="No active plan for this conversation")
 
+        plan_id = row["id"]
         steps = json.loads(row["steps"])
         updated = False
 
-        # Check for substep format (e.g. "1.2")
+        def _apply_update(step_dict: dict) -> None:
+            step_dict["status"] = new_status
+            if result_note:
+                if len(result_note) > RESULT_FILE_THRESHOLD:
+                    try:
+                        path = _write_step_result(plan_id, step_num, result_note)
+                        step_dict["result"] = result_note[:200] + "..."
+                        step_dict["result_file"] = path
+                    except Exception:
+                        step_dict["result"] = result_note
+                else:
+                    step_dict["result"] = result_note
+
         if "." in step_num:
             parent_num, _ = step_num.split(".", 1)
             for s in steps:
                 if str(s["step"]) == parent_num:
                     for sub in s.get("substeps", []):
                         if str(sub["step"]) == step_num:
-                            sub["status"] = new_status
-                            if result_note:
-                                sub["result"] = result_note
+                            _apply_update(sub)
                             updated = True
                             break
                     break
         else:
             for s in steps:
                 if str(s["step"]) == step_num:
-                    s["status"] = new_status
-                    if result_note:
-                        s["result"] = result_note
+                    _apply_update(s)
                     updated = True
                     break
 

@@ -503,21 +503,83 @@ class Executor:
                 )
                 return msg
 
-        t0 = time.monotonic()
-        try:
-            args = {**tool_call.arguments, "_conversation_id": conversation_id}
-            result = await tool.execute(args)
-            duration = time.monotonic() - t0
+        from odigos.core.failure import classify as classify_failure, should_retry
+        from odigos.tools.base import ToolContract
+
+        contract = getattr(tool, "contract", None) or ToolContract()
+        args = {**tool_call.arguments, "_conversation_id": conversation_id}
+        attempt = 0
+
+        while True:
+            t0 = time.monotonic()
+            result = None
+            exception = None
+
+            try:
+                result = await asyncio.wait_for(
+                    tool.execute(args),
+                    timeout=contract.timeout_seconds,
+                )
+                duration = time.monotonic() - t0
+            except asyncio.TimeoutError:
+                duration = time.monotonic() - t0
+                exception = TimeoutError(f"Tool {tool_call.name} timed out after {contract.timeout_seconds}s")
+            except Exception as e:
+                duration = time.monotonic() - t0
+                exception = e
+
+            # Classify the failure
+            if exception:
+                category = classify_failure(exception=exception)
+                error_msg = str(exception)
+                logger.warning("Tool %s failed (attempt %d, %s): %s", tool_call.name, attempt + 1, category, error_msg)
+            elif result and not result.success:
+                category = result.failure_category or classify_failure(error_msg=result.error)
+                error_msg = result.error or "Unknown error"
+            else:
+                category = None
+                error_msg = None
+
+            # Retry transient/unknown failures if contract allows
+            if category and should_retry(category, attempt, contract.max_retries):
+                attempt += 1
+                backoff = contract.retry_backoff_base * (2 ** (attempt - 1))
+                logger.info("Retrying %s in %.1fs (attempt %d, %s)", tool_call.name, backoff, attempt, category)
+                await asyncio.sleep(backoff)
+                continue
+
+            # No more retries -- emit trace and process result
             await self._emit_trace(
                 conversation_id, "tool_result",
-                {"tool": tool_call.name, "success": result.success, "error": result.error, "duration_ms": round(duration * 1000)},
+                {
+                    "tool": tool_call.name,
+                    "success": result.success if result else False,
+                    "error": error_msg,
+                    "duration_ms": round(duration * 1000),
+                    "attempts": attempt + 1,
+                    "failure_category": category,
+                },
             )
 
-            # Capture suggested actions for the frontend
+            # Handle exceptions (no result object)
+            if exception:
+                if self.db:
+                    try:
+                        await self.db.execute(
+                            "INSERT INTO tool_errors (id, tool_name, error_type, error_message, query_context, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?)",
+                            (str(uuid.uuid4()), tool_call.name, category or "unknown",
+                             str(exception)[:500], message_content[:200],
+                             datetime.now(timezone.utc).isoformat()),
+                        )
+                    except Exception:
+                        logger.debug("Could not log tool error", exc_info=True)
+                return f"Error: Tool execution failed: {exception}"
+
+            # Process successful result
             if result.side_effect and result.side_effect.get("suggested_actions"):
                 self._pending_suggested_actions = result.side_effect["suggested_actions"]
 
-            # Detect skill activation from structured side_effect
             if result.side_effect and result.side_effect.get("skill_activation"):
                 self._active_skill_name = result.side_effect["skill_name"]
                 self._active_skill_tools = set(result.side_effect.get("skill_tools", []))
@@ -526,79 +588,16 @@ class Executor:
 
             # Persist decomposed plan or attach substeps to parent
             if tool_call.name == "decompose_query" and result.side_effect and self.db:
-                try:
-                    now = datetime.now(timezone.utc).isoformat()
-                    if "plan_steps" in result.side_effect:
-                        plan_id = str(uuid.uuid4())
-                        plan_steps = result.side_effect["plan_steps"]
-                        # Generate sprint contract
-                        contract_json: str | None = None
-                        if self.evaluator:
-                            try:
-                                contract = await self.evaluator.generate_sprint_contract(
-                                    goal=message_content,
-                                    steps=plan_steps,
-                                )
-                                contract_json = json.dumps(contract)
-                            except Exception:
-                                logger.debug(
-                                    "Sprint contract gen failed",
-                                    exc_info=True,
-                                )
-                        await self.db.execute(
-                            "INSERT INTO task_plans "
-                            "(id, conversation_id, steps, "
-                            "sprint_contract, created_at, "
-                            "updated_at) "
-                            "VALUES (?, ?, ?, ?, ?, ?)",
-                            (plan_id, conversation_id,
-                             json.dumps(plan_steps),
-                             contract_json, now, now),
-                        )
-                    elif "substeps" in result.side_effect and "parent_step" in result.side_effect:
-                        # Attach substeps to an existing parent step
-                        parent_step = str(result.side_effect["parent_step"])
-                        substeps = result.side_effect["substeps"]
-                        # Validate substep structure
-                        substeps = [s for s in substeps if isinstance(s, dict) and "step" in s and "task" in s]
-                        if substeps:
-                            row = await self.db.fetch_one(
-                                "SELECT id, steps FROM task_plans WHERE conversation_id = ? "
-                                "ORDER BY updated_at DESC LIMIT 1",
-                                (conversation_id,),
-                            )
-                            if row:
-                                steps = json.loads(row["steps"])
-                                for s in steps:
-                                    if str(s["step"]) == parent_step:
-                                        s["substeps"] = substeps
-                                        break
-                                await self.db.execute(
-                                    "UPDATE task_plans SET steps = ?, updated_at = ? WHERE id = ?",
-                                    (json.dumps(steps), now, row["id"]),
-                                )
-                except Exception:
-                    logger.debug("Could not persist task plan", exc_info=True)
+                await self._persist_plan(conversation_id, result, message_content)
 
-            # Log tool errors for cross-conversation learning
+            # Log tool errors
             if not result.success and self.db:
                 try:
-                    error_type = "unknown"
-                    error_msg = result.error or ""
-                    lower_err = error_msg.lower()
-                    if "timeout" in lower_err:
-                        error_type = "timeout"
-                    elif "not found" in lower_err or "not_found" in lower_err:
-                        error_type = "not_found"
-                    elif "permission" in lower_err:
-                        error_type = "permission"
-                    elif "validation" in lower_err or "invalid" in lower_err:
-                        error_type = "validation"
                     await self.db.execute(
                         "INSERT INTO tool_errors (id, tool_name, error_type, error_message, query_context, created_at) "
                         "VALUES (?, ?, ?, ?, ?, ?)",
-                        (str(uuid.uuid4()), tool_call.name, error_type,
-                         error_msg[:500], message_content[:200],
+                        (str(uuid.uuid4()), tool_call.name, category or "unknown",
+                         (result.error or "")[:500], message_content[:200],
                          datetime.now(timezone.utc).isoformat()),
                     )
                 except Exception:
@@ -606,16 +605,54 @@ class Executor:
 
             if result.success:
                 return result.data
-            else:
-                return f"Error: {result.error}"
-        except Exception as e:
-            duration = time.monotonic() - t0
-            logger.exception("Tool %s raised an exception", tool_call.name)
-            await self._emit_trace(
-                conversation_id, "tool_result",
-                {"tool": tool_call.name, "success": False, "error": str(e), "duration_ms": round(duration * 1000)},
-            )
-            return f"Error: Tool execution failed: {e}"
+            return f"Error: {result.error}"
+
+    async def _persist_plan(
+        self, conversation_id: str, result: "ToolResult", message_content: str,
+    ) -> None:
+        """Persist a decomposed plan or attach substeps to an existing plan."""
+        try:
+            now = datetime.now(timezone.utc).isoformat()
+            if "plan_steps" in result.side_effect:
+                plan_id = str(uuid.uuid4())
+                plan_steps = result.side_effect["plan_steps"]
+                contract_json: str | None = None
+                if self.evaluator:
+                    try:
+                        contract = await self.evaluator.generate_sprint_contract(
+                            goal=message_content, steps=plan_steps,
+                        )
+                        contract_json = json.dumps(contract)
+                    except Exception:
+                        logger.debug("Sprint contract gen failed", exc_info=True)
+                await self.db.execute(
+                    "INSERT INTO task_plans "
+                    "(id, conversation_id, steps, sprint_contract, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (plan_id, conversation_id, json.dumps(plan_steps), contract_json, now, now),
+                )
+            elif "substeps" in result.side_effect and "parent_step" in result.side_effect:
+                parent_step = str(result.side_effect["parent_step"])
+                substeps = result.side_effect["substeps"]
+                substeps = [s for s in substeps if isinstance(s, dict) and "step" in s and "task" in s]
+                if substeps:
+                    row = await self.db.fetch_one(
+                        "SELECT id, steps FROM task_plans WHERE conversation_id = ? "
+                        "ORDER BY updated_at DESC LIMIT 1",
+                        (conversation_id,),
+                    )
+                    if row:
+                        steps = json.loads(row["steps"])
+                        for s in steps:
+                            if str(s["step"]) == parent_step:
+                                s["substeps"] = substeps
+                                break
+                        await self.db.execute(
+                            "UPDATE task_plans SET steps = ?, updated_at = ? WHERE id = ?",
+                            (json.dumps(steps), now, row["id"]),
+                        )
+        except Exception:
+            logger.debug("Could not persist task plan", exc_info=True)
 
     async def _emit_trace(
         self, conversation_id: str, event_type: str, data: dict,

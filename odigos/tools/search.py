@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from odigos.tools.base import BaseTool, ToolResult
+from odigos.tools.base import BaseTool, ToolContract, ToolResult
 
 from odigos.providers.search_base import SearchResult
 
@@ -16,6 +16,7 @@ class SearchTool(BaseTool):
 
     name = "web_search"
     description = "Search the web for current information on any topic."
+    contract = ToolContract(timeout_seconds=30, max_retries={"transient": 3, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     parameters_schema = {
         "type": "object",
         "properties": {

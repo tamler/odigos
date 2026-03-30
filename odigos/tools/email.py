@@ -14,6 +14,7 @@ from email.header import decode_header
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from odigos.tools.base import ToolContract
 from odigos.tools.content_filter_helper import filter_external_content
 
 from odigos.tools.base import BaseTool, ToolResult
@@ -65,6 +66,7 @@ def _extract_text(msg: email.message.Message) -> str:
 
 class CheckEmailTool(BaseTool):
     name = "check_email"
+    contract = ToolContract(timeout_seconds=30, max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     description = (
         "Check the email inbox for new messages. Returns a summary of unread emails "
         "including sender, subject, date, and a preview of the content. "
