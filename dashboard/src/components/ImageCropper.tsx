@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { X, Check } from 'lucide-react'
 import { toast } from 'sonner'
+import Cropper from 'cropperjs'
+import 'cropperjs/dist/cropper.css'
 
 interface ImageCropperProps {
   imageUrl: string
@@ -24,10 +26,6 @@ export function ImageCropper({ imageUrl, artifactId: _artifactId, filename, onCl
     let cropper: any = null
 
     async function init() {
-      const { default: Cropper } = await import('cropperjs')
-      // Import CSS
-      await import('cropperjs/dist/cropper.css')
-
       if (!containerRef.current) return
 
       const img = document.createElement('img')
