@@ -221,16 +221,9 @@ export const ChatPanel = memo(({
     else if (isStreaming) voiceMode.setPhase('speaking')
   }, [voiceMode.active, thinking, isStreaming])
 
-  // Auto-open new artifacts (G38)
+  // Track artifact count (user clicks thumbnail to open preview)
   const prevArtifactsCount = useRef(0)
   useEffect(() => {
-    if (artifacts.length > prevArtifactsCount.current) {
-      const latest = artifacts[0] // list is sorted by created_at DESC
-      if (latest && !artifactPanelOpen) {
-        setActiveArtifactId(latest.id)
-        setArtifactPanelOpen(true)
-      }
-    }
     prevArtifactsCount.current = artifacts.length
   }, [artifacts, artifactPanelOpen, setActiveArtifactId, setArtifactPanelOpen])
 
@@ -413,7 +406,7 @@ export const ChatPanel = memo(({
     }
   }, [handleSend])
 
-  const canSend = connected && (inputValue.trim() || pendingFiles.length > 0) && queuedCount < 3
+  const canSend = connected && (inputValue.trim() || pendingFiles.length > 0) && queuedCount < 3 && !thinking
 
   return (
     <FileUpload onFilesAdded={handleFilesAdded} capture={useCamera || undefined}>
