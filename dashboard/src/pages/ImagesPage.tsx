@@ -42,7 +42,7 @@ function ImageCard({ img, selected, onTap, onLongPress, onDelete, onDownload, on
     >
       <div className="aspect-square relative overflow-hidden bg-muted">
         <img
-          src={`/api/artifacts/${img.id}/download`}
+          src={`/api/artifacts/${img.id}/thumbnail?size=400`}
           alt={img.filename}
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
           loading="lazy"

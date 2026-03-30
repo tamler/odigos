@@ -203,7 +203,7 @@ const AppSidebar = memo(({
                     onClick={() => handleSelectImage(img.id)}
                     className={`aspect-square rounded-lg border overflow-hidden transition-all ${activeId === img.id ? 'border-primary ring-2 ring-primary/20' : 'border-border/40 hover:border-border'}`}
                   >
-                    <img src={`/api/artifacts/${img.id}/download`} alt={img.filename} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={`/api/artifacts/${img.id}/thumbnail?size=200`} alt={img.filename} className="w-full h-full object-cover" loading="lazy" />
                   </button>
                 ))}
               </div>

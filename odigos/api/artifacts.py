@@ -129,6 +129,37 @@ async def download_artifact(artifact_id: str, db=Depends(get_db)):
     )
 
 
+@router.get("/{artifact_id}/thumbnail")
+async def get_thumbnail(artifact_id: str, size: int = 400, db=Depends(get_db)):
+    """Get a resized thumbnail of an image artifact. Fast loading for galleries."""
+    row = await db.fetch_one("SELECT * FROM artifacts WHERE id = ?", (artifact_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not (row["content_type"] or "").startswith("image/"):
+        raise HTTPException(status_code=400, detail="Not an image")
+
+    file_path = resolve_artifact_path(artifact_id, row["filename"], row.get("file_path"))
+    if not file_path:
+        raise HTTPException(status_code=404, detail="File missing")
+
+    # Generate thumbnail on the fly (cached by browser via etag)
+    import io
+    from PIL import Image
+    size = min(max(size, 50), 800)
+    img = Image.open(str(file_path))
+    img.thumbnail((size, size), Image.LANCZOS)
+    buf = io.BytesIO()
+    img.save(buf, format="WEBP", quality=80)
+    buf.seek(0)
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        buf,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @router.delete("/{artifact_id}")
 async def delete_artifact(artifact_id: str, db=Depends(get_db)):
     """Delete an artifact."""

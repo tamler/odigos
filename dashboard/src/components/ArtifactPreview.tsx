@@ -4,7 +4,8 @@ import { get, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { X, ExternalLink, Download, Code, Eye, FileText, Save, FileDown, BookOpen, Image as ImageIcon, Sparkles } from 'lucide-react'
+import { X, ExternalLink, Download, Code, Eye, FileText, Save, FileDown, BookOpen, Image as ImageIcon, Sparkles, Crop } from 'lucide-react'
+import { ImageCropper } from './ImageCropper'
 import { ArtifactCard } from './ArtifactCard'
 import { MarkdownEditor, CodeEditor } from './Editor'
 import {
@@ -42,6 +43,7 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   const [editContent, setEditContent] = useState('')
   const [isDirty, setIsDirty] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [cropOpen, setCropOpen] = useState(false)
 
   useEffect(() => {
     if (data) {
@@ -208,15 +210,26 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
         
         <div className="flex items-center gap-1">
           {isImage && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-8 gap-1.5 mr-2 border-primary/20 text-primary hover:bg-primary/5"
-              onClick={handleEditWithAgent}
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              Edit with Agent
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 mr-1 border-primary/20 text-primary hover:bg-primary/5"
+                onClick={() => setCropOpen(true)}
+              >
+                <Crop className="h-3.5 w-3.5" />
+                Crop
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 mr-2 border-primary/20 text-primary hover:bg-primary/5"
+                onClick={handleEditWithAgent}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Edit with Agent
+              </Button>
+            </>
           )}
           {isDirty && (
             <Button 
@@ -300,15 +313,24 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
         {activeTab === 'preview' && (
           <div className="w-full h-full min-h-[200px]">
             {isImage ? (
-              <div className="w-full h-full min-h-[200px] flex items-center justify-center p-4 lg:p-12 bg-muted/10">
+              <div className="w-full h-full min-h-[200px] flex items-center justify-center p-4 lg:p-12 bg-muted/10 relative">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none" id={`loader-${artifactId}`}>
+                  <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
                 <img
                   src={`/api/artifacts/${artifactId}/download`}
                   alt={data.filename}
-                  className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-xl"
+                  className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-xl relative z-10"
+                  onLoad={(e) => {
+                    const loader = document.getElementById(`loader-${artifactId}`)
+                    if (loader) loader.style.display = 'none'
+                  }}
                   onError={(e) => {
+                    const loader = document.getElementById(`loader-${artifactId}`)
+                    if (loader) loader.style.display = 'none'
                     const target = e.target as HTMLImageElement
                     target.style.display = 'none'
-                    target.parentElement!.innerHTML = '<p class="text-muted-foreground text-sm">Failed to load image</p>'
+                    target.parentElement!.insertAdjacentHTML('beforeend', '<p class="text-muted-foreground text-sm relative z-10">Failed to load image</p>')
                   }}
                 />
               </div>
@@ -364,6 +386,16 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
           </div>
         )}
       </div>
+
+      {cropOpen && isImage && (
+        <ImageCropper
+          imageUrl={`/api/artifacts/${artifactId}/download`}
+          artifactId={artifactId}
+          filename={data.filename}
+          onClose={() => setCropOpen(false)}
+          onCropped={() => { setCropOpen(false); window.location.reload() }}
+        />
+      )}
     </div>
   )
 }
