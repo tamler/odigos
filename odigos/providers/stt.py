@@ -48,17 +48,36 @@ class GroqSTT(STTProvider):
             f.flush()
             temp_path = f.name
 
+        # Convert to mp3 for reliable Groq compatibility
+        import subprocess
+        mp3_path = temp_path + ".mp3"
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", temp_path, "-ar", "16000",
+                 "-ac", "1", "-b:a", "64k", mp3_path],
+                capture_output=True, timeout=10,
+            )
+            if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 100:
+                send_path = mp3_path
+                send_name = "recording.mp3"
+            else:
+                send_path = temp_path
+                send_name = filename
+        except Exception:
+            send_path = temp_path
+            send_name = filename
+
         try:
             logger.info(
                 "STT: sending %d bytes (%s) to Groq %s",
-                len(audio_bytes),
-                suffix,
+                os.path.getsize(send_path),
+                os.path.splitext(send_name)[1],
                 self._model,
             )
-            with open(temp_path, "rb") as af:
+            with open(send_path, "rb") as af:
                 transcription = (
                     await client.audio.transcriptions.create(
-                        file=(filename, af),
+                        file=(send_name, af),
                         model=self._model,
                         language="en",
                         response_format="verbose_json",
@@ -106,6 +125,8 @@ class GroqSTT(STTProvider):
             return result
         finally:
             os.unlink(temp_path)
+            if os.path.exists(mp3_path):
+                os.unlink(mp3_path)
 
 
 class LocalSTT(STTProvider):
