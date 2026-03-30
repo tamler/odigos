@@ -53,8 +53,6 @@ PLUGINS_DIR = DATA_DIR / "plugins"
 # VAPID keys
 VAPID_KEYS_PATH = DATA_DIR / "vapid_keys.json"
 
-# Legacy upload directory (read-only fallback for pre-consolidation installs)
-_LEGACY_UPLOADS_DIR = DATA_DIR / "uploads"
 
 
 def ensure_dirs() -> None:
@@ -76,7 +74,6 @@ def resolve_artifact_path(
     2. data/artifacts/{id}/{filename} (text artifacts from create_artifact tool)
     3. data/files/{id}_{anything} (uploads with ID prefix)
     4. data/files/{filename} (generated images by bare filename)
-    5. data/uploads/{id}_{anything} (legacy pre-consolidation uploads)
     """
     # 1. Explicit path from DB
     if file_path:
@@ -98,11 +95,6 @@ def resolve_artifact_path(
     p = FILES_DIR / filename
     if p.exists():
         return p
-
-    # 5. Legacy uploads
-    if _LEGACY_UPLOADS_DIR.exists():
-        for candidate in _LEGACY_UPLOADS_DIR.glob(f"{globmod.escape(artifact_id)}_*"):
-            return candidate
 
     return None
 
