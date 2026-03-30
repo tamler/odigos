@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from odigos.storage import write_plan_result, read_plan_result
 from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
@@ -15,27 +16,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-PLAN_FILES_DIR = Path("data/files/plans")
 RESULT_FILE_THRESHOLD = 500  # chars -- results longer than this get filed
-
-
-def _write_step_result(plan_id: str, step_num: str, content: str) -> str:
-    """Write a step result to a file and return the relative path."""
-    plan_dir = PLAN_FILES_DIR / plan_id
-    plan_dir.mkdir(parents=True, exist_ok=True)
-    safe_step = step_num.replace(".", "_")
-    filename = f"step_{safe_step}.md"
-    filepath = plan_dir / filename
-    filepath.write_text(content)
-    return str(filepath)
-
-
-def _read_step_result(path: str) -> str | None:
-    """Read a filed step result. Returns None if missing."""
-    p = Path(path)
-    if p.exists() and p.is_file():
-        return p.read_text()
-    return None
 
 
 class CheckPlanTool(BaseTool):
@@ -174,7 +155,7 @@ class UpdatePlanTool(BaseTool):
             if result_note:
                 if len(result_note) > RESULT_FILE_THRESHOLD:
                     try:
-                        path = _write_step_result(plan_id, step_num, result_note)
+                        path = write_plan_result(plan_id, step_num, result_note)
                         step_dict["result"] = result_note[:200] + "..."
                         step_dict["result_file"] = path
                     except Exception:

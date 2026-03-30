@@ -112,9 +112,9 @@ class CreateArtifactTool(BaseTool):
         # Register in database
         now = datetime.now(timezone.utc).isoformat()
         await self.db.execute(
-            "INSERT INTO artifacts (id, conversation_id, filename, content_type, file_size, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (artifact_id, conversation_id, filename, content_type, file_size, now),
+            "INSERT INTO artifacts (id, conversation_id, filename, content_type, file_size, file_path, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (artifact_id, conversation_id, filename, content_type, file_size, str(file_path), now),
         )
 
         logger.info("Created artifact %s: %s (%d bytes)", artifact_id[:8], filename, file_size)

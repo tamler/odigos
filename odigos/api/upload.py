@@ -151,9 +151,9 @@ async def upload_file(
     try:
         await db.execute(
             "INSERT OR IGNORE INTO artifacts "
-            "(id, filename, content_type, file_size, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (artifact_id, safe_name, content_type, len(content), now),
+            "(id, filename, content_type, file_size, file_path, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (artifact_id, safe_name, content_type, len(content), dest, now),
         )
     except Exception:
         logger.debug("Artifact record creation failed", exc_info=True)

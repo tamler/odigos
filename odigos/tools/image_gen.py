@@ -111,10 +111,10 @@ class GenerateImageTool(BaseTool):
                 await self._db.execute(
                     "INSERT INTO artifacts "
                     "(id, conversation_id, filename, content_type, "
-                    "file_size, created_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "file_size, file_path, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (artifact_id, conversation_id, filename,
-                     "image/png", file_size, now),
+                     "image/png", file_size, filepath, now),
                 )
 
             return ToolResult(

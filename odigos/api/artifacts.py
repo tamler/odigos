@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from odigos.api.deps import get_db, require_auth
+from odigos.storage import ARTIFACTS_DIR, resolve_artifact_path
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +18,6 @@ router = APIRouter(
     prefix="/api/artifacts",
     dependencies=[Depends(require_auth)],
 )
-
-ARTIFACTS_DIR = Path("data/artifacts")
 
 
 @router.get("")
@@ -64,23 +63,8 @@ async def get_artifact_content(artifact_id: str, db=Depends(get_db)):
             "file_size": row.get("file_size", 0),
         }
 
-    # Find the file for text content
-    file_path = ARTIFACTS_DIR / artifact_id / row["filename"]
-    if not file_path.exists():
-        # Check data/files/ and data/uploads/
-        import glob as globmod
-        for search_dir in [Path("data/files"), Path("data/uploads")]:
-            for candidate in search_dir.glob(f"{globmod.escape(artifact_id)}_*"):
-                file_path = candidate
-                break
-            else:
-                alt = search_dir / row["filename"]
-                if alt.exists():
-                    file_path = alt
-            if file_path.exists():
-                break
-
-    if not file_path.exists():
+    file_path = resolve_artifact_path(artifact_id, row["filename"], row.get("file_path"))
+    if not file_path:
         raise HTTPException(status_code=404, detail="Artifact file missing from disk")
 
     content = file_path.read_text(encoding="utf-8")
@@ -134,27 +118,8 @@ async def download_artifact(artifact_id: str, db=Depends(get_db)):
         raise HTTPException(status_code=404, detail="Not found")
 
     filename = row["filename"]
-    file_path = ARTIFACTS_DIR / artifact_id / filename
-
-    # Check data/files/ (all uploads and generated images land here)
-    if not file_path.exists():
-        files_dir = Path("data/files")
-        import glob as globmod
-        for candidate in files_dir.glob(f"{globmod.escape(artifact_id)}_*"):
-            file_path = candidate
-            break
-        else:
-            alt = files_dir / filename
-            if alt.exists():
-                file_path = alt
-        # Legacy: check data/uploads/ for files created before consolidation
-        if not file_path.exists():
-            uploads_dir = Path("data/uploads")
-            for candidate in uploads_dir.glob(f"{globmod.escape(artifact_id)}_*"):
-                file_path = candidate
-                break
-
-    if not file_path.exists():
+    file_path = resolve_artifact_path(artifact_id, filename, row.get("file_path"))
+    if not file_path:
         raise HTTPException(status_code=404, detail="File missing")
 
     return FileResponse(

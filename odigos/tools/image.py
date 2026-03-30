@@ -9,7 +9,8 @@ from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_DIR = os.path.realpath(os.path.join("data", "files"))
+from odigos.storage import FILES_DIR
+ALLOWED_DIR = os.path.realpath(str(FILES_DIR))
 
 
 def _safe_path(path: str, base: str | None = None) -> str:

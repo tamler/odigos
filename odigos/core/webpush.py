@@ -7,7 +7,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-VAPID_KEYS_PATH = Path("data/vapid_keys.json")
+from odigos.storage import VAPID_KEYS_PATH
 
 
 def get_or_create_vapid_keys() -> dict:
