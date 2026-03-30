@@ -32,7 +32,7 @@ async def transcribe_audio(request: Request):
 
     logger.info("STT: received %d bytes, filename=%s", len(audio_bytes), filename)
 
-    if len(audio_bytes) < 1000:
+    if len(audio_bytes) < 10000:
         return {"text": ""}
 
     try:
