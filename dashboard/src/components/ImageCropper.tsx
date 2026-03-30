@@ -5,7 +5,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { X, Check } from 'lucide-react'
-import { post } from '@/lib/api'
 import { toast } from 'sonner'
 
 interface ImageCropperProps {

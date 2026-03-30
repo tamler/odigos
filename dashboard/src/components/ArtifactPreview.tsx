@@ -321,7 +321,7 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
                   src={`/api/artifacts/${artifactId}/download`}
                   alt={data.filename}
                   className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-xl relative z-10"
-                  onLoad={(e) => {
+                  onLoad={() => {
                     const loader = document.getElementById(`loader-${artifactId}`)
                     if (loader) loader.style.display = 'none'
                   }}
