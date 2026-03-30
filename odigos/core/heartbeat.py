@@ -833,7 +833,7 @@ class Heartbeat:
         return True
 
     async def _run_evolution(self) -> None:
-        """Phase 5: Score past actions, manage trials, run strategist."""
+        """Phase 5: Score past actions, manage trials, run strategist, rollup domain perf."""
         try:
             scored = await self.evolution_engine.score_past_actions(limit=3)
             if scored:
@@ -842,6 +842,9 @@ class Heartbeat:
             result = await self.evolution_engine.check_active_trial()
             if result and result != "continue":
                 logger.info("Evolution: trial %s", result)
+
+            # Domain performance rollup (cheap, runs every evolution cycle)
+            await self.evolution_engine.rollup_domain_performance()
 
             # Run strategist if enough new evaluations
             if self.strategist:

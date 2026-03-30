@@ -101,6 +101,9 @@ Based on the above, produce a JSON object with:
    - "target_name": which section to modify (e.g. "voice", "identity", "meta")
    - "change": the new content for that section
    - "confidence": 0.0-1.0
+   When target="evolution_params", include:
+   - "params": object with parameter names and new values (e.g. {"min_evaluations": 8, "auto_trial_confidence": 0.75})
+   - Valid params: auto_trial_confidence, min_evaluations, trial_duration_hours, promote_threshold, revert_threshold, strategist_min_evals
    When target="new_skill", also include:
    - "skill_name": lowercase alphanumeric name for the skill
    - "skill_instructions": full system prompt for the new skill
@@ -185,6 +188,19 @@ class Strategist:
         fitness_summary = await get_fitness_summary(self.db)
         trial_patterns = await get_trial_patterns_summary(self.db)
 
+        # Domain performance trends (last 14 days)
+        domain_perf = await self._get_domain_performance()
+
+        # Current evolution parameters (for meta-improvement awareness)
+        current_params = (
+            f"auto_trial_confidence={self._config.auto_trial_confidence}, "
+            f"min_evaluations={self._config.min_evaluations}, "
+            f"trial_duration_hours={self._config.trial_duration_hours}, "
+            f"promote_threshold={self._config.promote_threshold}, "
+            f"revert_threshold={self._config.revert_threshold}, "
+            f"strategist_min_evals={self._config.strategist_min_evals}"
+        )
+
         # Build prompt variables
         prompt_vars = self._build_prompt_vars(
             recent_evals, failed_trials, directions,
@@ -193,6 +209,8 @@ class Strategist:
             fitness_summary=fitness_summary,
             trial_patterns=trial_patterns,
             evolution_mode=mode,
+            domain_performance=domain_perf,
+            evolution_params=current_params,
         )
 
         # Ask LLM
@@ -262,6 +280,25 @@ class Strategist:
                         logger.info("Strategist created new skill: %s", h["skill_name"])
                     except Exception:
                         logger.warning("Failed to create proposed skill", exc_info=True)
+                continue
+
+            # Meta-improvement: strategist proposes changes to its own parameters
+            if target == "evolution_params" and h.get("params") and isinstance(h["params"], dict):
+                valid_params = {
+                    "auto_trial_confidence", "min_evaluations", "trial_duration_hours",
+                    "promote_threshold", "revert_threshold", "strategist_min_evals",
+                }
+                params = {k: str(v) for k, v in h["params"].items() if k in valid_params}
+                if params and h.get("confidence", 0) >= self._config.auto_trial_confidence:
+                    await self.evolution.create_trial(
+                        hypothesis=h.get("hypothesis", "Meta-improvement: adjust evolution parameters"),
+                        target="evolution_params",
+                        change_description=json.dumps(params),
+                        overrides=params,
+                        direction_log_id=direction_id,
+                    )
+                    logger.info("Strategist created meta-trial: %s -> %s", h.get("hypothesis", "")[:50], params)
+                    break
                 continue
 
             if h.get("type") == "trial_hypothesis" and h.get("confidence", 0) >= self._config.auto_trial_confidence:
@@ -458,7 +495,7 @@ class Strategist:
             "total_recent": sum(r["cnt"] for r in rows) if rows else 0,
         }
 
-    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "", outcome_summary: str = "", arew_summary: str = "", fitness_summary: str = "", trial_patterns: str = "", evolution_mode: str = "continuous") -> dict[str, str]:
+    def _build_prompt_vars(self, eval_summary: dict, failed_trials: list, directions: list, query_log_summary: str = "", skill_usage_summary: str = "", skill_mining_summary: str = "", outcome_summary: str = "", arew_summary: str = "", fitness_summary: str = "", trial_patterns: str = "", evolution_mode: str = "continuous", domain_performance: str = "", evolution_params: str = "") -> dict[str, str]:
         failed_summary = ""
         if failed_trials:
             failed_summary = "\n".join(
@@ -495,6 +532,31 @@ class Strategist:
             "fitness_summary": fitness_summary or 'No fitness functions defined. Optimizing overall score.',
             "trial_patterns": trial_patterns or 'No trial history yet.',
             "evolution_mode": evolution_mode,
+            "domain_performance": domain_performance or 'No domain performance data yet.',
+            "evolution_params": evolution_params or 'Using defaults.',
         }
+
+    async def _get_domain_performance(self) -> str:
+        """Get domain performance trends for the last 14 days."""
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT domain, date, avg_score, eval_count "
+                "FROM domain_performance "
+                "ORDER BY date DESC, domain ASC LIMIT 50",
+            )
+            if not rows:
+                return ""
+            lines = []
+            current_domain = None
+            for r in rows:
+                if r["domain"] != current_domain:
+                    current_domain = r["domain"]
+                    lines.append(f"\n{current_domain}:")
+                lines.append(
+                    f"  {r['date']}: avg={r['avg_score']:.1f}, n={r['eval_count']}"
+                )
+            return "\n".join(lines)
+        except Exception:
+            return ""
 
 

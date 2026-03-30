@@ -41,6 +41,74 @@ class EvolutionEngine:
             evolution_config = EvolutionConfig()
         self._config = evolution_config
 
+    async def get_effective_param(self, param_name: str) -> float | int:
+        """Get an evolution parameter, checking for active trial overrides and promoted values."""
+        # Check active trial overrides first
+        try:
+            trial = await self.checkpoint_manager.get_active_trial()
+            if trial:
+                override = await self.db.fetch_one(
+                    "SELECT override_content FROM trial_overrides "
+                    "WHERE trial_id = ? AND target_type = 'evolution_params' AND target_name = ?",
+                    (trial["id"], param_name),
+                )
+                if override:
+                    return type(getattr(self._config, param_name))(override["override_content"])
+        except Exception:
+            pass
+
+        # Check promoted overrides in KV store
+        try:
+            row = await self.db.fetch_one(
+                "SELECT value FROM kv WHERE key = ?",
+                (f"evolution_override:{param_name}",),
+            )
+            if row:
+                return type(getattr(self._config, param_name))(row["value"])
+        except Exception:
+            pass
+
+        return getattr(self._config, param_name)
+
+    async def promote_evolution_params(self, trial_id: str) -> None:
+        """When an evolution_params trial is promoted, persist the new values to KV."""
+        overrides = await self.db.fetch_all(
+            "SELECT target_name, override_content FROM trial_overrides "
+            "WHERE trial_id = ? AND target_type = 'evolution_params'",
+            (trial_id,),
+        )
+        for ov in overrides:
+            await self.db.execute(
+                "INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)",
+                (f"evolution_override:{ov['target_name']}", ov["override_content"]),
+            )
+            logger.info("Promoted evolution param: %s = %s", ov["target_name"], ov["override_content"])
+
+    async def rollup_domain_performance(self) -> None:
+        """Aggregate daily domain performance from query_log."""
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT classification, AVG(score) as avg_score, COUNT(*) as cnt, "
+                "AVG(duration_ms) as avg_dur "
+                "FROM query_log WHERE date(created_at) = ? AND score IS NOT NULL "
+                "GROUP BY classification",
+                (today,),
+            )
+            now = datetime.now(timezone.utc).isoformat()
+            for r in rows:
+                if not r["classification"]:
+                    continue
+                await self.db.execute(
+                    "INSERT OR REPLACE INTO domain_performance "
+                    "(domain, date, avg_score, eval_count, avg_duration_ms, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (r["classification"], today, r["avg_score"] or 0.0,
+                     r["cnt"] or 0, r["avg_dur"] or 0.0, now),
+                )
+        except Exception:
+            logger.debug("Domain performance rollup failed", exc_info=True)
+
     async def create_trial(
         self,
         hypothesis: str,
@@ -110,6 +178,13 @@ class EvolutionEngine:
         delta = avg - baseline
 
         if delta >= self._config.promote_threshold:
+            # Check if this is an evolution_params trial
+            ev_override = await self.db.fetch_one(
+                "SELECT 1 FROM trial_overrides WHERE trial_id = ? AND target_type = 'evolution_params' LIMIT 1",
+                (trial_id,),
+            )
+            if ev_override:
+                await self.promote_evolution_params(trial_id)
             await self.checkpoint_manager.promote_trial(trial_id)
             logger.info(
                 "Promoted trial %s: score %.1f vs baseline %.1f (+%.1f)",
