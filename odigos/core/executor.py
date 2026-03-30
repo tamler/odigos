@@ -599,6 +599,12 @@ class Executor:
                 return f"Error: Tool execution failed: {exception}"
 
             # Process successful result
+            if result.side_effect and result.side_effect.get("artifact"):
+                await self._emit_trace(
+                    conversation_id, "artifact_created",
+                    result.side_effect["artifact"],
+                )
+
             if result.side_effect and result.side_effect.get("suggested_actions"):
                 self._pending_suggested_actions = result.side_effect["suggested_actions"]
 

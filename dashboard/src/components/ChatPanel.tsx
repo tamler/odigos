@@ -62,7 +62,7 @@ const ImageArtifact = ({ artifact, onClick }: { artifact: Artifact, onClick: () 
          onClick={onClick}>
       <div className="relative aspect-video bg-muted flex items-center justify-center overflow-hidden">
         <img
-          src={downloadUrl}
+          src={`/api/artifacts/${artifact.id}/thumbnail?size=600`}
           alt={artifact.filename}
           className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-105"
           loading="lazy"
@@ -253,14 +253,18 @@ export const ChatPanel = memo(({
     }).catch(() => {})
   }, [activeConversationId, searchParams, setMessages])
 
-  // Fetch artifacts when thinking completes
+  // Fetch artifacts when thinking completes (with delayed retry for async generation)
   useEffect(() => {
     if (!thinking && loadedConvRef.current) {
-      get<{ artifacts: Artifact[] }>(`/api/artifacts?conversation_id=${loadedConvRef.current}`)
-        .then(res => {
-          if (res?.artifacts) setArtifacts(res.artifacts)
-        })
-        .catch(() => {})
+      const cid = loadedConvRef.current
+      const fetchArtifacts = () =>
+        get<{ artifacts: Artifact[] }>(`/api/artifacts?conversation_id=${cid}`)
+          .then(res => { if (res?.artifacts) setArtifacts(res.artifacts) })
+          .catch(() => {})
+      fetchArtifacts()
+      // Retry after 3s in case image gen was still downloading
+      const timer = setTimeout(fetchArtifacts, 3000)
+      return () => clearTimeout(timer)
     }
   }, [thinking])
 

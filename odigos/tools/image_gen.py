@@ -58,14 +58,15 @@ class GenerateImageTool(BaseTool):
         default_ratio: str = "1:1",
         nsfw_filter: bool = True,
         max_poll_seconds: int = 120,
-        output_dir: str = "data/files",
+        output_dir: str = "",
         db=None,
     ):
         self._api_key = api_key
         self._default_ratio = default_ratio
         self._nsfw_filter = nsfw_filter
         self._max_poll = max_poll_seconds
-        self._output_dir = output_dir
+        from odigos.storage import FILES_DIR
+        self._output_dir = output_dir or str(FILES_DIR)
         self._db = db
 
     async def execute(self, params: dict) -> ToolResult:
