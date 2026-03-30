@@ -5,10 +5,11 @@ import logging
 from pathlib import Path
 
 from odigos.tools.base import BaseTool, ToolResult
+from odigos.storage import FILES_DIR
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_DIR = Path("data/files").resolve()
+_ALLOWED_DIR = FILES_DIR.resolve()
 
 
 class DocTool(BaseTool):

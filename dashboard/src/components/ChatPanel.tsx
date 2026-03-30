@@ -13,17 +13,11 @@ import {
   ChatContainerScrollAnchor,
 } from '@/components/ui/chat-container'
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
-import { Artifact, ArtifactCard, getFileIcon } from '@/components/ArtifactCard'
+import { Artifact, ArtifactCard, getFileIcon, formatFileSize } from '@/components/ArtifactCard'
 import { MessageActions } from '@/components/MessageActions'
 import { VoiceOrb } from '@/components/VoiceOrb'
 import { useVoiceMode } from '@/hooks/useVoiceMode'
-
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: string
-  attachments?: { id: string; filename: string; size: number }[]
-}
+import type { ChatMessage } from '@/layouts/AppLayout'
 
 interface ChatPanelProps {
   activeConversationId: string | null
@@ -217,8 +211,6 @@ export const ChatPanel = memo(({
 
   // Load conversation messages when switching
   useEffect(() => {
-    get<any>('/api/settings').then(s => setAgentName(s.agent.name)).catch(() => {})
-
     const cid = searchParams.get('c') || activeConversationId
     if (!cid) {
       if (loadedConvRef.current !== null) {
@@ -391,12 +383,6 @@ export const ChatPanel = memo(({
       handleSend()
     }
   }, [handleSend])
-
-  function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
 
   const canSend = connected && (inputValue.trim() || pendingFiles.length > 0) && queuedCount < 3
 

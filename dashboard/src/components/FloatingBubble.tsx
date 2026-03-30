@@ -6,12 +6,7 @@ import { ChatSocket } from '@/lib/ws'
 import { Markdown } from '@/components/ui/markdown'
 import { PageContext } from '@/hooks/usePageContext'
 import { AssistantConfig } from '@/layouts/AppLayout'
-
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: string
-}
+import type { ChatMessage } from '@/layouts/AppLayout'
 
 interface FloatingBubbleProps {
   socketRef: React.MutableRefObject<ChatSocket | null>

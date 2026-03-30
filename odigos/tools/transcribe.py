@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
+from odigos.storage import FILES_DIR
 
 if TYPE_CHECKING:
     from odigos.memory.ingester import DocumentIngester
@@ -43,7 +44,7 @@ class TranscribeAudioTool(BaseTool):
         self.stt = stt_provider
         self.ingester = ingester
 
-    _ALLOWED_DIR = Path("data/files").resolve()
+    _ALLOWED_DIR = FILES_DIR.resolve()
 
     async def execute(self, params: dict) -> ToolResult:
         source = params.get("source")
