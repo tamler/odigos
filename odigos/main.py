@@ -296,9 +296,9 @@ async def _register_tools(
     logger.info("Image processing tool registered")
 
     # Spreadsheet tool
-    from odigos.tools.spreadsheet import SpreadsheetTool
-    tool_registry.register(SpreadsheetTool(db=db))
-    logger.info("Spreadsheet tool registered")
+    from odigos.tools.spreadsheet import DataTableTool
+    tool_registry.register(DataTableTool(db=db))
+    logger.info("Data table tool registered")
 
     # Translation tool
     from odigos.tools.translate import TranslateTool
