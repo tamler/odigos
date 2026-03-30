@@ -151,6 +151,9 @@ export const ChatPanel = memo(({
     queuedCount = 0,
     suggestedActions = [],
     setSuggestedActions = () => {},
+    playTTS: outletPlayTTS,
+    stopTTS: outletStopTTS,
+    isTTSPlaying: outletTTSPlaying,
   } = outletCtx
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -302,14 +305,17 @@ export const ChatPanel = memo(({
     handleSendRef.current = (text: string) => handleSend(text)
   })
 
-  const [isTTSPlaying, setIsTTSPlaying] = useState(false)
+  // Use shared TTS from AppLayout when available (prevents duplicate audio refs)
+  const [localTTSPlaying, setLocalTTSPlaying] = useState(false)
+  const isTTSPlaying = outletTTSPlaying ?? localTTSPlaying
 
   const playTTS = useCallback(async (text: string) => {
+    if (outletPlayTTS) { outletPlayTTS(text); return }
     if (currentAudioRef.current) {
       currentAudioRef.current.pause()
       currentAudioRef.current.src = ''
       currentAudioRef.current = null
-      setIsTTSPlaying(false)
+      setLocalTTSPlaying(false)
     }
     if (!text) return
     try {
@@ -321,25 +327,26 @@ export const ChatPanel = memo(({
       const url = URL.createObjectURL(blob)
       const audio = new Audio(url)
       currentAudioRef.current = audio
-      setIsTTSPlaying(true)
+      setLocalTTSPlaying(true)
       audio.onended = () => {
         URL.revokeObjectURL(url)
         currentAudioRef.current = null
-        setIsTTSPlaying(false)
+        setLocalTTSPlaying(false)
       }
       audio.play()
     } catch {
-      setIsTTSPlaying(false)
+      setLocalTTSPlaying(false)
     }
-  }, [])
+  }, [outletPlayTTS])
 
   const stopTTS = useCallback(() => {
+    if (outletStopTTS) { outletStopTTS(); return }
     if (currentAudioRef.current) {
       currentAudioRef.current.pause()
       currentAudioRef.current.src = ''
       currentAudioRef.current = null
     }
-    setIsTTSPlaying(false)
+    setLocalTTSPlaying(false)
   }, [])
 
   const handleEdit = useCallback((messageIndex: number, content: string) => {
