@@ -52,18 +52,44 @@ async def get_artifact_content(artifact_id: str, db=Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
+    content_type = row["content_type"]
+
+    # For images and other binary types, return metadata only (preview uses /download endpoint)
+    text_types = {"text/", "application/json", "application/xml", "application/x-yaml"}
+    if not any(content_type.startswith(t) for t in text_types):
+        return {
+            "content": "",
+            "content_type": content_type,
+            "filename": row["filename"],
+            "file_size": row.get("file_size", 0),
+        }
+
+    # Find the file for text content
     file_path = ARTIFACTS_DIR / artifact_id / row["filename"]
+    if not file_path.exists():
+        # Check data/files/ and data/uploads/
+        import glob as globmod
+        for search_dir in [Path("data/files"), Path("data/uploads")]:
+            for candidate in search_dir.glob(f"{globmod.escape(artifact_id)}_*"):
+                file_path = candidate
+                break
+            else:
+                alt = search_dir / row["filename"]
+                if alt.exists():
+                    file_path = alt
+            if file_path.exists():
+                break
+
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Artifact file missing from disk")
 
-    # Only serve text-based content for preview
-    content_type = row["content_type"]
-    text_types = {"text/", "application/json", "application/xml", "application/x-yaml"}
-    if not any(content_type.startswith(t) for t in text_types):
-        raise HTTPException(status_code=400, detail="Binary artifacts cannot be previewed as text")
-
     content = file_path.read_text(encoding="utf-8")
-    return {"content": content, "content_type": content_type, "filename": row["filename"]}
+    return {
+        "content": content,
+        "content_type": content_type,
+        "filename": row["filename"],
+        "file_size": row.get("file_size", 0),
+    }
 
 
 class ArtifactUpdate(BaseModel):

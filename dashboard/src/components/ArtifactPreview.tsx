@@ -63,11 +63,13 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
           setData(res)
           setEditContent(res.content)
           setIsDirty(false)
-          // Default to download tab if not previewable text
-          const previewable = res.content_type.startsWith('text/') || 
-                            res.content_type === 'application/json' ||
-                            res.content_type === 'application/xml'
-          if (!previewable) setActiveTab('download')
+          // Default to preview for images, download for binary non-images
+          const isImg = res.content_type.startsWith('image/')
+          const isText = res.content_type.startsWith('text/') ||
+                         res.content_type === 'application/json' ||
+                         res.content_type === 'application/xml'
+          if (isImg) setActiveTab('preview')
+          else if (!isText) setActiveTab('download')
         }
       })
       .catch(() => {
