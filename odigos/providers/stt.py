@@ -48,31 +48,11 @@ class GroqSTT(STTProvider):
             f.flush()
             temp_path = f.name
 
-        # Convert to mp3 via ffmpeg — browser webm codecs often rejected by Groq
-        import subprocess
-        mp3_path = temp_path + ".mp3"
-        converted = False
         try:
-            result = subprocess.run(
-                ["ffmpeg", "-y", "-i", temp_path, "-ar", "16000", "-ac", "1", mp3_path],
-                capture_output=True, timeout=10,
-            )
-            if result.returncode == 0 and os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 100:
-                converted = True
-                logger.info("STT: converted to mp3 (%d bytes)", os.path.getsize(mp3_path))
-            else:
-                logger.warning("STT: ffmpeg failed (rc=%d): %s", result.returncode, result.stderr[-200:] if result.stderr else "no stderr")
-        except Exception as e:
-            logger.warning("STT: ffmpeg error: %s", e)
-
-        send_path = mp3_path if converted else temp_path
-        send_name = "recording.mp3" if converted else filename
-
-        try:
-            with open(send_path, "rb") as af:
+            with open(temp_path, "rb") as af:
                 transcription = (
                     await client.audio.transcriptions.create(
-                        file=(send_name, af),
+                        file=(filename, af),
                         model=self._model,
                         language="en",
                         response_format="verbose_json",
@@ -84,8 +64,6 @@ class GroqSTT(STTProvider):
             return text.strip()
         finally:
             os.unlink(temp_path)
-            if os.path.exists(mp3_path):
-                os.unlink(mp3_path)
 
 
 class LocalSTT(STTProvider):
