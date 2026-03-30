@@ -35,7 +35,9 @@ interface ArtifactPreviewProps {
 type PreviewTab = 'preview' | 'code' | 'download'
 
 export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
-  const { setPageContextData, setChatPanelOpen } = useOutletContext<any>()
+  let outletCtx: any = {}
+  try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
+  const { setPageContextData = () => {}, setChatPanelOpen = () => {} } = outletCtx
   const [data, setData] = useState<ArtifactContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
