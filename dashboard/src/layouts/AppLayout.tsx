@@ -482,8 +482,10 @@ export default function AppLayout() {
         if (msg.type === 'task_completed') toast.success(`Completed: ${msg.task || 'Background task'}`, { duration: 3000 })
       },
       (isConnected) => {
+        const wasConnected = connected
         setConnected(isConnected)
-        if (!isConnected) toast.error('Disconnected from server', { duration: 5000 })
+        if (isConnected && !wasConnected) toast.dismiss()
+        if (!isConnected && wasConnected) toast('Reconnecting...', { duration: 3000 })
       },
     )
     socket.connect()
