@@ -1,10 +1,13 @@
 import { NavigateFunction } from 'react-router-dom'
 
 export interface UIAction {
-  action: 'navigate' | 'refresh' | 'open_chat' | 'create' | 'theme' | 'navigate-to-notebook' | 'navigate-to-board' | 'stop_tts'
+  action: 'navigate' | 'refresh' | 'open_chat' | 'create' | 'theme' | 'navigate-to-notebook' | 'navigate-to-board' | 'stop_tts' | 'highlight'
   to?: string
   type?: string
   value?: string
+  selector?: string
+  title?: string
+  description?: string
 }
 
 export function executeActions(
@@ -15,6 +18,7 @@ export function executeActions(
     openChat: () => void
     setTheme: (theme: string) => void
     stopTTS: () => void
+    highlight?: (selector: string, title: string, description: string) => void
   }
 ): void {
   for (const a of actions) {
@@ -39,6 +43,10 @@ export function executeActions(
         break
       case 'stop_tts':
         callbacks.stopTTS()
+        break
+      case 'highlight':
+        if (a.selector && callbacks.highlight)
+          callbacks.highlight(a.selector, a.title || '', a.description || '')
         break
       case 'create':
         break

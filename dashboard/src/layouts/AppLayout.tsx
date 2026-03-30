@@ -52,6 +52,8 @@ import { executeActions, UIAction } from '@/lib/actions'
 import { useTheme } from 'next-themes'
 import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
 import { useAudio } from '@/hooks/useAudio'
+import { usePwaInstall } from '@/hooks/usePwaInstall'
+import { useDriver } from '@/hooks/useDriver'
 import { subscribeToPush } from '@/lib/push'
 import { Artifact } from '@/components/ArtifactCard'
 
@@ -101,13 +103,14 @@ export interface ChatMessage {
 }
 
 const AppSidebar = memo(({
-  collapsed, setCollapsed, sidebarOpen, setSidebarOpen, 
-  isMobile, searchQuery, setSearchQuery, 
+  collapsed, setCollapsed, sidebarOpen, setSidebarOpen,
+  isMobile, searchQuery, setSearchQuery,
   isSettings, isNotebook, isKanban, isChat, isImages, currentTab,
   agentName, notebooks, boards, images, filteredConversations,
   activeId, handleNewChat, handleSelectConversation, handleSelectImage,
   startRename, editingId, editTitle, setEditTitle,
-  confirmRename, handleExport, handleDelete, displayTitle, navigate, location
+  confirmRename, handleExport, handleDelete, displayTitle, navigate, location,
+  pwaInstallable, pwaInstall,
 }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -249,9 +252,19 @@ const AppSidebar = memo(({
         </ScrollArea>
       )}
 
-      <div className="p-3 mt-auto border-t border-border/10">
-        <button 
-          onClick={() => { setSidebarOpen(false); navigate(isSettings ? '/' : '/settings') }} 
+      <div className="p-3 mt-auto border-t border-border/10 space-y-1">
+        {pwaInstallable && !collapsed && (
+          <button
+            onClick={pwaInstall}
+            className="flex items-center gap-3 w-full p-2.5 rounded-xl text-muted-foreground hover:bg-muted transition-all"
+            title="Install App"
+          >
+            <Download className="h-4 w-4 shrink-0" />
+            <span className="text-sm font-medium">Install App</span>
+          </button>
+        )}
+        <button
+          onClick={() => { setSidebarOpen(false); navigate(isSettings ? '/' : '/settings') }}
           className={`flex items-center gap-3 w-full p-2.5 rounded-xl transition-all ${isSettings ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground hover:bg-muted'}`}
           title={isSettings ? "Back to Chat" : "Settings"}
         >
@@ -306,6 +319,8 @@ export default function AppLayout() {
 
   // Shared audio system -- single source of truth for all TTS
   const { play: playTTS, stop: stopTTS, playing: isTTSPlaying } = useAudio()
+  const { installable: pwaInstallable, install: pwaInstall } = usePwaInstall()
+  const { highlight: driverHighlight } = useDriver()
 
   const activeIdRef = useRef(activeId)
 
@@ -425,6 +440,7 @@ export default function AppLayout() {
               openChat: () => setChatPanelOpen(true),
               setTheme: (t) => setThemeRef.current(t),
               stopTTS,
+              highlight: driverHighlight,
             })
           }
         }
@@ -633,6 +649,7 @@ export default function AppLayout() {
           setEditTitle={setEditTitle} confirmRename={confirmRename}
           handleExport={handleExport} handleDelete={handleDelete}
           displayTitle={displayTitle} navigate={navigate} location={location}
+          pwaInstallable={pwaInstallable} pwaInstall={pwaInstall}
         />
 
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-background lg:hidden" onClick={() => setSidebarOpen(false)} onTouchMove={(e) => e.preventDefault()} />}
