@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { X, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import Cropper from 'cropperjs'
-import 'cropperjs/dist/cropper.css'
 
 interface ImageCropperProps {
   imageUrl: string
