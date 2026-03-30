@@ -44,17 +44,22 @@ def _prune_challenges() -> None:
 
 
 def _get_rp_id(request: Request) -> str:
-    hostname = request.url.hostname or "localhost"
-    return hostname
+    forwarded_host = request.headers.get("x-forwarded-host", request.url.hostname or "localhost")
+    return forwarded_host.split(":")[0] if ":" in forwarded_host else forwarded_host
 
 
 def _get_rp_origin(request: Request) -> str:
-    scheme = request.url.scheme
-    hostname = request.url.hostname or "localhost"
+    # Trust X-Forwarded headers from reverse proxy (Caddy)
+    forwarded_proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    forwarded_host = request.headers.get("x-forwarded-host", request.url.hostname or "localhost")
+    # Strip port from forwarded host if present
+    hostname = forwarded_host.split(":")[0] if ":" in forwarded_host else forwarded_host
     port = request.url.port
+    if forwarded_proto == "https" or (port and port in (80, 443)):
+        return f"{forwarded_proto}://{hostname}"
     if port and port not in (80, 443):
-        return f"{scheme}://{hostname}:{port}"
-    return f"{scheme}://{hostname}"
+        return f"{forwarded_proto}://{hostname}:{port}"
+    return f"{forwarded_proto}://{hostname}"
 
 
 def _get_session(request: Request) -> dict | None:

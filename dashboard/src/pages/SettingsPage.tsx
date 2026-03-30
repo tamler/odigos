@@ -35,7 +35,7 @@ import {
   Rss, 
   Eye,
   ChevronRight,
-  MessageCircle
+  MessageCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -80,7 +80,13 @@ export default function SettingsPage() {
     return (
       <div className="flex-1 flex flex-col bg-background overflow-y-auto">
         <div className="px-4 py-6">
-          <h1 className="text-2xl font-bold mb-6 px-2">Settings</h1>
+          <div className="flex items-center justify-between mb-6 pl-10">
+            <h1 className="text-2xl font-bold">Settings</h1>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="text-muted-foreground">
+              <MessageCircle className="h-4 w-4 mr-1.5" />
+              Chat
+            </Button>
+          </div>
           <div className="space-y-1">
             {SECTIONS.map((s) => (
               <button
@@ -108,13 +114,15 @@ export default function SettingsPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
       {/* Header for mobile drill-down */}
-      <div className="flex items-center gap-4 px-4 h-[52px] border-b border-border/40 shrink-0 lg:hidden">
-        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => navigate('/settings')}>
-          <ArrowLeft className="h-4 w-4" />
+      <div className="flex items-center gap-2 px-4 pl-12 h-[44px] border-b border-border/40 shrink-0 lg:hidden">
+        <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => navigate('/settings')}>
+          <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+          Settings
         </Button>
-        <h1 className="text-sm font-bold uppercase tracking-widest">
+        <span className="text-xs text-muted-foreground/40">/</span>
+        <span className="text-sm font-semibold">
           {SECTIONS.find(s => s.id === resolvedTab)?.label || 'Settings'}
-        </h1>
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto">
