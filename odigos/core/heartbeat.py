@@ -219,11 +219,7 @@ class Heartbeat:
             await self._evaluate_plan_outcomes()
 
         # Phase 11: Auto-update check (if enabled)
-        _update_cfg = (
-            getattr(self.settings, "auto_update", None)
-            if self.settings
-            else None
-        )
+        _update_cfg = self.settings.auto_update if self.settings else None
         if _update_cfg and _update_cfg.enabled:
             self._update_tick_counter += 1
             if self._update_tick_counter >= _update_cfg.check_interval_ticks:
@@ -246,7 +242,7 @@ class Heartbeat:
         try:
             # Check if briefing is enabled in settings
             if self.settings:
-                enabled = getattr(self.settings.heartbeat, 'morning_briefing', True)
+                enabled = self.settings.heartbeat.morning_briefing
                 if not enabled:
                     return
 
@@ -960,7 +956,7 @@ class Heartbeat:
         try:
             from pathlib import Path
 
-            quota = getattr(self.settings, "storage", None) if self.settings else None
+            quota = self.settings.storage if self.settings else None
             warn_gb = quota.warn_gb if quota else 10.0
             cap_gb = quota.cap_gb if quota else 12.0
 

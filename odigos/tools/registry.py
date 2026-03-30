@@ -1,10 +1,41 @@
+"""Smart tool registry with classification-aware filtering.
+
+Tools are registered once at startup. The registry provides filtered
+tool definitions based on query classification and routing rules,
+so simple queries don't get 45 tool schemas in context.
+"""
 from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable
 
 from odigos.tools.base import BaseTool
 
 
+# Core tools always available regardless of classification
+CORE_TOOLS = {
+    "web_search", "web_scrape", "run_code", "file_read", "file_write",
+    "file_list", "remember_fact", "decompose_query", "check_plan",
+    "update_plan", "activate_skill",
+}
+
+# Lightweight tools safe for simple queries (fast, no side effects)
+SIMPLE_TOOLS = {
+    "web_search", "remember_fact", "knowledge_lookup", "translate",
+    "check_calendar", "check_email",
+}
+
+
+@dataclass
+class ToolSpec:
+    """Declarative tool registration spec."""
+    tool_class: type
+    kwargs_factory: Callable[[Any], dict | None]  # Returns kwargs or None to skip
+    condition: Callable[[Any], bool] | None = None
+
+
 class ToolRegistry:
-    """Simple dict-based tool registry."""
+    """Smart tool registry with classification-aware filtering."""
 
     def __init__(self) -> None:
         self._tools: dict[str, BaseTool] = {}
@@ -18,8 +49,17 @@ class ToolRegistry:
     def list(self) -> list[BaseTool]:
         return list(self._tools.values())
 
-    def tool_definitions(self) -> list[dict]:
-        """Return OpenAI-compatible tool definitions for LLM tool calling."""
+    def tool_definitions(
+        self,
+        classification: str | None = None,
+        routing_rules: dict | None = None,
+    ) -> list[dict]:
+        """Return OpenAI-compatible tool definitions, filtered by classification.
+
+        If classification and routing_rules are provided, only returns tools
+        relevant to that query type. Otherwise returns all tools.
+        """
+        tools = self._filter_tools(classification, routing_rules)
         return [
             {
                 "type": "function",
@@ -29,5 +69,47 @@ class ToolRegistry:
                     "parameters": tool.parameters_schema,
                 },
             }
-            for tool in self._tools.values()
+            for tool in tools
         ]
+
+    def _filter_tools(
+        self,
+        classification: str | None,
+        routing_rules: dict | None,
+    ) -> list[BaseTool]:
+        """Filter tools based on classification routing rules."""
+        if not classification or not routing_rules:
+            return list(self._tools.values())
+
+        route = routing_rules.get(classification, {})
+        allowed = route.get("tools", "all")
+
+        if allowed == "all":
+            return list(self._tools.values())
+
+        if isinstance(allowed, str):
+            allowed_set = {t.strip() for t in allowed.split(",")}
+        else:
+            allowed_set = set(allowed)
+
+        return [t for t in self._tools.values() if t.name in allowed_set]
+
+    def register_from_specs(self, specs: list[ToolSpec], context: Any) -> int:
+        """Register tools from a declarative spec list. Returns count registered."""
+        count = 0
+        for spec in specs:
+            if spec.condition and not spec.condition(context):
+                continue
+            kwargs = spec.kwargs_factory(context)
+            if kwargs is None:
+                continue
+            try:
+                tool = spec.tool_class(**kwargs)
+                self.register(tool)
+                count += 1
+            except Exception:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Failed to register %s", spec.tool_class.__name__, exc_info=True,
+                )
+        return count

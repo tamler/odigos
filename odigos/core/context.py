@@ -486,10 +486,7 @@ class ContextAssembler:
                     notebook_context = notebook_context + "\n\n" + "\n".join(page_lines)
 
         # Image generation prompt guide (when tool is enabled)
-        if self.settings and getattr(
-            getattr(self.settings, "image_generation", None),
-            "enabled", False,
-        ):
+        if self.settings and self.settings.image_generation.enabled:
             img_guide = load_prompt(
                 "image_prompt_guide.md", ""
             )
@@ -499,7 +496,7 @@ class ContextAssembler:
                 else:
                     skill_catalog = img_guide
 
-        concise_mode = getattr(getattr(self.settings, 'agent', None), 'concise_mode', False) if self.settings else False
+        concise_mode = self.settings.agent.concise_mode if self.settings else False
 
         # Prune low-relevance context sections
         classification = (

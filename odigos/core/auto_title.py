@@ -13,22 +13,21 @@ logger = logging.getLogger(__name__)
 
 async def generate_title(provider: LLMProvider, user_message: str, assistant_response: str) -> str:
     """Generate a short conversation title from the first exchange."""
-    try:
-        response = await provider.complete(
-            [{"role": "user", "content": (
-                "Generate a short title (3-6 words, no quotes) for a conversation "
-                "that starts with this exchange:\n\n"
-                f"User: {user_message[:200]}\n"
-                f"Assistant: {assistant_response[:200]}\n\n"
-                "Title:"
-            )}],
-            model=getattr(provider, "fallback_model", None),
-            max_tokens=20,
-            temperature=0.3,
-        )
+    from odigos.core.llm_prompt import call_llm
+    response = await call_llm(
+        provider,
+        [{"role": "user", "content": (
+            "Generate a short title (3-6 words, no quotes) for a conversation "
+            "that starts with this exchange:\n\n"
+            f"User: {user_message[:200]}\n"
+            f"Assistant: {assistant_response[:200]}\n\n"
+            "Title:"
+        )}],
+        max_tokens=20, temperature=0.3, log_name="auto_title",
+    )
+    if response:
         title = response.content.strip().strip('"').strip("'")
-    except Exception:
-        logger.warning("LLM title generation failed, using heuristic")
+    else:
         title = _heuristic_title(user_message)
     if len(title) > 60:
         title = title[:57] + "..."

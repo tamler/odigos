@@ -9,11 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from odigos.db import Database
+from odigos.storage import FILES_DIR, ARTIFACTS_DIR
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
-
-ARTIFACTS_DIR = Path("data/artifacts")
 
 # Content type mapping for common extensions
 _CONTENT_TYPES = {
@@ -95,12 +94,10 @@ class CreateArtifactTool(BaseTool):
         ext = Path(filename).suffix.lower()
         content_type = _CONTENT_TYPES.get(ext) or mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
-        # Create artifact
+        # Create artifact -- write to unified data/files/ directory
         artifact_id = str(uuid.uuid4())
-        artifact_dir = ARTIFACTS_DIR / artifact_id
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-
-        file_path = artifact_dir / filename
+        FILES_DIR.mkdir(parents=True, exist_ok=True)
+        file_path = FILES_DIR / f"{artifact_id}_{filename}"
 
         if ext == ".docx":
             _write_docx(file_path, content)
