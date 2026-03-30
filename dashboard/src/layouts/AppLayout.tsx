@@ -421,7 +421,14 @@ export default function AppLayout() {
           setStreamingContent((prev) => prev + (msg.content as string))
         }
         if (msg.type === 'chat_response') {
-          if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return 
+          // Accept response if: same conversation, or new chat (activeId is null)
+          if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
+          // If new chat, adopt the server-generated conversation_id
+          if (!activeIdRef.current && msg.conversation_id) {
+            const newId = msg.conversation_id as string
+            const chatId = newId.includes(':') ? newId.split(':')[1] : newId
+            setActiveId(chatId)
+          }
           setThinking(false)
           setStatus(null)
           setStreamingContent('')

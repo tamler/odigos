@@ -18,10 +18,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-ENTITY_PATTERN = re.compile(r"<!--entities\s*\n?(.*?)\n?-->\s*$", re.DOTALL | re.MULTILINE)
-ENTITY_FALLBACK = re.compile(r"<!--entities\s*(\[.*?\])\s*$", re.DOTALL | re.MULTILINE)
-CORRECTION_PATTERN = re.compile(r"<!--correction\s*\n?(.*?)\n?-->\s*$", re.DOTALL | re.MULTILINE)
-CORRECTION_FALLBACK = re.compile(r"<!--correction\s*(\{.*?\})\s*$", re.DOTALL | re.MULTILINE)
+ENTITY_PATTERN = re.compile(r"<!--entities\s*\n?(.*?)\n?-->\s*\Z", re.DOTALL)
+ENTITY_FALLBACK = re.compile(r"<!--entities\s*(\[.*?\])\s*\Z", re.DOTALL)
+CORRECTION_PATTERN = re.compile(r"<!--correction\s*\n?(.*?)\n?-->\s*\Z", re.DOTALL)
+CORRECTION_FALLBACK = re.compile(r"<!--correction\s*(\{.*?\})\s*\Z", re.DOTALL)
 
 
 class Reflector:
