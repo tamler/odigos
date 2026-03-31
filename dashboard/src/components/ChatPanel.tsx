@@ -356,7 +356,7 @@ export const ChatPanel = memo(({
 
     socketRef.current?.send('chat', {
       content,
-      conversation_id: activeConversationId || undefined,
+      conversation_id: activeConversationId || 'new',
       attachments: attachments.length > 0 ? attachments : undefined,
       context: chatContext,
     })

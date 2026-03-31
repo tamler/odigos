@@ -150,13 +150,12 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await chat_queue.get()
             try:
-                # Use client-provided conversation_id if resuming,
-                # or generate a new one for fresh conversations.
-                # No conversation_id = new chat = new ID. Always.
+                # Use client-provided conversation_id if resuming.
+                # "new" or absent = generate fresh ID for new conversation.
                 client_conv_id = data.get("conversation_id")
-                if client_conv_id:
+                if client_conv_id and client_conv_id != "new":
                     conversation_id = client_conv_id
-                else:
+                elif client_conv_id == "new" or not client_conv_id:
                     import uuid
                     conversation_id = f"web:{uuid.uuid4().hex[:16]}"
 

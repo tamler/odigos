@@ -72,12 +72,15 @@ async def extract_entities_background(
                 if not isinstance(ent, dict) or not ent.get("name"):
                     continue
                 try:
-                    await entity_graph.upsert_entity(
-                        name=ent["name"],
-                        entity_type=ent.get("type", "concept"),
-                        source_conversation=conversation_id,
-                        summary=ent.get("detail", ""),
-                    )
+                    existing = await entity_graph.find_entity(ent["name"])
+                    if not existing:
+                        await entity_graph.create_entity(
+                            entity_type=ent.get("type", "concept"),
+                            name=ent["name"],
+                            properties={"detail": ent.get("detail", ""), "source": conversation_id},
+                            confidence=0.7,
+                            source="post_response",
+                        )
                 except Exception:
                     pass
 

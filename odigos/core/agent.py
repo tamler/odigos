@@ -51,9 +51,11 @@ class Agent:
         classifier: QueryClassifier | None = None,
         reasoning_model: str = "",
         settings=None,
+        entity_graph=None,
     ) -> None:
         self.db = db
         self.settings = settings
+        self._entity_graph = entity_graph
         self.budget_tracker = budget_tracker
         self.tracer = tracer
         self.classifier = classifier
