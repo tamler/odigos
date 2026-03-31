@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { 
   Settings, 
@@ -507,7 +507,7 @@ export default function AppLayout() {
 
   useEffect(() => { if (editingId) editInputRef.current?.focus() }, [editingId])
 
-  function handleNewChat() {
+  const handleNewChat = useCallback(() => {
     setActiveId(null)
     setMessages([])
     setStreamingContent('')
@@ -517,14 +517,14 @@ export default function AppLayout() {
     setSidebarOpen(false)
     setSearchQuery('')
     navigate('/')
-  }
+  }, [navigate])
 
-  function handleSelectConversation(id: string) {
+  const handleSelectConversation = useCallback((id: string) => {
     setActiveId(id)
     setSidebarOpen(false)
     setSearchQuery('')
     navigate(`/?c=${id}`)
-  }
+  }, [navigate])
 
   const handleSelectImage = useCallback((id: string) => {
     setActiveArtifactId(id)
@@ -550,14 +550,14 @@ export default function AppLayout() {
     setEditingId(null)
   }, [editingId, editTitle])
 
-  async function handleDelete(id: string) {
+  const handleDelete = useCallback(async (id: string) => {
     try {
       await del(`/api/conversations/${id}`)
       setConversations((prev) => prev.filter((c) => c.id !== id))
       if (activeId === id) { setActiveId(null); navigate('/') }
       toast.success('Conversation deleted')
     } catch { toast.error('Failed to delete conversation') }
-  }
+  }, [activeId, navigate])
 
   const handleExport = useCallback((id: string, format: 'markdown' | 'json') => {
     const url = `/api/conversations/${id}/export?format=${format}`
@@ -587,8 +587,10 @@ export default function AppLayout() {
   const isChat = !isSettings && !isNotebook && !isKanban && !isImages
   const currentTab = location.pathname.split('/')[2] || 'general'
 
-  const filteredConversations = conversations.filter(c => 
-    !searchQuery || displayTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredConversations = useMemo(() =>
+    conversations.filter(c =>
+      !searchQuery || displayTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
+    ), [conversations, searchQuery]
   )
 
   useEffect(() => {

@@ -229,7 +229,7 @@ export const ChatPanel = memo(({
     }).catch(() => {})
   }, [activeConversationId, searchParams, setMessages])
 
-  // Fetch artifacts when thinking completes + poll for async generation (images take 30-60s)
+  // Fetch artifacts once when thinking completes
   useEffect(() => {
     if (!thinking && loadedConvRef.current) {
       const cid = loadedConvRef.current
@@ -238,10 +238,9 @@ export const ChatPanel = memo(({
           .then(res => { if (res?.artifacts) setArtifacts(res.artifacts) })
           .catch(() => {})
       fetchArtifacts()
-      // Poll every 5s for up to 90s to catch async image generation
-      const interval = setInterval(fetchArtifacts, 5000)
-      const timeout = setTimeout(() => clearInterval(interval), 90000)
-      return () => { clearInterval(interval); clearTimeout(timeout) }
+      // Single retry after 5s for async generation
+      const timer = setTimeout(fetchArtifacts, 5000)
+      return () => clearTimeout(timer)
     }
   }, [thinking])
 
@@ -410,8 +409,8 @@ export const ChatPanel = memo(({
                     <div className="flex-1 flex flex-col h-full">
                       {/* Compact transcript above orb */}
                       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 opacity-40 hover:opacity-100 transition-opacity">
-                         {messages.slice(-5).map((msg: ChatMessage, i: number) => (
-                           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                         {messages.slice(-5).map((msg: ChatMessage) => (
+                           <div key={msg.timestamp} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                              <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-xs ${msg.role === 'user' ? 'bg-primary/20' : 'bg-muted/40'}`}>
                                {msg.content}
                              </div>
@@ -446,7 +445,7 @@ export const ChatPanel = memo(({
                         return messages.slice(-messageDisplayLimit).map((msg: ChatMessage, i: number) => {
                           const actualIndex = offset + i
                           return (
-                            <div key={i}>
+                            <div key={`${msg.role}-${msg.timestamp}-${i}`}>
                               {msg.role === 'user' ? (
                                 <div className="group/msg flex flex-col items-end">
                                   <div className="max-w-[90%] sm:max-w-[85%]">
