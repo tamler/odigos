@@ -132,7 +132,7 @@ const AppSidebar = memo(({
 
   return (
     <aside className={`fixed inset-y-0 left-0 z-40 w-64 flex flex-col bg-background transition-all duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:static lg:translate-x-0 ${collapsed && !isSettings ? 'lg:w-14' : 'lg:w-64'}`}>
-      <div className="flex flex-col gap-2 p-3 mb-2">
+      <div className="flex flex-col gap-2 p-3 mb-2 shrink-0">
         <div className="flex items-center gap-1 mb-2 px-1 min-h-[32px]">
           <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => isMobile ? setSidebarOpen(false) : setCollapsed(!collapsed)} className="shrink-0 h-8 w-8">
             {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
@@ -170,14 +170,14 @@ const AppSidebar = memo(({
       </div>
 
       {!collapsed && isChat && (
-        <div className="px-3 pb-2 pt-1 mb-2 relative group">
+        <div className="px-3 pb-2 pt-1 mb-2 relative group shrink-0">
           <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-8 text-xs bg-muted/40 focus-visible:ring-1 border-none rounded-lg pr-8" />
           <kbd className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none hidden group-focus-within:inline-flex h-4 select-none items-center gap-1 rounded border bg-muted px-1 font-mono text-[8px] font-medium text-muted-foreground opacity-100">⌘K</kbd>
         </div>
       )}
 
       {!collapsed && (
-        <ScrollArea className="flex-1 px-3">
+        <ScrollArea className="flex-1 min-h-0 px-3">
           <div className="space-y-0.5 pb-4">
             {isSettings ? (
               SETTINGS_SECTIONS.map((s) => (
