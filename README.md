@@ -126,8 +126,8 @@ Create downloadable .ics calendar event files importable into any calendar app (
 ### Work with your tools
 Google Workspace (Gmail, Calendar, Drive), browser automation, MCP server integration, file management. Extend with plugins -- no restart required.
 
-### Speak and listen
-Full voice mode: mic button records audio, transcribes it server-side, and edge-tts reads responses aloud. In continuous voice mode, the agent listens, transcribes, responds, and speaks in a loop -- hands-free conversation. 30 selectable voices, per-message speak buttons, and automatic TTS when voice mode is active. STT defaults to Groq Whisper but the provider is configurable -- additional STT plugins are planned.
+### Voice input and speech
+Tap the mic button to record, tap again to stop. Audio is transcribed server-side via Groq Whisper and the text appears in the input field for review before sending. Server-side WebRTC VAD filters silence before it reaches Whisper (no wasted API calls). Edge-tts reads responses aloud in voice mode with 30 selectable voices. Adaptive silence threshold calibrates to ambient noise.
 
 ### Install as an app (PWA)
 Odigos is a Progressive Web App. On mobile or desktop, "Add to Home Screen" and it runs full-screen without browser chrome. Push notifications reach you when the app is closed -- task reminders, email alerts, follow-ups, morning briefings. Long-press the app icon for shortcuts: New Chat, Journal, Board, Voice Memo. Biometric login (fingerprint/Face ID) via WebAuthn passkeys -- register once, sign in without typing a password.
@@ -280,14 +280,17 @@ One process. One database. No microservices.
 - **Cross-encoder reranking** (ms-marco-MiniLM) for document retrieval accuracy
 - **NLP layer** (TextBlob) for sentiment analysis, entity extraction, spell checking, commitment detection
 - **Plugin system** for tools, channels, and providers
-- **Smart tool registry** with classification-based filtering, progressive discovery, and always-available core set
-- **Unified storage layer** (`storage.py`) -- single source of truth for all file paths and operations
-- **Unified LLM wrapper** (`call_llm`) -- standard retry, logging, and cost tracking for all secondary LLM calls
-- **Heartbeat loop** for background processing, goal tracking, evolution trials, proactive plan execution, nudges, follow-up detection, idle research, auto-updates, storage quota monitoring
-- **Failure taxonomy** classifies tool errors (transient, input, permission, unavailable) with per-category retry strategies and exponential backoff
+- **Smart tool registry** with category-based filtering and progressive discovery via `find_tools`
+- **Unified storage layer** (`storage.py`) -- single source of truth for all file paths
+- **Unified HTTP client** (`api.ts`) -- all frontend HTTP through one module with CSRF
+- **Unified LLM wrapper** (`call_llm`) -- standard retry, logging, and cost tracking
+- **Single-task prompts** -- each LLM call does one thing. Entity extraction, correction detection, classification, evaluation, and profiling are separate calls. No multi-task prompts that mix response generation with metadata extraction.
+- **Background processing** -- entity extraction and correction detection run as fire-and-forget tasks after each response, using the background model
+- **Heartbeat loop** for goal tracking, evolution trials, proactive plan execution, nudges, follow-up detection, idle research, auto-updates, storage quota monitoring
+- **Failure taxonomy** classifies tool errors (transient, input, permission, unavailable) with per-category retry strategies
 - **Parallel context assembly** -- 13 context queries run concurrently via asyncio.gather
-- **Message queue** -- WebSocket chat messages never dropped, processed sequentially
-- **Config backup** -- settings are backed up before every write (3 versions retained)
+- **WebRTC VAD** -- server-side voice activity detection prevents sending silence to Whisper
+- **Config backup** -- settings backed up before every write (3 versions retained)
 
 Everything runs on a single VPS. 4 CPU, 16GB RAM is comfortable. No external databases, no message queues, no container orchestration.
 
