@@ -1,10 +1,6 @@
 ---
 priority: 100
-always_include: true
+always_include: false
 ---
-After your response, on a new line, include extracted entities in this exact format:
-<!--entities
-[{"name": "...", "type": "person|project|preference|concept", "relationship": "...", "detail": "..."}]
--->
-Only include entities if the conversation mentions specific people, projects, preferences, or important concepts.
-If none are relevant, omit the block entirely.
+# Entity extraction is now a separate background call after each response.
+# This prompt is no longer injected into the system prompt.

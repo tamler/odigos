@@ -162,7 +162,7 @@ export default function NotebookPage() {
     <div className={`flex-1 flex flex-col h-full bg-background transition-all duration-300 ${focusMode ? 'fixed inset-0 z-[100] p-4 lg:p-12' : ''}`}>
       {/* Header */}
       {!focusMode && (
-        <div className="flex items-center justify-between px-4 lg:px-8 py-3 lg:py-4 border-b border-border/10 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
+        <div className="flex items-center justify-between px-4 pl-14 lg:px-8 lg:pl-8 py-3 lg:py-4 border-b border-border/10 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <input
               value={title}

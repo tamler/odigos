@@ -24,20 +24,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _FALLBACK_PROMPT = (
-    'Classify this user message and extract metadata. Respond ONLY with valid JSON, no other text.\n\n'
+    'Classify this user message. Respond ONLY with valid JSON.\n\n'
     'Message: "{message}"\n\n'
-    'Respond with:\n'
-    '{{"classification": "simple|standard|document_query|complex|planning", '
-    '"entities": ["entity1"], "confidence": 0.85, '
-    '"search_queries": ["optimized query"], "sub_questions": ["sub-question 1"]}}\n\n'
-    'Classification guide:\n'
+    '{{"classification": "simple|standard|document_query|complex|planning", "confidence": 0.85}}\n\n'
     '- simple: greetings, acknowledgments, very short messages\n'
     '- standard: normal questions and requests\n'
     '- document_query: questions about uploaded documents or files\n'
-    '- complex: multi-part questions, comparisons, analysis requests\n'
-    '- planning: goal-setting, scheduling, strategy requests\n\n'
-    'Only include sub_questions for complex and planning classifications.\n'
-    'Only include search_queries when the message could benefit from document/memory search.'
+    '- complex: multi-part questions, comparisons, analysis\n'
+    '- planning: goal-setting, scheduling, strategy'
 )
 
 _VALID_CLASSIFICATIONS = {"simple", "standard", "document_query", "complex", "planning"}

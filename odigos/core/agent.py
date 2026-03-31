@@ -219,6 +219,24 @@ class Agent:
         except Exception:
             pass
 
+        # Background: entity extraction + correction detection (fire and forget)
+        try:
+            from odigos.core.post_response import (
+                extract_entities_background,
+                detect_correction_background,
+            )
+            entity_graph = getattr(self, '_entity_graph', None)
+            asyncio.create_task(extract_entities_background(
+                self.executor.provider, self.db, entity_graph,
+                conversation_id, message.content, clean_content,
+            ))
+            asyncio.create_task(detect_correction_background(
+                self.executor.provider, self.db,
+                conversation_id, message.content, clean_content,
+            ))
+        except Exception:
+            pass
+
         return clean_content
 
     def _get_session_lock(self, conversation_id: str) -> asyncio.Lock:

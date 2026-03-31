@@ -208,7 +208,7 @@ export default function ImagesPage() {
 
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden p-4 lg:p-8 max-w-7xl mx-auto w-full text-foreground">
-      <div className="flex items-center justify-between mb-6 lg:mb-8 shrink-0">
+      <div className="flex items-center justify-between mb-6 lg:mb-8 shrink-0 pl-12 lg:pl-0">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Images</h1>
           <p className="text-muted-foreground mt-1 text-sm lg:text-base">Gallery of all generated and uploaded images.</p>

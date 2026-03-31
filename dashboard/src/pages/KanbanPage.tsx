@@ -275,7 +275,7 @@ function BoardDetailInner({ boardId, board, setBoard }: {
     <div className={`flex-1 flex flex-col h-full bg-background transition-all duration-300 ${focusMode ? 'fixed inset-0 z-[100] p-4 sm:p-12 overflow-y-auto' : 'overflow-hidden'}`}>
       {/* Header */}
       {!focusMode && (
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
+        <div className="flex items-center justify-between px-6 py-4 pl-14 lg:pl-6 border-b border-border/40 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}

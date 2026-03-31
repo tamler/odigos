@@ -520,8 +520,7 @@ export const ChatPanel = memo(({
                       )}
 
                       {artifacts.length > 0 && (
-                        <div className="pt-4 mt-6">
-                          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Generated Artifacts</h3>
+                        <div className="pt-2 mt-4">
                           <div className="flex flex-wrap gap-3">
                             {artifacts.map(a => (
                               a.content_type?.startsWith('image/') ? (

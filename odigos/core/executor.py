@@ -275,16 +275,11 @@ class Executor:
                 # Use streaming when a stream_callback is provided
                 if stream_callback and hasattr(self.provider, "stream_complete"):
                     response = None
-                    _entity_block_started = False
                     async for chunk_text, final_response in self.provider.stream_complete(
                         messages, tools=tools, **model_kwargs
                     ):
                         if chunk_text is not None:
-                            # Suppress entity/correction blocks from stream
-                            if "<!--entities" in chunk_text or "<!--correction" in chunk_text:
-                                _entity_block_started = True
-                            if not _entity_block_started:
-                                await stream_callback(chunk_text)
+                            await stream_callback(chunk_text)
                         if final_response is not None:
                             response = final_response
                     if response is None:
