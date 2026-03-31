@@ -8,14 +8,14 @@ import WelcomeScreen from './components/WelcomeScreen'
 import { Loader } from '@/components/ui/loader'
 import { get } from './lib/api'
 import ChatPage from './pages/ChatPage'
-import SettingsPage from './pages/SettingsPage'
-import NotebookPage from './pages/NotebookPage'
-import KanbanPage from './pages/KanbanPage'
 import NotFoundPage from './pages/NotFoundPage'
-import ArtifactsPage from './pages/ArtifactsPage'
-import ImagesPage from './pages/ImagesPage'
 
-// Only lazy-load rarely visited pages
+// Lazy load all pages except Chat (the default view)
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const NotebookPage = lazy(() => import('./pages/NotebookPage'))
+const KanbanPage = lazy(() => import('./pages/KanbanPage'))
+const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
+const ImagesPage = lazy(() => import('./pages/ImagesPage'))
 const SharedNotebookPage = lazy(() => import('./pages/SharedNotebookPage'))
 const SharedBoardPage = lazy(() => import('./pages/SharedBoardPage'))
 
@@ -102,14 +102,14 @@ export default function App() {
 
             <Route element={<AppLayout />}>
               <Route path="/" element={<ChatPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/settings/:tab" element={<SettingsPage />} />
-              <Route path="/notebooks" element={<NotebookPage />} />
-              <Route path="/notebooks/:id" element={<NotebookPage />} />
-              <Route path="/kanban" element={<KanbanPage />} />
-              <Route path="/kanban/:id" element={<KanbanPage />} />
-              <Route path="/artifacts" element={<ArtifactsPage />} />
-              <Route path="/images" element={<ImagesPage />} />
+              <Route path="/settings" element={<Suspense fallback={null}><SettingsPage /></Suspense>} />
+              <Route path="/settings/:tab" element={<Suspense fallback={null}><SettingsPage /></Suspense>} />
+              <Route path="/notebooks" element={<Suspense fallback={null}><NotebookPage /></Suspense>} />
+              <Route path="/notebooks/:id" element={<Suspense fallback={null}><NotebookPage /></Suspense>} />
+              <Route path="/kanban" element={<Suspense fallback={null}><KanbanPage /></Suspense>} />
+              <Route path="/kanban/:id" element={<Suspense fallback={null}><KanbanPage /></Suspense>} />
+              <Route path="/artifacts" element={<Suspense fallback={null}><ArtifactsPage /></Suspense>} />
+              <Route path="/images" element={<Suspense fallback={null}><ImagesPage /></Suspense>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

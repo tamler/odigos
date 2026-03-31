@@ -94,11 +94,10 @@ export default function NotebookPage() {
         page: 'notebook',
         page_id: notebookId,
         page_title: notebook.title,
-        visible_data: content.slice(0, 500)
       })
     }
     return () => setPageContextData({})
-  }, [notebook, notebookId, content, setPageContextData])
+  }, [notebook, notebookId, setPageContextData])
 
   useEffect(() => {
     if (!focusMode) return

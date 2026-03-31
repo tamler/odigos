@@ -65,7 +65,7 @@ export function AgentInputBar({
     return () => {
       socket.onMessage = originalHandler
     }
-  }, [socketRef, waiting])
+  }, [socketRef])
 
   const send = useCallback(() => {
     if (!input.trim() || !connected) return
