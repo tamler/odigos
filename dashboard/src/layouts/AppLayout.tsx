@@ -231,10 +231,10 @@ const AppSidebar = memo(({
                     ) : (
                       <button onClick={() => handleSelectConversation(c.id)} className={`w-full text-left px-3 py-2 min-h-[40px] rounded-lg text-sm truncate transition-colors pr-8 ${activeId === c.id ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}>{displayTitle(c)}</button>
                     )}
-                    {activeId === c.id && editingId !== c.id && (
-                      <div className="absolute right-1 top-1/2 -translate-y-1/2">
+                    {editingId !== c.id && (
+                      <div className={`absolute right-1 top-1/2 -translate-y-1/2 ${activeId === c.id ? 'opacity-100' : 'lg:opacity-0 lg:group-hover:opacity-100'}`}>
                         <DropdownMenu>
-                          <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7 text-primary hover:bg-primary/20"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
+                          <DropdownMenuTrigger><Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground"><MoreHorizontal className="h-3.5 w-3.5" /></Button></DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-xl">
                             <DropdownMenuItem onClick={() => startRename(c)}><Pencil className="h-3.5 w-3.5 mr-2" /> Rename</DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleExport(c.id, 'markdown')}><Download className="h-3.5 w-3.5 mr-2" /> Export</DropdownMenuItem>
