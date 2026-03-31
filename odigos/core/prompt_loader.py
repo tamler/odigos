@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+# Cache is bounded in practice: one entry per unique prompt file path (tens of files, not thousands).
 _cache: Dict[str, Tuple[float, str]] = {}
 
 _DEFAULT_BASE_DIR = "data/prompts"

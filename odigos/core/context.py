@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 _tokenizer = tiktoken.get_encoding("cl100k_base")
 
+# 60-second TTL cache for memory_index counts (avoid hitting DB every request)
+_memory_index_cache: tuple[float, str] | None = None
+_MEMORY_INDEX_TTL = 60.0
+
 
 def estimate_tokens(text: str) -> int:
     """Count tokens using tiktoken (cl100k_base, used by Claude/GPT-4)."""
@@ -124,8 +128,16 @@ class ContextAssembler:
                 return ""
 
         async def _memory_index():
+            global _memory_index_cache
             if not self.db or skip_rag:
                 return ""
+            # Return cached result if within TTL
+            import time as _time
+            now = _time.monotonic()
+            if _memory_index_cache is not None:
+                cached_at, cached_val = _memory_index_cache
+                if now - cached_at < _MEMORY_INDEX_TTL:
+                    return cached_val
             try:
                 row = await self.db.fetch_one("""
                     SELECT
@@ -140,11 +152,14 @@ class ContextAssembler:
                     "entities": row["entities"] if row else 0,
                     "documents": row["documents"] if row else 0,
                 }
+                result = ""
                 if any(counts.values()):
-                    return (
+                    result = (
                         f"## Memory index: {counts['documents']} documents ({counts['doc_chunks']} chunks), "
                         f"{counts['conversations']} conversation memories, {counts['entities']} entities"
                     )
+                _memory_index_cache = (now, result)
+                return result
             except Exception:
                 logger.debug("Could not build memory index", exc_info=True)
             return ""

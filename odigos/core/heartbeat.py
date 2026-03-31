@@ -11,9 +11,12 @@ from typing import TYPE_CHECKING
 
 from odigos.channels.base import UniversalMessage
 from odigos.core.json_utils import parse_json_response
+from odigos.core.content_filter import ContentFilter
 from odigos.core.llm_prompt import run_prompt
 from odigos.core.prompt_loader import load_prompt
 from odigos.db import Database
+
+_peer_filter = ContentFilter()
 
 if TYPE_CHECKING:
     from odigos.channels.base import ChannelRegistry
@@ -200,23 +203,26 @@ class Heartbeat:
         if self.agent_client:
             await self._peer_maintenance()
 
-        # Phase 8: User profile dreaming (every N ticks)
-        self._dream_tick_counter += 1
-        if self._dream_tick_counter >= self._dream_interval_ticks:
-            self._dream_tick_counter = 0
-            await self._dream_analyze_user()
+        # Phase 8: User profile dreaming (every N ticks, only when idle)
+        if not did_work:
+            self._dream_tick_counter += 1
+            if self._dream_tick_counter >= self._dream_interval_ticks:
+                self._dream_tick_counter = 0
+                await self._dream_analyze_user()
 
-        # Phase 9: Experience extraction (every N ticks)
-        self._experience_tick_counter += 1
-        if self._experience_tick_counter >= self._experience_interval_ticks:
-            self._experience_tick_counter = 0
-            await self._extract_experiences()
+        # Phase 9: Experience extraction (every N ticks, only when idle)
+        if not did_work:
+            self._experience_tick_counter += 1
+            if self._experience_tick_counter >= self._experience_interval_ticks:
+                self._experience_tick_counter = 0
+                await self._extract_experiences()
 
-        # Phase 10: Outcome evaluation for completed plans (every N ticks)
-        self._outcome_tick_counter += 1
-        if self._outcome_tick_counter >= self._outcome_interval_ticks:
-            self._outcome_tick_counter = 0
-            await self._evaluate_plan_outcomes()
+        # Phase 10: Outcome evaluation for completed plans (every N ticks, only when idle)
+        if not did_work:
+            self._outcome_tick_counter += 1
+            if self._outcome_tick_counter >= self._outcome_interval_ticks:
+                self._outcome_tick_counter = 0
+                await self._evaluate_plan_outcomes()
 
         # Phase 11: Auto-update check (if enabled)
         _update_cfg = self.settings.auto_update if self.settings else None
@@ -547,8 +553,6 @@ class Heartbeat:
                 continue
 
             # Re-scan for injection on replay (annotation may have been lost in DB round-trip)
-            from odigos.core.content_filter import ContentFilter
-            _peer_filter = ContentFilter()
             scan = _peer_filter.scan(message_text)
             if scan.risk_level == "high":
                 logger.warning("Blocked peer message from %s: high injection risk", peer)
@@ -1052,20 +1056,33 @@ class Heartbeat:
             if conv_count - last_count < 5:
                 return
 
-            # Fetch last 20 conversations with their messages
+            # Fetch last 20 conversations with their messages (single query)
             convs = await self.db.fetch_all(
                 "SELECT id, title FROM conversations ORDER BY created_at DESC LIMIT 20"
             )
             if not convs:
                 return
 
+            conv_ids = [c["id"] for c in convs]
+            placeholders = ",".join("?" for _ in conv_ids)
+            all_msgs = await self.db.fetch_all(
+                f"SELECT conversation_id, role, content FROM messages "
+                f"WHERE conversation_id IN ({placeholders}) "
+                f"ORDER BY timestamp ASC",
+                tuple(conv_ids),
+            )
+
+            # Group messages by conversation, keeping only first 20 per conv
+            msgs_by_conv: dict[str, list] = {}
+            for m in all_msgs:
+                cid = m["conversation_id"]
+                bucket = msgs_by_conv.setdefault(cid, [])
+                if len(bucket) < 20:
+                    bucket.append(m)
+
             conv_texts = []
             for c in convs:
-                msgs = await self.db.fetch_all(
-                    "SELECT role, content FROM messages WHERE conversation_id = ? "
-                    "ORDER BY timestamp ASC LIMIT 20",
-                    (c["id"],),
-                )
+                msgs = msgs_by_conv.get(c["id"], [])
                 if msgs:
                     title = c.get("title") or c["id"][:8]
                     lines = [f"### {title}"]

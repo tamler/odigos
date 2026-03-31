@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -644,8 +645,12 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Using remote embedding service at %s", settings.embeddings.remote_url)
     else:
-        _embedder = EmbeddingProvider()
+        _embedder = await asyncio.to_thread(EmbeddingProvider)
         logger.info("Using local embedding model")
+
+    # Pre-load CrossEncoder reranker in a thread so first recall isn't slow
+    from odigos.memory.manager import _get_reranker
+    asyncio.create_task(asyncio.to_thread(_get_reranker))
 
     # Initialize memory stack
     vector_memory = VectorMemory(embedder=_embedder, db=_db)

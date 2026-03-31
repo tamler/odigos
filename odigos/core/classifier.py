@@ -56,6 +56,9 @@ _FALLBACK_RULES: dict[str, list[str]] = {
 # Order matters: most specific first
 _RULE_ORDER = ["document_query", "complex", "planning", "simple"]
 
+# mtime-keyed cache for parsed classification rules
+_rules_cache: tuple[float, dict[str, list[str]]] | None = None
+
 
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize a list of floats to a compact binary format for sqlite-vec."""
@@ -92,13 +95,25 @@ class QueryClassifier:
 
         Returns a dict mapping category names to lists of signal phrases.
         Falls back to hardcoded rules if the file is missing or unparseable.
+        Uses mtime-keyed cache so _parse_rules() only runs when the file changes.
         """
+        global _rules_cache
+        from pathlib import Path
+        rules_path = Path("data/agent/classification_rules.md")
+        if rules_path.exists():
+            mtime = rules_path.stat().st_mtime
+            if _rules_cache is not None and _rules_cache[0] == mtime:
+                return _rules_cache[1]
+
         raw = load_prompt("classification_rules.md", fallback="", base_dir="data/agent")
         if not raw:
             return _FALLBACK_RULES
 
         try:
-            return _parse_rules(raw)
+            parsed = _parse_rules(raw)
+            if rules_path.exists():
+                _rules_cache = (rules_path.stat().st_mtime, parsed)
+            return parsed
         except Exception:
             logger.warning("Failed to parse classification_rules.md, using fallback rules", exc_info=True)
             return _FALLBACK_RULES
