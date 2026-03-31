@@ -160,13 +160,17 @@ export const ChatPanel = memo(({
     return () => window.removeEventListener('voice-error', handler)
   }, [])
 
-  // Streaming starts when content arrives, ends when thinking stops
+  // Streaming starts when first chunk arrives
   useEffect(() => {
     if (streamingContent && !isStreaming) setIsStreaming(true)
-    if (!thinking && isStreaming) setIsStreaming(false)
-  }, [thinking, streamingContent, isStreaming])
+  }, [streamingContent])
 
-  // Safety: clear thinking after 120s if server never responds
+  // Streaming ends when thinking stops
+  useEffect(() => {
+    if (!thinking) setIsStreaming(false)
+  }, [thinking])
+
+  // Safety: clear all states after 120s if server never responds
   useEffect(() => {
     if (!thinking) return
     const timer = setTimeout(() => {

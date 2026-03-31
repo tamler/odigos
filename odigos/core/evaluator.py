@@ -72,10 +72,9 @@ _RUBRIC_FALLBACK = (
     "User message: {user_content}\n"
     "Assistant response: {assistant_content}\n"
     "User reaction signal: {feedback} (-1=negative, +1=positive)\n\n"
-    "Also identify key entities (people, tools, documents, concepts) mentioned.\n\n"
     "Return ONLY a JSON object:\n"
     '{{"task_type": "category", "criteria": [{{"name": "...", "weight": 0.0-1.0, '
-    '"description": "what good looks like"}}], "key_entities": ["entity1", "entity2"], "notes": "..."}}'
+    '"description": "what good looks like"}}], "notes": "..."}}'
 )
 
 _SCORING_FALLBACK = (
@@ -84,12 +83,9 @@ _SCORING_FALLBACK = (
     "User message: {user_content}\n"
     "Assistant response: {assistant_content}\n"
     "User reaction signal: {feedback}\n\n"
-    "Also provide a one-sentence improvement suggestion and assess user satisfaction.\n\n"
     "Return ONLY a JSON object:\n"
     '{{"scores": [{{"criterion": "name", "score": 0-10, "observation": "..."}}], '
-    '"overall": 0-10, "improvement_signal": "what would have been better" or null, '
-    '"suggested_improvement": "one sentence on what to do better", '
-    '"user_satisfaction_signal": "satisfied|neutral|dissatisfied"}}'
+    '"overall": 0-10, "improvement_signal": "what would have been better" or null}}'
 )
 
 
@@ -329,23 +325,7 @@ class Evaluator:
 
         await self._cache_rubric(task_type, rubric)
 
-        # Feed extracted entities into the entity graph
-        key_entities = rubric.get("key_entities", [])
-        if key_entities and isinstance(key_entities, list) and self.entity_graph:
-            for entity_name in key_entities:
-                if isinstance(entity_name, str) and entity_name.strip():
-                    try:
-                        existing = await self.entity_graph.find_entity(entity_name.strip())
-                        if not existing:
-                            await self.entity_graph.create_entity(
-                                entity_type="extracted",
-                                name=entity_name.strip(),
-                                properties={"source_eval": eval_id},
-                                confidence=0.7,
-                                source="evaluator",
-                            )
-                    except Exception:
-                        logger.debug("Failed to store entity %s", entity_name)
+        # Entity extraction handled by post_response.py background call
 
         # Log improvement suggestion for strategist visibility
         suggested_improvement = scores.get("suggested_improvement")
@@ -390,7 +370,6 @@ class Evaluator:
             "user_satisfaction_signal": scores.get(
                 "user_satisfaction_signal"
             ),
-            "key_entities": key_entities,
             "as_critique": as_score,
             "bt_critique": bt_score,
             "user_sentiment": sentiment,
