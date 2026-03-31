@@ -107,7 +107,7 @@ const AppSidebar = memo(({
   isMobile, searchQuery, setSearchQuery,
   isSettings, isNotebook, isKanban, isChat, isImages, currentTab,
   agentName, notebooks, boards, images, filteredConversations,
-  activeId, handleNewChat, handleSelectConversation, handleSelectImage,
+  activeId, handleNewChat, handleSelectConversation, handleSelectImage: _handleSelectImage,
   startRename, editingId, editTitle, setEditTitle,
   confirmRename, handleExport, handleDelete, displayTitle, navigate, location,
   pwaInstallable, pwaInstall,
@@ -196,16 +196,8 @@ const AppSidebar = memo(({
                 ))}
               </div>
             ) : isImages ? (
-              <div className="grid grid-cols-2 gap-2 px-1">
-                {images.map((img: any) => (
-                  <button 
-                    key={img.id} 
-                    onClick={() => handleSelectImage(img.id)}
-                    className={`aspect-square rounded-lg border overflow-hidden transition-all ${activeId === img.id ? 'border-primary ring-2 ring-primary/20' : 'border-border/40 hover:border-border'}`}
-                  >
-                    <img src={`/api/artifacts/${img.id}/thumbnail?size=200`} alt={img.filename} className="w-full h-full object-cover" loading="lazy" />
-                  </button>
-                ))}
+              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                {images.length} images
               </div>
             ) : (
               filteredConversations.length === 0 ? (
