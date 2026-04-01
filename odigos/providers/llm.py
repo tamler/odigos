@@ -7,15 +7,41 @@ from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 logger = logging.getLogger(__name__)
 
-# Conservative cost estimation per million tokens when provider doesn't report cost.
-# These rates are intentionally high to ensure budget limits trigger early.
-_INPUT_RATE = 0.50   # $/M input tokens (conservative — most models are cheaper)
-_OUTPUT_RATE = 1.50  # $/M output tokens (conservative)
+# Model-specific rates ($/M tokens). Matched by prefix.
+# Conservative fallback ensures budget triggers even for unknown models.
+_MODEL_RATES: list[tuple[str, float, float]] = [
+    # (prefix, input_rate, output_rate) per million tokens
+    ("meta-llama/llama-4", 0.15, 0.40),
+    ("meta-llama/llama-3", 0.60, 0.80),
+    ("deepseek/deepseek", 0.30, 0.40),
+    ("openai/gpt-oss", 0.04, 0.20),
+    ("openai/gpt-4o", 2.50, 10.00),
+    ("openai/gpt-4", 5.00, 15.00),
+    ("anthropic/claude-3", 3.00, 15.00),
+    ("anthropic/claude-4", 3.00, 15.00),
+    ("google/gemini-2", 0.10, 0.40),
+    ("google/gemini-3", 0.30, 2.50),
+    ("qwen/qwen3", 0.30, 0.60),
+]
+_FALLBACK_INPUT = 0.50
+_FALLBACK_OUTPUT = 1.50
+
+_last_model: str = ""
 
 
-def _estimate_cost_from_tokens(tokens_in: int, tokens_out: int) -> float:
-    """Estimate cost from token counts when the provider returns no cost."""
-    return (tokens_in * _INPUT_RATE + tokens_out * _OUTPUT_RATE) / 1_000_000
+def _get_rates(model: str) -> tuple[float, float]:
+    """Get input/output rates for a model, matched by prefix."""
+    model_lower = model.lower()
+    for prefix, inp, out in _MODEL_RATES:
+        if model_lower.startswith(prefix):
+            return inp, out
+    return _FALLBACK_INPUT, _FALLBACK_OUTPUT
+
+
+def _estimate_cost_from_tokens(tokens_in: int, tokens_out: int, model: str = "") -> float:
+    """Estimate cost from token counts using model-specific rates."""
+    inp_rate, out_rate = _get_rates(model or _last_model)
+    return (tokens_in * inp_rate + tokens_out * out_rate) / 1_000_000
 
 
 class LLMClient(LLMProvider):
@@ -105,10 +131,14 @@ class LLMClient(LLMProvider):
 
         tokens_in = usage.get("prompt_tokens", 0)
         tokens_out = usage.get("completion_tokens", 0)
-        # Use provider-reported cost, or estimate from tokens
+        actual_model = data.get("model", model)
+        # Track last model for background calls that don't pass model name
+        global _last_model
+        _last_model = actual_model
+        # Use provider-reported cost, or estimate from tokens with model-specific rates
         cost = usage.get("cost") or data.get("usage", {}).get("cost") or 0.0
         if not cost and (tokens_in or tokens_out):
-            cost = _estimate_cost_from_tokens(tokens_in, tokens_out)
+            cost = _estimate_cost_from_tokens(tokens_in, tokens_out, actual_model)
 
         return LLMResponse(
             content=message.get("content") or "",
@@ -222,7 +252,7 @@ class LLMClient(LLMProvider):
                     model=response_model,
                     tokens_in=_tin,
                     tokens_out=_tout,
-                    cost_usd=_estimate_cost_from_tokens(_tin, _tout),
+                    cost_usd=_estimate_cost_from_tokens(_tin, _tout, response_model),
                     generation_id=generation_id,
                     tool_calls=parsed_tool_calls,
                 )
