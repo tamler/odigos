@@ -1,4 +1,6 @@
 """File upload endpoint with auto-ingestion into agent memory."""
+from __future__ import annotations
+
 
 import asyncio
 import hashlib

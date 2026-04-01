@@ -1,4 +1,5 @@
 """Auth API: setup, login, logout, change-password, status, me."""
+from __future__ import annotations
 
 import os
 import uuid

@@ -1,4 +1,6 @@
 """Settings GET/POST API endpoints for reading and writing configuration."""
+from __future__ import annotations
+
 
 import asyncio
 import imaplib
