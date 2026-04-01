@@ -1,10 +1,6 @@
-import { lazy, Suspense } from 'react'
 import { Mic, MicOff, Loader2, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-const MorphingSphere = lazy(() =>
-  import('@/components/MorphingSphere').then(m => ({ default: m.MorphingSphere }))
-)
+import { MorphingSphere } from '@/components/MorphingSphere'
 
 export type VoiceState = 'idle' | 'listening' | 'processing' | 'thinking' | 'speaking'
 
@@ -41,14 +37,12 @@ export function VoiceOrb({ state, onExit, onToggleMic, amplitude = 0 }: VoiceOrb
               className="absolute inset-0 rounded-full blur-[48px] opacity-30 transition-all duration-1000 scale-[1.5]"
               style={{ backgroundColor: activeColor }}
             />
-            <Suspense fallback={<div className="h-[280px] w-[280px]" />}>
-              <MorphingSphere
-                amplitude={amplitude}
-                color={activeColor}
-                size={280}
-                className="relative z-10"
-              />
-            </Suspense>
+            <MorphingSphere
+              amplitude={amplitude}
+              color={activeColor}
+              size={280}
+              className="relative z-10"
+            />
             <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
               {state === 'listening' && <Mic className="h-10 w-10 text-white drop-shadow-lg" />}
               {state === 'speaking' && (
