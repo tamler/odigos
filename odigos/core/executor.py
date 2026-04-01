@@ -478,7 +478,7 @@ class Executor:
             model=last_response.model,
             tokens_in=total_tokens_in,
             tokens_out=total_tokens_out,
-            cost_usd=total_cost,
+            cost_usd=total_cost if total_cost > 0 else run_estimated_cost,
             generation_id=last_response.generation_id,
             tool_calls=last_response.tool_calls,
         )

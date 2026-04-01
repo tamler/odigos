@@ -592,8 +592,14 @@ class Heartbeat:
 
         return True
 
+    _plan_fail_count: int = 0
+    _MAX_PLAN_RETRIES: int = 3  # stop trying after 3 consecutive failures
+
     async def _work_in_progress_plans(self) -> bool:
         """Phase 4e: Pick up in-progress plans and execute the next pending step."""
+        if self._plan_fail_count >= self._MAX_PLAN_RETRIES:
+            return False  # Stop retrying stuck plans
+
         try:
             row = await self.db.fetch_one(
                 "SELECT id, conversation_id, steps, goal FROM task_plans "
@@ -601,6 +607,7 @@ class Heartbeat:
                 "ORDER BY updated_at ASC LIMIT 1",
             )
             if not row:
+                self._plan_fail_count = 0  # Reset on no plans
                 return False
 
             steps = json.loads(row["steps"])
@@ -676,6 +683,13 @@ class Heartbeat:
 
             result = await self.agent.handle_message(message)
 
+            # Detect LLM failure responses
+            _FAIL_MARKERS = ("couldn't process", "having trouble reaching", "ran out of time", "went wrong")
+            if result and any(m in result.lower() for m in _FAIL_MARKERS):
+                self._plan_fail_count += 1
+                logger.warning("Plan step failed (LLM error): %s (%d/%d)", result[:100], self._plan_fail_count, self._MAX_PLAN_RETRIES)
+                return False
+
             await self._log_heartbeat_session(
                 goal_id=goal, plan_id=plan_id,
                 conversation_id=conversation_id,
@@ -683,9 +697,11 @@ class Heartbeat:
             )
 
             logger.info("Proactive plan step %s executed for plan %s", step_num, plan_id[:8])
+            self._plan_fail_count = 0
             return True
         except Exception:
-            logger.debug("Proactive plan execution failed", exc_info=True)
+            self._plan_fail_count += 1
+            logger.warning("Proactive plan failed (%d/%d)", self._plan_fail_count, self._MAX_PLAN_RETRIES)
             return False
 
     async def _log_heartbeat_session(
