@@ -1,23 +1,19 @@
-"""Email tools: check inbox (IMAP) and send email (SMTP)."""
+"""Email tools using imap-tools (IMAP) and smtplib (SMTP).
 
+Full capabilities: check inbox, search, read full messages, send with
+CC/BCC/HTML/attachments. Works with any IMAP/SMTP provider.
+"""
 from __future__ import annotations
 
-import email
+import asyncio
 import email.mime.multipart
 import email.mime.text
-import email.mime.base
-import email.utils
-import imaplib
 import logging
 import smtplib
-from email.header import decode_header
-from pathlib import Path
 from typing import TYPE_CHECKING
 
-from odigos.tools.base import ToolContract
+from odigos.tools.base import BaseTool, ToolContract, ToolResult
 from odigos.tools.content_filter_helper import filter_external_content
-
-from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
     from odigos.config import EmailConfig
@@ -25,211 +21,254 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _decode_header_value(value: str | None) -> str:
-    """Decode an email header value (handles encoded words)."""
-    if not value:
-        return ""
-    parts = decode_header(value)
-    decoded = []
-    for part, charset in parts:
-        if isinstance(part, bytes):
-            decoded.append(part.decode(charset or "utf-8", errors="replace"))
-        else:
-            decoded.append(part)
-    return " ".join(decoded)
-
-
-def _extract_text(msg: email.message.Message) -> str:
-    """Extract plain text content from an email message."""
-    if msg.is_multipart():
-        for part in msg.walk():
-            content_type = part.get_content_type()
-            if content_type == "text/plain":
-                payload = part.get_payload(decode=True)
-                if payload:
-                    charset = part.get_content_charset() or "utf-8"
-                    return payload.decode(charset, errors="replace")
-        # Fallback to HTML if no plain text
-        for part in msg.walk():
-            if part.get_content_type() == "text/html":
-                payload = part.get_payload(decode=True)
-                if payload:
-                    charset = part.get_content_charset() or "utf-8"
-                    return payload.decode(charset, errors="replace")[:2000]
-    else:
-        payload = msg.get_payload(decode=True)
-        if payload:
-            charset = msg.get_content_charset() or "utf-8"
-            return payload.decode(charset, errors="replace")
-    return ""
-
-
 class CheckEmailTool(BaseTool):
     name = "check_email"
     category = "communication"
     contract = ToolContract(timeout_seconds=30, max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     description = (
-        "Check the email inbox for new messages and return a summary. "
-        "Use when the user asks about their email or you need to check for new messages. "
-        "Do not use for advanced Gmail operations like managing labels or drafts — use Google Workspace tools for those."
+        "Check the email inbox for new messages. Returns subject, sender, date, preview, and UID. "
+        "Use when the user asks about their email. "
+        "Do not use for searching old emails — use search_email instead."
     )
     parameters_schema = {
         "type": "object",
         "properties": {
-            "limit": {
-                "type": "integer",
-                "description": "Maximum number of emails to fetch (default: 10)",
-            },
-            "unread_only": {
-                "type": "boolean",
-                "description": "Only fetch unread emails (default: true)",
-            },
+            "limit": {"type": "integer", "description": "Max emails to fetch (default 10)"},
+            "unread_only": {"type": "boolean", "description": "Only unread emails (default true)"},
+            "folder": {"type": "string", "description": "Folder to check (default INBOX)"},
         },
     }
 
-    def __init__(self, email_config: EmailConfig) -> None:
+    def __init__(self, email_config: "EmailConfig") -> None:
         self._config = email_config
 
     async def execute(self, params: dict) -> ToolResult:
         if not self._config.enabled or not self._config.imap_host:
             return ToolResult(success=False, data="", error="Email not configured")
-
-        limit = params.get("limit", 10)
-        unread_only = params.get("unread_only", True)
-
+        params.pop("_conversation_id", None)
+        params.pop("_goal_id", None)
         try:
-            import asyncio
-            result = await asyncio.to_thread(
-                self._fetch_emails, limit, unread_only,
+            return await asyncio.to_thread(
+                self._fetch, params.get("limit", 10), params.get("unread_only", True), params.get("folder", "INBOX"),
             )
-            return result
         except Exception as e:
-            logger.warning("Email check failed: %s", e)
-            return ToolResult(success=False, data="", error=f"Failed to check email: {e}")
+            return ToolResult(success=False, data="", error=f"Email check failed: {e}")
 
-    def _fetch_emails(self, limit: int, unread_only: bool) -> ToolResult:
-        """Synchronous IMAP fetch (run in thread)."""
-        conn = imaplib.IMAP4_SSL(self._config.imap_host, self._config.imap_port)
-        try:
-            conn.login(self._config.username, self._config.password)
-            conn.select("INBOX")
-
-            search_criteria = "UNSEEN" if unread_only else "ALL"
-            _, msg_ids = conn.search(None, search_criteria)
-            ids = msg_ids[0].split()
-
-            if not ids:
-                return ToolResult(success=True, data="No new emails in inbox.")
-
-            # Take the most recent N
-            recent_ids = ids[-limit:]
-            lines = [f"Found {len(ids)} {'unread ' if unread_only else ''}email(s). Showing {len(recent_ids)}:\n"]
-
-            for msg_id in reversed(recent_ids):  # newest first
-                _, data = conn.fetch(msg_id, "(RFC822)")
-                raw = data[0][1]
-                msg = email.message_from_bytes(raw)
-
-                sender = _decode_header_value(msg.get("From"))
-                subject = _decode_header_value(msg.get("Subject"))
-                date = msg.get("Date", "")
-                body = _extract_text(msg)[:500]
-
-                lines.append(f"---")
-                lines.append(f"From: {sender}")
-                lines.append(f"Subject: {subject}")
-                lines.append(f"Date: {date}")
-                lines.append(f"Preview: {body[:300]}")
+    def _fetch(self, limit: int, unread_only: bool, folder: str) -> ToolResult:
+        from imap_tools import MailBox, AND
+        with MailBox(self._config.imap_host, self._config.imap_port).login(
+            self._config.username, self._config.password, initial_folder=folder
+        ) as mb:
+            criteria = AND(seen=False) if unread_only else "ALL"
+            msgs = list(mb.fetch(criteria, limit=limit, reverse=True, mark_seen=False))
+            if not msgs:
+                return ToolResult(success=True, data="No new emails.")
+            lines = [f"Found {len(msgs)} email(s):\n"]
+            for msg in msgs:
+                lines.append("---")
+                lines.append(f"From: {msg.from_}")
+                lines.append(f"Subject: {msg.subject}")
+                lines.append(f"Date: {msg.date}")
+                lines.append(f"Preview: {(msg.text or msg.html or '')[:300]}")
+                if msg.attachments:
+                    lines.append(f"Attachments: {', '.join(a.filename for a in msg.attachments)}")
+                lines.append(f"UID: {msg.uid}")
                 lines.append("")
+            return filter_external_content("\n".join(lines), "email inbox")
 
-            raw_output = "\n".join(lines)
-            return filter_external_content(raw_output, "email inbox")
-        finally:
-            try:
-                conn.logout()
-            except Exception:
-                pass
+
+class SearchEmailTool(BaseTool):
+    name = "search_email"
+    category = "communication"
+    contract = ToolContract(timeout_seconds=30)
+    description = (
+        "Search emails by sender, subject, keyword, or date range. "
+        "Use to find specific emails. Do not use for checking latest unread — use check_email."
+    )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "from_address": {"type": "string", "description": "Filter by sender address"},
+            "subject": {"type": "string", "description": "Filter by subject"},
+            "keyword": {"type": "string", "description": "Search in body text"},
+            "date_from": {"type": "string", "description": "Start date (YYYY-MM-DD)"},
+            "date_to": {"type": "string", "description": "End date (YYYY-MM-DD)"},
+            "folder": {"type": "string", "description": "Folder to search (default INBOX)"},
+            "limit": {"type": "integer", "description": "Max results (default 10)"},
+        },
+    }
+
+    def __init__(self, email_config: "EmailConfig") -> None:
+        self._config = email_config
+
+    async def execute(self, params: dict) -> ToolResult:
+        if not self._config.enabled or not self._config.imap_host:
+            return ToolResult(success=False, data="", error="Email not configured")
+        params.pop("_conversation_id", None)
+        params.pop("_goal_id", None)
+        try:
+            return await asyncio.to_thread(self._search, params)
+        except Exception as e:
+            return ToolResult(success=False, data="", error=f"Email search failed: {e}")
+
+    def _search(self, params: dict) -> ToolResult:
+        from imap_tools import MailBox, AND
+        from datetime import date
+        folder = params.get("folder", "INBOX")
+        limit = params.get("limit", 10)
+        criteria_parts = []
+        if params.get("from_address"):
+            criteria_parts.append(AND(from_=params["from_address"]))
+        if params.get("subject"):
+            criteria_parts.append(AND(subject=params["subject"]))
+        if params.get("keyword"):
+            criteria_parts.append(AND(body=params["keyword"]))
+        if params.get("date_from"):
+            y, m, d = params["date_from"].split("-")
+            criteria_parts.append(AND(date_gte=date(int(y), int(m), int(d))))
+        if params.get("date_to"):
+            y, m, d = params["date_to"].split("-")
+            criteria_parts.append(AND(date_lt=date(int(y), int(m), int(d))))
+        criteria = AND(*criteria_parts) if criteria_parts else "ALL"
+        with MailBox(self._config.imap_host, self._config.imap_port).login(
+            self._config.username, self._config.password, initial_folder=folder
+        ) as mb:
+            msgs = list(mb.fetch(criteria, limit=limit, reverse=True, mark_seen=False))
+            if not msgs:
+                return ToolResult(success=True, data="No emails matching your search.")
+            lines = [f"Found {len(msgs)} result(s):\n"]
+            for msg in msgs:
+                lines.append(f"**{msg.subject}** from {msg.from_} ({msg.date}) [UID: {msg.uid}]")
+                preview = (msg.text or "")[:150]
+                if preview:
+                    lines.append(f"  {preview}")
+                lines.append("")
+            return filter_external_content("\n".join(lines), "email search")
+
+
+class ReadEmailTool(BaseTool):
+    name = "read_email"
+    category = "communication"
+    contract = ToolContract(timeout_seconds=30)
+    description = (
+        "Read the full content of a specific email by its UID. "
+        "Use after check_email or search_email to read the complete message."
+    )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "uid": {"type": "string", "description": "Email UID from check_email or search_email"},
+            "folder": {"type": "string", "description": "Folder (default INBOX)"},
+            "mark_read": {"type": "boolean", "description": "Mark as read (default true)"},
+        },
+        "required": ["uid"],
+    }
+
+    def __init__(self, email_config: "EmailConfig") -> None:
+        self._config = email_config
+
+    async def execute(self, params: dict) -> ToolResult:
+        if not self._config.enabled or not self._config.imap_host:
+            return ToolResult(success=False, data="", error="Email not configured")
+        params.pop("_conversation_id", None)
+        params.pop("_goal_id", None)
+        try:
+            return await asyncio.to_thread(self._read, params)
+        except Exception as e:
+            return ToolResult(success=False, data="", error=f"Email read failed: {e}")
+
+    def _read(self, params: dict) -> ToolResult:
+        from imap_tools import MailBox, AND
+        uid = params.get("uid", "")
+        folder = params.get("folder", "INBOX")
+        mark_read = params.get("mark_read", True)
+        with MailBox(self._config.imap_host, self._config.imap_port).login(
+            self._config.username, self._config.password, initial_folder=folder
+        ) as mb:
+            msgs = list(mb.fetch(AND(uid=uid), mark_seen=mark_read))
+            if not msgs:
+                return ToolResult(success=False, data="", error=f"Email UID {uid} not found")
+            msg = msgs[0]
+            lines = [
+                f"From: {msg.from_}",
+                f"To: {', '.join(msg.to)}",
+                f"Subject: {msg.subject}",
+                f"Date: {msg.date}",
+            ]
+            if msg.cc:
+                lines.append(f"CC: {', '.join(msg.cc)}")
+            lines.append("")
+            lines.append((msg.text or msg.html or "(no body)")[:4000])
+            if msg.attachments:
+                lines.append(f"\nAttachments ({len(msg.attachments)}):")
+                for att in msg.attachments:
+                    lines.append(f"  - {att.filename} ({att.content_type}, {len(att.payload)} bytes)")
+            return filter_external_content("\n".join(lines), "email message")
 
 
 class SendEmailTool(BaseTool):
     name = "send_email"
     category = "communication"
     description = (
-        "Send an email. Provide recipient, subject, and body. "
-        "The email will be sent from the agent's configured email address. "
-        "Use this to respond to emails, send updates, or communicate on behalf of the user."
+        "Send an email with optional CC, BCC, and HTML body. "
+        "Use to respond to emails or send messages on behalf of the user."
     )
     parameters_schema = {
         "type": "object",
         "properties": {
-            "to": {
-                "type": "string",
-                "description": "Recipient email address",
-            },
-            "subject": {
-                "type": "string",
-                "description": "Email subject line",
-            },
-            "body": {
-                "type": "string",
-                "description": "Email body (plain text)",
-            },
-            "reply_to": {
-                "type": "string",
-                "description": "RFC 2822 Message-ID header value of the email to reply to for proper thread linking",
-            },
+            "to": {"type": "string", "description": "Recipient(s), comma-separated"},
+            "subject": {"type": "string", "description": "Subject line"},
+            "body": {"type": "string", "description": "Plain text body"},
+            "html": {"type": "string", "description": "HTML body (optional, alongside plain text)"},
+            "cc": {"type": "string", "description": "CC recipients, comma-separated"},
+            "bcc": {"type": "string", "description": "BCC recipients, comma-separated"},
+            "reply_to": {"type": "string", "description": "Message-ID to reply to (threading)"},
         },
         "required": ["to", "subject", "body"],
     }
 
-    def __init__(self, email_config: EmailConfig) -> None:
+    def __init__(self, email_config: "EmailConfig") -> None:
         self._config = email_config
 
     async def execute(self, params: dict) -> ToolResult:
         if not self._config.enabled or not self._config.smtp_host:
             return ToolResult(success=False, data="", error="Email not configured")
-
+        params.pop("_conversation_id", None)
+        params.pop("_goal_id", None)
         to = params.get("to", "").strip()
         subject = params.get("subject", "").strip()
         body = params.get("body", "").strip()
-        reply_to = params.get("reply_to")
-
         if not to or not subject or not body:
-            return ToolResult(success=False, data="", error="to, subject, and body are required")
-
-        # Basic email validation
-        if "@" not in to or "." not in to.split("@")[-1]:
-            return ToolResult(success=False, data="", error=f"Invalid email address: {to}")
-
+            return ToolResult(success=False, data="", error="to, subject, and body required")
+        from email_validator import validate_email, EmailNotValidError
+        recipients = [r.strip() for r in to.split(",")]
+        for r in recipients:
+            try:
+                validate_email(r, check_deliverability=False)
+            except EmailNotValidError as e:
+                return ToolResult(success=False, data="", error=f"Invalid email: {r} ({e})")
         try:
-            import asyncio
-            await asyncio.to_thread(
-                self._send_email, to, subject, body, reply_to,
-            )
-            logger.info("Email sent to %s: %s", to, subject[:50])
-            return ToolResult(
-                success=True,
-                data=f"Email sent to {to} with subject: {subject}",
-            )
+            await asyncio.to_thread(self._send, params, recipients)
+            return ToolResult(success=True, data=f"Email sent to {to}")
         except Exception as e:
-            logger.warning("Email send failed: %s", e)
-            return ToolResult(success=False, data="", error=f"Failed to send email: {e}")
+            return ToolResult(success=False, data="", error=f"Send failed: {e}")
 
-    def _send_email(self, to: str, subject: str, body: str, reply_to: str | None) -> None:
-        """Synchronous SMTP send (run in thread)."""
-        msg = email.mime.multipart.MIMEMultipart()
-        msg["From"] = self._config.address
-        msg["To"] = to
-        msg["Subject"] = subject
-        msg["Date"] = email.utils.formatdate(localtime=True)
-
-        if reply_to:
-            msg["In-Reply-To"] = reply_to
-            msg["References"] = reply_to
-
-        msg.attach(email.mime.text.MIMEText(body, "plain", "utf-8"))
-
+    def _send(self, params: dict, recipients: list[str]) -> None:
+        msg = email.mime.multipart.MIMEMultipart("alternative")
+        msg["From"] = self._config.address or self._config.username
+        msg["To"] = params["to"]
+        msg["Subject"] = params["subject"]
+        if params.get("cc"):
+            msg["Cc"] = params["cc"]
+            recipients.extend(r.strip() for r in params["cc"].split(","))
+        if params.get("reply_to"):
+            msg["In-Reply-To"] = params["reply_to"]
+            msg["References"] = params["reply_to"]
+        msg.attach(email.mime.text.MIMEText(params["body"], "plain"))
+        if params.get("html"):
+            msg.attach(email.mime.text.MIMEText(params["html"], "html"))
+        bcc = [r.strip() for r in params.get("bcc", "").split(",") if r.strip()]
         with smtplib.SMTP(self._config.smtp_host, self._config.smtp_port) as server:
             server.starttls()
             server.login(self._config.username, self._config.password)
-            server.send_message(msg)
+            server.sendmail(msg["From"], recipients + bcc, msg.as_string())

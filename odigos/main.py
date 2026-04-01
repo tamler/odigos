@@ -207,9 +207,11 @@ async def _register_tools(
 
     # Calendar tools (only if configured)
     if settings.calendar.enabled and settings.calendar.url:
-        from odigos.tools.calendar import CheckCalendarTool
+        from odigos.tools.calendar import CheckCalendarTool, CreateCalendarEventTool, FindFreeTimeTool
         tool_registry.register(CheckCalendarTool(calendar_config=settings.calendar))
-        logger.info("Calendar tool initialized (%s)", settings.calendar.url)
+        tool_registry.register(CreateCalendarEventTool(calendar_config=settings.calendar))
+        tool_registry.register(FindFreeTimeTool(calendar_config=settings.calendar))
+        logger.info("Calendar tools initialized (%s)", settings.calendar.url)
 
     # Feed monitoring tools (always available -- user adds feeds via watch_feed)
     from odigos.tools.feed_monitor import WatchFeedTool, ListFeedsTool, CheckFeedsTool
@@ -220,8 +222,10 @@ async def _register_tools(
 
     # Email tools (only if configured)
     if settings.email.enabled and settings.email.imap_host:
-        from odigos.tools.email import CheckEmailTool, SendEmailTool
+        from odigos.tools.email import CheckEmailTool, SearchEmailTool, ReadEmailTool, SendEmailTool
         tool_registry.register(CheckEmailTool(email_config=settings.email))
+        tool_registry.register(SearchEmailTool(email_config=settings.email))
+        tool_registry.register(ReadEmailTool(email_config=settings.email))
         tool_registry.register(SendEmailTool(email_config=settings.email))
         logger.info("Email tools initialized (%s)", settings.email.address)
 

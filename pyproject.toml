@@ -26,7 +26,7 @@ dependencies = [
     "itsdangerous>=2.1.0",
     "python-docx>=1.0.0",
     "websockets>=12.0",
-    "caldav>=1.0.0",
+    "caldav>=3.0.0",
     "edge-tts>=6.0.0",
     "groq>=0.4.0",
     "webrtcvad-wheels>=2.0.14",
@@ -40,7 +40,9 @@ dependencies = [
     "pytesseract>=0.3.10",
     "openpyxl>=3.1.0",
     "qrcode[pil]>=7.4",
-    "icalendar>=5.0.0",
+    "icalendar>=7.0.0",
+    "imap-tools>=1.10.0",
+    "email-validator>=2.2.0",
 ]
 
 [project.optional-dependencies]
