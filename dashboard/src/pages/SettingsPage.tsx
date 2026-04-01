@@ -13,6 +13,8 @@ import MeshTab from './settings/MeshTab'
 import IntegrationsTab from './settings/IntegrationsTab'
 import AssistantTab from './settings/AssistantTab'
 import VoiceTab from './settings/VoiceTab'
+import EmailTab from './settings/EmailTab'
+import CalendarTab from './settings/CalendarTab'
 import DataTab from './settings/DataTab'
 import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
@@ -31,6 +33,8 @@ import {
   Network,
   Database,
   BarChart3,
+  Mail,
+  CalendarDays,
   Link as LinkIcon,
   Rss,
   Eye,
@@ -51,6 +55,8 @@ const SECTIONS = [
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'documents', label: 'Documents', icon: FileText },
   { id: 'integrations', label: 'Integrations', icon: Zap },
+  { id: 'email', label: 'Email', icon: Mail },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'assistant', label: 'Assistant', icon: MessageCircle },
   { id: 'mesh', label: 'Mesh', icon: Network },
   { id: 'data', label: 'Data', icon: Database },
@@ -136,6 +142,8 @@ export default function SettingsPage() {
         {resolvedTab === 'integrations' && <IntegrationsTab active={true} />}
         {resolvedTab === 'assistant' && <AssistantTab active={true} />}
         {resolvedTab === 'voice' && <VoiceTab active={true} />}
+        {resolvedTab === 'email' && <EmailTab active={true} />}
+        {resolvedTab === 'calendar' && <CalendarTab active={true} />}
         {resolvedTab === 'data' && <DataTab active={true} />}
         {resolvedTab === 'analytics' && <AnalyticsTab />}
         {resolvedTab === 'mesh' && <MeshTab />}

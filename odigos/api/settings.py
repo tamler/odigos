@@ -1,5 +1,8 @@
 """Settings GET/POST API endpoints for reading and writing configuration."""
 
+import asyncio
+import imaplib
+import smtplib
 from pathlib import Path
 
 import yaml
@@ -63,6 +66,66 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
         "calendar": settings.calendar.model_dump(),
         "assistant": settings.assistant.model_dump(),
     }
+
+
+class EmailTestRequest(BaseModel):
+    imap_host: str
+    imap_port: int = 993
+    smtp_host: str
+    smtp_port: int = 587
+    username: str
+    password: str | None = None
+    address: str | None = None
+    enabled: bool | None = None
+    check_interval_ticks: int | None = None
+
+
+def _test_imap(host: str, port: int, username: str, password: str) -> str:
+    """Test IMAP connection (blocking, run via to_thread)."""
+    try:
+        conn = imaplib.IMAP4_SSL(host, port, timeout=10)
+        conn.login(username, password)
+        conn.logout()
+        return "ok"
+    except Exception as exc:
+        return str(exc)
+
+
+def _test_smtp(host: str, port: int, username: str, password: str) -> str:
+    """Test SMTP connection (blocking, run via to_thread)."""
+    try:
+        if port == 465:
+            server = smtplib.SMTP_SSL(host, port, timeout=10)
+        else:
+            server = smtplib.SMTP(host, port, timeout=10)
+            server.starttls()
+        server.login(username, password)
+        server.quit()
+        return "ok"
+    except Exception as exc:
+        return str(exc)
+
+
+@router.post("/email/test")
+async def test_email_connection(
+    req: EmailTestRequest,
+    settings=Depends(get_settings),
+    _=Depends(require_auth),
+):
+    """Test IMAP and SMTP connections with the provided credentials."""
+    password = req.password
+    if not password or password == "****":
+        # Fall back to stored password
+        email_cfg = settings.email
+        password = getattr(email_cfg, "password", "")
+    if not password:
+        raise HTTPException(status_code=400, detail="No password provided and none stored")
+
+    imap_result, smtp_result = await asyncio.gather(
+        asyncio.to_thread(_test_imap, req.imap_host, req.imap_port, req.username, password),
+        asyncio.to_thread(_test_smtp, req.smtp_host, req.smtp_port, req.username, password),
+    )
+    return {"imap": imap_result, "smtp": smtp_result}
 
 
 @router.post("/settings")
@@ -145,6 +208,37 @@ async def update_settings_endpoint(
         object.__setattr__(settings, section, new_obj)
 
     return {"status": "ok"}
+
+
+@router.post("/calendar/test")
+async def test_calendar_connection(request: Request, _=Depends(require_auth)):
+    """Test a CalDAV connection and return discovered calendars."""
+    body = await request.json()
+    url = body.get("url", "").strip()
+    username = body.get("username", "").strip()
+    password = body.get("password", "").strip()
+
+    if not url or not username:
+        raise HTTPException(status_code=400, detail="url and username are required")
+
+    def _test():
+        import caldav
+
+        client = caldav.DAVClient(url=url, username=username, password=password, timeout=10)
+        principal = client.principal()
+        calendars = principal.calendars()
+        return [str(c.name) for c in calendars if c.name]
+
+    try:
+        calendars = await asyncio.wait_for(asyncio.to_thread(_test), timeout=15)
+        return {"status": "ok", "calendars": calendars}
+    except asyncio.TimeoutError:
+        return {"status": "error", "detail": "Connection timed out after 10 seconds"}
+    except Exception as exc:
+        detail = str(exc)
+        if len(detail) > 200:
+            detail = detail[:200] + "..."
+        return {"status": "error", "detail": detail}
 
 
 @router.get("/profiles")
