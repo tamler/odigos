@@ -1078,6 +1078,9 @@ app.include_router(sharing_router)
 app.include_router(sharing_public_router)
 if _HAS_WEBAUTHN:
     app.include_router(webauthn_router)
+if os.environ.get("ODIGOS_PLATFORM_URL"):
+    from odigos.api.platform_auth import router as platform_auth_router
+    app.include_router(platform_auth_router)
 
 
 @app.get("/health")

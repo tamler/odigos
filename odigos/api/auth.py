@@ -1,10 +1,12 @@
 """Auth API: setup, login, logout, change-password, status, me."""
 
+import os
 import uuid
 from datetime import datetime, timezone
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -194,9 +196,12 @@ async def auth_login(body: LoginRequest, request: Request, response: Response):
 
 @router.post("/logout")
 async def auth_logout(request: Request, response: Response):
-    """Clear the session cookie."""
+    """Clear the session cookie. Redirect to platform if managed."""
     _check_csrf(request)
     response.delete_cookie(key=SESSION_COOKIE)
+    platform_url = os.environ.get("ODIGOS_PLATFORM_URL", "").rstrip("/")
+    if platform_url:
+        return RedirectResponse(f"{platform_url}/api/v1/auth/logout", status_code=303)
     return {"status": "ok"}
 
 
