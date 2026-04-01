@@ -19,7 +19,7 @@ import { VoiceOrb } from '@/components/VoiceOrb'
 import { useVoiceMode } from '@/hooks/useVoiceMode'
 import { usePushToTalk } from '@/hooks/usePushToTalk'
 import type { ChatMessage } from '@/layouts/AppLayout'
-import { MessageSkeleton } from '@/components/ui/skeleton-loaders'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useChatStore } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 
@@ -400,7 +400,21 @@ export const ChatPanel = memo(({
                       />
                     </div>
                   ) : switchingConversation ? (
-                    <MessageSkeleton />
+                    <div className="space-y-6 py-6">
+                      <div className="flex justify-end gap-3">
+                        <div className="space-y-2 max-w-[70%] w-full">
+                          <Skeleton className="h-4 w-[80%] ml-auto" />
+                          <Skeleton className="h-4 w-[55%] ml-auto" />
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="space-y-2 max-w-[75%] w-full">
+                          <Skeleton className="h-4 w-[90%]" />
+                          <Skeleton className="h-4 w-[65%]" />
+                          <Skeleton className="h-4 w-[40%]" />
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <div className="space-y-6 animate-in fade-in duration-300">
                       {messages.length === 0 && !thinking && (

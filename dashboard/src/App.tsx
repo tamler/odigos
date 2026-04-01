@@ -6,7 +6,6 @@ import AppLayout from './layouts/AppLayout'
 import LoginPrompt from './components/LoginPrompt'
 import WelcomeScreen from './components/WelcomeScreen'
 import { Loader } from '@/components/ui/loader'
-import { GooLoader } from '@/components/ui/goo-loader'
 import { get } from './lib/api'
 import ChatPage from './pages/ChatPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -69,11 +68,9 @@ export default function App() {
 
   if (authState === null || checkingWelcome) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-4 animate-in fade-in duration-500">
-        <GooLoader size="sm" />
-        <p className="text-sm font-medium text-muted-foreground tracking-widest uppercase animate-pulse">
-          Odigos
-        </p>
+      <div className="flex flex-col items-center justify-center h-screen gap-6 animate-in fade-in duration-500">
+        <Loader variant="text-shimmer" text="Odigos" size="lg" className="text-3xl font-bold tracking-tight" />
+        <Loader variant="pulse" size="sm" />
       </div>
     )
   }
