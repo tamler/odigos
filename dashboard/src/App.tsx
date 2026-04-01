@@ -6,6 +6,7 @@ import AppLayout from './layouts/AppLayout'
 import LoginPrompt from './components/LoginPrompt'
 import WelcomeScreen from './components/WelcomeScreen'
 import { Loader } from '@/components/ui/loader'
+import { GooLoader } from '@/components/ui/goo-loader'
 import { get } from './lib/api'
 import ChatPage from './pages/ChatPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -67,7 +68,14 @@ export default function App() {
   useEffect(() => { checkAuth() }, [checkAuth])
 
   if (authState === null || checkingWelcome) {
-    return <div className="flex items-center justify-center h-screen text-muted-foreground text-sm">Loading...</div>
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-4 animate-in fade-in duration-500">
+        <GooLoader size="sm" />
+        <p className="text-sm font-medium text-muted-foreground tracking-widest uppercase animate-pulse">
+          Odigos
+        </p>
+      </div>
+    )
   }
 
   const needsLogin = authState.setup_required || !authState.authenticated || authState.must_change_password

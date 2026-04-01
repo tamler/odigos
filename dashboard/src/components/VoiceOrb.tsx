@@ -1,5 +1,10 @@
+import { lazy, Suspense } from 'react'
 import { Mic, MicOff, Loader2, Square } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+const MorphingSphere = lazy(() =>
+  import('@/components/MorphingSphere').then(m => ({ default: m.MorphingSphere }))
+)
 
 export type VoiceState = 'idle' | 'listening' | 'processing' | 'thinking' | 'speaking'
 
@@ -28,82 +33,31 @@ export function VoiceOrb({ state, onExit, onToggleMic, amplitude = 0 }: VoiceOrb
     <div className="flex flex-col items-center justify-center p-8 space-y-16 animate-in fade-in zoom-in duration-700 ease-[cubic-bezier(0.32,0.72,0,1)]">
       {/* The Orb Container */}
       <div className="relative group cursor-pointer" onClick={onToggleMic}>
-        
-        {/* Volumetric Glow Layers */}
-        <div 
-          className="absolute inset-0 rounded-full blur-[64px] opacity-20 transition-[background-color,opacity] duration-1000 ease-in-out scale-[2.5] animate-orb-glow"
-          style={{ backgroundColor: activeColor }}
-        />
-        <div 
-          className="absolute inset-0 rounded-full blur-[32px] opacity-30 transition-all duration-700 ease-in-out scale-[1.8]"
-          style={{ backgroundColor: activeColor }}
-        />
 
-        {/* Amplitude Waves (Organic Rings) */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          {/* Layer 1 - Quickest response */}
-          <div 
-            className="absolute rounded-full border border-white/10 transition-transform duration-75 ease-out will-change-transform"
-            style={{ 
-              width: '100%', 
-              height: '100%', 
-              transform: `scale(${1 + amplitude * 1.5})`,
-              backgroundColor: state === 'listening' ? `${activeColor}10` : 'transparent',
-              borderColor: state === 'listening' ? `${activeColor}40` : 'transparent',
-            }}
-          />
-          {/* Layer 2 - Smoother, larger */}
-          <div 
-            className="absolute rounded-full border border-white/5 transition-transform duration-150 ease-out will-change-transform"
-            style={{ 
-              width: '100%', 
-              height: '100%', 
-              transform: `scale(${1 + amplitude * 2.2})`,
-              borderColor: state === 'listening' ? `${activeColor}20` : 'transparent',
-            }}
-          />
-          {/* Layer 3 - Subtle outer glow */}
-          <div 
-            className="absolute rounded-full transition-all duration-300 ease-out blur-xl will-change-transform"
-            style={{ 
-              width: '100%', 
-              height: '100%', 
-              transform: `scale(${1 + amplitude * 1.2})`,
-              backgroundColor: state === 'listening' ? `${activeColor}05` : 'transparent',
-            }}
-          />
-        </div>
-
-        {/* The Core Orb (Double-Bezel) */}
-        <div className="relative p-1.5 rounded-full bg-white/5 border border-white/10 shadow-2xl backdrop-blur-sm transition-transform duration-500 group-hover:scale-105 active:scale-[0.97]">
-          <div 
-            className={cn(
-              "h-32 w-32 rounded-full flex items-center justify-center transition-all duration-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] relative overflow-hidden",
-              state === 'idle' ? "bg-muted text-muted-foreground" : "text-white"
-            )}
-            style={{ backgroundColor: state !== 'idle' ? activeColor : undefined }}
-          >
-            {/* Glossy Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-white/20 pointer-events-none" />
-            
-            {/* Animated Icons/Content */}
-            <div className="relative z-10 transition-all duration-500">
-              {state === 'listening' && <Mic className="h-12 w-12 animate-pulse" />}
-              {state === 'processing' && <Loader2 className="h-12 w-12 animate-spin" />}
-              {state === 'thinking' && (
-                <div className="flex gap-1.5 items-center">
-                  <div className="h-2 w-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="h-2 w-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="h-2 w-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
-              )}
+        {/* 3D Morphing Sphere — shown during active voice states */}
+        {(state === 'listening' || state === 'speaking') ? (
+          <div className="relative">
+            <div
+              className="absolute inset-0 rounded-full blur-[48px] opacity-30 transition-all duration-1000 scale-[1.5]"
+              style={{ backgroundColor: activeColor }}
+            />
+            <Suspense fallback={<div className="h-[280px] w-[280px]" />}>
+              <MorphingSphere
+                amplitude={amplitude}
+                color={activeColor}
+                size={280}
+                className="relative z-10"
+              />
+            </Suspense>
+            <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+              {state === 'listening' && <Mic className="h-10 w-10 text-white drop-shadow-lg" />}
               {state === 'speaking' && (
                 <div className="flex items-center gap-1 h-8">
                   {[...Array(5)].map((_, i) => (
-                    <div 
+                    <div
                       key={i}
-                      className="w-1.5 bg-white rounded-full animate-waveform"
-                      style={{ 
+                      className="w-1.5 bg-white rounded-full animate-waveform drop-shadow-lg"
+                      style={{
                         height: '100%',
                         animationDelay: `${i * 0.15}s`,
                         animationDuration: `${WAVEFORM_DURATIONS[i]}s`
@@ -112,10 +66,45 @@ export function VoiceOrb({ state, onExit, onToggleMic, amplitude = 0 }: VoiceOrb
                   ))}
                 </div>
               )}
-              {state === 'idle' && <MicOff className="h-12 w-12" />}
             </div>
           </div>
-        </div>
+        ) : (
+          <>
+            {/* Volumetric Glow Layers */}
+            <div
+              className="absolute inset-0 rounded-full blur-[64px] opacity-20 transition-[background-color,opacity] duration-1000 ease-in-out scale-[2.5] animate-orb-glow"
+              style={{ backgroundColor: activeColor }}
+            />
+            <div
+              className="absolute inset-0 rounded-full blur-[32px] opacity-30 transition-all duration-700 ease-in-out scale-[1.8]"
+              style={{ backgroundColor: activeColor }}
+            />
+
+            {/* The Core Orb (Double-Bezel) — idle/processing/thinking */}
+            <div className="relative p-1.5 rounded-full bg-white/5 border border-white/10 shadow-2xl backdrop-blur-sm transition-transform duration-500 group-hover:scale-105 active:scale-[0.97]">
+              <div
+                className={cn(
+                  "h-32 w-32 rounded-full flex items-center justify-center transition-all duration-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] relative overflow-hidden",
+                  state === 'idle' ? "bg-muted text-muted-foreground" : "text-white"
+                )}
+                style={{ backgroundColor: state !== 'idle' ? activeColor : undefined }}
+              >
+                <div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-white/20 pointer-events-none" />
+                <div className="relative z-10 transition-all duration-500">
+                  {state === 'processing' && <Loader2 className="h-12 w-12 animate-spin" />}
+                  {state === 'thinking' && (
+                    <div className="flex gap-1.5 items-center">
+                      <div className="h-2 w-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="h-2 w-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="h-2 w-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  )}
+                  {state === 'idle' && <MicOff className="h-12 w-12" />}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Action Area */}

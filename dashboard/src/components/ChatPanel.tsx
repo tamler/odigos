@@ -19,6 +19,7 @@ import { VoiceOrb } from '@/components/VoiceOrb'
 import { useVoiceMode } from '@/hooks/useVoiceMode'
 import { usePushToTalk } from '@/hooks/usePushToTalk'
 import type { ChatMessage } from '@/layouts/AppLayout'
+import { MessageSkeleton } from '@/components/ui/skeleton-loaders'
 import { useChatStore } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 
@@ -68,11 +69,12 @@ function WelcomeView({ agentName, onSuggest }: { agentName: string; onSuggest: (
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {suggestions.map((s) => (
+          {suggestions.map((s, i) => (
             <button
               key={s.label}
               onClick={() => onSuggest(s.text)}
-              className="p-4 rounded-xl border border-border/40 bg-card hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
+              className="p-4 rounded-xl border border-border/40 bg-card hover:border-primary/50 hover:bg-primary/5 transition-all text-left group animate-in fade-in slide-in-from-bottom-3 fill-mode-backwards will-change-transform"
+              style={{ animationDelay: `${i * 100}ms` }}
             >
               <p className="text-xs font-semibold text-primary mb-1 uppercase tracking-wider">{s.label}</p>
               <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">{s.text}</p>
@@ -128,6 +130,7 @@ export const ChatPanel = memo(({
   const [showAllActions, setShowAllActions] = useState(false)
   const [useCamera, setUseCamera] = useState<boolean | 'environment'>(false)
   const [voiceAmplitude, setVoiceAmplitude] = useState(0)
+  const [switchingConversation, setSwitchingConversation] = useState(false)
   const loadedConvRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -187,6 +190,7 @@ export const ChatPanel = memo(({
     }
     if (cid === loadedConvRef.current) return
     loadedConvRef.current = cid
+    setSwitchingConversation(true)
 
     useChatStore.getState().setThinking(false)
     useChatStore.getState().setStatus(null)
@@ -207,7 +211,8 @@ export const ChatPanel = memo(({
       if (artRes.status === 'fulfilled' && artRes.value?.artifacts) {
         setArtifacts(artRes.value.artifacts)
       }
-    }).catch(() => {})
+      setSwitchingConversation(false)
+    }).catch(() => { setSwitchingConversation(false) })
   }, [activeConversationId, searchParams, setMessages])
 
   // Fetch artifacts once when thinking completes
@@ -394,8 +399,10 @@ export const ChatPanel = memo(({
                         onToggleMic={() => {}}
                       />
                     </div>
+                  ) : switchingConversation ? (
+                    <MessageSkeleton />
                   ) : (
-                    <div className="space-y-6">
+                    <div className="space-y-6 animate-in fade-in duration-300">
                       {messages.length === 0 && !thinking && (
                         <div className="flex items-center justify-center h-[60vh] text-muted-foreground text-base text-center">
                           What can I help you with?
@@ -465,7 +472,7 @@ export const ChatPanel = memo(({
 
                       {streamingContent && thinking ? (
                         <div className="group/msg w-full overflow-hidden">
-                          <StreamingText content={streamingContent} />
+                          <StreamingText content={streamingContent} isStreaming={true} />
                           <div className="flex items-center gap-2 mt-3 pb-1 opacity-50 hover:opacity-100 transition-opacity duration-500">
                             <div className="size-1.5 bg-primary rounded-full animate-pulse" />
                             <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground/80">
@@ -531,7 +538,8 @@ export const ChatPanel = memo(({
                     useChatStore.getState().setThinking(true)
                     socketRef.current?.send('chat', { content: action, conversation_id: activeConversationId || undefined })
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all border border-border/40 hover:border-primary/20 shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-[13px] bg-muted/50 text-muted-foreground hover:bg-primary/10 hover:text-primary transition-all border border-border/40 hover:border-primary/20 shadow-sm animate-in fade-in slide-in-from-bottom-2 fill-mode-backwards will-change-transform"
+                  style={{ animationDelay: `${i * 75}ms` }}
                 >
                   {action.length > 60 ? action.slice(0, 57) + '...' : action}
                 </button>

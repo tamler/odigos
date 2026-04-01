@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { ChatPanel } from '@/components/ChatPanel'
+import { PageTransition } from '@/components/ui/page-transition'
 import { useChatStore } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 
@@ -23,13 +24,13 @@ export default function ChatPage() {
   }, [setChatPanelOpen])
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-background relative z-10">
+    <PageTransition className="flex-1 flex flex-col h-full bg-background relative z-10">
       <ChatPanel
         activeConversationId={activeConversationId}
         socketRef={socketRef}
         connected={connected}
         isSidePanel={false}
       />
-    </div>
+    </PageTransition>
   )
 }

@@ -6,6 +6,7 @@ import { Trash2 } from 'lucide-react'
 
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PageTransition } from '@/components/ui/page-transition'
 
 export default function ArtifactsPage() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -40,7 +41,7 @@ export default function ArtifactsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden p-6 max-w-5xl mx-auto w-full">
+    <PageTransition className="flex flex-col h-full bg-background overflow-hidden p-6 max-w-5xl mx-auto w-full">
       <div className="flex items-center justify-between mb-8 shrink-0">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Documents</h1>
@@ -86,6 +87,6 @@ export default function ArtifactsPage() {
           )}
         </div>
       </ScrollArea>
-    </div>
+    </PageTransition>
   )
 }

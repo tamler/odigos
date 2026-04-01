@@ -256,7 +256,7 @@ const AppSidebar = memo(({
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startRename(null)}><X className="h-3 w-3" /></Button>
                       </div>
                     ) : (
-                      <button onClick={() => handleSelectConversation(c.id)} className={`w-full text-left px-3 py-2 min-h-[40px] rounded-lg text-sm truncate transition-colors pr-8 ${activeId === c.id ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}>{displayTitle(c)}</button>
+                      <button onClick={() => handleSelectConversation(c.id)} className={`w-full text-left px-3 py-2 min-h-[40px] rounded-lg text-sm truncate pr-8 transition-all duration-200 ${activeId === c.id ? 'bg-primary/10 text-primary font-bold shadow-sm border-l-2 border-primary' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground hover:translate-x-0.5'}`}>{displayTitle(c)}</button>
                     )}
                     {editingId !== c.id && (
                       <div className={`absolute right-1 top-1/2 -translate-y-1/2 ${activeId === c.id ? 'opacity-100' : 'lg:opacity-0 lg:group-hover:opacity-100'}`}>

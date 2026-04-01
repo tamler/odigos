@@ -7,6 +7,7 @@ import { Trash2, Upload, ImageIcon, Share2, Download, Camera } from 'lucide-reac
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PageTransition } from '@/components/ui/page-transition'
 
 function ImageCard({ img, selected, onTap, onLongPress, onDelete, onDownload, onShare, onDismiss }: {
   img: Artifact
@@ -205,7 +206,7 @@ export default function ImagesPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-hidden p-4 lg:p-8 max-w-7xl mx-auto w-full text-foreground">
+    <PageTransition className="flex flex-col h-full bg-background overflow-hidden p-4 lg:p-8 max-w-7xl mx-auto w-full text-foreground">
       <div className="flex items-center justify-between mb-6 lg:mb-8 shrink-0 pl-12 lg:pl-0">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Images</h1>
@@ -263,6 +264,6 @@ export default function ImagesPage() {
       {selectedId && (
         <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setSelectedId(null)} />
       )}
-    </div>
+    </PageTransition>
   )
 }

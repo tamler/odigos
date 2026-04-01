@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Plus, Trash2, Share2, Globe, Maximize2, Minimize2 } from 'lucide-react'
 import { ShareDialog } from '@/components/ShareDialog'
 import { AgentInputBar } from '@/components/AgentInputBar'
+import { PageTransition } from '@/components/ui/page-transition'
 import {
   KanbanBoardProvider,
   KanbanBoard,
@@ -518,8 +519,10 @@ function BoardDetail({ boardId }: { boardId: string }) {
   if (!board) return null
 
   return (
-    <KanbanBoardProvider>
-      <BoardDetailInner boardId={boardId} board={board} setBoard={setBoard} />
-    </KanbanBoardProvider>
+    <PageTransition>
+      <KanbanBoardProvider>
+        <BoardDetailInner boardId={boardId} board={board} setBoard={setBoard} />
+      </KanbanBoardProvider>
+    </PageTransition>
   )
 }

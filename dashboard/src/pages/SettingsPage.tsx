@@ -42,6 +42,7 @@ import {
   MessageCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PageTransition } from '@/components/ui/page-transition'
 import { useUIStore } from '@/stores/uiStore'
 
 const SECTIONS = [
@@ -118,7 +119,7 @@ export default function SettingsPage() {
   const resolvedTab = activeTab || 'general'
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-background">
+    <PageTransition className="flex-1 flex flex-col overflow-hidden bg-background">
       <div className="flex items-center gap-2 px-4 pl-12 h-[44px] border-b border-border/40 shrink-0 lg:hidden">
         <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => navigate('/settings')}>
           <ArrowLeft className="h-3.5 w-3.5 mr-1" />
@@ -152,6 +153,6 @@ export default function SettingsPage() {
         {resolvedTab === 'feed' && <FeedTab active={true} />}
         {resolvedTab === 'inspector' && <InspectorTab active={true} />}
       </div>
-    </div>
+    </PageTransition>
   )
 }

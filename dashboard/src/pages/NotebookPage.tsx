@@ -8,6 +8,7 @@ import { Loader2, Trash2, Share2, Globe, Maximize2, Minimize2 } from 'lucide-rea
 import { MarkdownEditor } from '@/components/Editor'
 import { AgentInputBar } from '@/components/AgentInputBar'
 import { ShareDialog } from '@/components/ShareDialog'
+import { PageTransition } from '@/components/ui/page-transition'
 
 interface Notebook {
   id: string
@@ -158,7 +159,7 @@ export default function NotebookPage() {
   }
 
   return (
-    <div className={`flex-1 flex flex-col h-full bg-background transition-all duration-300 ${focusMode ? 'fixed inset-0 z-[100] p-4 lg:p-12' : ''}`}>
+    <PageTransition className={`flex-1 flex flex-col h-full bg-background transition-all duration-300 ${focusMode ? 'fixed inset-0 z-[100] p-4 lg:p-12' : ''}`}>
       {/* Header */}
       {!focusMode && (
         <div className="flex items-center justify-between px-4 pl-14 lg:px-8 lg:pl-8 py-3 lg:py-4 border-b border-border/10 shrink-0 bg-background/50 backdrop-blur-sm sticky top-0 z-20">
@@ -244,6 +245,6 @@ export default function NotebookPage() {
         }}
         initialShareToken={notebook?.share_token}
       />
-    </div>
+    </PageTransition>
   )
 }
