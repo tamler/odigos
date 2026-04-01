@@ -7,6 +7,16 @@ from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 logger = logging.getLogger(__name__)
 
+# Conservative cost estimation per million tokens when provider doesn't report cost.
+# These rates are intentionally high to ensure budget limits trigger early.
+_INPUT_RATE = 0.50   # $/M input tokens (conservative — most models are cheaper)
+_OUTPUT_RATE = 1.50  # $/M output tokens (conservative)
+
+
+def _estimate_cost_from_tokens(tokens_in: int, tokens_out: int) -> float:
+    """Estimate cost from token counts when the provider returns no cost."""
+    return (tokens_in * _INPUT_RATE + tokens_out * _OUTPUT_RATE) / 1_000_000
+
 
 class LLMClient(LLMProvider):
     """OpenAI-compatible LLM provider with fallback support.
@@ -93,12 +103,19 @@ class LLMClient(LLMProvider):
                     arguments=args,
                 ))
 
+        tokens_in = usage.get("prompt_tokens", 0)
+        tokens_out = usage.get("completion_tokens", 0)
+        # Use provider-reported cost, or estimate from tokens
+        cost = usage.get("cost") or data.get("usage", {}).get("cost") or 0.0
+        if not cost and (tokens_in or tokens_out):
+            cost = _estimate_cost_from_tokens(tokens_in, tokens_out)
+
         return LLMResponse(
             content=message.get("content") or "",
             model=data.get("model", model),
-            tokens_in=usage.get("prompt_tokens", 0),
-            tokens_out=usage.get("completion_tokens", 0),
-            cost_usd=0.0,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost,
             generation_id=data.get("id"),
             tool_calls=tool_calls,
         )
@@ -198,12 +215,14 @@ class LLMClient(LLMProvider):
                             id=tc["id"], name=tc["name"], arguments=args,
                         ))
 
+                _tin = locals().get("tokens_in", 0)
+                _tout = locals().get("tokens_out", 0)
                 final = LLMResponse(
                     content=full_content,
                     model=response_model,
-                    tokens_in=locals().get("tokens_in", 0),
-                    tokens_out=locals().get("tokens_out", 0),
-                    cost_usd=0.0,
+                    tokens_in=_tin,
+                    tokens_out=_tout,
+                    cost_usd=_estimate_cost_from_tokens(_tin, _tout),
                     generation_id=generation_id,
                     tool_calls=parsed_tool_calls,
                 )

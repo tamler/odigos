@@ -940,6 +940,7 @@ async def lifespan(app: FastAPI):
         scheduler=scheduler,
         ws_port=settings.server.ws_port,
         settings=settings,
+        budget_tracker=budget_tracker,
     )
 
     # Set heartbeat on agent so any channel can access it

@@ -71,9 +71,11 @@ class Heartbeat:
         scheduler: Scheduler | None = None,
         ws_port: int = 8001,
         settings=None,
+        budget_tracker=None,
     ) -> None:
         self.db = db
         self.settings = settings
+        self._budget_tracker = budget_tracker
         self.agent = agent
         self.channel_registry = channel_registry
         self.goal_store = goal_store
@@ -140,10 +142,22 @@ class Heartbeat:
         if self.paused:
             return
 
+        # Budget gate: skip ALL LLM-touching phases when over budget
+        _over_budget = False
+        if hasattr(self, '_budget_tracker') and self._budget_tracker:
+            try:
+                status = await self._budget_tracker.check_budget()
+                if not status.within_budget:
+                    _over_budget = True
+                    logger.warning("Heartbeat: over budget, skipping LLM phases")
+            except Exception:
+                pass
+
         did_work = False
 
         # Phase 0: Morning briefing (once per day)
-        await self._maybe_send_briefing()
+        if not _over_budget:
+            await self._maybe_send_briefing()
 
         # Phase 1: Process scheduled tasks (unified reminders + cron)
         did_work |= await self._process_scheduled_tasks()
@@ -151,8 +165,9 @@ class Heartbeat:
         # Phase 1b: Fire legacy reminders (old table, for backward compat)
         did_work |= await self._fire_reminders()
 
-        # Phase 2: Work on pending todos
-        did_work |= await self._work_todos()
+        # Phase 2: Work on pending todos (LLM calls)
+        if not _over_budget:
+            did_work |= await self._work_todos()
 
         # Phase 3: Deliver subagent results
         did_work |= await self._deliver_subagent_results()
@@ -164,7 +179,7 @@ class Heartbeat:
         if self.agent_client:
             did_work |= await self._process_peer_messages()
 
-        # Phase 4b: Check email inbox (if configured)
+        # Phase 4b: Check email inbox (if configured, no LLM)
         _email_cfg = getattr(self, "_email_config", None)
         if _email_cfg and _email_cfg.enabled:
             if not hasattr(self, "_email_tick_counter"):
@@ -175,50 +190,50 @@ class Heartbeat:
                 self._email_tick_counter = 0
                 did_work |= await self._check_email()
 
-        # Phase 4c: Proactive nudges (stale tasks, overdue goals)
+        # Phase 4c: Proactive nudges (no LLM)
         self._nudge_tick_counter += 1
         if self._nudge_tick_counter >= self._nudge_interval_ticks:
             self._nudge_tick_counter = 0
             did_work |= await self._send_nudges()
 
-        # Phase 4d: Follow-up reminders (user commitments)
+        # Phase 4d: Follow-up reminders (no LLM)
         self._followup_tick_counter += 1
         if self._followup_tick_counter >= self._followup_interval_ticks:
             self._followup_tick_counter = 0
             did_work |= await self._check_followups()
 
-        # Phase 4e: Proactive plan execution (work on in-progress plans during idle)
-        if not did_work:
+        # Phase 4e: Proactive plan execution (LLM calls)
+        if not did_work and not _over_budget:
             did_work |= await self._work_in_progress_plans()
 
-        # Phase 5: Idle thoughts (only if nothing ran above)
-        if not did_work:
+        # Phase 5: Idle thoughts (LLM calls)
+        if not did_work and not _over_budget:
             await self._idle_think()
 
-        # Phase 6: Self-improvement cycle (runs when idle)
-        if not did_work and self.evolution_engine:
+        # Phase 6: Self-improvement cycle (LLM calls)
+        if not did_work and not _over_budget and self.evolution_engine:
             await self._run_evolution()
 
         # Phase 7: Peer announce + stale check
         if self.agent_client:
             await self._peer_maintenance()
 
-        # Phase 8: User profile dreaming (every N ticks, only when idle)
-        if not did_work:
+        # Phase 8: User profile dreaming (LLM calls, idle only)
+        if not did_work and not _over_budget:
             self._dream_tick_counter += 1
             if self._dream_tick_counter >= self._dream_interval_ticks:
                 self._dream_tick_counter = 0
                 await self._dream_analyze_user()
 
-        # Phase 9: Experience extraction (every N ticks, only when idle)
-        if not did_work:
+        # Phase 9: Experience extraction (LLM calls, idle only)
+        if not did_work and not _over_budget:
             self._experience_tick_counter += 1
             if self._experience_tick_counter >= self._experience_interval_ticks:
                 self._experience_tick_counter = 0
                 await self._extract_experiences()
 
-        # Phase 10: Outcome evaluation for completed plans (every N ticks, only when idle)
-        if not did_work:
+        # Phase 10: Outcome evaluation (LLM calls, idle only)
+        if not did_work and not _over_budget:
             self._outcome_tick_counter += 1
             if self._outcome_tick_counter >= self._outcome_interval_ticks:
                 self._outcome_tick_counter = 0
@@ -472,8 +487,9 @@ class Heartbeat:
         if not todos:
             return False
 
+        # Execute sequentially — no unbounded parallel tasks
         for t in todos:
-            asyncio.create_task(self._execute_todo(t))
+            await self._execute_todo(t)
         return True
 
     async def _execute_todo(self, todo: dict) -> None:
