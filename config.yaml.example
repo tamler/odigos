@@ -202,10 +202,10 @@ evolution:
 # CALENDAR (optional)
 # =============================================================================
 
-# CalDAV calendar integration
+# Calendar -- connect any CalDAV provider (Google, Apple iCloud, Outlook, Fastmail, Nextcloud, etc.)
 # calendar:
 #   enabled: false
-#   url: ""                         # CalDAV server URL
+#   url: "https://caldav.example.com/user/calendar"  # Your provider's CalDAV URL
 #   username: ""
 #   password: ""
 
@@ -214,15 +214,17 @@ evolution:
 # =============================================================================
 
 # IMAP/SMTP email integration
+# Email -- connect any SMTP/IMAP provider (Gmail, Outlook, Fastmail, ProtonMail, etc.)
 # email:
 #   enabled: false
-#   address: "agent@yourdomain.com"
-#   imap_host: "mail.yourdomain.com"
+#   address: "you@gmail.com"
+#   imap_host: "imap.gmail.com"           # Your provider's IMAP server
 #   imap_port: 993
-#   smtp_host: "mail.yourdomain.com"
+#   smtp_host: "smtp.gmail.com"           # Your provider's SMTP server
 #   smtp_port: 587
-#   username: "agent@yourdomain.com"
-#   password: "from-env-var"
+#   username: "you@gmail.com"
+#   password: "app-specific-password"     # Use app passwords, not your main password
+#   check_interval_ticks: 10              # Heartbeat ticks between inbox checks
 #   check_interval_ticks: 10        # Heartbeat ticks between inbox checks (0 = agent decides)
 
 # =============================================================================
