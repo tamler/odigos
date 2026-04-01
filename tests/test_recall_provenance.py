@@ -1,6 +1,7 @@
 """Test that memory recall separates document and conversation results."""
 import asyncio
 import pytest
+pytest.importorskip("sentence_transformers")
 from unittest.mock import AsyncMock
 from odigos.memory.manager import MemoryManager
 from odigos.memory.vectors import MemoryResult

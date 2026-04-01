@@ -1,4 +1,5 @@
 """Entity graph and semantic memory search API endpoints."""
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 

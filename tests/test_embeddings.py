@@ -1,8 +1,10 @@
+import pytest
+pytest.importorskip("sentence_transformers")
+
 from unittest.mock import MagicMock, patch
 from functools import partial
 
 import numpy as np
-import pytest
 
 from odigos.providers.embeddings import EmbeddingProvider
 

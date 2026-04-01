@@ -14,7 +14,7 @@ from odigos.core.reflector import Reflector
 from odigos.core.trace import HOOK_TIMEOUT, Tracer
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
-from odigos.tools.base import BaseTool, ToolResult
+from odigos.tools.base import BaseTool, ToolContract, ToolResult
 from odigos.tools.registry import ToolRegistry
 
 
@@ -113,6 +113,7 @@ class TestTracerInExecutor:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute = AsyncMock(
             return_value=ToolResult(success=True, data="results here")
         )
@@ -159,6 +160,7 @@ class TestTracerInExecutor:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute = AsyncMock(
             return_value=ToolResult(success=False, data="", error="network timeout")
         )
@@ -205,6 +207,7 @@ class TestTracerInExecutor:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute = AsyncMock(
             return_value=ToolResult(success=True, data="ok")
         )

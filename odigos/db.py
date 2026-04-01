@@ -57,9 +57,14 @@ class Database:
         await self._conn.execute("PRAGMA foreign_keys=ON")
 
         # Load sqlite-vec extension for vector search
-        await self._conn.enable_load_extension(True)
-        await self._conn.load_extension(sqlite_vec.loadable_path())
-        await self._conn.enable_load_extension(False)
+        self._vec_loaded = False
+        try:
+            await self._conn.enable_load_extension(True)
+            await self._conn.load_extension(sqlite_vec.loadable_path())
+            await self._conn.enable_load_extension(False)
+            self._vec_loaded = True
+        except AttributeError:
+            logger.warning("sqlite3 extension loading not supported in this Python build")
 
         await self.run_migrations()
 
@@ -97,7 +102,21 @@ class Database:
             if migration_file.name in applied:
                 continue
             sql = migration_file.read_text()
-            await self.conn.executescript(sql)
+            if not self._vec_loaded and "vec0" in sql:
+                # Strip vec0 virtual table creation so the rest of the migration runs
+                import re
+                filtered = re.sub(
+                    r"CREATE\s+VIRTUAL\s+TABLE[^;]*USING\s+vec0\([^)]*\)\s*;",
+                    "-- (vec0 table skipped, extension not loaded)",
+                    sql,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+                try:
+                    await self.conn.executescript(filtered)
+                except Exception as e:
+                    logger.warning("Migration %s partially failed: %s", migration_file.name, e)
+            else:
+                await self.conn.executescript(sql)
             await self.conn.execute(
                 "INSERT INTO _migrations (name) VALUES (?)",
                 (migration_file.name,),

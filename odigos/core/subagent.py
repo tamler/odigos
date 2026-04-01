@@ -139,8 +139,10 @@ class SubagentManager:
                 tracer=self.tracer,
             )
 
-            async with asyncio.timeout(timeout):
-                result = await executor.execute(f"subagent:{subagent_id}", instruction)
+            result = await asyncio.wait_for(
+                executor.execute(f"subagent:{subagent_id}", instruction),
+                timeout=timeout,
+            )
 
             result_content = result.response.content or "Subagent completed with no output."
             now = datetime.now(timezone.utc).isoformat()
@@ -149,7 +151,7 @@ class SubagentManager:
                 "WHERE id = ?",
                 (result_content, now, subagent_id),
             )
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             now = datetime.now(timezone.utc).isoformat()
             await self.db.execute(
                 "UPDATE subagent_tasks SET status = 'failed', result = ?, completed_at = ? "

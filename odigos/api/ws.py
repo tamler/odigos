@@ -1,4 +1,5 @@
 """WebSocket endpoint for real-time chat, subscriptions, and event streaming."""
+from __future__ import annotations
 
 import asyncio
 import hmac

@@ -1,10 +1,26 @@
 import asyncio
 import os
+import sqlite3
 import tempfile
 from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
+
+# Check once at import time whether sqlite3 supports extension loading
+_test_conn = sqlite3.connect(":memory:")
+try:
+    _test_conn.enable_load_extension(True)
+    HAS_SQLITE_VEC = True
+except AttributeError:
+    HAS_SQLITE_VEC = False
+finally:
+    _test_conn.close()
+
+requires_sqlite_vec = pytest.mark.skipif(
+    not HAS_SQLITE_VEC,
+    reason="sqlite3 extension loading not supported in this Python build",
+)
 
 try:
     from odigos.config import Settings

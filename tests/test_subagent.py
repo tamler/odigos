@@ -7,7 +7,7 @@ from odigos.core.heartbeat import Heartbeat
 from odigos.core.subagent import MAX_CONCURRENT_PER_CONVERSATION, SubagentManager
 from odigos.db import Database
 from odigos.providers.base import LLMResponse
-from odigos.tools.base import BaseTool, ToolResult
+from odigos.tools.base import BaseTool, ToolContract, ToolResult
 from odigos.tools.registry import ToolRegistry
 from odigos.tools.subagent_tool import SpawnSubagentTool
 
@@ -48,6 +48,7 @@ def _make_tool_registry() -> ToolRegistry:
     web_search.name = "web_search"
     web_search.description = "Search the web"
     web_search.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+    web_search.contract = ToolContract()
     web_search.execute = AsyncMock(return_value=ToolResult(success=True, data="results"))
     registry.register(web_search)
 
@@ -55,6 +56,7 @@ def _make_tool_registry() -> ToolRegistry:
     spawn.name = "spawn_subagent"
     spawn.description = "Spawn a subagent"
     spawn.parameters_schema = {"type": "object", "properties": {"instruction": {"type": "string"}}}
+    spawn.contract = ToolContract()
     spawn.execute = AsyncMock(return_value=ToolResult(success=True, data="spawned"))
     registry.register(spawn)
 

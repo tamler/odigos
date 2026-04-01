@@ -1,6 +1,7 @@
 """Integration tests verifying all API routers are mounted on the main app."""
 
 import pytest
+pytest.importorskip("sentence_transformers")
 from unittest.mock import AsyncMock, MagicMock
 
 from httpx import ASGITransport, AsyncClient

@@ -14,7 +14,7 @@ from odigos.core.executor import Executor, ExecuteResult
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
 from odigos.skills.registry import SkillRegistry, Skill
-from odigos.tools.base import BaseTool, ToolResult
+from odigos.tools.base import BaseTool, ToolContract, ToolResult
 from odigos.tools.registry import ToolRegistry
 from odigos.tools.skill_tool import ActivateSkillTool
 
@@ -64,6 +64,7 @@ class TestReActLoop:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="Python 3.13 released")
 
         registry = ToolRegistry()
@@ -84,7 +85,7 @@ class TestReActLoop:
         result = await executor.execute("conv-1", "What's new in Python?")
         assert result.response.content == "Python 3.13 was just released!"
         assert mock_provider.complete.call_count == 2
-        mock_tool.execute.assert_called_once_with({"query": "python 3.13", "_conversation_id": "conv-1"})
+        mock_tool.execute.assert_called_once_with({"query": "python 3.13", "_conversation_id": "conv-1", "_goal_id": None})
 
     @pytest.mark.asyncio
     async def test_multi_turn_tool_calls(self, mock_provider, mock_assembler):
@@ -93,12 +94,14 @@ class TestReActLoop:
         mock_search.name = "web_search"
         mock_search.description = "Search"
         mock_search.parameters_schema = {"type": "object", "properties": {}}
+        mock_search.contract = ToolContract()
         mock_search.execute.return_value = ToolResult(success=True, data="Result 1")
 
         mock_scrape = AsyncMock(spec=BaseTool)
         mock_scrape.name = "read_page"
         mock_scrape.description = "Read page"
         mock_scrape.parameters_schema = {"type": "object", "properties": {}}
+        mock_scrape.contract = ToolContract()
         mock_scrape.execute.return_value = ToolResult(success=True, data="Page content")
 
         registry = ToolRegistry()
@@ -126,6 +129,7 @@ class TestReActLoop:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="result")
 
         registry = ToolRegistry()
@@ -148,6 +152,7 @@ class TestReActLoop:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=False, data="", error="Connection refused")
 
         registry = ToolRegistry()
@@ -192,6 +197,7 @@ class TestReActLoop:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="result")
 
         registry = ToolRegistry()
@@ -219,6 +225,7 @@ class TestReActLoop:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="result")
 
         registry = ToolRegistry()
@@ -265,6 +272,7 @@ class TestAgentReAct:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="Python 3.13 features")
 
         registry = ToolRegistry()
@@ -420,6 +428,7 @@ class TestSkillActivation:
         mock_other_tool.name = "send_email"
         mock_other_tool.description = "Send email"
         mock_other_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_other_tool.contract = ToolContract()
         mock_other_tool.execute.return_value = ToolResult(success=True, data="Sent")
 
         registry = ToolRegistry()
@@ -466,6 +475,7 @@ class TestSkillActivation:
         mock_search.name = "web_search"
         mock_search.description = "Search"
         mock_search.parameters_schema = {"type": "object", "properties": {}}
+        mock_search.contract = ToolContract()
         mock_search.execute.return_value = ToolResult(success=True, data="Results")
 
         registry = ToolRegistry()
@@ -513,6 +523,7 @@ class TestBudgetEnforcement:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="result")
 
         registry = ToolRegistry()
@@ -554,6 +565,7 @@ class TestBudgetEnforcement:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="result")
 
         registry = ToolRegistry()

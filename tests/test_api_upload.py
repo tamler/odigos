@@ -1,4 +1,6 @@
 import os
+import pytest
+pytest.importorskip("sentence_transformers")
 from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 from fastapi import FastAPI

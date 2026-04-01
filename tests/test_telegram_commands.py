@@ -1,5 +1,6 @@
 # tests/test_telegram_commands.py
 import pytest
+pytest.importorskip("telegram")
 from unittest.mock import AsyncMock, MagicMock
 
 from odigos.core.agent_service import AgentService

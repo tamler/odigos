@@ -1,4 +1,6 @@
 """API endpoints for listing, reading, and editing prompt files."""
+from __future__ import annotations
+
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException

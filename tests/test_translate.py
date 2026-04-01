@@ -1,4 +1,5 @@
 import pytest
+pytest.importorskip("deep_translator")
 from odigos.tools.translate import TranslateTool
 
 

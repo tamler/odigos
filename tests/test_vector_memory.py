@@ -1,6 +1,20 @@
+import sqlite3
 from unittest.mock import AsyncMock
 
 import pytest
+
+# sqlite-vec requires extension loading support in sqlite3
+_conn = sqlite3.connect(":memory:")
+try:
+    _conn.enable_load_extension(True)
+    _HAS_EXT = True
+except AttributeError:
+    _HAS_EXT = False
+finally:
+    _conn.close()
+
+if not _HAS_EXT:
+    pytest.skip("sqlite3 extension loading not supported", allow_module_level=True)
 
 from odigos.db import Database
 from odigos.memory.vectors import VectorMemory, MemoryResult

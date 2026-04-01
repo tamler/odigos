@@ -1,6 +1,7 @@
-from unittest.mock import AsyncMock
-
 import pytest
+pytest.importorskip("sentence_transformers")
+
+from unittest.mock import AsyncMock
 
 from odigos.db import Database
 from odigos.memory.graph import EntityGraph

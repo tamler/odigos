@@ -12,7 +12,7 @@ from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.providers.base import LLMResponse, ToolCall
 from odigos.skills.registry import SkillRegistry, Skill
-from odigos.tools.base import ToolResult
+from odigos.tools.base import ToolContract, ToolResult
 from odigos.tools.registry import ToolRegistry
 
 
@@ -173,6 +173,7 @@ class TestExecutor:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="## Results\n1. Python docs")
 
         registry = ToolRegistry()
@@ -197,7 +198,7 @@ class TestExecutor:
 
         result = await executor.execute("conv-1", "Find python docs")
 
-        mock_tool.execute.assert_called_once_with({"query": "python docs", "_conversation_id": "conv-1"})
+        mock_tool.execute.assert_called_once_with({"query": "python docs", "_conversation_id": "conv-1", "_goal_id": None})
         assert mock_provider.complete.call_count == 2
         assert "Python docs" in result.response.content
 
@@ -207,6 +208,7 @@ class TestExecutor:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(
             success=False, data="", error="Connection refused"
         )
@@ -241,6 +243,7 @@ class TestExecutor:
         mock_tool.name = "read_page"
         mock_tool.description = "Read page"
         mock_tool.parameters_schema = {"type": "object", "properties": {"url": {"type": "string"}}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(
             success=True, data="## Page: Example\n\nThe article content."
         )
@@ -267,7 +270,7 @@ class TestExecutor:
 
         result = await executor.execute("conv-1", "Read this page")
 
-        mock_tool.execute.assert_called_once_with({"url": "https://example.com", "_conversation_id": "conv-1"})
+        mock_tool.execute.assert_called_once_with({"url": "https://example.com", "_conversation_id": "conv-1", "_goal_id": None})
         assert mock_provider.complete.call_count == 2
 
 
@@ -434,6 +437,7 @@ class TestAgent:
         mock_tool.name = "web_search"
         mock_tool.description = "Search"
         mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(
             success=True, data="## Results\n1. Python 3.13 released"
         )
@@ -473,6 +477,7 @@ class TestAgent:
         mock_tool.name = "read_page"
         mock_tool.description = "Read page"
         mock_tool.parameters_schema = {"type": "object", "properties": {"url": {"type": "string"}}}
+        mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(
             success=True,
             data="## Page: Example\n\n**URL:** https://example.com/page\n\nPage content here.",
@@ -621,6 +626,7 @@ class TestExecutorDocumentAction:
         mock_doc_tool.name = "read_document"
         mock_doc_tool.description = "Read document"
         mock_doc_tool.parameters_schema = {"type": "object", "properties": {"path": {"type": "string"}}}
+        mock_doc_tool.contract = ToolContract()
         mock_doc_tool.execute.return_value = ToolResult(
             success=True, data="# Meeting Notes\n\n- Action items listed"
         )
@@ -649,7 +655,7 @@ class TestExecutorDocumentAction:
 
         registry_tool = registry.get("read_document")
         assert registry_tool is not None
-        mock_doc_tool.execute.assert_called_once_with({"path": "/tmp/test.pdf", "_conversation_id": "conv-1"})
+        mock_doc_tool.execute.assert_called_once_with({"path": "/tmp/test.pdf", "_conversation_id": "conv-1", "_goal_id": None})
         assert result.response.content == "Here are the meeting notes."
 
 
@@ -665,6 +671,7 @@ class TestExecutorCodeAction:
                 "language": {"type": "string"},
             },
         }
+        mock_code_tool.contract = ToolContract()
         mock_code_tool.execute.return_value = ToolResult(success=True, data="42\n")
 
         registry = ToolRegistry()
@@ -690,7 +697,7 @@ class TestExecutorCodeAction:
         result = await executor.execute("conv-1", "calculate 42")
         registry_tool = registry.get("run_code")
         assert registry_tool is not None
-        mock_code_tool.execute.assert_called_once_with({"code": "print(42)", "language": "python", "_conversation_id": "conv-1"})
+        mock_code_tool.execute.assert_called_once_with({"code": "print(42)", "language": "python", "_conversation_id": "conv-1", "_goal_id": None})
         assert result.response.content == "The answer is 42."
 
 

@@ -171,15 +171,17 @@ class Agent:
             await status_callback("Thinking...")
 
         try:
-            async with asyncio.timeout(self._run_timeout):
-                result = await self.executor.execute(
+            result = await asyncio.wait_for(
+                self.executor.execute(
                     conversation_id, message.content,
                     abort_event=abort_event,
                     query_analysis=analysis,
                     status_callback=status_callback,
                     context_metadata=context_metadata,
                     stream_callback=stream_callback,
-                )
+                ),
+                timeout=self._run_timeout,
+            )
         except asyncio.TimeoutError:
             logger.warning("Run timed out after %ds for %s", self._run_timeout, conversation_id)
             if self.tracer:

@@ -1,3 +1,6 @@
+import pytest
+pytest.importorskip("scrapling")
+
 from unittest.mock import AsyncMock
 
 

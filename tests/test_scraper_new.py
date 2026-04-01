@@ -1,3 +1,6 @@
+import pytest
+pytest.importorskip("scrapling")
+
 from unittest.mock import MagicMock, patch
 
 from odigos.providers.scraper import ScrapedPage, ScraperProvider

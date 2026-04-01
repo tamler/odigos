@@ -1,4 +1,5 @@
 """Tests for the auth system: password hashing, sessions, and auth API endpoints."""
+from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI

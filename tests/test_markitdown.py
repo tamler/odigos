@@ -1,4 +1,9 @@
 import pytest
+
+_mod = pytest.importorskip("markitdown")
+if not hasattr(_mod, "MarkItDown"):
+    pytest.skip("markitdown version missing MarkItDown class", allow_module_level=True)
+
 from odigos.providers.markitdown import MarkItDownProvider
 
 

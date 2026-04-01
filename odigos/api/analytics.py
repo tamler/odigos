@@ -1,4 +1,5 @@
 """Analytics API -- query classification stats, skill usage, task plans, tool errors."""
+from __future__ import annotations
 
 import json
 
