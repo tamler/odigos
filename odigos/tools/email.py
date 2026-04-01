@@ -116,20 +116,20 @@ class SearchEmailTool(BaseTool):
         from datetime import date
         folder = params.get("folder", "INBOX")
         limit = params.get("limit", 10)
-        criteria_parts = []
+        kwargs = {}
         if params.get("from_address"):
-            criteria_parts.append(AND(from_=params["from_address"]))
+            kwargs["from_"] = params["from_address"]
         if params.get("subject"):
-            criteria_parts.append(AND(subject=params["subject"]))
+            kwargs["subject"] = params["subject"]
         if params.get("keyword"):
-            criteria_parts.append(AND(body=params["keyword"]))
+            kwargs["body"] = params["keyword"]
         if params.get("date_from"):
             y, m, d = params["date_from"].split("-")
-            criteria_parts.append(AND(date_gte=date(int(y), int(m), int(d))))
+            kwargs["date_gte"] = date(int(y), int(m), int(d))
         if params.get("date_to"):
             y, m, d = params["date_to"].split("-")
-            criteria_parts.append(AND(date_lt=date(int(y), int(m), int(d))))
-        criteria = AND(*criteria_parts) if criteria_parts else "ALL"
+            kwargs["date_lt"] = date(int(y), int(m), int(d))
+        criteria = AND(**kwargs) if kwargs else "ALL"
         with MailBox(self._config.imap_host, self._config.imap_port).login(
             self._config.username, self._config.password, initial_folder=folder
         ) as mb:
@@ -185,7 +185,7 @@ class ReadEmailTool(BaseTool):
         with MailBox(self._config.imap_host, self._config.imap_port).login(
             self._config.username, self._config.password, initial_folder=folder
         ) as mb:
-            msgs = list(mb.fetch(AND(uid=uid), mark_seen=mark_read))
+            msgs = list(mb.fetch(f"UID {uid}", mark_seen=mark_read))
             if not msgs:
                 return ToolResult(success=False, data="", error=f"Email UID {uid} not found")
             msg = msgs[0]
@@ -268,7 +268,13 @@ class SendEmailTool(BaseTool):
         if params.get("html"):
             msg.attach(email.mime.text.MIMEText(params["html"], "html"))
         bcc = [r.strip() for r in params.get("bcc", "").split(",") if r.strip()]
-        with smtplib.SMTP(self._config.smtp_host, self._config.smtp_port) as server:
-            server.starttls()
-            server.login(self._config.username, self._config.password)
-            server.sendmail(msg["From"], recipients + bcc, msg.as_string())
+        port = self._config.smtp_port
+        if port == 465:
+            with smtplib.SMTP_SSL(self._config.smtp_host, port) as server:
+                server.login(self._config.username, self._config.password)
+                server.sendmail(msg["From"], recipients + bcc, msg.as_string())
+        else:
+            with smtplib.SMTP(self._config.smtp_host, port) as server:
+                server.starttls()
+                server.login(self._config.username, self._config.password)
+                server.sendmail(msg["From"], recipients + bcc, msg.as_string())

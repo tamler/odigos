@@ -253,12 +253,19 @@ class FindFreeTimeTool(BaseTool):
 
             busy.sort(key=lambda x: x[0])
 
-            # Find gaps (business hours: 8am-6pm)
+            # Find gaps (business hours: 8am-6pm in event timezone or UTC)
+            # Use the timezone from the first event if available, else UTC
+            import zoneinfo
+            try:
+                first_tz = busy[0][0].tzinfo if busy else timezone.utc
+            except Exception:
+                first_tz = timezone.utc
+
             slots = []
             for day_offset in range(days_ahead):
                 day = now.date() + timedelta(days=day_offset)
-                day_start = datetime(day.year, day.month, day.day, 8, 0, tzinfo=timezone.utc)
-                day_end = datetime(day.year, day.month, day.day, 18, 0, tzinfo=timezone.utc)
+                day_start = datetime(day.year, day.month, day.day, 8, 0, tzinfo=first_tz)
+                day_end = datetime(day.year, day.month, day.day, 18, 0, tzinfo=first_tz)
 
                 if day_start < now:
                     day_start = now
