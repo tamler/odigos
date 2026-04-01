@@ -12,7 +12,8 @@ class TestChunkingService:
     def test_long_text_is_chunked(self):
         """Long text is split into multiple chunks."""
         cs = ChunkingService()
-        long_text = "This is a sentence about dogs. " * 200
+        # Use paragraphs so the fallback splitter (no chonkie) can still chunk
+        long_text = ("This is a sentence about dogs.\n\n") * 200
         result = cs.chunk(long_text, content_type="message")
         assert len(result) > 1
         combined = " ".join(result)

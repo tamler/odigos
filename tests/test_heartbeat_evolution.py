@@ -49,6 +49,21 @@ async def test_tick_runs_evolution_when_idle():
     heartbeat._work_todos = AsyncMock(return_value=False)
     heartbeat._deliver_subagent_results = AsyncMock(return_value=False)
     heartbeat._idle_think = AsyncMock()
+    heartbeat._budget_tracker = None
+    heartbeat._quota_tick_counter = 0
+    heartbeat._email_config = None
+    heartbeat._background_model = ""
+    heartbeat._maybe_send_briefing = AsyncMock()
+    heartbeat._process_scheduled_tasks = AsyncMock(return_value=False)
+    heartbeat._run_cron_jobs = AsyncMock(return_value=False)
+    heartbeat._send_nudges = AsyncMock(return_value=False)
+    heartbeat._check_followups = AsyncMock(return_value=False)
+    heartbeat._work_in_progress_plans = AsyncMock(return_value=False)
+    heartbeat._peer_maintenance = AsyncMock()
+    heartbeat._dream_analyze_user = AsyncMock()
+    heartbeat._extract_experiences = AsyncMock()
+    heartbeat._evaluate_plan_outcomes = AsyncMock()
+    heartbeat._check_storage_quota = AsyncMock()
 
     await heartbeat._tick()
 

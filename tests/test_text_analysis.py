@@ -1,4 +1,7 @@
 import pytest
+
+pytest.importorskip("textblob")
+
 from odigos.tools.text_analysis import TextAnalysisTool
 
 

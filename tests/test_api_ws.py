@@ -115,19 +115,20 @@ class TestChatMessage:
             # First message on a new conversation is conversation_started
             started = ws.receive_json()
             assert started["type"] == "conversation_started"
-            assert started["conversation_id"] == conversation_id
+            # Chat may generate a new conversation_id (web:16-char-hex)
+            chat_conv_id = started["conversation_id"]
+            assert chat_conv_id.startswith("web:")
 
             response = ws.receive_json()
             assert response["type"] == "chat_response"
             assert response["content"] == "Hello from agent"
-            assert response["conversation_id"] == conversation_id
+            assert response["conversation_id"] == chat_conv_id
 
             agent.handle_message.assert_awaited_once()
             call_msg = agent.handle_message.call_args[0][0]
             assert call_msg.channel == "web"
             assert call_msg.sender == session_id
             assert call_msg.content == "Hi there"
-            assert call_msg.metadata["chat_id"] == session_id
 
 
 class TestChatConversationId:

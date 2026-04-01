@@ -1,6 +1,13 @@
+import importlib
+
 import pytest
 from starlette.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock
+
+pytestmark = pytest.mark.skipif(
+    not importlib.util.find_spec("sentence_transformers"),
+    reason="sentence_transformers not installed",
+)
 
 
 class TestWebSocketMounted:

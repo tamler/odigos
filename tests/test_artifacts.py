@@ -16,6 +16,7 @@ async def db(tmp_db_path: str) -> Database:
 class TestCreateArtifactTool:
     async def test_create_csv(self, db, tmp_path, monkeypatch):
         monkeypatch.setattr("odigos.tools.artifact.ARTIFACTS_DIR", tmp_path)
+        monkeypatch.setattr("odigos.tools.artifact.FILES_DIR", tmp_path)
         tool = CreateArtifactTool(db=db)
         result = await tool.execute({
             "filename": "report.csv",
@@ -29,14 +30,15 @@ class TestCreateArtifactTool:
         assert result.side_effect["artifact"]["content_type"] == "text/csv"
         assert "/download" in result.side_effect["artifact"]["download_url"]
 
-        # Verify file on disk
+        # Verify file on disk -- new layout: name_shortid.ext
         artifact_id = result.side_effect["artifact"]["id"]
-        file_path = tmp_path / artifact_id / "report.csv"
+        file_path = tmp_path / f"report_{artifact_id[:16]}.csv"
         assert file_path.exists()
         assert file_path.read_text() == "name,age\nAlice,30\nBob,25"
 
     async def test_create_json(self, db, tmp_path, monkeypatch):
         monkeypatch.setattr("odigos.tools.artifact.ARTIFACTS_DIR", tmp_path)
+        monkeypatch.setattr("odigos.tools.artifact.FILES_DIR", tmp_path)
         tool = CreateArtifactTool(db=db)
         result = await tool.execute({
             "filename": "data.json",
@@ -48,6 +50,7 @@ class TestCreateArtifactTool:
 
     async def test_create_markdown(self, db, tmp_path, monkeypatch):
         monkeypatch.setattr("odigos.tools.artifact.ARTIFACTS_DIR", tmp_path)
+        monkeypatch.setattr("odigos.tools.artifact.FILES_DIR", tmp_path)
         tool = CreateArtifactTool(db=db)
         result = await tool.execute({
             "filename": "notes.md",
@@ -59,6 +62,7 @@ class TestCreateArtifactTool:
 
     async def test_registered_in_database(self, db, tmp_path, monkeypatch):
         monkeypatch.setattr("odigos.tools.artifact.ARTIFACTS_DIR", tmp_path)
+        monkeypatch.setattr("odigos.tools.artifact.FILES_DIR", tmp_path)
         tool = CreateArtifactTool(db=db)
         result = await tool.execute({
             "filename": "test.txt",
@@ -79,6 +83,7 @@ class TestCreateArtifactTool:
 
     async def test_path_traversal_blocked(self, db, tmp_path, monkeypatch):
         monkeypatch.setattr("odigos.tools.artifact.ARTIFACTS_DIR", tmp_path)
+        monkeypatch.setattr("odigos.tools.artifact.FILES_DIR", tmp_path)
         tool = CreateArtifactTool(db=db)
         result = await tool.execute({
             "filename": "../../../etc/passwd",
@@ -89,6 +94,7 @@ class TestCreateArtifactTool:
 
     async def test_html_artifact(self, db, tmp_path, monkeypatch):
         monkeypatch.setattr("odigos.tools.artifact.ARTIFACTS_DIR", tmp_path)
+        monkeypatch.setattr("odigos.tools.artifact.FILES_DIR", tmp_path)
         tool = CreateArtifactTool(db=db)
         result = await tool.execute({
             "filename": "chart.html",
@@ -97,8 +103,13 @@ class TestCreateArtifactTool:
         assert result.success
         assert result.side_effect["artifact"]["content_type"] == "text/html"
 
+    @pytest.mark.skipif(
+        not __import__("importlib").util.find_spec("docx"),
+        reason="python-docx not installed",
+    )
     async def test_docx_artifact(self, db, tmp_path, monkeypatch):
         monkeypatch.setattr("odigos.tools.artifact.ARTIFACTS_DIR", tmp_path)
+        monkeypatch.setattr("odigos.tools.artifact.FILES_DIR", tmp_path)
         tool = CreateArtifactTool(db=db)
         result = await tool.execute({
             "filename": "report.docx",
@@ -108,7 +119,7 @@ class TestCreateArtifactTool:
         assert result.side_effect["artifact"]["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         # Verify the file is a valid DOCX
         artifact_id = result.side_effect["artifact"]["id"]
-        file_path = tmp_path / artifact_id / "report.docx"
+        file_path = tmp_path / f"report_{artifact_id[:16]}.docx"
         assert file_path.exists()
         assert file_path.stat().st_size > 0
         # Verify it's a valid zip (DOCX is a zip)

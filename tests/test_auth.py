@@ -15,6 +15,7 @@ from odigos.api.auth import (
 )
 
 _TEST_SECRET = "test-session-secret-for-unit-tests"
+_CSRF = {"X-Requested-With": "XMLHttpRequest"}
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +176,7 @@ async def test_setup_creates_user_and_sets_cookie():
             "username": "admin",
             "password": "longpassword123",
             "display_name": "Admin User",
-        })
+        }, headers=_CSRF)
     assert resp.status_code == 200
     data = resp.json()
     assert data["username"] == "admin"
@@ -194,11 +195,11 @@ async def test_setup_blocked_when_user_exists():
         await c.post("/api/auth/setup", json={
             "username": "admin",
             "password": "longpassword123",
-        })
+        }, headers=_CSRF)
         resp = await c.post("/api/auth/setup", json={
             "username": "admin2",
             "password": "anotherpass123",
-        })
+        }, headers=_CSRF)
     assert resp.status_code == 409
 
 
@@ -209,7 +210,7 @@ async def test_setup_password_too_short():
         resp = await c.post("/api/auth/setup", json={
             "username": "admin",
             "password": "short",
-        })
+        }, headers=_CSRF)
     assert resp.status_code == 400
     assert "8 characters" in resp.json()["detail"]
 
@@ -223,12 +224,12 @@ async def test_login_success():
         await c.post("/api/auth/setup", json={
             "username": "admin",
             "password": "longpassword123",
-        })
+        }, headers=_CSRF)
         # Now login
         resp = await c.post("/api/auth/login", json={
             "username": "admin",
             "password": "longpassword123",
-        })
+        }, headers=_CSRF)
     assert resp.status_code == 200
     assert resp.json()["must_change_password"] is False
     assert SESSION_COOKIE in resp.cookies
@@ -242,11 +243,11 @@ async def test_login_wrong_password():
         await c.post("/api/auth/setup", json={
             "username": "admin",
             "password": "longpassword123",
-        })
+        }, headers=_CSRF)
         resp = await c.post("/api/auth/login", json={
             "username": "admin",
             "password": "wrongpassword",
-        })
+        }, headers=_CSRF)
     assert resp.status_code == 401
 
 
@@ -259,7 +260,7 @@ async def test_change_password_flow():
         setup_resp = await c.post("/api/auth/setup", json={
             "username": "admin",
             "password": "longpassword123",
-        })
+        }, headers=_CSRF)
         cookie = setup_resp.cookies.get(SESSION_COOKIE)
 
         # Change password
@@ -267,6 +268,7 @@ async def test_change_password_flow():
             "/api/auth/change-password",
             json={"new_password": "newlongpassword456"},
             cookies={SESSION_COOKIE: cookie},
+            headers=_CSRF,
         )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
@@ -276,11 +278,11 @@ async def test_change_password_flow():
         resp_old = await c.post("/api/auth/login", json={
             "username": "admin",
             "password": "longpassword123",
-        })
+        }, headers=_CSRF)
         resp_new = await c.post("/api/auth/login", json={
             "username": "admin",
             "password": "newlongpassword456",
-        })
+        }, headers=_CSRF)
     assert resp_old.status_code == 401
     assert resp_new.status_code == 200
 
@@ -293,12 +295,13 @@ async def test_change_password_too_short():
         setup_resp = await c.post("/api/auth/setup", json={
             "username": "admin",
             "password": "longpassword123",
-        })
+        }, headers=_CSRF)
         cookie = setup_resp.cookies.get(SESSION_COOKIE)
         resp = await c.post(
             "/api/auth/change-password",
             json={"new_password": "short"},
             cookies={SESSION_COOKIE: cookie},
+            headers=_CSRF,
         )
     assert resp.status_code == 400
 
@@ -312,7 +315,7 @@ async def test_me_endpoint():
             "username": "admin",
             "password": "longpassword123",
             "display_name": "The Admin",
-        })
+        }, headers=_CSRF)
         cookie = setup_resp.cookies.get(SESSION_COOKIE)
         resp = await c.get("/api/auth/me", cookies={SESSION_COOKIE: cookie})
     assert resp.status_code == 200

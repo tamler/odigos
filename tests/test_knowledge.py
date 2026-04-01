@@ -12,7 +12,7 @@ def tool():
 
 
 def test_tool_metadata(tool):
-    assert tool.name == "lookup"
+    assert tool.name == "lookup_fact"
     props = tool.parameters_schema["properties"]
     assert "query" in props
     assert "source" in props
@@ -41,6 +41,10 @@ def test_empty_query_missing(tool):
 
 
 @pytest.mark.network
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("wikipedia"),
+    reason="wikipedia not installed",
+)
 def test_lookup_auto(tool):
     result = asyncio.get_event_loop().run_until_complete(
         tool.execute({"query": "Python programming language"})
@@ -51,6 +55,10 @@ def test_lookup_auto(tool):
 
 
 @pytest.mark.network
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("wikipedia"),
+    reason="wikipedia not installed",
+)
 def test_lookup_wikipedia_explicit(tool):
     result = asyncio.get_event_loop().run_until_complete(
         tool.execute({

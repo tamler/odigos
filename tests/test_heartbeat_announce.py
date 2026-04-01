@@ -53,6 +53,20 @@ def _build_heartbeat(**overrides):
     hb._deliver_subagent_results = AsyncMock(return_value=False)
     hb._idle_think = AsyncMock()
     hb._background_model = ""
+    hb._budget_tracker = None
+    hb._quota_tick_counter = 0
+    hb._email_config = None
+    hb._maybe_send_briefing = AsyncMock()
+    hb._process_scheduled_tasks = AsyncMock(return_value=False)
+    hb._run_cron_jobs = AsyncMock(return_value=False)
+    hb._send_nudges = AsyncMock(return_value=False)
+    hb._check_followups = AsyncMock(return_value=False)
+    hb._work_in_progress_plans = AsyncMock(return_value=False)
+    hb._run_evolution = AsyncMock()
+    hb._dream_analyze_user = AsyncMock()
+    hb._extract_experiences = AsyncMock()
+    hb._evaluate_plan_outcomes = AsyncMock()
+    hb._check_storage_quota = AsyncMock()
     return hb
 
 

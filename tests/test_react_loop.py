@@ -293,18 +293,26 @@ class TestAgentReAct:
     @pytest.mark.asyncio
     async def test_agent_session_serialization(self, db):
         """Concurrent messages to same session are serialized."""
-        call_order = []
+        # Track when the main executor enters/exits to verify serialization.
+        # We use a separate list so background tasks (entity extraction etc.)
+        # don't pollute the ordering signal.
+        run_events = []
 
-        async def slow_complete(messages, **kwargs):
-            call_order.append("start")
-            await asyncio.sleep(0.05)
-            call_order.append("end")
-            return LLMResponse(content="Done", model="test", tokens_in=10, tokens_out=5, cost_usd=0.001)
+        original_run = Agent._run
+
+        async def tracking_run(self_agent, *args, **kwargs):
+            run_events.append("enter")
+            result = await original_run(self_agent, *args, **kwargs)
+            run_events.append("exit")
+            return result
 
         provider = AsyncMock()
-        provider.complete.side_effect = slow_complete
+        provider.complete.return_value = LLMResponse(
+            content="Done", model="test", tokens_in=10, tokens_out=5, cost_usd=0.001
+        )
 
         agent = Agent(db=db, provider=provider, agent_name="TestBot")
+        agent._run = lambda *a, **kw: tracking_run(agent, *a, **kw)
 
         msg1 = _make_message("First")
         msg2 = _make_message("Second")
@@ -314,8 +322,8 @@ class TestAgentReAct:
             agent.handle_message(msg2),
         )
 
-        # Serialized: start, end, start, end (not start, start, end, end)
-        assert call_order == ["start", "end", "start", "end"]
+        # Serialized: enter, exit, enter, exit (not enter, enter, exit, exit)
+        assert run_events == ["enter", "exit", "enter", "exit"]
 
     @pytest.mark.asyncio
     async def test_agent_budget_enforcement(self, db):

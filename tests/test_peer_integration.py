@@ -1,6 +1,13 @@
+import importlib
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from httpx import ASGITransport, AsyncClient
+
+pytestmark = pytest.mark.skipif(
+    not importlib.util.find_spec("sentence_transformers"),
+    reason="sentence_transformers not installed",
+)
 
 
 class TestPeerEndpointMounted:

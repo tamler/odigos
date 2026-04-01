@@ -1,9 +1,13 @@
 """Tests for context relevance scoring and pruning."""
+import importlib
+
 from odigos.core.relevance import (
     score_section_relevance,
     prune_sections,
     ALWAYS_INCLUDE,
 )
+
+_HAS_TEXTBLOB = importlib.util.find_spec("textblob") is not None
 
 
 def test_score_empty_query():
@@ -29,7 +33,11 @@ def test_score_no_overlap():
         "error_hints",
         "The weather today is sunny and warm",
     )
-    assert score < 0.3
+    if _HAS_TEXTBLOB:
+        assert score < 0.3
+    else:
+        # Without TextBlob, scoring falls back to 0.5 for all content
+        assert score == 0.5
 
 
 def test_always_include():

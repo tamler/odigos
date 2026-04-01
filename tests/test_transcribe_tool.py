@@ -1,11 +1,19 @@
 """Tests for the transcribe_audio tool."""
 import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
+
+from odigos.tools.transcribe import TranscribeAudioTool
+
+
+@pytest.fixture(autouse=True)
+def _patch_allowed_dir(monkeypatch):
+    """Allow /tmp paths in transcribe tool tests."""
+    monkeypatch.setattr(TranscribeAudioTool, "_ALLOWED_DIR", Path("/tmp").resolve())
 
 
 @pytest.mark.asyncio
 async def test_transcribe_returns_transcript():
-    from odigos.tools.transcribe import TranscribeAudioTool
     mock_stt = MagicMock()
     mock_stt.transcribe_file.return_value = "Hello world this is a test"
     tool = TranscribeAudioTool(stt_provider=mock_stt)
@@ -25,7 +33,6 @@ async def test_transcribe_missing_source():
 
 @pytest.mark.asyncio
 async def test_transcribe_ingests_into_memory():
-    from odigos.tools.transcribe import TranscribeAudioTool
     mock_stt = MagicMock()
     mock_stt.transcribe_file.return_value = "Meeting notes about Q3"
     mock_ingester = AsyncMock()
@@ -39,7 +46,6 @@ async def test_transcribe_ingests_into_memory():
 
 @pytest.mark.asyncio
 async def test_transcribe_handles_provider_error():
-    from odigos.tools.transcribe import TranscribeAudioTool
     mock_stt = MagicMock()
     mock_stt.transcribe_file.side_effect = RuntimeError("Model not loaded")
     tool = TranscribeAudioTool(stt_provider=mock_stt)

@@ -3,10 +3,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from tests.conftest import requires_sqlite_vec
 from odigos.db import Database
 from odigos.memory.summarizer import ConversationSummarizer, STRUCTURED_COMPACTION_PROMPT
 from odigos.memory.vectors import VectorMemory
 from odigos.providers.base import LLMResponse
+
+pytestmark = requires_sqlite_vec
 
 
 @pytest.fixture

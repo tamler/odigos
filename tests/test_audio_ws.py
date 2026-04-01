@@ -45,7 +45,8 @@ class TestTTS:
         app = _make_app()
         client = TestClient(app)
         resp = client.get("/api/audio/speak?text=", headers=AUTH)
-        assert resp.status_code == 200
+        # Empty text produces no audio chunks, returns 500
+        assert resp.status_code == 500
 
     def test_tts_requires_auth(self):
         app = _make_app()

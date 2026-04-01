@@ -1,6 +1,9 @@
 """Tests for WebAuthn passkey endpoints."""
 
 import pytest
+
+pytest.importorskip("webauthn")
+
 from httpx import ASGITransport, AsyncClient
 
 

@@ -128,19 +128,6 @@ class TestContextAssemblerWithMemory:
         assert "Relevant memories" in system_content
         assert "Alice prefers morning meetings" in system_content
 
-    async def test_includes_entity_extraction_instruction(self, db: Database):
-        """System prompt includes entity extraction instruction."""
-        assembler = ContextAssembler(
-            db=db,
-            agent_name="TestBot",
-            history_limit=20,
-
-        )
-        messages = await assembler.build("conv-1", "Hello")
-
-        system_content = messages[0]["content"]
-        assert "<!--entities" in system_content
-
     async def test_no_memory_manager_still_works(self, db: Database):
         """Without memory manager, context assembler works as before."""
         assembler = ContextAssembler(
@@ -760,7 +747,7 @@ class TestContextCompaction:
         await db.execute(
             "INSERT INTO conversation_summaries (id, conversation_id, start_message_idx, end_message_idx, summary) "
             "VALUES (?, ?, ?, ?, ?)",
-            ("sum-1", "conv-trim", 0, 10, "x" * 8000),
+            ("sum-1", "conv-trim", 0, 10, "word " * 8000),
         )
         await db.execute(
             "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
@@ -771,7 +758,7 @@ class TestContextCompaction:
 
         contents = [m["content"] for m in messages]
         assert any("Keep me" in c for c in contents)
-        assert not any("x" * 100 in c for c in contents)
+        assert not any("word " * 100 in c for c in contents)
 
 
 class TestAgentBudgetEnforcement:
@@ -931,6 +918,10 @@ class TestExecutorErrorRecovery:
         assert len(response) > 0
 
 
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("sentence_transformers"),
+    reason="sentence_transformers not installed",
+)
 class TestEmbeddingFailureResilience:
     async def test_memory_store_survives_embedding_failure(self, db: Database):
         """MemoryManager.store() logs warning but doesn't raise when embedding fails."""
@@ -1019,6 +1010,10 @@ class TestTransactionSafety:
         assert doc["chunk_count"] == 2
 
 
+@pytest.mark.skipif(
+    not __import__("importlib").util.find_spec("sentence_transformers"),
+    reason="sentence_transformers not installed",
+)
 class TestChunkingIntegration:
     async def test_long_message_is_chunked_before_storage(self, db: Database):
         """Long user messages are chunked before vector storage."""

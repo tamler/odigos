@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from tests.conftest import requires_sqlite_vec
 from odigos.db import Database
 from odigos.memory.graph import EntityGraph
 from odigos.memory.resolver import EntityResolver
@@ -59,6 +60,7 @@ class TestEntityResolver:
         assert result.entity_id == entity_id
         assert result.action == "matched"
 
+    @requires_sqlite_vec
     async def test_no_match_creates_new(self, resolver: EntityResolver):
         """No match creates a new entity."""
         result = await resolver.resolve(name="NewPerson", entity_type="person", context="")

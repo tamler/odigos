@@ -1,6 +1,13 @@
 import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from odigos.tools.document import DocTool
+
+
+@pytest.fixture(autouse=True)
+def _patch_allowed_dir(monkeypatch, tmp_path):
+    """Allow /tmp paths in doc tool tests."""
+    monkeypatch.setattr("odigos.tools.document._ALLOWED_DIR", Path("/tmp").resolve())
 
 
 class TestDocToolMarkItDown:
