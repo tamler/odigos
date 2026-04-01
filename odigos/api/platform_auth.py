@@ -19,17 +19,21 @@ from odigos.api.auth import (
 router = APIRouter(tags=["platform-auth"])
 
 PLATFORM_URL = os.environ.get("ODIGOS_PLATFORM_URL", "").rstrip("/")
+PLATFORM_API_KEY = os.environ.get("ODIGOS_PLATFORM_API_KEY", "")
 
 
 @router.get("/auth/callback")
 async def platform_auth_callback(token: str, request: Request):
     if not PLATFORM_URL:
         raise HTTPException(404, "Platform integration not configured")
+    if not PLATFORM_API_KEY:
+        raise HTTPException(500, "Platform API key not configured")
 
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
             f"{PLATFORM_URL}/api/v1/auth/validate-token",
             json={"token": token},
+            headers={"Authorization": f"Bearer {PLATFORM_API_KEY}"},
         )
 
     if r.status_code != 200:
