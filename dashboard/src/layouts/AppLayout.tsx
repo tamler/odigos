@@ -56,6 +56,7 @@ import { usePwaInstall } from '@/hooks/usePwaInstall'
 import { useDriver } from '@/hooks/useDriver'
 import { subscribeToPush } from '@/lib/push'
 import { Artifact } from '@/components/ArtifactCard'
+import { prefetchMessages } from '@/lib/prefetch'
 import { useChatStore } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useConversationStore } from '@/stores/conversationStore'
@@ -129,6 +130,21 @@ const AppSidebar = memo(({
   const currentTab = location.pathname.split('/')[2] || 'general'
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleConversationHover = useCallback((conversationId: string) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => {
+      prefetchMessages(conversationId)
+    }, 200)
+  }, [])
+
+  const handleConversationHoverEnd = useCallback(() => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+  }, [])
 
   const handleUploadClick = () => {
     fileInputRef.current?.click()
@@ -140,7 +156,10 @@ const AppSidebar = memo(({
     try {
       await uploadFile(file)
       toast.success('Image uploaded')
-      window.location.reload()
+      const imgData = await get<{ artifacts: Artifact[] }>('/api/artifacts')
+      useConversationStore.getState().setImages(
+        (imgData.artifacts || []).filter(a => a.content_type?.startsWith('image/')).slice(0, 10)
+      )
     } catch {
       toast.error('Upload failed')
     }
@@ -220,7 +239,7 @@ const AppSidebar = memo(({
                 <div className="px-3 py-6 mt-4 text-center text-xs text-muted-foreground italic">No conversations found</div>
               ) : (
                 filteredConversations.map((c: any) => (
-                  <div key={c.id} className="group relative mb-0.5">
+                  <div key={c.id} className="group relative mb-0.5" onMouseEnter={() => handleConversationHover(c.id)} onMouseLeave={handleConversationHoverEnd}>
                     {editingId === c.id ? (
                       <div className="flex items-center gap-1 px-1 py-1">
                         <Input
@@ -441,7 +460,7 @@ export default function AppLayout() {
           }
           if (Array.isArray(msg.actions) && msg.actions.length > 0) {
             executeActions(msg.actions as UIAction[], navigateRef.current, {
-              refresh: () => window.location.reload(),
+              refresh: () => useConversationStore.getState().refreshConversations(),
               openChat: () => ui.setChatPanelOpen(true),
               setTheme: (t) => setThemeRef.current(t),
               stopTTS,

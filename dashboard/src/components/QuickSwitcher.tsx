@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { 
-  Search, 
-  MessageCircle, 
-  FileText, 
-  Columns3, 
+import {
+  Search,
+  MessageCircle,
+  FileText,
+  Columns3,
   Command,
   ArrowRight
 } from 'lucide-react'
@@ -23,48 +23,70 @@ export function QuickSwitcher({ open, onOpenChange }: { open: boolean; onOpenCha
   const [results, setResults] = useState<SearchResult[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const navigate = useNavigate()
+  const abortRef = useRef<AbortController | null>(null)
 
   const handleSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
       setResults([])
       return
     }
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     try {
-      // Using workspace_search tool logic via a general search endpoint if available
-      // For now, let's fetch lists and filter client-side or use a search API
+      const encoded = encodeURIComponent(q.trim())
       const [convs, notes, boards] = await Promise.all([
-        get<{ conversations: any[] }>('/api/conversations?limit=20'),
+        get<{ conversations: any[] }>(`/api/conversations/search?q=${encoded}&limit=10`),
         get<{ notebooks: any[] }>('/api/notebooks'),
         get<{ boards: any[] }>('/api/kanban/boards')
       ])
 
+      if (controller.signal.aborted) return
+
+      const lowerQ = q.toLowerCase()
+
       const all: SearchResult[] = [
-        ...convs.conversations.map(c => ({ 
-          id: c.id, 
-          title: c.title || `Chat ${new Date(c.started_at).toLocaleDateString()}`, 
+        ...convs.conversations.map(c => ({
+          id: c.id,
+          title: c.title || `Chat ${new Date(c.started_at).toLocaleDateString()}`,
           type: 'conversation' as const,
           updated_at: c.last_message_at || c.started_at
         })),
-        ...notes.notebooks.map(n => ({ id: n.id, title: n.title, type: 'notebook' as const, updated_at: n.updated_at })),
-        ...boards.boards.map(b => ({ id: b.id, title: b.title, type: 'board' as const, updated_at: b.updated_at }))
+        ...notes.notebooks
+          .filter((n: any) => n.title.toLowerCase().includes(lowerQ))
+          .map((n: any) => ({ id: n.id, title: n.title, type: 'notebook' as const, updated_at: n.updated_at })),
+        ...boards.boards
+          .filter((b: any) => b.title.toLowerCase().includes(lowerQ))
+          .map((b: any) => ({ id: b.id, title: b.title, type: 'board' as const, updated_at: b.updated_at }))
       ]
 
-      const filtered = all
-        .filter(item => item.title.toLowerCase().includes(q.toLowerCase()))
+      const sorted = all
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
         .slice(0, 10)
 
-      setResults(filtered)
+      setResults(sorted)
       setSelectedIndex(0)
     } catch (err) {
-      console.error('Search failed', err)
+      if (!controller.signal.aborted) {
+        console.error('Search failed', err)
+      }
     }
   }, [])
 
   useEffect(() => {
-    const timer = setTimeout(() => handleSearch(query), 200)
+    const timer = setTimeout(() => handleSearch(query), 300)
     return () => clearTimeout(timer)
   }, [query, handleSearch])
+
+  useEffect(() => {
+    if (!open) {
+      setQuery('')
+      setResults([])
+      abortRef.current?.abort()
+    }
+  }, [open])
 
   const handleSelect = (item: SearchResult) => {
     const path = item.type === 'conversation' ? `/?c=${item.id}` :

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
@@ -13,13 +14,18 @@ _MAX_RETRIES = 3
 _RETRY_DELAYS = (0.1, 0.2, 0.4)  # seconds
 
 
+def _is_busy_error(e: Exception) -> bool:
+    msg = str(e).lower()
+    return "locked" in msg or "busy" in msg
+
+
 async def _retry_on_busy(coro_factory, max_retries=_MAX_RETRIES):
     """Retry a coroutine factory on SQLITE_BUSY with exponential backoff."""
     for attempt in range(max_retries + 1):
         try:
             return await coro_factory()
         except aiosqlite.OperationalError as e:
-            if "locked" not in str(e).lower() and "busy" not in str(e).lower():
+            if not _is_busy_error(e):
                 raise
             if attempt >= max_retries:
                 raise
@@ -137,6 +143,57 @@ class Database:
             result = [dict(row) for row in rows]
         await _retry_on_busy(_do)
         return result
+
+    @asynccontextmanager
+    async def transaction(self):
+        """Async context manager for atomic multi-statement transactions.
+
+        Uses BEGIN IMMEDIATE to acquire a write lock upfront, preventing
+        deadlocks under WAL mode. Commits on clean exit, rolls back on
+        any exception.
+
+        Usage:
+            async with db.transaction() as tx:
+                await tx.execute("INSERT ...", params)
+                await tx.execute("UPDATE ...", params)
+
+        For BUSY retry of entire transaction blocks, use run_transaction().
+        """
+        await self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield self.conn
+        except Exception:
+            await self.conn.rollback()
+            raise
+        else:
+            await self.conn.commit()
+
+    async def run_transaction(self, fn, max_retries: int = _MAX_RETRIES):
+        """Execute a callable as an atomic transaction with BUSY retry.
+
+        The callable receives the raw connection and can execute multiple
+        statements. On BUSY/locked errors, the entire transaction (rollback
+        + re-execute) is retried with exponential backoff.
+
+        Usage:
+            async def do_work(conn):
+                await conn.execute("INSERT ...", params)
+                await conn.execute("UPDATE ...", params)
+            await db.run_transaction(do_work)
+        """
+        async def _do():
+            await self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                result = await fn(self.conn)
+                await self.conn.commit()
+                return result
+            except Exception:
+                try:
+                    await self.conn.rollback()
+                except Exception:
+                    pass
+                raise
+        return await _retry_on_busy(_do, max_retries=max_retries)
 
     async def execute_in_transaction(self, statements: list[tuple[str, tuple]]) -> None:
         """Execute multiple statements atomically in a single transaction."""

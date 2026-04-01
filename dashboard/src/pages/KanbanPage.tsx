@@ -471,8 +471,9 @@ function BoardDetailInner({ boardId, board, setBoard }: {
         isOpen={shareOpen}
         onClose={() => {
           setShareOpen(false)
-          // Simple refresh to get share state
-          window.location.reload()
+          get<BoardDetail>(`/api/kanban/boards/${boardId}`)
+            .then((data) => setBoard(data))
+            .catch(() => {})
         }}
         initialShareToken={board?.share_token}
       />

@@ -989,12 +989,17 @@ async def lifespan(app: FastAPI):
     if _routing_warnings:
         logger.warning("Routing rule warnings: %d issues found", len(_routing_warnings))
 
+    from concurrent.futures import ThreadPoolExecutor
+    app.state.heavy_pool = ThreadPoolExecutor(max_workers=4)
+    logger.info("Heavy file processing pool started (4 workers)")
+
     logger.info("Odigos is ready.")
 
     yield
 
     # Shutdown
     logger.info("Shutting down Odigos...")
+    app.state.heavy_pool.shutdown(wait=False)
     if _ws_connector:
         await _ws_connector.stop()
     if _heartbeat:

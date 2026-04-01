@@ -65,6 +65,23 @@ async def get_conversation(
     return conversation
 
 
+@router.get("/conversations/search")
+async def search_conversations(
+    q: str = Query(default="", min_length=1, max_length=200),
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Database = Depends(get_db),
+):
+    """Search conversations by title using SQL LIKE."""
+    pattern = f"%{q}%"
+    conversations = await db.fetch_all(
+        "SELECT * FROM conversations WHERE (archived = 0 OR archived IS NULL) "
+        "AND (title LIKE ? OR id LIKE ?) "
+        "ORDER BY last_message_at DESC LIMIT ?",
+        (pattern, pattern, limit),
+    )
+    return {"conversations": conversations}
+
+
 @router.get("/conversations")
 async def list_conversations(
     limit: int = Query(default=50, ge=1, le=200),

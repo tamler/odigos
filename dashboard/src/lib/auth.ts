@@ -18,7 +18,7 @@ export async function setup(username: string, password: string): Promise<void> {
 
 export async function logout(): Promise<void> {
   await post('/api/auth/logout')
-  window.location.reload()
+  window.location.href = '/'
 }
 
 export async function webauthnRegisterBegin(): Promise<any> {

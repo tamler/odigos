@@ -168,7 +168,12 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
             artifactId={artifactId}
             filename={data.filename}
             onClose={() => setCropOpen(false)}
-            onCropped={() => { setCropOpen(false); window.location.reload() }}
+            onCropped={() => {
+              setCropOpen(false)
+              get<ArtifactContent>(`/api/artifacts/${artifactId}/content`)
+                .then((res) => { setData(res); setEditContent(res.content) })
+                .catch(() => {})
+            }}
           />
         )}
       </div>
@@ -313,7 +318,12 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
           artifactId={artifactId}
           filename={data.filename}
           onClose={() => setCropOpen(false)}
-          onCropped={() => { setCropOpen(false); window.location.reload() }}
+          onCropped={() => {
+              setCropOpen(false)
+              get<ArtifactContent>(`/api/artifacts/${artifactId}/content`)
+                .then((res) => { setData(res); setEditContent(res.content) })
+                .catch(() => {})
+            }}
         />
       )}
     </div>

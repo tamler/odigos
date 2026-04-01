@@ -108,14 +108,21 @@ async def upload_file(
     if plugin_context:
         stt_provider = plugin_context.get_provider("stt")
 
+    loop = asyncio.get_running_loop()
+    heavy_pool = getattr(request.app.state, "heavy_pool", None)
+
     if is_audio_file(safe_name) and stt_provider:
         try:
-            extracted_text = await asyncio.to_thread(stt_provider.transcribe_file, dest)
+            extracted_text = await loop.run_in_executor(
+                heavy_pool, stt_provider.transcribe_file, dest,
+            )
         except Exception:
             logger.warning("Audio transcription failed for %s", safe_name, exc_info=True)
     else:
         try:
-            extracted_text = await asyncio.to_thread(markitdown.convert_file, dest)
+            extracted_text = await loop.run_in_executor(
+                heavy_pool, markitdown.convert_file, dest,
+            )
         except Exception:
             logger.warning("Text extraction failed for %s", safe_name, exc_info=True)
 
