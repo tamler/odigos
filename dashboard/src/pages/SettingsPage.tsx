@@ -18,26 +18,27 @@ import ConnectionsTab from './ConnectionsPage'
 import FeedTab from './FeedPage'
 import InspectorTab from './StatePage'
 import PeerConfigTab from './settings/PeerConfigTab'
-import { 
-  ArrowLeft, 
-  Settings, 
-  User, 
-  Volume2, 
-  Zap, 
-  Terminal, 
-  TrendingUp, 
-  Puzzle, 
-  FileText, 
-  Network, 
-  Database, 
-  BarChart3, 
-  Link as LinkIcon, 
-  Rss, 
+import {
+  ArrowLeft,
+  Settings,
+  User,
+  Volume2,
+  Zap,
+  Terminal,
+  TrendingUp,
+  Puzzle,
+  FileText,
+  Network,
+  Database,
+  BarChart3,
+  Link as LinkIcon,
+  Rss,
   Eye,
   ChevronRight,
   MessageCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useUIStore } from '@/stores/uiStore'
 
 const SECTIONS = [
   { id: 'general', label: 'General', icon: Settings },
@@ -62,7 +63,10 @@ const SECTIONS = [
 
 export default function SettingsPage() {
   const { tab } = useParams<{ tab?: string }>()
-  const { isMobile, setPageContextData } = useOutletContext<any>()
+  const isMobile = useUIStore(s => s.isMobile)
+  let outletCtx: any = {}
+  try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
+  const { setPageContextData = () => {} } = outletCtx
   const navigate = useNavigate()
   const activeTab = tab || (isMobile ? null : 'general')
 
@@ -109,7 +113,6 @@ export default function SettingsPage() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-background">
-      {/* Header for mobile drill-down */}
       <div className="flex items-center gap-2 px-4 pl-12 h-[44px] border-b border-border/40 shrink-0 lg:hidden">
         <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => navigate('/settings')}>
           <ArrowLeft className="h-3.5 w-3.5 mr-1" />

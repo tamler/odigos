@@ -11,6 +11,31 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 SESSION_COOKIE = "odigos_session"
+
+
+def _check_csrf(request: Request) -> None:
+    if not request.headers.get("X-Requested-With"):
+        raise HTTPException(status_code=403, detail="Missing CSRF header")
+
+
+class SetupRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str = ""
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    new_password: str
+
+
+class ResetPasswordRequest(BaseModel):
+    username: str
+    new_password: str
 _SESSION_MAX_AGE = 7 * 24 * 60 * 60  # 7 days in seconds
 _MIN_PASSWORD_LENGTH = 8
 
@@ -90,17 +115,17 @@ async def auth_status(request: Request):
 
 
 @router.post("/setup")
-async def auth_setup(request: Request, response: Response):
+async def auth_setup(body: SetupRequest, request: Request, response: Response):
     """Create the first user. Blocked if any user already exists."""
+    _check_csrf(request)
     db = request.app.state.db
     row = await db.fetch_one("SELECT COUNT(*) as count FROM users")
     if row and row["count"] > 0:
         raise HTTPException(status_code=409, detail="Setup already completed")
 
-    body = await request.json()
-    username = body.get("username", "").strip()
-    password = body.get("password", "")
-    display_name = body.get("display_name", "")
+    username = body.username.strip()
+    password = body.password
+    display_name = body.display_name
 
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")
@@ -132,12 +157,12 @@ async def auth_setup(request: Request, response: Response):
 
 
 @router.post("/login")
-async def auth_login(request: Request, response: Response):
+async def auth_login(body: LoginRequest, request: Request, response: Response):
     """Validate credentials and set session cookie."""
+    _check_csrf(request)
     db = request.app.state.db
-    body = await request.json()
-    username = body.get("username", "").strip()
-    password = body.get("password", "")
+    username = body.username.strip()
+    password = body.password
 
     if not username or not password:
         raise HTTPException(status_code=400, detail="Username and password are required")
@@ -168,23 +193,24 @@ async def auth_login(request: Request, response: Response):
 
 
 @router.post("/logout")
-async def auth_logout(response: Response):
+async def auth_logout(request: Request, response: Response):
     """Clear the session cookie."""
+    _check_csrf(request)
     response.delete_cookie(key=SESSION_COOKIE)
     return {"status": "ok"}
 
 
 @router.post("/change-password")
-async def auth_change_password(request: Request, response: Response):
+async def auth_change_password(body: ChangePasswordRequest, request: Request, response: Response):
     """Change password for the authenticated user (session required)."""
+    _check_csrf(request)
     secret = request.app.state.settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
     session = _validate_session(secret, cookie)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    body = await request.json()
-    new_password = body.get("new_password", "")
+    new_password = body.new_password
     if len(new_password) < _MIN_PASSWORD_LENGTH:
         raise HTTPException(
             status_code=400,
@@ -216,8 +242,9 @@ async def auth_change_password(request: Request, response: Response):
 
 
 @router.post("/reset-password")
-async def auth_reset_password(request: Request):
+async def auth_reset_password(body: ResetPasswordRequest, request: Request):
     """Reset a user's password. Requires API key (admin only)."""
+    _check_csrf(request)
     from odigos.api.deps import require_auth
     # Manual auth check — we need API key, not session
     settings = request.app.state.settings
@@ -229,9 +256,8 @@ async def auth_reset_password(request: Request):
     if not hmac.compare_digest(token.encode(), settings.api_key.encode()):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
-    body = await request.json()
-    username = body.get("username", "").strip()
-    new_password = body.get("new_password", "")
+    username = body.username.strip()
+    new_password = body.new_password
 
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")

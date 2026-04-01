@@ -614,6 +614,7 @@ async def lifespan(app: FastAPI):
         temperature=settings.llm.temperature,
         request_timeout=settings.llm.request_timeout_seconds,
         connect_timeout=settings.llm.connect_timeout_seconds,
+        cost_per_million_tokens=settings.llm.cost_per_million_tokens,
     )
 
     # Initialize budget tracker
@@ -630,10 +631,12 @@ async def lifespan(app: FastAPI):
     # Auto-detect shared toolkit if mode is "auto" (default), or use explicit setting
     embed_mode = settings.embeddings.mode
     if embed_mode == "auto":
-        # Check if shared embedding service is available
+        # Check if shared embedding service is available (non-blocking)
         try:
             import httpx
-            resp = httpx.get(f"{settings.embeddings.remote_url}/health", timeout=2.0)
+            resp = await asyncio.to_thread(
+                httpx.get, f"{settings.embeddings.remote_url}/health", timeout=2.0,
+            )
             if resp.status_code == 200:
                 embed_mode = "remote"
                 logger.info("Detected shared embedding toolkit at %s", settings.embeddings.remote_url)

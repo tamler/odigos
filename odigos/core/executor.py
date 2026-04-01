@@ -27,15 +27,6 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_TURNS = 25
 
-_INPUT_RATE_PER_M = 3.0
-_OUTPUT_RATE_PER_M = 15.0
-
-
-def _estimate_cost(tokens_in: int, tokens_out: int) -> float:
-    """Conservative token-based cost estimate for budget safety checks."""
-    return (tokens_in * _INPUT_RATE_PER_M + tokens_out * _OUTPUT_RATE_PER_M) / 1_000_000
-
-
 import random
 
 _TOOL_STATUS_MAP: dict[str, list[str]] = {
@@ -78,10 +69,6 @@ _TOOL_STATUS_MAP: dict[str, list[str]] = {
         "Reading that document...",
         "Digesting the content...",
         "Processing the file...",
-    ],
-    "remember_fact": [
-        "Noted. Committing to memory...",
-        "Saving that...",
     ],
     "remember_fact": [
         "Noted. Committing to memory...",
@@ -215,7 +202,6 @@ class Executor:
         total_tokens_out = 0
         total_cost = 0.0
         last_response: LLMResponse | None = None
-        run_estimated_cost = 0.0
         budget_warning: BudgetStatus | None = None
         prev_turn_calls: set[str] = set()
 
@@ -231,7 +217,7 @@ class Executor:
 
             # Budget check with running estimate
             if self.budget_tracker:
-                status = await self.budget_tracker.check_budget(extra_cost=run_estimated_cost)
+                status = await self.budget_tracker.check_budget(extra_cost=total_cost)
                 if not status.within_budget:
                     logger.warning("Budget exceeded mid-run at turn %d", turn)
                     budget_msg = "\n\n---\nI've hit my spending limit mid-task. Stopping here."
@@ -304,7 +290,6 @@ class Executor:
             total_tokens_out += response.tokens_out
             total_cost += response.cost_usd
             last_response = response
-            run_estimated_cost += _estimate_cost(response.tokens_in, response.tokens_out)
 
             # If no tool calls, we're done
             if not response.tool_calls:
@@ -347,15 +332,15 @@ class Executor:
                 return tc, result_content
 
             if len(response.tool_calls) > 1:
-                results = await asyncio.gather(
-                    *[_run_tool(tc) for tc in response.tool_calls],
-                    return_exceptions=True,
-                )
-                for r in results:
-                    if isinstance(r, Exception):
-                        logger.error("Parallel tool execution failed: %s", r)
-                        continue
-                    tc, result_content = r
+                async def _safe_run(tc):
+                    try:
+                        return await _run_tool(tc)
+                    except Exception as e:
+                        logger.error("Parallel tool execution failed for %s: %s", tc.name, e)
+                        return tc, f"Error: {e}"
+
+                results = await asyncio.gather(*[_safe_run(tc) for tc in response.tool_calls])
+                for tc, result_content in results:
                     messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_content})
             else:
                 tc, result_content = await _run_tool(response.tool_calls[0])
@@ -478,7 +463,7 @@ class Executor:
             model=last_response.model,
             tokens_in=total_tokens_in,
             tokens_out=total_tokens_out,
-            cost_usd=total_cost if total_cost > 0 else run_estimated_cost,
+            cost_usd=total_cost,
             generation_id=last_response.generation_id,
             tool_calls=last_response.tool_calls,
         )

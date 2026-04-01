@@ -92,6 +92,9 @@ async def update_artifact_content(
         raise HTTPException(status_code=404, detail="Artifact not found")
 
     file_path = ARTIFACTS_DIR / artifact_id / row["filename"]
+    resolved = file_path.resolve()
+    if not str(resolved).startswith(str(ARTIFACTS_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="Invalid artifact path")
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Artifact file missing from disk")
 

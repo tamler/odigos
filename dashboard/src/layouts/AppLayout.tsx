@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Outlet, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { 
-  Settings, 
-  PanelLeftClose, 
-  PanelLeft, 
-  Plus, 
-  Pencil, 
-  Trash2, 
-  Check, 
-  X, 
-  Download, 
-  MoreHorizontal, 
+import {
+  Settings,
+  PanelLeftClose,
+  PanelLeft,
+  Plus,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  Download,
+  MoreHorizontal,
   Menu,
   MessageCircle,
   Volume2,
@@ -45,7 +45,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { get, getBlob, patch, del, post, uploadFile } from '@/lib/api'
+import { get, getBlob, patch, del, uploadFile } from '@/lib/api'
 import { ChatSocket } from '@/lib/ws'
 import { toast } from 'sonner'
 import { executeActions, UIAction } from '@/lib/actions'
@@ -56,14 +56,10 @@ import { usePwaInstall } from '@/hooks/usePwaInstall'
 import { useDriver } from '@/hooks/useDriver'
 import { subscribeToPush } from '@/lib/push'
 import { Artifact } from '@/components/ArtifactCard'
-
-interface Conversation {
-  id: string
-  started_at: string
-  last_message_at: string | null
-  title?: string | null
-  message_count: number
-}
+import { useChatStore } from '@/stores/chatStore'
+import { useUIStore } from '@/stores/uiStore'
+import { useConversationStore } from '@/stores/conversationStore'
+import type { Conversation } from '@/stores/conversationStore'
 
 const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General', icon: Settings },
@@ -103,15 +99,35 @@ export interface ChatMessage {
 }
 
 const AppSidebar = memo(({
-  collapsed, setCollapsed, sidebarOpen, setSidebarOpen,
-  isMobile, searchQuery, setSearchQuery,
-  isSettings, isNotebook, isKanban, isChat, isImages, currentTab,
-  agentName, notebooks, boards, images, filteredConversations,
-  activeId, handleNewChat, handleSelectConversation, handleSelectImage: _handleSelectImage,
-  startRename, editingId, editTitle, setEditTitle,
-  confirmRename, handleExport, handleDelete, displayTitle, navigate, location,
+  editingId, editTitle, setEditTitle,
+  confirmRename, handleExport, handleDelete, displayTitle,
+  startRename,
+  handleNewChat, handleSelectConversation, handleSelectImage: _handleSelectImage,
   pwaInstallable, pwaInstall,
 }: any) => {
+  const collapsed = useUIStore(s => s.collapsed)
+  const setCollapsed = useUIStore(s => s.setCollapsed)
+  const sidebarOpen = useUIStore(s => s.sidebarOpen)
+  const setSidebarOpen = useUIStore(s => s.setSidebarOpen)
+  const isMobile = useUIStore(s => s.isMobile)
+  const agentName = useUIStore(s => s.agentName)
+  const searchQuery = useConversationStore(s => s.searchQuery)
+  const setSearchQuery = useConversationStore(s => s.setSearchQuery)
+  const notebooks = useConversationStore(s => s.notebooks)
+  const boards = useConversationStore(s => s.boards)
+  const images = useConversationStore(s => s.images)
+  const filteredConversations = useConversationStore(s => s.filteredConversations)()
+  const activeId = useChatStore(s => s.activeConversationId)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const isSettings = location.pathname.startsWith('/settings')
+  const isNotebook = location.pathname.startsWith('/notebooks')
+  const isKanban = location.pathname.startsWith('/kanban')
+  const isImages = location.pathname.startsWith('/images')
+  const isChat = !isSettings && !isNotebook && !isKanban && !isImages
+  const currentTab = location.pathname.split('/')[2] || 'general'
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleUploadClick = () => {
@@ -124,7 +140,7 @@ const AppSidebar = memo(({
     try {
       await uploadFile(file)
       toast.success('Image uploaded')
-      window.location.reload() // Simple way to refresh for now
+      window.location.reload()
     } catch {
       toast.error('Upload failed')
     }
@@ -271,30 +287,8 @@ const AppSidebar = memo(({
 AppSidebar.displayName = 'AppSidebar'
 
 export default function AppLayout() {
-  const [collapsed, setCollapsed] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [notebooks, setNotebooks] = useState<{ id: string; title: string; updated_at: string }[]>([])
-  const [boards, setBoards] = useState<{ id: string; title: string; updated_at: string }[]>([])
-  const [images, setImages] = useState<Artifact[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [streamingContent, setStreamingContent] = useState('')
-  const [thinking, setThinking] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
-  const [queuedCount, setQueuedCount] = useState(0)
-  const [suggestedActions, setSuggestedActions] = useState<string[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
-  const [connected, setConnected] = useState(false)
-  const [hasNewEmail, setHasNewEmail] = useState(false)
-  const [chatPanelOpen, setChatPanelOpen] = useState(false)
-  const [artifactPanelOpen, setArtifactPanelOpen] = useState(false)
-  const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null)
-  const [focusMode, setFocusMode] = useState(false)
-  const [switcherOpen, setSwitcherOpen] = useState(false)
   const [chatContext, setChatContext] = useState<Record<string, string> | undefined>(undefined)
   const editInputRef = useRef<HTMLInputElement>(null)
   const socketRef = useRef<ChatSocket | null>(null)
@@ -303,50 +297,63 @@ export default function AppLayout() {
   navigateRef.current = navigate
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const [agentName, setAgentName] = useState('Odigos')
   const { setTheme } = useTheme()
   const setThemeRef = useRef(setTheme)
   setThemeRef.current = setTheme
   const pendingTitles = useRef<Record<string, string>>({})
 
-  // Shared audio system -- single source of truth for all TTS
+  // Zustand store access via getState() for non-rendering usage
+  const activeConversationId = useChatStore(s => s.activeConversationId)
+  const setActiveConversationId = useChatStore(s => s.setActiveConversationId)
+  const sidebarOpen = useUIStore(s => s.sidebarOpen)
+  const setSidebarOpen = useUIStore(s => s.setSidebarOpen)
+  const isMobile = useUIStore(s => s.isMobile)
+  const focusMode = useUIStore(s => s.focusMode)
+  const switcherOpen = useUIStore(s => s.switcherOpen)
+  const setSwitcherOpen = useUIStore(s => s.setSwitcherOpen)
+  const chatPanelOpen = useUIStore(s => s.chatPanelOpen)
+  const setChatPanelOpen = useUIStore(s => s.setChatPanelOpen)
+  const artifactPanelOpen = useUIStore(s => s.artifactPanelOpen)
+  const setArtifactPanelOpen = useUIStore(s => s.setArtifactPanelOpen)
+  const activeArtifactId = useUIStore(s => s.activeArtifactId)
+  const connected = useUIStore(s => s.connected)
+
   const { play: playTTS, stop: stopTTS, playing: isTTSPlaying } = useAudio()
   const { installable: pwaInstallable, install: pwaInstall } = usePwaInstall()
   const { highlight: driverHighlight } = useDriver()
 
-  const activeIdRef = useRef(activeId)
+  const activeIdRef = useRef(activeConversationId)
 
   useEffect(() => {
-    activeIdRef.current = activeId
-  }, [activeId])
+    activeIdRef.current = activeConversationId
+  }, [activeConversationId])
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 1024)
+    const handleResize = () => useUIStore.getState().setIsMobile(window.innerWidth < 1024)
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // Keyboard shortcuts (G14, G-W3)
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
-        setSwitcherOpen(true)
+        useUIStore.getState().setSwitcherOpen(true)
         return
       }
 
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) || (e.target as HTMLElement).isContentEditable) {
         if (e.key === 'Escape') {
           (e.target as HTMLElement).blur()
-          setSidebarOpen(false)
-          setChatPanelOpen(false)
+          useUIStore.getState().setSidebarOpen(false)
+          useUIStore.getState().setChatPanelOpen(false)
         }
         return
       }
 
       if (e.key === 'Escape') {
-        setSidebarOpen(false)
-        setChatPanelOpen(false)
+        useUIStore.getState().setSidebarOpen(false)
+        useUIStore.getState().setChatPanelOpen(false)
       } else if (e.key === 'n' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         handleNewChat()
@@ -354,121 +361,119 @@ export default function AppLayout() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [setSidebarOpen, setChatPanelOpen])
+  }, [])
 
   useEffect(() => {
     get<any>('/api/settings')
       .then(s => {
-        setAgentName(s.agent?.name || 'Odigos')
+        useUIStore.getState().setAgentName(s.agent?.name || 'Odigos')
       })
       .catch(() => {})
   }, [])
 
-  // Auto-close sidebar on mobile when navigating to any page
   useEffect(() => {
-    if (isMobile) setSidebarOpen(false)
+    if (isMobile) useUIStore.getState().setSidebarOpen(false)
   }, [location.pathname, isMobile])
 
   const loadConversations = useCallback(() => {
-    get<{ conversations: Conversation[] }>('/api/conversations?limit=50')
+    useConversationStore.getState().refreshConversations(pendingTitles.current)
+  }, [])
+
+  const loadMessages = useCallback((cid: string, limit = 50, offset = 0) => {
+    get<{ messages: ChatMessage[] }>(`/api/conversations/${cid}/messages?limit=${limit}&offset=${offset}`)
       .then((data) => {
-        setConversations(data.conversations.map(c => ({
-          ...c,
-          title: pendingTitles.current[c.id] || c.title
-        })))
+        if (offset > 0) {
+          useChatStore.getState().setMessages((prev) => [...data.messages, ...prev])
+        } else {
+          useChatStore.getState().setMessages(data.messages)
+        }
       })
       .catch(() => {})
   }, [])
 
-  const loadMessages = useCallback((cid: string) => {
-    get<{ messages: ChatMessage[] }>(`/api/conversations/${cid}/messages`)
-      .then((data) => setMessages(data.messages))
-      .catch(() => {})
-  }, [])
-
   useEffect(() => {
-    if (activeId) loadMessages(activeId)
-    else setMessages([])
-  }, [activeId, loadMessages])
+    if (activeConversationId) loadMessages(activeConversationId)
+    else useChatStore.getState().setMessages([])
+  }, [activeConversationId, loadMessages])
 
   // Persistent WebSocket
   useEffect(() => {
     const socket = new ChatSocket(
       (msg) => {
+        const chat = useChatStore.getState()
+        const ui = useUIStore.getState()
+
         if (msg.type === 'notification') {
           const body = (msg.body || msg.message || '') as string
           const title = msg.title as string | undefined
           const label = title ? `${title}: ${body}` : body
           const priority = (msg.priority || 'info') as string
-          if (title?.toLowerCase().includes('email')) setHasNewEmail(true)
+          if (title?.toLowerCase().includes('email')) ui.setHasNewEmail(true)
           if (priority === 'urgent') toast.error(label)
           else if (priority === 'warning') toast.warning(label)
           else toast.info(label)
         }
-        if (msg.type === 'status') setStatus(msg.text as string)
+        if (msg.type === 'status') chat.setStatus(msg.text as string)
         if (msg.type === 'chat_chunk') {
-          if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return 
-          setThinking(false)
-          setStatus(null)
-          setStreamingContent((prev) => prev + (msg.content as string))
+          if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
+          chat.setThinking(false)
+          chat.setStatus(null)
+          chat.setStreamingContent((prev) => prev + (msg.content as string))
         }
         if (msg.type === 'chat_response') {
-          // Accept response if: same conversation, or new chat (activeId is null)
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
-          // If new chat, adopt the server-generated conversation_id
           if (!activeIdRef.current && msg.conversation_id) {
             const newId = msg.conversation_id as string
             const chatId = newId.includes(':') ? newId.split(':')[1] : newId
-            setActiveId(chatId)
+            chat.setActiveConversationId(chatId)
           }
-          setThinking(false)
-          setStatus(null)
-          setStreamingContent('')
+          chat.setThinking(false)
+          chat.setStatus(null)
+          chat.setStreamingContent('')
           const content = msg.content as string
-          setMessages((prev) => [...prev, {
+          chat.setMessages((prev) => [...prev, {
             role: 'assistant',
             content,
             timestamp: new Date().toISOString(),
           }])
-          // Only auto-play TTS when voice mode is active (focusMode)
-          if (focusMode && shouldPlayTTS(content)) {
+          if (ui.focusMode && shouldPlayTTS(content)) {
             playTTS(stripForTTS(content))
           }
           if (Array.isArray(msg.actions) && msg.actions.length > 0) {
             executeActions(msg.actions as UIAction[], navigateRef.current, {
               refresh: () => window.location.reload(),
-              openChat: () => setChatPanelOpen(true),
+              openChat: () => ui.setChatPanelOpen(true),
               setTheme: (t) => setThemeRef.current(t),
               stopTTS,
               highlight: driverHighlight,
             })
           }
         }
-        if (msg.type === 'stream_end') { setThinking(false); setStatus(null) }
+        if (msg.type === 'stream_end') { chat.setThinking(false); chat.setStatus(null) }
         if (msg.type === 'queue_update') {
           const queued = msg.queued as number
-          setQueuedCount(queued)
-          if (queued === 0) setThinking(false)
+          chat.setQueuedCount(queued)
+          if (queued === 0) chat.setThinking(false)
         }
-        if (msg.type === 'message_queued') setStatus(`Queued (${msg.queued as number} pending)`)
+        if (msg.type === 'message_queued') chat.setStatus(`Queued (${msg.queued as number} pending)`)
         if (msg.type === 'queue_full') toast.warning('Message queue is full. Please wait.')
-        if (msg.type === 'suggested_actions' && msg.actions) setSuggestedActions(msg.actions as string[])
+        if (msg.type === 'suggested_actions' && msg.actions) chat.setSuggestedActions(msg.actions as string[])
         if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
           const cid = msg.conversation_id as string
           const title = msg.title as string
           pendingTitles.current[cid] = title
-          setConversations((prev) => prev.map((c) => (c.id === cid ? { ...c, title } : c)))
+          useConversationStore.getState().setConversations((prev) => prev.map((c) => (c.id === cid ? { ...c, title } : c)))
         }
         if (msg.type === 'feed_update') toast.info(`New feed items from ${msg.source || 'RSS feed'}`, { duration: 4000 })
         if (msg.type === 'email_received') {
-          setHasNewEmail(true)
+          ui.setHasNewEmail(true)
           toast.info(`New email: ${msg.subject || 'New message'}`, { duration: 5000 })
         }
         if (msg.type === 'task_completed') toast.success(`Completed: ${msg.task || 'Background task'}`, { duration: 3000 })
       },
       (isConnected) => {
-        const wasConnected = connected
-        setConnected(isConnected)
+        const wasConnected = useUIStore.getState().connected
+        useUIStore.getState().setConnected(isConnected)
         if (isConnected && !wasConnected) toast.dismiss()
         if (!isConnected && wasConnected) toast('Reconnecting...', { duration: 3000 })
       },
@@ -476,7 +481,6 @@ export default function AppLayout() {
     socket.connect()
     socketRef.current = socket
 
-    // Request push notification permission and subscribe
     if (typeof Notification !== 'undefined') {
       if (Notification.permission === 'default') {
         Notification.requestPermission().then((perm) => {
@@ -488,39 +492,39 @@ export default function AppLayout() {
     }
 
     return () => socket.disconnect()
-  }, [loadConversations, playTTS])
+  }, [playTTS])
 
   useEffect(() => { loadConversations() }, [loadConversations])
 
   useEffect(() => {
     const cid = searchParams.get('c')
-    if (cid) setActiveId(cid)
-  }, [searchParams])
+    if (cid) setActiveConversationId(cid)
+  }, [searchParams, setActiveConversationId])
 
   useEffect(() => { if (editingId) editInputRef.current?.focus() }, [editingId])
 
   const handleNewChat = useCallback(() => {
-    setActiveId(null)
-    setMessages([])
-    setStreamingContent('')
-    setThinking(false)
-    setStatus(null)
-    setSuggestedActions([])
-    setSidebarOpen(false)
-    setSearchQuery('')
+    useChatStore.getState().setActiveConversationId(null)
+    useChatStore.getState().setMessages([])
+    useChatStore.getState().setStreamingContent('')
+    useChatStore.getState().setThinking(false)
+    useChatStore.getState().setStatus(null)
+    useChatStore.getState().setSuggestedActions([])
+    useUIStore.getState().setSidebarOpen(false)
+    useConversationStore.getState().setSearchQuery('')
     navigate('/')
   }, [navigate])
 
   const handleSelectConversation = useCallback((id: string) => {
-    setActiveId(id)
-    setSidebarOpen(false)
-    setSearchQuery('')
+    useChatStore.getState().setActiveConversationId(id)
+    useUIStore.getState().setSidebarOpen(false)
+    useConversationStore.getState().setSearchQuery('')
     navigate(`/?c=${id}`)
   }, [navigate])
 
   const handleSelectImage = useCallback((id: string) => {
-    setActiveArtifactId(id)
-    setArtifactPanelOpen(true)
+    useUIStore.getState().setActiveArtifactId(id)
+    useUIStore.getState().setArtifactPanelOpen(true)
   }, [])
 
   const startRename = useCallback((c: Conversation | null) => {
@@ -537,7 +541,7 @@ export default function AppLayout() {
     if (!editingId || !editTitle.trim()) { setEditingId(null); return }
     try {
       await patch(`/api/conversations/${editingId}`, { title: editTitle.trim() })
-      setConversations((prev) => prev.map((c) => (c.id === editingId ? { ...c, title: editTitle.trim() } : c)))
+      useConversationStore.getState().setConversations((prev) => prev.map((c) => (c.id === editingId ? { ...c, title: editTitle.trim() } : c)))
     } catch { toast.error('Failed to rename conversation') }
     setEditingId(null)
   }, [editingId, editTitle])
@@ -545,11 +549,11 @@ export default function AppLayout() {
   const handleDelete = useCallback(async (id: string) => {
     try {
       await del(`/api/conversations/${id}`)
-      setConversations((prev) => prev.filter((c) => c.id !== id))
-      if (activeId === id) { setActiveId(null); navigate('/') }
+      useConversationStore.getState().setConversations((prev) => prev.filter((c) => c.id !== id))
+      if (activeConversationId === id) { setActiveConversationId(null); navigate('/') }
       toast.success('Conversation deleted')
     } catch { toast.error('Failed to delete conversation') }
-  }, [activeId, navigate])
+  }, [activeConversationId, navigate, setActiveConversationId])
 
   const handleExport = useCallback((id: string, format: 'markdown' | 'json') => {
     const url = `/api/conversations/${id}/export?format=${format}`
@@ -576,58 +580,33 @@ export default function AppLayout() {
   const isNotebook = location.pathname.startsWith('/notebooks')
   const isKanban = location.pathname.startsWith('/kanban')
   const isImages = location.pathname.startsWith('/images')
-  const isChat = !isSettings && !isNotebook && !isKanban && !isImages
-  const currentTab = location.pathname.split('/')[2] || 'general'
-
-  const filteredConversations = useMemo(() =>
-    conversations.filter(c =>
-      !searchQuery || displayTitle(c).toLowerCase().includes(searchQuery.toLowerCase())
-    ), [conversations, searchQuery]
-  )
 
   useEffect(() => {
     if (isSettings && !isMobile) {
-      setSidebarOpen(true)
-      setCollapsed(false)
+      useUIStore.getState().setSidebarOpen(true)
+      useUIStore.getState().setCollapsed(false)
     }
   }, [isSettings, isMobile])
 
   useEffect(() => {
-    if (isNotebook && notebooks.length === 0) {
-      get<{ notebooks: any[] }>('/api/notebooks').then(d => setNotebooks(d.notebooks))
+    if (isNotebook && useConversationStore.getState().notebooks.length === 0) {
+      get<{ notebooks: any[] }>('/api/notebooks').then(d => useConversationStore.getState().setNotebooks(d.notebooks))
     }
-    if (isKanban && boards.length === 0) {
-      get<{ boards: any[] }>('/api/kanban/boards').then(d => setBoards(d.boards))
+    if (isKanban && useConversationStore.getState().boards.length === 0) {
+      get<{ boards: any[] }>('/api/kanban/boards').then(d => useConversationStore.getState().setBoards(d.boards))
     }
-    if (isImages && images.length === 0) {
+    if (isImages && useConversationStore.getState().images.length === 0) {
       get<{ artifacts: Artifact[] }>('/api/artifacts').then(d => {
-        setImages((d.artifacts || []).filter(a => a.content_type?.startsWith('image/')).slice(0, 10))
+        useConversationStore.getState().setImages((d.artifacts || []).filter(a => a.content_type?.startsWith('image/')).slice(0, 10))
       })
     }
-  }, [isNotebook, isKanban, isImages, notebooks.length, boards.length, images.length])
-
-  const handleCreateNotebook = useCallback(async () => {
-    try {
-      const res = await post<{ id: string }>('/api/notebooks', { title: 'Untitled Note' })
-      setNotebooks(prev => [{ id: res.id, title: 'Untitled Note', updated_at: new Date().toISOString() }, ...prev])
-      navigate(`/notebooks/${res.id}`)
-    } catch { toast.error('Failed to create notebook') }
-  }, [navigate])
-
-  const handleCreateBoard = useCallback(async () => {
-    try {
-      const res = await post<{ id: string }>('/api/kanban/boards', { title: 'Untitled Board' })
-      setBoards(prev => [{ id: res.id, title: 'Untitled Board', updated_at: new Date().toISOString() }, ...prev])
-      navigate(`/kanban/${res.id}`)
-    } catch { toast.error('Failed to create board') }
-  }, [navigate])
+  }, [isNotebook, isKanban, isImages])
 
   return (
     <TooltipProvider>
       <div className="flex h-[100dvh] bg-background text-foreground relative overflow-hidden">
         <QuickSwitcher open={switcherOpen} onOpenChange={setSwitcherOpen} />
-        
-        {/* Mobile menu -- floating button only, no header bar */}
+
         {!focusMode && !sidebarOpen && (
           <Button
             variant="ghost"
@@ -641,21 +620,13 @@ export default function AppLayout() {
           </Button>
         )}
 
-        <AppSidebar 
-          collapsed={collapsed} setCollapsed={setCollapsed} 
-          sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
-          isMobile={isMobile} searchQuery={searchQuery} setSearchQuery={setSearchQuery}
-          isSettings={isSettings} isNotebook={isNotebook} isKanban={isKanban} isChat={isChat} isImages={isImages}
-          currentTab={currentTab} agentName={agentName}
-          notebooks={notebooks} boards={boards} images={images}
-          filteredConversations={filteredConversations} activeId={activeId}
-          handleNewChat={handleNewChat} handleCreateNotebook={handleCreateNotebook}
-          handleCreateBoard={handleCreateBoard} handleSelectConversation={handleSelectConversation}
-          handleSelectImage={handleSelectImage}
-          startRename={startRename} editingId={editingId} editTitle={editTitle}
+        <AppSidebar
+          editingId={editingId} editTitle={editTitle}
           setEditTitle={setEditTitle} confirmRename={confirmRename}
           handleExport={handleExport} handleDelete={handleDelete}
-          displayTitle={displayTitle} navigate={navigate} location={location}
+          displayTitle={displayTitle} startRename={startRename}
+          handleNewChat={handleNewChat} handleSelectConversation={handleSelectConversation}
+          handleSelectImage={handleSelectImage}
           pwaInstallable={pwaInstallable} pwaInstall={pwaInstall}
         />
 
@@ -665,30 +636,22 @@ export default function AppLayout() {
           <main className={`flex-1 flex flex-col min-w-0 overflow-hidden lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
             <ErrorBoundary>
               {artifactPanelOpen ? (
-                <ChatPanel activeConversationId={activeId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={false} />
+                <ChatPanel activeConversationId={activeConversationId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={false} />
               ) : (
                 <Outlet context={{
-                  activeId,
-                  setActiveId,
-                  activeConversationId: activeId,
-                  refreshConversations: loadConversations,
-                  socketRef, connected, hasNewEmail, setHasNewEmail, setChatPanelOpen,
-                  artifactPanelOpen, setArtifactPanelOpen, activeArtifactId, setActiveArtifactId,
-                  chatContext, setChatContext, isMobile, messages, setMessages,
-                  streamingContent, setStreamingContent, thinking, setThinking, status, setStatus,
-                  queuedCount, setQueuedCount, suggestedActions, setSuggestedActions,
-                  playTTS, stopTTS, isTTSPlaying, focusMode, setFocusMode,
-                  agentName,
+                  socketRef,
+                  playTTS, stopTTS, isTTSPlaying,
+                  highlight: driverHighlight,
+                  chatContext, setChatContext,
                   setPageContextData: setChatContext,
-                  sttAvailable: true,
                 }} />
               )}
             </ErrorBoundary>
           </main>
-          
+
           {chatPanelOpen && !artifactPanelOpen && (
             <aside className="fixed inset-0 z-50 lg:static lg:border-l lg:border-border/40 lg:w-[400px] lg:min-w-[400px] bg-background flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 shadow-2xl">
-              <ChatPanel activeConversationId={activeId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={true} onClose={() => setChatPanelOpen(false)} />
+              <ChatPanel activeConversationId={activeConversationId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={true} onClose={() => setChatPanelOpen(false)} />
             </aside>
           )}
 

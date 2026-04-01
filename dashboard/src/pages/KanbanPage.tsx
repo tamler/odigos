@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import { get, post, del, patch } from '@/lib/api'
+import { useUIStore } from '@/stores/uiStore'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -91,16 +92,15 @@ function BoardDetailInner({ boardId, board, setBoard }: {
   setBoard: React.Dispatch<React.SetStateAction<BoardDetail | null>>
 }) {
   const navigate = useNavigate()
-  const { 
-    isMobile, 
-    setPageContextData,
-    socketRef,
-    connected,
-    agentName,
-    sttAvailable,
-    focusMode,
-    setFocusMode
-  } = useOutletContext<any>()
+  let outletCtx: any = {}
+  try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
+  const { setPageContextData = () => {}, socketRef } = outletCtx
+  const isMobile = useUIStore(s => s.isMobile)
+  const connected = useUIStore(s => s.connected)
+  const agentName = useUIStore(s => s.agentName)
+  const focusMode = useUIStore(s => s.focusMode)
+  const setFocusMode = useUIStore(s => s.setFocusMode)
+  const sttAvailable = true
   const [newCardTexts, setNewCardTexts] = useState<Record<string, string>>({})
   const [newColumnTitle, setNewColumnTitle] = useState('')
   const [addingColumn, setAddingColumn] = useState(false)
@@ -117,7 +117,7 @@ function BoardDetailInner({ boardId, board, setBoard }: {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === '.') {
         e.preventDefault()
-        setFocusMode((prev: boolean) => !prev)
+        setFocusMode(!useUIStore.getState().focusMode)
       }
       if (e.key === 'Escape' && focusMode) {
         setFocusMode(false)

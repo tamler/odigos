@@ -22,9 +22,11 @@ router = APIRouter(
 @router.get("/conversations/{conversation_id:path}/messages")
 async def get_conversation_messages(
     conversation_id: str,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Database = Depends(get_db),
 ):
-    """Get all messages for a conversation, ordered by timestamp ascending."""
+    """Get messages for a conversation with pagination (newest last)."""
     conversation = await db.fetch_one(
         "SELECT id FROM conversations WHERE id = ?",
         (conversation_id,),
@@ -32,11 +34,20 @@ async def get_conversation_messages(
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    messages = await db.fetch_all(
-        "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+    total = await db.fetch_one(
+        "SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = ?",
         (conversation_id,),
     )
-    return {"messages": messages}
+    total_count = total["cnt"] if total else 0
+
+    # Return the last `limit` messages starting from `offset` from the end.
+    # offset=0 means the most recent batch.
+    skip = max(0, total_count - limit - offset)
+    messages = await db.fetch_all(
+        "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?",
+        (conversation_id, limit, skip),
+    )
+    return {"messages": messages, "total": total_count}
 
 
 @router.get("/conversations/{conversation_id:path}")

@@ -191,8 +191,11 @@ class Agent:
                 await self.tracer.emit("error", conversation_id, {"error": str(e)[:500]})
             return "Something went wrong while processing your message. Please try again."
 
-        # Store suggested actions for the caller (ws.py) to send to frontend
-        self._last_suggested_actions = result.suggested_actions
+        # Store suggested actions keyed by conversation for ws.py to retrieve
+        if not hasattr(self, "_suggested_actions_by_convo"):
+            self._suggested_actions_by_convo = {}
+        if result.suggested_actions:
+            self._suggested_actions_by_convo[conversation_id] = result.suggested_actions
 
         clean_content = await self.reflector.reflect(
             conversation_id,

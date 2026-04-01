@@ -143,6 +143,7 @@ async def websocket_endpoint(websocket: WebSocket):
     chat_queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_QUEUED_MESSAGES)
     processor_task: asyncio.Task | None = None
     cancel_event: asyncio.Event | None = None
+    background_tasks: set[asyncio.Task] = set()
 
     async def _process_chat_queue():
         """Process queued chat messages one at a time."""
@@ -219,21 +220,23 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     # Send suggested actions if the agent offered options
                     agent = agent_service.agent
-                    actions = getattr(agent, "_last_suggested_actions", None)
+                    actions_map = getattr(agent, "_suggested_actions_by_convo", {})
+                    actions = actions_map.pop(conversation_id, None)
                     if actions:
                         await websocket.send_json({
                             "type": "suggested_actions",
                             "actions": actions,
                             "conversation_id": conversation_id,
                         })
-                        agent._last_suggested_actions = None
                 except Exception:
                     pass  # Client disconnected, response is still saved in DB
                 agent = agent_service.agent
-                asyncio.create_task(_auto_title_and_notify(
+                task = asyncio.create_task(_auto_title_and_notify(
                     websocket, agent.db, agent.executor.provider,
                     conversation_id, data.get("content", ""), response,
                 ))
+                background_tasks.add(task)
+                task.add_done_callback(background_tasks.discard)
             except Exception:
                 logger.exception("Error processing queued chat message")
                 try:
@@ -440,4 +443,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await processor_task
             except asyncio.CancelledError:
                 pass
+        for task in background_tasks:
+            task.cancel()
+        background_tasks.clear()
         web_channel.unregister_connection(conversation_id, websocket)

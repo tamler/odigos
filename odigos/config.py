@@ -38,6 +38,7 @@ class LLMConfig(BaseModel):
     temperature: float = 0.7
     request_timeout_seconds: float = 60.0
     connect_timeout_seconds: float = 10.0
+    cost_per_million_tokens: float = 0.0  # Fallback when provider doesn't report cost. 0 = trust provider.
 
 
 class TelegramConfig(BaseModel):

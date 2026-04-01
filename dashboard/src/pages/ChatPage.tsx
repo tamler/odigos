@@ -2,26 +2,23 @@ import { useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { ChatPanel } from '@/components/ChatPanel'
+import { useChatStore } from '@/stores/chatStore'
+import { useUIStore } from '@/stores/uiStore'
 
 interface OutletCtx {
-  activeConversationId: string | null
-  setActiveId: (id: string | null) => void
-  refreshConversations: () => void
   socketRef: React.MutableRefObject<ChatSocket | null>
-  connected: boolean
-  setChatPanelOpen: (open: boolean) => void
+  playTTS?: () => void
+  stopTTS?: () => void
+  isTTSPlaying?: boolean
 }
 
 export default function ChatPage() {
-  const {
-    activeConversationId,
-    socketRef,
-    connected,
-    setChatPanelOpen,
-  } = useOutletContext<OutletCtx>()
+  const activeConversationId = useChatStore(s => s.activeConversationId)
+  const connected = useUIStore(s => s.connected)
+  const setChatPanelOpen = useUIStore(s => s.setChatPanelOpen)
+  const { socketRef } = useOutletContext<OutletCtx>()
 
   useEffect(() => {
-    // Ensure side panel is closed when visiting full chat page
     if (setChatPanelOpen) setChatPanelOpen(false)
   }, [setChatPanelOpen])
 

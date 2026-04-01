@@ -90,12 +90,12 @@ def resolve_artifact_path(
 
     # 3. Files dir by bare filename
     p = FILES_DIR / filename
-    if p.exists():
+    if p.exists() and str(p.resolve()).startswith(str(FILES_DIR.resolve())):
         return p
 
     # 4. Pre-merge artifacts (data/artifacts/{id}/{filename})
     p = ARTIFACTS_DIR / artifact_id / filename
-    if p.exists():
+    if p.exists() and str(p.resolve()).startswith(str(ARTIFACTS_DIR.resolve())):
         return p
 
     return None

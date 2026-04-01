@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
+import { useUIStore } from '@/stores/uiStore'
 import { get, post, del, patch } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -30,14 +31,13 @@ interface NotebookEntry {
 export default function NotebookPage() {
   const { id: notebookId } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { 
-    socketRef, 
-    connected, 
-    agentName, 
-    setPageContextData,
-    focusMode,
-    setFocusMode
-  } = useOutletContext<any>()
+  let outletCtx: any = {}
+  try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
+  const { socketRef, setPageContextData = () => {} } = outletCtx
+  const connected = useUIStore(s => s.connected)
+  const agentName = useUIStore(s => s.agentName)
+  const focusMode = useUIStore(s => s.focusMode)
+  const setFocusMode = useUIStore(s => s.setFocusMode)
 
   const [notebook, setNotebook] = useState<Notebook | null>(null)
   const [entries, setEntries] = useState<NotebookEntry[]>([])

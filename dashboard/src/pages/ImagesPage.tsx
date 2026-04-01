@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useOutletContext } from 'react-router-dom'
 import { get, del, uploadFile } from '@/lib/api'
+import { useUIStore } from '@/stores/uiStore'
 import { Artifact } from '@/components/ArtifactCard'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Trash2, Upload, ImageIcon, Share2, Download, Camera } from 'lucide-react'
@@ -122,11 +122,9 @@ export default function ImagesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   
-  const { 
-    setArtifactPanelOpen, 
-    setActiveArtifactId,
-    isMobile
-  } = useOutletContext<any>()
+  const setArtifactPanelOpen = useUIStore(s => s.setArtifactPanelOpen)
+  const setActiveArtifactId = useUIStore(s => s.setActiveArtifactId)
+  const isMobile = useUIStore(s => s.isMobile)
 
   const loadImages = useCallback(() => {
     setLoading(true)
