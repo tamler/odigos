@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
+ARG CACHE_BUST=0
 COPY odigos/ odigos/
 RUN pip install --no-cache-dir --prefix=/install --timeout=300 .
 
@@ -43,6 +44,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
+
+# Cache bust: forces re-copy of application code on deploy
+ARG CACHE_BUST=0
 
 # Copy application code
 COPY odigos/ odigos/

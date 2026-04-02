@@ -119,7 +119,10 @@ ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" <<'REMOTE'
   git reset --hard origin/main
 
   # Rebuild and restart the odigos service only (system Caddy handles TLS)
-  docker compose up -d --build --no-deps odigos 2>&1 | tail -5
+  # Touch a file to bust Docker layer cache for code changes
+  date +%s > .docker-build-stamp
+  docker compose build --build-arg CACHE_BUST="$(cat .docker-build-stamp)" odigos 2>&1 | tail -5
+  docker compose up -d --no-deps odigos 2>&1 | tail -5
 
   # Brief pause for image to be ready, don't block on health check
   sleep 5
