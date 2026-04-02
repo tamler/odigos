@@ -3,7 +3,7 @@ import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera, Music } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { StreamingText } from '@/components/ui/streaming-text'
@@ -44,6 +44,33 @@ const ImageArtifact = ({ artifact, onClick }: { artifact: Artifact, onClick: () 
           className="w-full h-full object-cover"
           loading="lazy"
         />
+      </div>
+    </div>
+  )
+}
+
+const AudioArtifact = ({ artifact, onClick }: { artifact: Artifact, onClick: () => void }) => {
+  return (
+    <div
+      className="rounded-xl overflow-hidden border border-border/40 max-w-xs cursor-pointer hover:border-border transition-all shadow-sm"
+      onClick={onClick}
+    >
+      <div className="p-3 space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 bg-primary/10 rounded-md flex items-center justify-center shrink-0">
+            <Music className="h-4 w-4 text-primary" />
+          </div>
+          <span className="text-xs font-medium truncate">{artifact.filename}</span>
+        </div>
+        <audio
+          controls
+          preload="metadata"
+          className="w-full h-8"
+          src={`/api/artifacts/${artifact.id}/download`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          Your browser does not support the audio element.
+        </audio>
       </div>
     </div>
   )
@@ -521,6 +548,11 @@ export const ChatPanel = memo(({
                             {artifacts.map(a => (
                               a.content_type?.startsWith('image/') ? (
                                 <ImageArtifact key={a.id} artifact={a} onClick={() => {
+                                  setActiveArtifactId(a.id)
+                                  setArtifactPanelOpen(true)
+                                }} />
+                              ) : a.content_type?.startsWith('audio/') ? (
+                                <AudioArtifact key={a.id} artifact={a} onClick={() => {
                                   setActiveArtifactId(a.id)
                                   setArtifactPanelOpen(true)
                                 }} />

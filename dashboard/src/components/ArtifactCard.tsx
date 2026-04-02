@@ -1,4 +1,4 @@
-import { Download, FileText, FileSpreadsheet, FileJson, FileCode, FileImage, File, Eye } from 'lucide-react'
+import { Download, FileText, FileSpreadsheet, FileJson, FileCode, FileImage, File, Eye, Music } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useUIStore } from '@/stores/uiStore'
 
@@ -24,6 +24,7 @@ export function getFileIcon(contentType: string, filename: string) {
   if (c.includes('csv') || c.includes('spreadsheet') || f.endsWith('.csv') || f.endsWith('.xlsx')) return <FileSpreadsheet className="h-5 w-5" />
   if (c.includes('json') || f.endsWith('.json')) return <FileJson className="h-5 w-5" />
   if (c.includes('javascript') || c.includes('typescript') || c.includes('html') || c.includes('code') || f.endsWith('.js') || f.endsWith('.ts') || f.endsWith('.jsx') || f.endsWith('.tsx')) return <FileCode className="h-5 w-5" />
+  if (c.includes('audio') || f.endsWith('.mp3') || f.endsWith('.wav') || f.endsWith('.ogg') || f.endsWith('.m4a') || f.endsWith('.aac')) return <Music className="h-5 w-5" />
   if (c.includes('image') || f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.jpeg') || f.endsWith('.svg')) return <FileImage className="h-5 w-5" />
   if (c.includes('text') || c.includes('markdown') || f.endsWith('.txt') || f.endsWith('.md')) return <FileText className="h-5 w-5" />
   

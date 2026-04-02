@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import shutil
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -302,6 +303,14 @@ async def _register_tools(
     tool_registry.register(ImageTool())
     logger.info("Image processing tool registered")
 
+    # Audio processing tool (FFmpeg)
+    if shutil.which("ffmpeg"):
+        from odigos.tools.audio_process import ProcessAudioTool
+        tool_registry.register(ProcessAudioTool(db=db))
+        logger.info("Audio processing tool registered (FFmpeg found)")
+    else:
+        logger.info("Audio processing tool skipped (FFmpeg not found)")
+
     # Spreadsheet tool
     from odigos.tools.spreadsheet import DataTableTool
     tool_registry.register(DataTableTool(db=db))
@@ -365,6 +374,29 @@ async def _register_tools(
         logger.info(
             "Image generation tool registered (Z-Image)"
         )
+
+    # Music generation tools (only if configured)
+    if settings.music_generation.enabled:
+        music_api_key = (
+            settings.music_generation.api_key
+            or settings.image_generation.api_key
+        )
+        if music_api_key:
+            from odigos.tools.music_gen import (
+                GenerateMusicTool,
+                SubmitMusicTool,
+            )
+            tool_registry.register(GenerateMusicTool(db=_db))
+            tool_registry.register(SubmitMusicTool(
+                api_key=music_api_key,
+                max_poll_seconds=(
+                    settings.music_generation.max_poll_seconds
+                ),
+                db=_db,
+            ))
+            logger.info(
+                "Music generation tools registered (Suno)"
+            )
 
     # MCP server bridges
     if settings.mcp.servers:

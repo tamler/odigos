@@ -179,6 +179,13 @@ class ImageGenerationConfig(BaseModel):
     max_poll_seconds: int = 120
 
 
+class MusicGenerationConfig(BaseModel):
+    enabled: bool = False
+    api_key: str = ""  # Kie.ai API key (same as image gen)
+    model: str = "V5"
+    max_poll_seconds: int = 180
+
+
 class AccessConfig(BaseModel):
     supervised: bool = False  # True = managed agent, protected settings locked. False = full admin access.
 
@@ -275,6 +282,7 @@ class Settings(BaseSettings):
     calendar: CalendarConfig = CalendarConfig()
     email: EmailConfig = EmailConfig()
     image_generation: ImageGenerationConfig = ImageGenerationConfig()
+    music_generation: MusicGenerationConfig = MusicGenerationConfig()
     auto_update: AutoUpdateConfig = AutoUpdateConfig()
     storage: StorageConfig = StorageConfig()
 

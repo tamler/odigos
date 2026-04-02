@@ -312,6 +312,14 @@ browser:
 #   nsfw_filter: true
 #   max_poll_seconds: 120
 
+# Music generation via Kie.ai Suno API (two-step: draft then submit)
+# Uses the same Kie.ai API key as image generation if api_key is empty
+# music_generation:
+#   enabled: false
+#   api_key: ""                       # Kie.ai API key (falls back to image_generation key)
+#   model: "V5"                       # V5, V4_5PLUS, V4_5, V4
+#   max_poll_seconds: 180
+
 # Storage quota -- monitor per-agent disk usage
 # storage:
 #   warn_gb: 10.0                     # Notify user when data/ exceeds this
