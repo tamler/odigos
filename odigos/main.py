@@ -311,6 +311,15 @@ async def _register_tools(
     else:
         logger.info("Audio processing tool skipped (FFmpeg not found)")
 
+    # Web platform tool (opencli-rs)
+    from odigos.tools.opencli import OPENCLI_BIN
+    if OPENCLI_BIN:
+        from odigos.tools.opencli import WebPlatformTool
+        tool_registry.register(WebPlatformTool())
+        logger.info("Web platform tool registered (opencli-rs found at %s)", OPENCLI_BIN)
+    else:
+        logger.info("Web platform tool skipped (opencli-rs not found)")
+
     # Spreadsheet tool
     from odigos.tools.spreadsheet import DataTableTool
     tool_registry.register(DataTableTool(db=db))
