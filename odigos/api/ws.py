@@ -158,7 +158,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 if client_conv_id and client_conv_id != "new":
                     conversation_id = client_conv_id
                 elif client_conv_id == "new" or not client_conv_id:
-                    import uuid
                     conversation_id = f"web:{uuid.uuid4().hex[:16]}"
 
                 chat_id = conversation_id.split(":", 1)[1] if ":" in conversation_id else conversation_id
