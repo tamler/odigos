@@ -14,13 +14,13 @@ def test_peer_config_with_api_key():
 
 
 def test_settings_defaults_to_empty_peers():
-    s = Settings(telegram_bot_token="fake", llm_api_key="fake")
+    s = Settings(services={"telegram": "fake"}, llm_api_key="fake")
     assert s.peers == []
 
 
 def test_settings_with_peers():
     s = Settings(
-        telegram_bot_token="fake",
+        services={"telegram": "fake"},
         llm_api_key="fake",
         peers=[
             {"name": "agent-a", "netbird_ip": "100.64.0.2", "api_key": "key-a"},

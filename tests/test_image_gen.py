@@ -38,7 +38,6 @@ def test_invalid_ratio_defaults():
 
 def test_config_defaults():
     cfg = ImageGenerationConfig()
-    assert cfg.enabled is False
     assert cfg.default_aspect_ratio == "1:1"
     assert cfg.nsfw_filter is True
     assert cfg.max_poll_seconds == 120

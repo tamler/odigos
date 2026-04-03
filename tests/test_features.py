@@ -94,6 +94,8 @@ def _settings(**overrides):
     defaults = dict(
         api_key="test-key",
         llm_api_key="sk-test",
+        services={},
+        service_key=lambda name: "",
         llm=SimpleNamespace(
             base_url="https://api.example.com",
             default_model="test/model",

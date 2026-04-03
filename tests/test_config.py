@@ -25,6 +25,7 @@ def test_settings_from_env_and_yaml():
             "max_tokens": 512,
             "temperature": 0.5,
         },
+        "services": {"telegram": "test-token-123"},
         "telegram": {"mode": "polling", "webhook_url": ""},
         "server": {"host": "127.0.0.1", "port": 9000},
     }
@@ -34,12 +35,12 @@ def test_settings_from_env_and_yaml():
         config_path = f.name
 
     try:
-        os.environ["TELEGRAM_BOT_TOKEN"] = "test-token-123"
         os.environ["LLM_API_KEY"] = "test-key-456"
 
         settings = load_settings(config_path)
 
         assert settings.telegram_bot_token == "test-token-123"
+        assert settings.service_key("telegram") == "test-token-123"
         assert settings.llm_api_key == "test-key-456"
         assert settings.agent.name == "TestBot"
         assert settings.database.path == "data/test.db"
@@ -49,7 +50,6 @@ def test_settings_from_env_and_yaml():
         assert settings.telegram.mode == "polling"
         assert settings.server.port == 9000
     finally:
-        os.environ.pop("TELEGRAM_BOT_TOKEN", None)
         os.environ.pop("LLM_API_KEY", None)
         os.unlink(config_path)
 
@@ -57,7 +57,7 @@ def test_settings_from_env_and_yaml():
 def test_settings_defaults():
     """Settings have sensible defaults from config.yaml.example."""
     settings = Settings(
-        telegram_bot_token="tok",
+        services={"telegram": "tok"},
         llm_api_key="key",
     )
     assert settings.agent.name == "Odigos"
@@ -70,7 +70,6 @@ def test_settings_defaults():
 
 def test_searxng_config_from_env(monkeypatch):
     """SearXNG config reads URL, username, password from env vars."""
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
     monkeypatch.setenv("LLM_API_KEY", "test-key")
     monkeypatch.setenv("SEARXNG_URL", "https://search.example.com")
     monkeypatch.setenv("SEARXNG_USERNAME", "nimda")
@@ -78,7 +77,7 @@ def test_searxng_config_from_env(monkeypatch):
 
     from odigos.config import Settings
 
-    settings = Settings()
+    settings = Settings(services={"telegram": "test-token"})
     assert settings.searxng_url == "https://search.example.com"
     assert settings.searxng_username == "nimda"
     assert settings.searxng_password == "secret123"
@@ -96,7 +95,7 @@ class TestNewConfigSections:
 
     def test_settings_includes_new_sections(self):
         settings = Settings(
-            telegram_bot_token="test",
+            services={"telegram": "test"},
             llm_api_key="test",
         )
         assert settings.budget.daily_limit_usd == 1.00

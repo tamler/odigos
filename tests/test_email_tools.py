@@ -8,13 +8,12 @@ from odigos.tools.email import CheckEmailTool, SendEmailTool
 
 @pytest.fixture
 def disabled_config():
-    return EmailConfig(enabled=False)
+    return EmailConfig()
 
 
 @pytest.fixture
 def configured_config():
     return EmailConfig(
-        enabled=True,
         address="test@example.com",
         imap_host="imap.example.com",
         imap_port=993,

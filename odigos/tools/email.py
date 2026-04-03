@@ -43,7 +43,7 @@ class CheckEmailTool(BaseTool):
         self._config = email_config
 
     async def execute(self, params: dict) -> ToolResult:
-        if not self._config.enabled or not self._config.imap_host:
+        if not self._config.imap_host:
             return ToolResult(success=False, data="", error="Email not configured")
         params.pop("_conversation_id", None)
         params.pop("_goal_id", None)
@@ -102,7 +102,7 @@ class SearchEmailTool(BaseTool):
         self._config = email_config
 
     async def execute(self, params: dict) -> ToolResult:
-        if not self._config.enabled or not self._config.imap_host:
+        if not self._config.imap_host:
             return ToolResult(success=False, data="", error="Email not configured")
         params.pop("_conversation_id", None)
         params.pop("_goal_id", None)
@@ -168,7 +168,7 @@ class ReadEmailTool(BaseTool):
         self._config = email_config
 
     async def execute(self, params: dict) -> ToolResult:
-        if not self._config.enabled or not self._config.imap_host:
+        if not self._config.imap_host:
             return ToolResult(success=False, data="", error="Email not configured")
         params.pop("_conversation_id", None)
         params.pop("_goal_id", None)
@@ -231,7 +231,7 @@ class SendEmailTool(BaseTool):
         self._config = email_config
 
     async def execute(self, params: dict) -> ToolResult:
-        if not self._config.enabled or not self._config.smtp_host:
+        if not self._config.smtp_host:
             return ToolResult(success=False, data="", error="Email not configured")
         params.pop("_conversation_id", None)
         params.pop("_goal_id", None)
