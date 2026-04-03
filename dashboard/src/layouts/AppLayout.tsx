@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
+import { NotebookSidebar } from '@/components/NotebookSidebar'
 import { QuickSwitcher } from '@/components/QuickSwitcher'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { Button } from '@/components/ui/button'
@@ -219,11 +220,7 @@ const AppSidebar = memo(({
                 <button key={s.id} onClick={() => { navigate(`/settings/${s.id}`); setSidebarOpen(false) }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${currentTab === s.id ? 'bg-accent text-accent-foreground font-medium shadow-sm' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`}><s.icon className="h-4 w-4 shrink-0" /><span>{s.label}</span></button>
               ))
             ) : isNotebook ? (
-              <div className="space-y-1">
-                {notebooks.map((nb: any) => (
-                  <button key={nb.id} onClick={() => { navigate(`/notebooks/${nb.id}`); setSidebarOpen(false) }} className={`w-full text-left px-3 py-2 rounded-lg text-sm truncate transition-colors ${location.pathname.includes(nb.id) ? 'bg-primary/10 text-primary font-bold shadow-sm' : 'text-muted-foreground hover:bg-accent/50'}`}>{nb.title}</button>
-                ))}
-              </div>
+              <NotebookSidebar notebooks={notebooks} currentPath={location.pathname} onNavigate={(path) => { navigate(path); setSidebarOpen(false) }} />
             ) : isKanban ? (
               <div className="space-y-1">
                 {boards.map((b: any) => (

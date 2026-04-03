@@ -183,13 +183,14 @@ export const ChatPanel = memo(({
     return () => window.removeEventListener('voice-error', handler)
   }, [])
 
-  // Safety: clear all states after 120s if server never responds
+  // Safety: clear all states after 300s if server never responds
+  // Music generation (submit_music) can take up to 240s, so 120s was too short
   useEffect(() => {
     if (!thinking) return
     const timer = setTimeout(() => {
       useChatStore.getState().setThinking(false)
       useChatStore.getState().setStatus(null)
-    }, 120000)
+    }, 300000)
     return () => clearTimeout(timer)
   }, [thinking])
 
@@ -242,7 +243,10 @@ export const ChatPanel = memo(({
     }).catch(() => { setSwitchingConversation(false) })
   }, [activeConversationId, searchParams, setMessages])
 
-  // Fetch artifacts once when thinking completes
+  // Fetch artifacts when thinking completes or new messages arrive
+  // messages.length covers the case where thinking times out before a long-running
+  // tool (e.g. music gen ~240s) finishes — the chat_response adds a message,
+  // triggering a refetch even though thinking was already false
   useEffect(() => {
     if (!thinking && loadedConvRef.current) {
       const cid = loadedConvRef.current
@@ -254,7 +258,7 @@ export const ChatPanel = memo(({
       const timer = setTimeout(fetchArtifacts, 5000)
       return () => clearTimeout(timer)
     }
-  }, [thinking])
+  }, [thinking, messages.length])
 
   useEffect(() => {
     const ta = textareaRef.current

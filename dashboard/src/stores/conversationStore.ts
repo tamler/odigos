@@ -14,10 +14,10 @@ interface ConversationState {
   conversations: Conversation[]
   setConversations: (conversations: Conversation[] | ((prev: Conversation[]) => Conversation[])) => void
   refreshConversations: (pendingTitles?: Record<string, string>) => Promise<void>
-  notebooks: { id: string; title: string; updated_at: string }[]
-  setNotebooks: (notebooks: { id: string; title: string; updated_at: string }[] | ((prev: { id: string; title: string; updated_at: string }[]) => { id: string; title: string; updated_at: string }[])) => void
-  boards: { id: string; title: string; updated_at: string }[]
-  setBoards: (boards: { id: string; title: string; updated_at: string }[] | ((prev: { id: string; title: string; updated_at: string }[]) => { id: string; title: string; updated_at: string }[])) => void
+  notebooks: { id: string; title: string; mode?: string; updated_at: string }[]
+  setNotebooks: (notebooks: { id: string; title: string; mode?: string; updated_at: string }[] | ((prev: { id: string; title: string; mode?: string; updated_at: string }[]) => { id: string; title: string; mode?: string; updated_at: string }[])) => void
+  boards: { id: string; title: string; mode?: string; updated_at: string }[]
+  setBoards: (boards: { id: string; title: string; mode?: string; updated_at: string }[] | ((prev: { id: string; title: string; mode?: string; updated_at: string }[]) => { id: string; title: string; mode?: string; updated_at: string }[])) => void
   images: Artifact[]
   setImages: (images: Artifact[]) => void
   searchQuery: string

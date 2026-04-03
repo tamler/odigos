@@ -25,20 +25,20 @@ BACKUP_DIR = Path("data/notebooks")
 
 # -- Request models --
 
-_MODES = Literal["general", "journal", "research", "creative", "meetings"]
+_DEFAULT_MODES = {"general", "journal", "research", "creative", "meetings", "recipes", "music", "fitness", "finance", "travel"}
 _COLLAB = Literal["read", "suggest", "active"]
 
 
 class CreateNotebookRequest(BaseModel):
     title: str
-    mode: _MODES = "general"
+    mode: str = "general"
     collaboration: _COLLAB = "read"
     share_with_agent: int = 0
 
 
 class UpdateNotebookRequest(BaseModel):
     title: str | None = None
-    mode: _MODES | None = None
+    mode: str | None = None
     collaboration: _COLLAB | None = None
     share_with_agent: int | None = None
 

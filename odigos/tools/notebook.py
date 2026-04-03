@@ -48,8 +48,7 @@ class ManageNotebookTool(BaseTool):
             },
             "mode": {
                 "type": "string",
-                "enum": ["general", "journal", "research", "creative", "meetings"],
-                "description": "Notebook mode (default: general)",
+                "description": "Notebook category — common: general, journal, research, creative, meetings, recipes, music, fitness, finance, travel. Can be any custom value.",
             },
             "limit": {
                 "type": "integer",
