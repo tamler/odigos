@@ -73,9 +73,10 @@ class LLMClient(LLMProvider):
         if tools:
             payload["tools"] = tools
 
-        logger.debug(
-            "LLM request: model=%s, tools=%d, messages=%d",
+        logger.info(
+            "LLM request: model=%s, tools=%d, messages=%d, tool_names=%s",
             model, len(tools) if tools else 0, len(messages),
+            [t["function"]["name"] for t in tools] if tools else [],
         )
 
         url = f"{self.base_url}/chat/completions"
