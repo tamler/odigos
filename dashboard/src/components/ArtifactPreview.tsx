@@ -1,20 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useOutletContext, useSearchParams } from 'react-router-dom'
-import { get, put, post } from '@/lib/api'
+import { get, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { X, ExternalLink, Download, Code, Eye, FileText, Save, Music, Send } from 'lucide-react'
+import { X, ExternalLink, Download, Code, Eye, FileText, Save, Music } from 'lucide-react'
 import { ImageCropper } from './ImageCropper'
 import { ArtifactCard } from './ArtifactCard'
 import { MarkdownEditor, CodeEditor } from './Editor'
@@ -23,151 +13,6 @@ import { MarkdownEditor, CodeEditor } from './Editor'
 import html2pdf from 'html2pdf.js'
 // @ts-ignore
 import { epub } from 'epub-gen-memory'
-
-interface SongData {
-  title?: string
-  lyrics?: string
-  style?: string
-  instrumental?: boolean
-  vocal_gender?: '' | 'male' | 'female'
-  [key: string]: unknown
-}
-
-function SongEditor({
-  content,
-  artifactId,
-  conversationId,
-  onChange,
-  onSave,
-}: {
-  content: string
-  artifactId: string
-  conversationId: string | null
-  onChange: (newContent: string) => void
-  onSave: () => void
-}) {
-  const [song, setSong] = useState<SongData>(() => {
-    try { return JSON.parse(content) } catch { return {} }
-  })
-  const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    try { setSong(JSON.parse(content)) } catch {}
-  }, [content])
-
-  const update = (field: keyof SongData, value: unknown) => {
-    const updated = { ...song, [field]: value }
-    setSong(updated)
-    onChange(JSON.stringify(updated, null, 2))
-  }
-
-  const handleGenerate = async () => {
-    if (!conversationId) {
-      toast.error('No active conversation')
-      return
-    }
-    onSave()
-    setSubmitting(true)
-    try {
-      await post(`/api/conversations/${conversationId}/messages`, {
-        content: `Submit the song draft ${artifactId}`,
-      })
-      toast.success('Song submitted for generation')
-    } catch {
-      toast.error('Failed to submit song')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <div className="p-6 space-y-5 max-w-2xl mx-auto">
-      <div className="flex items-center gap-2 mb-2">
-        <Music className="h-5 w-5 text-primary" />
-        <h3 className="text-base font-semibold">Song Editor</h3>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="song-title">Title</Label>
-        <Input
-          id="song-title"
-          value={song.title || ''}
-          onChange={(e) => update('title', e.target.value)}
-          placeholder="Song title"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="song-lyrics">Lyrics</Label>
-        <Textarea
-          id="song-lyrics"
-          value={song.lyrics || ''}
-          onChange={(e) => update('lyrics', e.target.value)}
-          placeholder="Write your lyrics here..."
-          className="min-h-[200px] font-mono text-sm resize-y"
-          rows={12}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="song-style">Style / Genre</Label>
-        <Input
-          id="song-style"
-          value={song.style || ''}
-          onChange={(e) => update('style', e.target.value)}
-          placeholder="e.g. upbeat pop, acoustic folk, lo-fi hip hop"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Instrumental</Label>
-          <button
-            type="button"
-            onClick={() => update('instrumental', !song.instrumental)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              song.instrumental ? 'bg-primary' : 'bg-muted-foreground/30'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-                song.instrumental ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Vocal Gender</Label>
-          <Select
-            value={song.vocal_gender || ''}
-            onValueChange={(v) => update('vocal_gender', v)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Any" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">Any</SelectItem>
-              <SelectItem value="male">Male</SelectItem>
-              <SelectItem value="female">Female</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="pt-2">
-        <Button
-          onClick={handleGenerate}
-          disabled={submitting || !song.title}
-          className="gap-2"
-        >
-          <Send className="h-4 w-4" />
-          {submitting ? 'Submitting...' : 'Generate Song'}
-        </Button>
-      </div>
-    </div>
-  )
-}
 
   interface ArtifactContent {
     content: string
@@ -275,7 +120,6 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
   const isJson = data.content_type === 'application/json'
   const isImage = data.content_type.startsWith('image/')
   const isAudio = data.content_type.startsWith('audio/')
-  const isSongJson = isJson && data.filename.endsWith('.song.json')
   const isPreviewable = isHtml || isMarkdown || data.content_type.startsWith('text/') || isJson || isImage || isAudio
 
 
@@ -488,16 +332,6 @@ export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
                   }}
                 />
               </div>
-            ) : isSongJson ? (
-              <ScrollArea className="h-full">
-                <SongEditor
-                  content={editContent}
-                  artifactId={artifactId}
-                  conversationId={conversationId}
-                  onChange={handleContentChange}
-                  onSave={handleSave}
-                />
-              </ScrollArea>
             ) : isHtml ? (
               <iframe
                 srcDoc={editContent}
