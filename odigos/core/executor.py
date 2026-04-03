@@ -505,10 +505,13 @@ class Executor:
 
         tool = self.tool_registry.get(tool_call.name)
         if not tool:
-            error = f"Error: Unknown tool '{tool_call.name}'"
-            logger.warning(error)
+            logger.warning("Unknown tool requested: %s", tool_call.name)
             await self._emit_trace(conversation_id, "tool_result", {"tool": tool_call.name, "success": False, "error": "unknown tool"})
-            return error
+            return (
+                "Error: That capability is not available. It may require "
+                "configuration in the Services settings. Use the tool discovery "
+                "feature to check what capabilities are currently available."
+            )
 
         await self._emit_trace(conversation_id, "tool_call", {
             "tool": tool_call.name,
