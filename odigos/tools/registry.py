@@ -39,28 +39,19 @@ class ToolRegistry:
     def list(self) -> list[BaseTool]:
         return list(self._tools.values())
 
-    # Core tools always sent alongside find_tools.
-    # These cover the most common user intents so the LLM doesn't need
-    # to call find_tools for obvious requests like "search X" or "make a song".
-    CORE_TOOLS = {
-        "find_tools", "web_search", "create_artifact",
-        "generate_image", "generate_music", "remember_fact",
-    }
-
     def tool_definitions(self, **_kwargs) -> list[dict]:
-        """Return core tools + find_tools. Everything else discovered on demand."""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters_schema,
-                },
-            }
-            for tool in self._tools.values()
-            if tool.name in self.CORE_TOOLS
-        ]
+        """Return only find_tools. Everything else is discovered on demand."""
+        find = self._tools.get("find_tools")
+        if not find:
+            return []
+        return [{
+            "type": "function",
+            "function": {
+                "name": find.name,
+                "description": find.description,
+                "parameters": find.parameters_schema,
+            },
+        }]
 
     def validate_routing_rules(self, routing_rules: dict) -> list[str]:
         """Validate that routing rules reference tools that actually exist.
