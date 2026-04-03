@@ -293,6 +293,11 @@ async def _register_tools(
     tool_registry.register(WorkspaceSearchTool(db=db))
     logger.info("Workspace search tool registered")
 
+    # Notebook tool (create/read/write notebooks)
+    from odigos.tools.notebook import ManageNotebookTool
+    tool_registry.register(ManageNotebookTool(db=db))
+    logger.info("Notebook tool registered")
+
     # Tool discovery meta-tool (progressive disclosure)
     from odigos.tools.find_tools import FindToolsTool
     tool_registry.register(FindToolsTool(registry=tool_registry))
@@ -391,20 +396,18 @@ async def _register_tools(
             or settings.image_generation.api_key
         )
         if music_api_key:
-            from odigos.tools.music_gen import (
-                GenerateMusicTool,
-                SubmitMusicTool,
-            )
-            tool_registry.register(GenerateMusicTool(db=_db))
-            tool_registry.register(SubmitMusicTool(
+            from odigos.tools.music_gen import GenerateMusicTool
+            tool_registry.register(GenerateMusicTool(
                 api_key=music_api_key,
-                max_poll_seconds=(
-                    settings.music_generation.max_poll_seconds
-                ),
+                provider=settings.music_generation.provider,
+                task_type=settings.music_generation.task_type,
+                model=settings.music_generation.model,
+                max_poll_seconds=settings.music_generation.max_poll_seconds,
                 db=_db,
             ))
             logger.info(
-                "Music generation tools registered (Suno)"
+                "Music generation tool registered (%s)",
+                settings.music_generation.provider,
             )
 
     # MCP server bridges
