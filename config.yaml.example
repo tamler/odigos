@@ -5,35 +5,30 @@
 # =============================================================================
 # SECRETS & API KEYS
 # =============================================================================
-# These can also be set as environment variables or in a .env file.
 
 # API key for authenticating dashboard and API requests.
-# If not set, a random key is generated on first startup and saved.
 # api_key: "your-secret-api-key-here"
 
 # LLM provider API key (required for cloud providers like OpenRouter)
 # llm_api_key: "sk-or-..."
 
-# Groq API key (required for Whisper STT via Groq)
-# groq_api_key: "gsk_..."
-
 # Session secret for web auth (auto-generated if not set)
 # session_secret: ""
 
-# Search provider credentials (pick one)
-# search_provider: "searxng"        # "searxng", "brave", or "google"
+# External services — one key per provider, auto-enables all capabilities.
+# Set a key and the features it powers just work. No "enabled: true" needed.
+# services:
+#   kie_ai: ""          # Image gen (Z-Image) + Music gen (Suno)
+#   groq: ""            # Whisper STT for voice input
+#   brave: ""           # Brave web search
+#   telegram: ""        # Telegram bot channel
+#   notebooklm: ""      # NotebookLM integration
+
+# Search provider (if using SearxNG instead of Brave)
+# search_provider: "searxng"
 # searxng_url: "http://searxng:8080"
 # searxng_username: ""
 # searxng_password: ""
-# brave_api_key: ""
-# google_search_api_key: ""
-# google_search_cx: ""
-
-# Telegram bot token (required for Telegram channel)
-# telegram_bot_token: ""
-
-# NotebookLM cookie (optional, for NotebookLM integration)
-# notebooklm_cookie: ""
 
 # =============================================================================
 # CORE SETTINGS
@@ -303,21 +298,19 @@ browser:
 #   auto_apply: false               # true = apply immediately, false = notify only
 #   branch: "main"
 
-# Image generation via Kie.ai Z-Image API
+# Kie.ai media generation (image + music) — one key enables both
 # Get an API key at https://kie.ai/api-key
+# Set the key in EITHER section — it's shared automatically.
 # image_generation:
-#   enabled: false
-#   api_key: ""                       # Kie.ai API key (or set KIE_API_KEY in .env)
+#   api_key: ""                       # Kie.ai API key
 #   default_aspect_ratio: "1:1"       # 1:1, 4:3, 3:4, 16:9, 9:16
 #   nsfw_filter: true
 #   max_poll_seconds: 120
-
-# Music generation via Kie.ai Suno API (two-step: draft then submit)
-# Uses the same Kie.ai API key as image generation if api_key is empty
-# music_generation:
-#   enabled: false
-#   api_key: ""                       # Kie.ai API key (falls back to image_generation key)
-#   model: "V5"                       # V5, V4_5PLUS, V4_5, V4
+#
+# music_generation:                   # Auto-enabled when a Kie.ai key exists
+#   provider: "suno"                  # Kie.ai provider name
+#   task_type: "suno_music"           # Kie.ai taskType
+#   model: "V5"                       # V5, V5_5, V4_5PLUS, V4_5, V4
 #   max_poll_seconds: 180
 
 # Storage quota -- monitor per-agent disk usage

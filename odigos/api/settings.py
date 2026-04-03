@@ -52,8 +52,8 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
     return {
         "llm_api_key": _mask_key(settings.llm_api_key),
         "api_key": _mask_key(settings.api_key),
-        "telegram_bot_token": _mask_key(settings.telegram_bot_token),
-        "telegram_configured": bool(settings.telegram_bot_token),
+        "services": {name: _mask_key(key) for name, key in settings.services.items()},
+        "telegram_configured": bool(settings.service_key("telegram")),
         "llm": settings.llm.model_dump(),
         "agent": settings.agent.model_dump(),
         "budget": settings.budget.model_dump(),
@@ -155,10 +155,12 @@ async def update_settings_endpoint(
                 yaml_config[section] = {}
             yaml_config[section].update(section_data)
 
-    # Update Telegram bot token in config.yaml (not .env -- accessible via settings UI)
+    # Update Telegram bot token via services
     if update.telegram_bot_token is not None and update.telegram_bot_token != "****":
-        yaml_config["telegram_bot_token"] = update.telegram_bot_token
-        object.__setattr__(settings, "telegram_bot_token", update.telegram_bot_token)
+        if "services" not in yaml_config:
+            yaml_config["services"] = {}
+        yaml_config["services"]["telegram"] = update.telegram_bot_token
+        settings.services["telegram"] = update.telegram_bot_token
 
     # Update LLM API key in .env (ignore masked placeholder)
     if update.llm_api_key is not None and update.llm_api_key != "****":

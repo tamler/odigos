@@ -6,9 +6,9 @@ from odigos.config_validator import validate_settings
 
 def _settings(**overrides) -> Settings:
     """Build a Settings object with safe defaults."""
-    defaults = {
+    defaults: dict = {
         "llm_api_key": "sk-test-key",
-        "groq_api_key": "gsk-test-key",
+        "services": {"groq": "gsk-test-key"},
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -51,11 +51,11 @@ def test_daily_exceeds_monthly():
 
 def test_groq_stt_no_key():
     s = _settings(
-        groq_api_key="",
+        services={},
         voice={"stt_provider": "groq"},
     )
     warnings = validate_settings(s)
-    assert any("groq_api_key" in w for w in warnings)
+    assert any("groq" in w.lower() for w in warnings)
 
 
 def test_invalid_stt_provider():

@@ -368,47 +368,32 @@ async def _register_tools(
         tool_registry.register(feed_publish)
         logger.info("Feed publish tool registered")
 
-    # Image generation tool (only if configured)
-    if (
-        settings.image_generation.enabled
-        and settings.image_generation.api_key
-    ):
+    # Kie.ai-powered tools (image gen, music gen) — one API key enables all
+    kie_api_key = settings.service_key("kie_ai")
+    if kie_api_key:
         from odigos.tools.image_gen import GenerateImageTool
         tool_registry.register(GenerateImageTool(
-            api_key=settings.image_generation.api_key,
-            default_ratio=(
-                settings.image_generation.default_aspect_ratio
-            ),
+            api_key=kie_api_key,
+            default_ratio=settings.image_generation.default_aspect_ratio,
             nsfw_filter=settings.image_generation.nsfw_filter,
-            max_poll_seconds=(
-                settings.image_generation.max_poll_seconds
-            ),
+            max_poll_seconds=settings.image_generation.max_poll_seconds,
+            db=_db,
+        ))
+        logger.info("Image generation tool registered (Z-Image)")
+
+        from odigos.tools.music_gen import GenerateMusicTool
+        tool_registry.register(GenerateMusicTool(
+            api_key=kie_api_key,
+            provider=settings.music_generation.provider,
+            task_type=settings.music_generation.task_type,
+            model=settings.music_generation.model,
+            max_poll_seconds=settings.music_generation.max_poll_seconds,
             db=_db,
         ))
         logger.info(
-            "Image generation tool registered (Z-Image)"
+            "Music generation tool registered (%s)",
+            settings.music_generation.provider,
         )
-
-    # Music generation tools (only if configured)
-    if settings.music_generation.enabled:
-        music_api_key = (
-            settings.music_generation.api_key
-            or settings.image_generation.api_key
-        )
-        if music_api_key:
-            from odigos.tools.music_gen import GenerateMusicTool
-            tool_registry.register(GenerateMusicTool(
-                api_key=music_api_key,
-                provider=settings.music_generation.provider,
-                task_type=settings.music_generation.task_type,
-                model=settings.music_generation.model,
-                max_poll_seconds=settings.music_generation.max_poll_seconds,
-                db=_db,
-            ))
-            logger.info(
-                "Music generation tool registered (%s)",
-                settings.music_generation.provider,
-            )
 
     # MCP server bridges
     if settings.mcp.servers:
@@ -552,7 +537,7 @@ async def lifespan(app: FastAPI):
 
     app.state.stt_provider = create_stt_provider(
         voice_config=settings.voice,
-        groq_api_key=settings.groq_api_key,
+        groq_api_key=settings.service_key("groq"),
         stt_config=settings.stt,
     )
     logger.info(

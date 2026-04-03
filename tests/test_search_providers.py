@@ -80,9 +80,11 @@ def test_search_tool_legacy_searxng_kwarg():
     assert tool.searxng is provider
 
 
-def test_config_has_new_fields():
+def test_config_services_pattern():
     from odigos.config import Settings
     s = Settings()
-    assert s.brave_api_key == ""
-    assert s.google_search_api_key == ""
-    assert s.google_search_cx == ""
+    assert s.service_key("brave") == ""
+    assert s.service_key("kie_ai") == ""
+    s2 = Settings(services={"brave": "test-key"})
+    assert s2.service_key("brave") == "test-key"
+    assert s2.brave_api_key == "test-key"  # compat property

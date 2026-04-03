@@ -172,17 +172,15 @@ class KanbanConfig(BaseModel):
 
 
 class ImageGenerationConfig(BaseModel):
-    enabled: bool = False
-    api_key: str = ""  # Kie.ai API key
     default_aspect_ratio: str = "1:1"
     nsfw_filter: bool = True
     max_poll_seconds: int = 120
 
 
 class MusicGenerationConfig(BaseModel):
-    enabled: bool = False
-    api_key: str = ""  # Kie.ai API key (same as image gen)
-    model: str = "V5"
+    provider: str = "suno"  # Kie.ai provider name (e.g. "suno", "udio")
+    task_type: str = "suno_music"  # Kie.ai taskType for this provider
+    model: str = "V5"  # Provider model version
     max_poll_seconds: int = 180
 
 
@@ -238,19 +236,25 @@ class StorageConfig(BaseModel):
 
 
 class Settings(BaseSettings):
-    telegram_bot_token: str = ""
+    # --- External services: one key per provider, auto-enables capabilities ---
+    services: dict[str, str] = {}
+    # Known service names:
+    #   kie_ai      → image gen + music gen
+    #   groq        → Whisper STT
+    #   brave       → web search (Brave)
+    #   google      → web search (Google), value = "api_key:cx_id"
+    #   telegram    → Telegram bot channel
+    #   notebooklm  → NotebookLM integration
+    #   searxng     → SearxNG search (value = URL, auth via searxng_username/password)
+
+    # --- Core credentials (not per-service) ---
     llm_api_key: str = ""
-    groq_api_key: str = ""  # Groq API key for Whisper STT
-    api_key: str = ""
+    api_key: str = ""  # Dashboard auth key
     session_secret: str = ""
     search_provider: str = ""
-    searxng_url: str = ""
+    searxng_url: str = ""  # Legacy — prefer services.searxng
     searxng_username: str = ""
     searxng_password: str = ""
-    brave_api_key: str = ""
-    google_search_api_key: str = ""
-    google_search_cx: str = ""
-    notebooklm_cookie: str = ""
 
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()
@@ -287,6 +291,27 @@ class Settings(BaseSettings):
     storage: StorageConfig = StorageConfig()
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    def service_key(self, name: str) -> str:
+        """Get API key for an external service. Returns empty string if not configured."""
+        return self.services.get(name, "")
+
+    # Compat properties — code that reads old field names still works
+    @property
+    def telegram_bot_token(self) -> str:
+        return self.service_key("telegram")
+
+    @property
+    def groq_api_key(self) -> str:
+        return self.service_key("groq")
+
+    @property
+    def brave_api_key(self) -> str:
+        return self.service_key("brave")
+
+    @property
+    def notebooklm_cookie(self) -> str:
+        return self.service_key("notebooklm")
 
 
 def load_settings(config_path: str = "config.yaml") -> Settings:

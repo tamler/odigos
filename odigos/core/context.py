@@ -501,7 +501,7 @@ class ContextAssembler:
                     notebook_context = notebook_context + "\n\n" + "\n".join(page_lines)
 
         # Image generation prompt guide (when tool is enabled)
-        if self.settings and self.settings.image_generation.enabled:
+        if self.settings and self.settings.service_key("kie_ai"):
             img_guide = load_prompt(
                 "image_prompt_guide.md", ""
             )

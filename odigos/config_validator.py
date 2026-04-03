@@ -55,10 +55,10 @@ def validate_settings(settings: Settings) -> list[str]:
             f"voice.stt_provider '{stt}' is not valid. "
             f"Expected one of {sorted(VALID_STT_PROVIDERS)}."
         )
-    if stt == "groq" and not settings.groq_api_key:
+    if stt == "groq" and not settings.service_key("groq"):
         warnings.append(
             "voice.stt_provider is 'groq' but "
-            "groq_api_key is empty."
+            "services.groq is not set."
         )
 
     tts = settings.voice.tts_provider
