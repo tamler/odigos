@@ -3,8 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
-import yaml
-
 from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
@@ -115,24 +113,13 @@ class ManageSettingsTool(BaseTool):
 
             value = params["value"]
 
-            # Update in-memory settings via dotted key
-            parts = key.split(".")
-            if len(parts) == 1:
-                object.__setattr__(self.settings, parts[0], value)
-            else:
-                parent = self.settings
-                for part in parts[:-1]:
-                    parent = getattr(parent, part)
-                object.__setattr__(parent, parts[-1], value)
-
-            # Persist to config.yaml
+            # Persist to config.yaml first (validate on reload)
+            from odigos import aio
             config_file = Path(self.config_path)
-            data: dict = {}
-            if config_file.exists():
-                with open(config_file) as f:
-                    data = yaml.safe_load(f) or {}
+            data: dict = await aio.read_yaml(config_file) if config_file.exists() else {}
 
             # Build nested dict for dotted key
+            parts = key.split(".")
             target = data
             for part in parts[:-1]:
                 if part not in target or not isinstance(target[part], dict):
@@ -140,8 +127,17 @@ class ManageSettingsTool(BaseTool):
                 target = target[part]
             target[parts[-1]] = value
 
-            with open(config_file, "w") as f:
-                yaml.dump(data, f, default_flow_style=False)
+            await aio.write_yaml(config_file, data)
+
+            # Reload all settings from disk (validates via Pydantic)
+            try:
+                from odigos.config import reload_into
+                reload_into(self.settings, self.config_path)
+            except Exception as exc:
+                return ToolResult(
+                    success=False, data="",
+                    error=f"Setting written but validation failed: {exc}",
+                )
 
             return ToolResult(success=True, data=f"{key} updated to {value!r}")
 

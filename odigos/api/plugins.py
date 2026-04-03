@@ -11,7 +11,6 @@ from pydantic import BaseModel
 from odigos import aio
 from odigos.api.deps import get_config_path, get_container, get_env_path, get_plugin_manager, get_settings, require_auth
 from odigos.api.settings import _update_env_file
-from odigos.config import Settings
 from odigos.container import Container
 
 router = APIRouter(
@@ -135,11 +134,9 @@ async def configure_plugin(
 
         await aio.write_yaml(config_path, yaml_config)
 
-    # Hot-reload: re-read settings from disk and update container
-    new_settings = Settings()
-    for field in new_settings.model_fields:
-        object.__setattr__(settings, field, getattr(new_settings, field))
-    container.settings = settings
+    # Hot-reload: re-read settings from disk (validates via Pydantic)
+    from odigos.config import reload_into
+    reload_into(settings, str(config_path))
 
     # Re-register plugins so newly configured ones activate
     plugin_manager.reload()

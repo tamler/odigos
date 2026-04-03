@@ -321,3 +321,14 @@ def load_settings(config_path: str = "config.yaml") -> Settings:
             yaml_config = yaml.safe_load(f) or {}
 
     return Settings(**yaml_config)
+
+
+def reload_into(target: Settings, config_path: str = "config.yaml") -> None:
+    """Reload settings from disk and atomically replace all fields on target.
+
+    Validates the new config via Pydantic before mutating anything.
+    If validation fails, target is unchanged and the exception propagates.
+    """
+    fresh = load_settings(config_path)
+    for field in fresh.model_fields:
+        object.__setattr__(target, field, getattr(fresh, field))

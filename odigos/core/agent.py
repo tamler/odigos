@@ -16,6 +16,9 @@ from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
+# Limit concurrent background analysis tasks (entity extraction, correction detection, profiling)
+_BACKGROUND_SEMAPHORE = asyncio.Semaphore(10)
+
 if TYPE_CHECKING:
     from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetTracker
@@ -136,10 +139,11 @@ class Agent:
             (message.id, conversation_id, "user", message.content),
         )
 
-        # Fire-and-forget structured profile update
-        asyncio.create_task(
-            update_profile_from_message(self.db, message.content, "user")
-        )
+        # Fire-and-forget structured profile update (bounded by semaphore)
+        async def _bg_profile():
+            async with _BACKGROUND_SEMAPHORE:
+                await update_profile_from_message(self.db, message.content, "user")
+        asyncio.create_task(_bg_profile())
 
         if self.tracer:
             await self.tracer.emit("step_start", conversation_id, {"message_preview": message.content[:200]})
@@ -233,14 +237,23 @@ class Agent:
                 detect_correction_background,
             )
             entity_graph = getattr(self, '_entity_graph', None)
-            asyncio.create_task(extract_entities_background(
-                self.executor.provider, self.db, entity_graph,
-                conversation_id, message.content, clean_content,
-            ))
-            asyncio.create_task(detect_correction_background(
-                self.executor.provider, self.db,
-                conversation_id, message.content, clean_content,
-            ))
+
+            async def _bg_extract():
+                async with _BACKGROUND_SEMAPHORE:
+                    await extract_entities_background(
+                        self.executor.provider, self.db, entity_graph,
+                        conversation_id, message.content, clean_content,
+                    )
+
+            async def _bg_correct():
+                async with _BACKGROUND_SEMAPHORE:
+                    await detect_correction_background(
+                        self.executor.provider, self.db,
+                        conversation_id, message.content, clean_content,
+                    )
+
+            asyncio.create_task(_bg_extract())
+            asyncio.create_task(_bg_correct())
         except Exception:
             pass
 

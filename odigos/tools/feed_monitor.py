@@ -90,8 +90,11 @@ class ListFeedsTool(BaseTool):
             rows = await self.db.fetch_all(
                 "SELECT name, url, topics, enabled, last_checked_at FROM monitored_feeds ORDER BY name"
             )
-        except Exception:
-            return ToolResult(success=True, data="No monitored feeds yet.")
+        except Exception as e:
+            return ToolResult(
+                success=False, data="", error=f"Failed to query feeds: {e}",
+                failure_category="unavailable",
+            )
 
         if not rows:
             return ToolResult(success=True, data="No monitored feeds yet. Use watch_feed to add one.")
@@ -136,8 +139,11 @@ class CheckFeedsTool(BaseTool):
             feeds = await self.db.fetch_all(
                 "SELECT id, name, url, topics FROM monitored_feeds WHERE enabled = 1"
             )
-        except Exception:
-            return ToolResult(success=True, data="No monitored feeds configured.")
+        except Exception as e:
+            return ToolResult(
+                success=False, data="", error=f"Failed to query feeds: {e}",
+                failure_category="unavailable",
+            )
 
         if not feeds:
             return ToolResult(success=True, data="No monitored feeds configured. Use watch_feed to add one.")
