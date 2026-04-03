@@ -1,6 +1,7 @@
 ---
 priority: 85
 always_include: false
+exclude_from_prompt: true
 ---
 # Routing rules control CONTEXT, not tools.
 # Tool availability is handled by category in registry.py.

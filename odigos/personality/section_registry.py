@@ -17,6 +17,7 @@ class PromptSection:
     priority: int = 50
     always_include: bool = True
     max_tokens: int = 0  # 0 = unlimited
+    exclude_from_prompt: bool = False
 
 
 class SectionRegistry:
@@ -43,7 +44,7 @@ class SectionRegistry:
         for path in sorted(self._dir.glob("*.md")):
             name = path.stem
             section = self._load_one(path)
-            if section is None:
+            if section is None or section.exclude_from_prompt:
                 continue
             if overrides and name in overrides:
                 section = PromptSection(
@@ -80,6 +81,7 @@ class SectionRegistry:
             priority=frontmatter.get("priority", 50),
             always_include=frontmatter.get("always_include", True),
             max_tokens=frontmatter.get("max_tokens", 0),
+            exclude_from_prompt=frontmatter.get("exclude_from_prompt", False),
         )
         self._cache[path.name] = (mtime, section)
         return section
