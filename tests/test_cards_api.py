@@ -6,6 +6,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from odigos.container import Container
+
 
 def _make_app():
     from odigos.api.cards import router
@@ -17,9 +19,11 @@ def _make_app():
     card_manager = AsyncMock()
     db = AsyncMock()
 
-    app.state.settings = settings
-    app.state.card_manager = card_manager
-    app.state.db = db
+    app.state.container = Container(
+        settings=settings,
+        card_manager=card_manager,
+        db=db,
+    )
     app.include_router(router)
     return app, card_manager, db
 

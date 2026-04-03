@@ -4,13 +4,14 @@ from fastapi.testclient import TestClient
 
 from odigos.api.deps import require_feature
 from odigos.config import Settings, NotebooksConfig
+from odigos.container import Container
 
 
 def _make_app(notebooks_enabled: bool) -> FastAPI:
     """Create a minimal FastAPI app with a gated endpoint."""
     app = FastAPI()
     settings = Settings(notebooks=NotebooksConfig(enabled=notebooks_enabled))
-    app.state.settings = settings
+    app.state.container = Container(settings=settings)
 
     @app.get("/api/notebooks", dependencies=[Depends(require_feature("notebooks"))])
     async def list_notebooks():
@@ -35,7 +36,7 @@ class TestRequireFeature:
     def test_missing_config_allows_access(self):
         """If the feature config doesn't exist on Settings, allow access (safe default)."""
         app = FastAPI()
-        app.state.settings = Settings()
+        app.state.container = Container(settings=Settings())
 
         @app.get("/api/unknown", dependencies=[Depends(require_feature("nonexistent_feature"))])
         async def endpoint():

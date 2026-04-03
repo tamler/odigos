@@ -5,6 +5,7 @@ import pytest
 pytest.importorskip("webauthn")
 
 from httpx import ASGITransport, AsyncClient
+from odigos.container import Container
 
 
 @pytest.fixture
@@ -38,8 +39,7 @@ async def app():
 
         from fastapi import FastAPI
         test_app = FastAPI()
-        test_app.state.db = db
-        test_app.state.settings = settings
+        test_app.state.container = Container(settings=settings, db=db)
 
         try:
             from odigos.api.webauthn import router
@@ -82,7 +82,7 @@ async def test_login_begin_no_credentials(client):
 @pytest.mark.anyio
 async def test_migration_creates_table(app):
     """Verify webauthn_credentials table exists after migration."""
-    db = app.state.db
+    db = app.state.container.db
     row = await db.fetch_one(
         "SELECT name FROM sqlite_master "
         "WHERE type='table' AND name='webauthn_credentials'"

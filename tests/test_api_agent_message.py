@@ -9,13 +9,13 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.agent_message import router
+from odigos.container import Container
 
 
 def _make_app(api_key: str = "test-key", db=None, known_peer: bool = False) -> FastAPI:
     """Create a minimal FastAPI app with the agent_message router and fake state."""
     app = FastAPI()
     app.include_router(router)
-    app.state.settings = SimpleNamespace(api_key=api_key)
     if db is None:
         db = MagicMock()
         if known_peer:
@@ -23,7 +23,11 @@ def _make_app(api_key: str = "test-key", db=None, known_peer: bool = False) -> F
         else:
             db.fetch_one = AsyncMock(return_value=None)
         db.execute = AsyncMock()
-    app.state.db = db
+    container = Container(
+        settings=SimpleNamespace(api_key=api_key),
+        db=db,
+    )
+    app.state.container = container
     return app
 
 

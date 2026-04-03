@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.goals import router
+from odigos.container import Container
 from odigos.core.goal_store import GoalStore
 from odigos.db import Database
 
@@ -16,9 +17,12 @@ def _make_app(db: Database, store: GoalStore) -> FastAPI:
     """Create a minimal FastAPI app with the goals router and fake state."""
     app = FastAPI()
     app.include_router(router)
-    app.state.db = db
-    app.state.goal_store = store
-    app.state.settings = SimpleNamespace(api_key="test-key")
+    container = Container(
+        db=db,
+        goal_store=store,
+        settings=SimpleNamespace(api_key="test-key"),
+    )
+    app.state.container = container
     return app
 
 

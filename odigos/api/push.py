@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from odigos.api.deps import require_auth
+from odigos.api.deps import get_db, get_vapid_keys, require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +15,9 @@ router = APIRouter(prefix="/api/push")
 
 
 @router.get("/vapid-key", dependencies=[Depends(require_auth)])
-async def get_vapid_key(request: Request):
+async def get_vapid_key(vapid_keys: dict = Depends(get_vapid_keys)):
     """Return the VAPID public key for push subscription."""
-    vapid_keys = getattr(request.app.state, "vapid_keys", {})
-    public_key = vapid_keys.get("public_key", "")
+    public_key = (vapid_keys or {}).get("public_key", "")
     if not public_key:
         return JSONResponse(
             status_code=404,
@@ -28,9 +27,8 @@ async def get_vapid_key(request: Request):
 
 
 @router.post("/subscribe", dependencies=[Depends(require_auth)])
-async def subscribe(request: Request):
+async def subscribe(request: Request, db=Depends(get_db)):
     """Store a push subscription for the current user."""
-    db = request.app.state.db
     body = await request.json()
     subscription = body.get("subscription")
     if not subscription:
@@ -52,9 +50,8 @@ async def subscribe(request: Request):
 
 
 @router.delete("/subscribe", dependencies=[Depends(require_auth)])
-async def unsubscribe(request: Request):
+async def unsubscribe(request: Request, db=Depends(get_db)):
     """Remove a push subscription."""
-    db = request.app.state.db
     body = await request.json()
     endpoint = body.get("endpoint", "")
     if endpoint:

@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 
 from odigos.api.agents import router as agents_router
+from odigos.container import Container
 from odigos.db import Database
 
 
@@ -24,8 +25,6 @@ async def db():
 @pytest_asyncio.fixture
 async def app(db):
     app = FastAPI()
-    app.state.db = db
-    app.state.settings = SimpleNamespace(api_key="test-key")
 
     mock_spawner = AsyncMock()
     mock_spawner.spawn = AsyncMock(return_value={
@@ -34,7 +33,12 @@ async def app(db):
         "identity": "You are a coding specialist.",
         "seed_knowledge": [],
     })
-    app.state.spawner = mock_spawner
+    container = Container(
+        db=db,
+        settings=SimpleNamespace(api_key="test-key"),
+        spawner=mock_spawner,
+    )
+    app.state.container = container
     app.include_router(agents_router)
     return app
 

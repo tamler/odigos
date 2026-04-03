@@ -45,7 +45,7 @@ async def get_feed(
             pass
         else:
             # Accept card key
-            card_manager = getattr(request.app.state, "card_manager", None)
+            card_manager = getattr(request.app.state.container, "card_manager", None)
             if not card_manager:
                 raise HTTPException(status_code=401, detail="No card manager available")
             card = await card_manager.validate_card_key(token)

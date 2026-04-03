@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.conversations import router
+from odigos.container import Container
 from odigos.db import Database
 
 
@@ -16,8 +17,11 @@ def _make_app(db: Database) -> FastAPI:
     """Create a minimal FastAPI app with the conversations router and fake state."""
     app = FastAPI()
     app.include_router(router)
-    app.state.db = db
-    app.state.settings = SimpleNamespace(api_key="test-key")
+    container = Container(
+        db=db,
+        settings=SimpleNamespace(api_key="test-key"),
+    )
+    app.state.container = container
     return app
 
 

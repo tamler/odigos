@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.deps import require_api_key, require_auth
+from odigos.container import Container
 
 
 def _make_app(api_key_value: str) -> FastAPI:
@@ -15,7 +16,8 @@ def _make_app(api_key_value: str) -> FastAPI:
         api_key = api_key_value
         session_secret = "test-secret-for-sessions"
 
-    app.state.settings = _FakeSettings()
+    container = Container(settings=_FakeSettings())
+    app.state.container = container
 
     @app.get("/protected", dependencies=[Depends(require_api_key)])
     async def protected():

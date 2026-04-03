@@ -6,20 +6,24 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from odigos.container import Container
+
 
 def _make_app(feed_enabled=True, feed_public=False):
     from odigos.api.feed import router
 
     app = FastAPI()
-    app.state.settings = SimpleNamespace(
-        api_key="test-key",
-        feed=SimpleNamespace(enabled=feed_enabled, public=feed_public, max_entries=200),
-        agent=SimpleNamespace(name="Odigos"),
-    )
     db = AsyncMock()
-    app.state.db = db
     card_manager = AsyncMock()
-    app.state.card_manager = card_manager
+    app.state.container = Container(
+        settings=SimpleNamespace(
+            api_key="test-key",
+            feed=SimpleNamespace(enabled=feed_enabled, public=feed_public, max_entries=200),
+            agent=SimpleNamespace(name="Odigos"),
+        ),
+        db=db,
+        card_manager=card_manager,
+    )
     app.include_router(router)
     return app, db, card_manager
 

@@ -106,12 +106,12 @@ async def upload_file(
     doc_id = None
 
     stt_provider = None
-    plugin_context = getattr(request.app.state, "plugin_context", None)
+    plugin_context = getattr(request.app.state.container, "plugin_context", None)
     if plugin_context:
         stt_provider = plugin_context.get_provider("stt")
 
     loop = asyncio.get_running_loop()
-    heavy_pool = getattr(request.app.state, "heavy_pool", None)
+    heavy_pool = getattr(request.app.state.container, "heavy_pool", None)
 
     if is_audio_file(safe_name) and stt_provider:
         try:

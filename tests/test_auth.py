@@ -13,6 +13,7 @@ from odigos.api.auth import (
     _verify_password,
     router as auth_router,
 )
+from odigos.container import Container
 
 _TEST_SECRET = "test-session-secret-for-unit-tests"
 _CSRF = {"X-Requested-With": "XMLHttpRequest"}
@@ -101,8 +102,10 @@ def _make_auth_app(db: FakeDB | None = None) -> FastAPI:
         api_key = "test-api-key"
         session_secret = _TEST_SECRET
 
-    app.state.settings = _FakeSettings()
-    app.state.db = db or FakeDB()
+    app.state.container = Container(
+        settings=_FakeSettings(),
+        db=db or FakeDB(),
+    )
     return app
 
 

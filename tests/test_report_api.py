@@ -4,15 +4,13 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from odigos.container import Container
+
 
 def _make_app():
     from odigos.api.report import router
     app = FastAPI()
     app.include_router(router)
-    app.state.settings = SimpleNamespace(
-        api_key="test-key",
-        session_secret="",
-    )
 
     class MockDB:
         def __init__(self):
@@ -21,7 +19,14 @@ def _make_app():
         async def execute(self, sql, params=None):
             self.inserts.append((sql, params))
 
-    app.state.db = MockDB()
+    db = MockDB()
+    app.state.container = Container(
+        settings=SimpleNamespace(
+            api_key="test-key",
+            session_secret="",
+        ),
+        db=db,
+    )
     return app
 
 
@@ -36,8 +41,8 @@ class TestReportEndpoint:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "reported"
-        assert len(app.state.db.inserts) == 1
-        sql, params = app.state.db.inserts[0]
+        assert len(app.state.container.db.inserts) == 1
+        sql, params = app.state.container.db.inserts[0]
         assert "evaluations" in sql
         assert params[2] == "conv-123"
 

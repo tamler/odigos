@@ -10,14 +10,18 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.budget import router
+from odigos.container import Container
 from odigos.core.budget import BudgetStatus
 
 
 def _make_app(budget_tracker) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
-    app.state.budget_tracker = budget_tracker
-    app.state.settings = type("S", (), {"api_key": "test-key"})()
+    container = Container(
+        budget_tracker=budget_tracker,
+        settings=type("S", (), {"api_key": "test-key"})(),
+    )
+    app.state.container = container
     return app
 
 

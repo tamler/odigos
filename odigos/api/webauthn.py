@@ -6,7 +6,9 @@ import logging
 import time
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+
+from odigos.api.deps import get_db, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +64,12 @@ def _get_rp_origin(request: Request) -> str:
     return f"{forwarded_proto}://{hostname}"
 
 
-def _get_session(request: Request) -> dict | None:
+def _get_session(request: Request, settings) -> dict | None:
     from odigos.api.auth import SESSION_COOKIE, _validate_session
     cookie = request.cookies.get(SESSION_COOKIE)
     if not cookie:
         return None
-    secret = request.app.state.settings.session_secret
-    return _validate_session(secret, cookie)
+    return _validate_session(settings.session_secret, cookie)
 
 
 try:
@@ -107,10 +108,10 @@ def _require_webauthn():
 # ------------------------------------------------------------------
 
 @router.post("/register/begin")
-async def register_begin(request: Request):
+async def register_begin(request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Generate registration options. Requires session."""
     _require_webauthn()
-    session = _get_session(request)
+    session = _get_session(request, settings)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -118,7 +119,6 @@ async def register_begin(request: Request):
     username = session["username"]
     rp_id = _get_rp_id(request)
 
-    db = request.app.state.db
     existing = await db.fetch_all(
         "SELECT credential_id FROM webauthn_credentials",
     )
@@ -152,10 +152,10 @@ async def register_begin(request: Request):
 
 
 @router.post("/register/complete")
-async def register_complete(request: Request):
+async def register_complete(request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Verify registration and store credential. Requires session."""
     _require_webauthn()
-    session = _get_session(request)
+    session = _get_session(request, settings)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -210,7 +210,6 @@ async def register_complete(request: Request):
     public_key = verification.credential_public_key
     sign_count = verification.sign_count
 
-    db = request.app.state.db
     row_id = uuid.uuid4().hex
     await db.execute(
         "INSERT INTO webauthn_credentials "
@@ -227,11 +226,10 @@ async def register_complete(request: Request):
 # ------------------------------------------------------------------
 
 @router.post("/login/begin")
-async def login_begin(request: Request):
+async def login_begin(request: Request, db=Depends(get_db)):
     """Generate authentication options."""
     _require_webauthn()
 
-    db = request.app.state.db
     creds = await db.fetch_all(
         "SELECT credential_id FROM webauthn_credentials",
     )
@@ -262,7 +260,12 @@ async def login_begin(request: Request):
 
 
 @router.post("/login/complete")
-async def login_complete(request: Request, response: Response):
+async def login_complete(
+    request: Request,
+    response: Response,
+    db=Depends(get_db),
+    settings=Depends(get_settings),
+):
     """Verify authentication and issue session."""
     _require_webauthn()
 
@@ -300,7 +303,6 @@ async def login_complete(request: Request, response: Response):
 
     raw_id = credential.raw_id
 
-    db = request.app.state.db
     stored = await db.fetch_one(
         "SELECT id, credential_id, public_key, sign_count "
         "FROM webauthn_credentials WHERE credential_id = ?",
@@ -355,8 +357,7 @@ async def login_complete(request: Request, response: Response):
         (now, user["id"]),
     )
 
-    secret = request.app.state.settings.session_secret
-    token = _create_session(secret, {
+    token = _create_session(settings.session_secret, {
         "user_id": user["id"],
         "username": user["username"],
         "must_change_password": False,

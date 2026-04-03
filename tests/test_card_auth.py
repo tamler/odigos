@@ -7,13 +7,16 @@ from fastapi import FastAPI, Depends
 from fastapi.testclient import TestClient
 
 from odigos.api.deps import require_card_or_api_key
+from odigos.container import Container
 
 
 def _make_app():
     app = FastAPI()
-    app.state.settings = SimpleNamespace(api_key="global-key")
     card_manager = AsyncMock()
-    app.state.card_manager = card_manager
+    app.state.container = Container(
+        settings=SimpleNamespace(api_key="global-key"),
+        card_manager=card_manager,
+    )
     return app, card_manager
 
 

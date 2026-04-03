@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from odigos.api.ws import router
+from odigos.container import Container
 
 
 def _make_app(api_key: str = "", agent: Optional[MagicMock] = None) -> FastAPI:
@@ -38,9 +39,11 @@ def _make_app(api_key: str = "", agent: Optional[MagicMock] = None) -> FastAPI:
     web_channel.unregister_connection = MagicMock()
     web_channel.add_subscription = MagicMock()
 
-    app.state.settings = SimpleNamespace(api_key=api_key)
-    app.state.agent_service = agent_service
-    app.state.web_channel = web_channel
+    app.state.container = Container(
+        settings=SimpleNamespace(api_key=api_key),
+        agent_service=agent_service,
+        web_channel=web_channel,
+    )
     return app
 
 
@@ -162,5 +165,5 @@ class TestSubscribe:
             assert response["type"] == "subscribed"
             assert response["channels"] == ["events", "logs"]
 
-            web_channel = app.state.web_channel
+            web_channel = app.state.container.web_channel
             assert web_channel.add_subscription.call_count == 2

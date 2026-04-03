@@ -10,14 +10,17 @@ from httpx import ASGITransport, AsyncClient
 
 from odigos.api.settings import router
 from odigos.config import Settings
+from odigos.container import Container
 
 
 def _make_app(settings, config_path: str, env_path: str) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
-    app.state.settings = settings
-    app.state.config_path = config_path
-    app.state.env_path = env_path
+    app.state.container = Container(
+        settings=settings,
+        config_path=config_path,
+        env_path=env_path,
+    )
     return app
 
 

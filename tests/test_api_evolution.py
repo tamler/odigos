@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 
 from odigos.api.evolution import router as evolution_router
+from odigos.container import Container
 from odigos.db import Database
 
 
@@ -23,10 +24,13 @@ async def db():
 @pytest_asyncio.fixture
 async def app(db):
     app = FastAPI()
-    app.state.db = db
-    app.state.settings = SimpleNamespace(api_key="test-key")
-    app.state.checkpoint_manager = AsyncMock()
-    app.state.evolution_engine = AsyncMock()
+    container = Container(
+        db=db,
+        settings=SimpleNamespace(api_key="test-key"),
+        checkpoint_manager=AsyncMock(),
+        evolution_engine=AsyncMock(),
+    )
+    app.state.container = container
     app.include_router(evolution_router)
     return app
 

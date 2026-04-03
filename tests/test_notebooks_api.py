@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from odigos.api.notebooks import router
 from odigos.config import Settings, NotebooksConfig
+from odigos.container import Container
 from odigos.core.resource_store import ResourceStore
 from odigos.db import Database
 
@@ -20,8 +21,7 @@ async def db(tmp_db_path: str) -> Database:
 def app(db: Database) -> FastAPI:
     app = FastAPI()
     settings = Settings(notebooks=NotebooksConfig(enabled=True), api_key="test-key")
-    app.state.settings = settings
-    app.state.db = db
+    app.state.container = Container(settings=settings, db=db)
     app.include_router(router)
     return app
 
@@ -139,8 +139,10 @@ class TestNotebookEntries:
 class TestDisabledFeature:
     def test_disabled_returns_404(self, db):
         app = FastAPI()
-        app.state.settings = Settings(notebooks=NotebooksConfig(enabled=False), api_key="test-key")
-        app.state.db = db
+        app.state.container = Container(
+            settings=Settings(notebooks=NotebooksConfig(enabled=False), api_key="test-key"),
+            db=db,
+        )
         app.include_router(router)
         client = TestClient(app)
         client.headers["Authorization"] = "Bearer test-key"

@@ -73,7 +73,7 @@ async def _authenticate_ws(websocket: WebSocket) -> tuple[bool, bool]:
     - Query param auth: authenticated before accept, so already_accepted=False.
     - First-message auth: we accept() first, so already_accepted=True.
     """
-    settings = websocket.app.state.settings
+    settings = websocket.app.state.container.settings
 
     # 1. Try session cookie (available before accept)
     cookie = websocket.cookies.get(SESSION_COOKIE)
@@ -137,7 +137,7 @@ async def websocket_endpoint(websocket: WebSocket):
     session_id = uuid.uuid4().hex[:12]
     conversation_id = f"web:{session_id}"
 
-    web_channel = websocket.app.state.web_channel
+    web_channel = websocket.app.state.container.web_channel
     web_channel.register_connection(conversation_id, websocket)
 
     first_message = True
@@ -189,7 +189,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     except Exception:
                         pass  # Client disconnected
 
-                agent_service = websocket.app.state.agent_service
+                agent_service = websocket.app.state.container.agent_service
                 cancel_event = asyncio.Event()
                 response = await agent_service.handle_message(
                     msg, status_callback=send_status, stream_callback=send_chunk,
@@ -338,7 +338,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 edit_content = data.get("content", "")
                 if edit_index is not None and edit_content:
                     try:
-                        db = websocket.app.state.agent_service.agent.db
+                        db = websocket.app.state.container.agent_service.agent.db
                         rows = await db.fetch_all(
                             "SELECT id FROM messages WHERE conversation_id = ? ORDER BY timestamp",
                             (conversation_id,),
@@ -360,7 +360,7 @@ async def websocket_endpoint(websocket: WebSocket):
             elif msg_type == "undo":
                 # Remove the last user+assistant exchange
                 try:
-                    db = websocket.app.state.agent_service.agent.db
+                    db = websocket.app.state.container.agent_service.agent.db
                     last_two = await db.fetch_all(
                         "SELECT id, role FROM messages WHERE conversation_id = ? "
                         "ORDER BY timestamp DESC LIMIT 2",
@@ -383,7 +383,7 @@ async def websocket_endpoint(websocket: WebSocket):
             elif msg_type == "retry":
                 # Remove last assistant response, then re-send the last user message
                 try:
-                    db = websocket.app.state.agent_service.agent.db
+                    db = websocket.app.state.container.agent_service.agent.db
                     last_asst = await db.fetch_one(
                         "SELECT id FROM messages WHERE conversation_id = ? AND role = 'assistant' "
                         "ORDER BY timestamp DESC LIMIT 1",
@@ -408,7 +408,7 @@ async def websocket_endpoint(websocket: WebSocket):
             elif msg_type == "compress":
                 # User-triggered context compression
                 try:
-                    agent = websocket.app.state.agent_service.agent
+                    agent = websocket.app.state.container.agent_service.agent
                     if hasattr(agent, 'context_assembler') and agent.context_assembler.summarizer:
                         await agent.context_assembler.summarizer.summarize_if_needed(
                             conversation_id, force=True,

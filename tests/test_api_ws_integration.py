@@ -14,13 +14,25 @@ class TestWebSocketMounted:
     def test_ws_endpoint_exists(self):
         from odigos.main import app
         from odigos.channels.web import WebChannel
+        from odigos.container import Container
 
-        app.state.settings = type("S", (), {"api_key": "test-key"})()
-        app.state.agent = MagicMock()
-        app.state.agent.handle_message = AsyncMock(return_value="ok")
-        app.state.tracer = MagicMock()
-        app.state.tracer.subscribe = MagicMock()
-        app.state.web_channel = WebChannel()
+        agent = MagicMock()
+        agent.handle_message = AsyncMock(return_value="ok")
+
+        tracer = MagicMock()
+        tracer.subscribe = MagicMock()
+
+        agent_service = MagicMock()
+        agent_service.handle_message = agent.handle_message
+        agent_service.agent = agent
+
+        app.state.container = Container(
+            settings=type("S", (), {"api_key": "test-key"})(),
+            agent=agent,
+            agent_service=agent_service,
+            tracer=tracer,
+            web_channel=WebChannel(),
+        )
 
         client = TestClient(app)
         with client.websocket_connect("/api/ws?token=test-key") as ws:

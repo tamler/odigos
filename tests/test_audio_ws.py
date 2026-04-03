@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from odigos.config import VoiceConfig
+from odigos.container import Container
 from odigos.providers.stt import create_stt_provider
 from odigos.providers.tts import create_tts_provider
 
@@ -17,19 +18,21 @@ def _make_app(voice_config=None, groq_api_key=""):
     vc = voice_config or VoiceConfig()
     app = FastAPI()
     app.include_router(router)
-    app.state.settings = SimpleNamespace(
-        api_key="test-key",
-        session_secret="",
-        groq_api_key=groq_api_key,
-        voice=vc,
+    app.state.container = Container(
+        settings=SimpleNamespace(
+            api_key="test-key",
+            session_secret="",
+            groq_api_key=groq_api_key,
+            voice=vc,
+        ),
+        stt_provider=create_stt_provider(
+            voice_config=vc, groq_api_key=groq_api_key,
+        ),
+        tts_provider=create_tts_provider(
+            voice_config=vc,
+        ),
+        plugin_context=None,
     )
-    app.state.stt_provider = create_stt_provider(
-        voice_config=vc, groq_api_key=groq_api_key,
-    )
-    app.state.tts_provider = create_tts_provider(
-        voice_config=vc,
-    )
-    app.state.plugin_context = None
     return app
 
 

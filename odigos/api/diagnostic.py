@@ -6,9 +6,9 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 
-from odigos.api.deps import get_db, require_auth
+from odigos.api.deps import get_agent_service, get_db, get_settings, require_auth
 from odigos.storage import FILES_DIR, DATA_DIR
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,11 @@ router = APIRouter(
 
 
 @router.get("/diagnostic")
-async def run_diagnostic(request: Request, db=Depends(get_db)):
+async def run_diagnostic(
+    db=Depends(get_db),
+    agent_service=Depends(get_agent_service),
+    settings=Depends(get_settings),
+):
     """Run a full system diagnostic. Returns status of all subsystems."""
     checks = []
 
@@ -37,7 +41,6 @@ async def run_diagnostic(request: Request, db=Depends(get_db)):
 
     # 2. LLM Provider
     try:
-        agent_service = request.app.state.agent_service
         provider = agent_service.agent.executor.provider
         model = getattr(provider, "default_model", "unknown")
         checks.append({
@@ -76,7 +79,7 @@ async def run_diagnostic(request: Request, db=Depends(get_db)):
 
     # 5. Tool Count
     try:
-        tools = request.app.state.agent_service.agent.executor.tool_registry
+        tools = agent_service.agent.executor.tool_registry
         count = len(tools.list()) if tools else 0
         checks.append({
             "name": "Tools",
@@ -96,7 +99,6 @@ async def run_diagnostic(request: Request, db=Depends(get_db)):
 
     # 7. Voice (STT/TTS)
     try:
-        settings = request.app.state.settings
         stt = settings.voice.stt_provider
         tts = settings.voice.tts_provider
         checks.append({
@@ -120,7 +122,7 @@ async def run_diagnostic(request: Request, db=Depends(get_db)):
 
     # 9. Heartbeat
     try:
-        hb = request.app.state.agent_service.agent.heartbeat
+        hb = agent_service.agent.heartbeat
         paused = getattr(hb, "paused", False) if hb else None
         if hb is None:
             checks.append({"name": "Heartbeat", "status": "disabled", "detail": "Not running"})

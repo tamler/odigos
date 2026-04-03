@@ -55,7 +55,7 @@ async def peer_announce(
 
     # Check accepted cards (a card-holder announcing themselves)
     if not allowed:
-        card_manager = getattr(request.app.state, "card_manager", None)
+        card_manager = getattr(request.app.state.container, "card_manager", None)
         if card_manager:
             accepted = await card_manager.list_accepted()
             for card in accepted:

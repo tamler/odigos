@@ -10,14 +10,17 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.message import router
+from odigos.container import Container
 
 
 def _make_app(agent: MagicMock) -> FastAPI:
     """Create a minimal FastAPI app with the message router and fake state."""
     app = FastAPI()
     app.include_router(router)
-    app.state.agent = agent
-    app.state.settings = SimpleNamespace(api_key="test-key")
+    app.state.container = Container(
+        agent=agent,
+        settings=SimpleNamespace(api_key="test-key"),
+    )
     return app
 
 

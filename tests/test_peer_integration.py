@@ -4,6 +4,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from httpx import ASGITransport, AsyncClient
 
+from odigos.container import Container
+
 pytestmark = pytest.mark.skipif(
     not importlib.util.find_spec("sentence_transformers"),
     reason="sentence_transformers not installed",
@@ -15,11 +17,13 @@ class TestPeerEndpointMounted:
     async def test_peer_announce_endpoint_exists(self):
         from odigos.main import app
 
-        app.state.settings = type("S", (), {"api_key": "test-key"})()
         mock_db = MagicMock()
         mock_db.fetch_one = AsyncMock(return_value={"agent_name": "test-peer"})
         mock_db.execute = AsyncMock()
-        app.state.db = mock_db
+        app.state.container = Container(
+            settings=type("S", (), {"api_key": "test-key"})(),
+            db=mock_db,
+        )
 
         async with AsyncClient(
             transport=ASGITransport(app=app),

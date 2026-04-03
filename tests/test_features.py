@@ -21,6 +21,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from odigos.container import Container
 from odigos.db import Database
 from odigos.core.goal_store import GoalStore
 from odigos.core.trace import Tracer
@@ -78,14 +79,14 @@ def _make_app(
     app.include_router(settings_router)
     app.include_router(evolution_router)
 
-    app.state.settings = settings
-    app.state.db = db
-    app.state.config_path = config_path
-    app.state.env_path = env_path
-    if skill_registry:
-        app.state.skill_registry = skill_registry
-    if goal_store:
-        app.state.goal_store = goal_store
+    app.state.container = Container(
+        settings=settings,
+        db=db,
+        config_path=config_path,
+        env_path=env_path,
+        skill_registry=skill_registry,
+        goal_store=goal_store,
+    )
     return app
 
 
@@ -720,7 +721,7 @@ class TestEvolutionStatus:
 
         # Mock checkpoint manager since promote/revert need it
         mock_cm = AsyncMock()
-        app.state.checkpoint_manager = mock_cm
+        app.state.container.checkpoint_manager = mock_cm
 
         client = TestClient(app)
 

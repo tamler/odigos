@@ -6,14 +6,17 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.metrics import router
+from odigos.container import Container
 from odigos.db import Database
 
 
 def _make_app(db: Database) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
-    app.state.db = db
-    app.state.settings = type("S", (), {"api_key": "test-key"})()
+    app.state.container = Container(
+        db=db,
+        settings=type("S", (), {"api_key": "test-key"})(),
+    )
     return app
 
 

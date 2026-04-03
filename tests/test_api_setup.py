@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
 from odigos.api.setup import router
+from odigos.container import Container
 
 
 def _make_app(llm_api_key: str = "", api_key: str = "test-key") -> FastAPI:
@@ -14,7 +15,7 @@ def _make_app(llm_api_key: str = "", api_key: str = "test-key") -> FastAPI:
     settings.llm_api_key = llm_api_key
     settings.api_key = api_key
     settings.llm.base_url = "https://openrouter.ai/api/v1"
-    app.state.settings = settings
+    app.state.container = Container(settings=settings)
     return app
 
 

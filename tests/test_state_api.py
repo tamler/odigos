@@ -7,6 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
 
 from odigos.api.state import router as state_router
+from odigos.container import Container
 from odigos.core.agent import Agent
 from odigos.core.budget import BudgetTracker
 from odigos.db import Database
@@ -38,11 +39,8 @@ async def app(db):
         agent=SimpleNamespace(name="TestAgent", role="tester"),
         api_key="test-key",
     )
-    app.state.settings = settings
-    app.state.db = db
 
     budget_tracker = BudgetTracker(db=db, daily_limit=5.00, monthly_limit=50.00)
-    app.state.budget_tracker = budget_tracker
 
     tool_registry = ToolRegistry()
     skill_registry = SkillRegistry()
@@ -56,9 +54,16 @@ async def app(db):
         skill_registry=skill_registry,
         budget_tracker=budget_tracker,
     )
-    app.state.agent = agent
-    app.state.skill_registry = skill_registry
-    app.state.plugin_manager = SimpleNamespace(loaded_plugins=[])
+
+    app.state.container = Container(
+        settings=settings,
+        db=db,
+        budget_tracker=budget_tracker,
+        tool_registry=tool_registry,
+        skill_registry=skill_registry,
+        agent=agent,
+        plugin_manager=SimpleNamespace(loaded_plugins=[]),
+    )
 
     app.include_router(state_router)
     return app

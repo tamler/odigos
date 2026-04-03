@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from odigos.container import Container
 from odigos.db import Database
 
 
@@ -20,12 +21,14 @@ def _make_app(db):
     app = FastAPI()
     app.include_router(router)
     app.include_router(public_router)
-    app.state.settings = SimpleNamespace(
-        api_key="test-key",
-        session_secret="",
-        agent=SimpleNamespace(name="TestBot"),
+    app.state.container = Container(
+        settings=SimpleNamespace(
+            api_key="test-key",
+            session_secret="",
+            agent=SimpleNamespace(name="TestBot"),
+        ),
+        db=db,
     )
-    app.state.db = db
     return app
 
 

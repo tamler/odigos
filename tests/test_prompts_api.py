@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from odigos.api.prompts import router, _PROMPT_DIRS
+from odigos.container import Container
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def app_with_prompts(tmp_path):
 
     settings = MagicMock()
     settings.api_key = "test-key"
-    app.state.settings = settings
+    app.state.container = Container(settings=settings)
 
     original_dirs = dict(_PROMPT_DIRS)
     _PROMPT_DIRS["agent"] = str(agent_dir)

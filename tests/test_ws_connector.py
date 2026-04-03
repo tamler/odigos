@@ -84,10 +84,13 @@ class TestMeshAPI:
         from fastapi import FastAPI
         from odigos.api.mesh import router
         from odigos.config import Settings
+        from odigos.container import Container
 
         app = FastAPI()
-        app.state.settings = Settings(api_key="test-key")
-        app.state.db = db
+        app.state.container = Container(
+            settings=Settings(api_key="test-key"),
+            db=db,
+        )
         app.include_router(router)
         return app
 

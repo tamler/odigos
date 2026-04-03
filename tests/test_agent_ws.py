@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from odigos.api.agent_ws import router as agent_ws_router
+from odigos.container import Container
 
 
 @pytest_asyncio.fixture
@@ -20,9 +21,12 @@ async def app():
     await db.initialize()
 
     app = FastAPI()
-    app.state.db = db
-    app.state.agent_client = AgentClient(peers=[], agent_name="TestAgent", db=db)
-    app.state.settings = SimpleNamespace(api_key="test-key")
+    container = Container(
+        db=db,
+        agent_client=AgentClient(peers=[], agent_name="TestAgent", db=db),
+        settings=SimpleNamespace(api_key="test-key"),
+    )
+    app.state.container = container
     app.include_router(agent_ws_router)
     return app
 

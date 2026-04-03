@@ -6,9 +6,10 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
+from odigos.api.deps import get_db, get_settings
 from odigos.api.auth import (
     SESSION_COOKIE,
     _create_session,
@@ -23,7 +24,12 @@ PLATFORM_API_KEY = os.environ.get("ODIGOS_PLATFORM_API_KEY", "")
 
 
 @router.get("/auth/callback")
-async def platform_auth_callback(token: str, request: Request):
+async def platform_auth_callback(
+    token: str,
+    request: Request,
+    db=Depends(get_db),
+    settings=Depends(get_settings),
+):
     if not PLATFORM_URL:
         raise HTTPException(404, "Platform integration not configured")
     if not PLATFORM_API_KEY:
@@ -45,8 +51,6 @@ async def platform_auth_callback(token: str, request: Request):
 
     if not email:
         raise HTTPException(400, "Platform did not provide an email")
-
-    db = request.app.state.db
 
     local_user = await db.fetch_one(
         "SELECT id, username FROM users WHERE email = ?", (email,)
@@ -70,7 +74,7 @@ async def platform_auth_callback(token: str, request: Request):
             "UPDATE users SET last_login_at = ? WHERE id = ?", (now, user_id)
         )
 
-    secret = request.app.state.settings.session_secret
+    secret = settings.session_secret
     session_token = _create_session(secret, {
         "user_id": user_id,
         "username": username,

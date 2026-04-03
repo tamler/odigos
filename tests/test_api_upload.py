@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
 from odigos.api.upload import router
+from odigos.container import Container
 
 
 def _make_app(tmp_path) -> FastAPI:
@@ -13,14 +14,16 @@ def _make_app(tmp_path) -> FastAPI:
     app.include_router(router)
     settings = MagicMock()
     settings.api_key = "test-key"
-    app.state.settings = settings
-    app.state.upload_dir = str(tmp_path)
-    app.state.doc_ingester = None
-    app.state.markitdown_provider = None
     # db mock for soft-limit chunk count check
     db = MagicMock()
     db.fetch_one = AsyncMock(return_value={"total": 0})
-    app.state.db = db
+    app.state.container = Container(
+        settings=settings,
+        upload_dir=str(tmp_path),
+        doc_ingester=None,
+        markitdown_provider=None,
+        db=db,
+    )
     return app
 
 

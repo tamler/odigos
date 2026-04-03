@@ -9,9 +9,10 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from odigos.api.deps import get_config_path, get_env_path, get_plugin_manager, get_settings, require_auth
+from odigos.api.deps import get_config_path, get_container, get_env_path, get_plugin_manager, get_settings, require_auth
 from odigos.api.settings import _update_env_file
 from odigos.config import Settings
+from odigos.container import Container
 
 router = APIRouter(
     prefix="/api",
@@ -103,6 +104,7 @@ async def configure_plugin(
     request: Request,
     plugin_manager=Depends(get_plugin_manager),
     settings=Depends(get_settings),
+    container: Container = Depends(get_container),
     config_path_str: str = Depends(get_config_path),
     env_path_str: str = Depends(get_env_path),
 ):
@@ -135,11 +137,11 @@ async def configure_plugin(
         with open(config_path, "w") as f:
             yaml.dump(yaml_config, f, default_flow_style=False)
 
-    # Hot-reload: re-read settings from disk and update app state
+    # Hot-reload: re-read settings from disk and update container
     new_settings = Settings()
     for field in new_settings.model_fields:
         object.__setattr__(settings, field, getattr(new_settings, field))
-    request.app.state.settings = settings
+    container.settings = settings
 
     # Re-register plugins so newly configured ones activate
     plugin_manager.reload()

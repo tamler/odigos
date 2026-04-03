@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from httpx import ASGITransport, AsyncClient
 
+from odigos.container import Container
 from odigos.core.budget import BudgetStatus
 from odigos.main import app
 
@@ -42,23 +43,23 @@ def _mock_app_state():
 
     settings = type("S", (), {"api_key": "test-key"})()
 
-    app.state.db = db
-    app.state.goal_store = goal_store
-    app.state.agent = agent
-    app.state.vector_memory = vector_memory
-    app.state.budget_tracker = budget_tracker
-    app.state.plugin_manager = plugin_manager
-    app.state.settings = settings
+    container = Container(
+        db=db,
+        goal_store=goal_store,
+        agent=agent,
+        vector_memory=vector_memory,
+        budget_tracker=budget_tracker,
+        plugin_manager=plugin_manager,
+        settings=settings,
+    )
+    app.state.container = container
 
     yield
 
-    # Clean up state attributes
-    for attr in ("db", "goal_store", "agent", "vector_memory",
-                 "budget_tracker", "plugin_manager", "settings"):
-        try:
-            delattr(app.state, attr)
-        except AttributeError:
-            pass
+    try:
+        delattr(app.state, "container")
+    except AttributeError:
+        pass
 
 
 @pytest.fixture

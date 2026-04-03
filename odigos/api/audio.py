@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from odigos.api.deps import require_auth
+from odigos.api.deps import get_settings, get_stt_provider, require_auth
 from odigos.providers.stt import DisabledSTT
 
 logger = logging.getLogger(__name__)
@@ -15,9 +15,8 @@ router = APIRouter(prefix="/api")
 
 
 @router.post("/audio/transcribe", dependencies=[Depends(require_auth)])
-async def transcribe_audio(request: Request):
+async def transcribe_audio(request: Request, provider=Depends(get_stt_provider)):
     """Transcribe uploaded audio. Accepts multipart form with 'audio' file."""
-    provider = request.app.state.stt_provider
 
     if isinstance(provider, DisabledSTT):
         return JSONResponse(status_code=404, content={"detail": "STT is disabled"})
@@ -44,9 +43,8 @@ async def transcribe_audio(request: Request):
 
 
 @router.get("/audio/speak", dependencies=[Depends(require_auth)])
-async def speak(text: str, request: Request, voice: str | None = None):
+async def speak(text: str, voice: str | None = None, settings=Depends(get_settings)):
     """Convert text to speech."""
-    settings = request.app.state.settings
     voice_config = settings.voice
 
     if voice_config.tts_provider == "disabled":

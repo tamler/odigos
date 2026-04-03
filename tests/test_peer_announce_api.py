@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from odigos.container import Container
+
 
 def _make_app():
     from odigos.api.agent_message import router
@@ -21,9 +23,11 @@ def _make_app():
     agent_client.list_peer_names = MagicMock(return_value=["Archie"])
     agent_client.add_discovered_peer = MagicMock()
 
-    app.state.settings = settings
-    app.state.db = db
-    app.state.agent_client = agent_client
+    app.state.container = Container(
+        settings=settings,
+        db=db,
+        agent_client=agent_client,
+    )
 
     app.include_router(router)
     return app, agent_client

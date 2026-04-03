@@ -4,10 +4,11 @@ from __future__ import annotations
 import uuid
 from enum import Enum
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from odigos.api.deps import require_auth
+from odigos.api.deps import get_db, require_auth
+from odigos.db import Database
 
 
 router = APIRouter(
@@ -32,10 +33,9 @@ class ReportBody(BaseModel):
 async def report_message(
     conversation_id: str,
     body: ReportBody,
-    request: Request,
+    db: Database = Depends(get_db),
 ):
     """Flag a message as bad. Creates a negative evaluation record for AREW."""
-    db = request.app.state.db
     eval_id = uuid.uuid4().hex[:16]
 
     await db.execute(

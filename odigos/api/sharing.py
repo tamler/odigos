@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
-from odigos.api.deps import require_auth
+from odigos.api.deps import get_db, get_settings, require_auth
 
 # Authenticated endpoints for managing shares
 router = APIRouter(prefix="/api", dependencies=[Depends(require_auth)])
@@ -22,9 +22,8 @@ def _generate_token() -> str:
 # -- Notebook sharing --
 
 @router.post("/notebooks/{notebook_id}/share")
-async def share_notebook(notebook_id: str, request: Request):
+async def share_notebook(notebook_id: str, db=Depends(get_db)):
     """Generate a public share link for a notebook."""
-    db = request.app.state.db
     notebook = await db.fetch_one("SELECT id, share_token FROM notebooks WHERE id = ?", (notebook_id,))
     if not notebook:
         raise HTTPException(status_code=404, detail="Notebook not found")
@@ -38,17 +37,15 @@ async def share_notebook(notebook_id: str, request: Request):
 
 
 @router.delete("/notebooks/{notebook_id}/share")
-async def unshare_notebook(notebook_id: str, request: Request):
+async def unshare_notebook(notebook_id: str, db=Depends(get_db)):
     """Revoke the public share link for a notebook."""
-    db = request.app.state.db
     await db.execute("UPDATE notebooks SET share_token = NULL WHERE id = ?", (notebook_id,))
     return {"status": "revoked"}
 
 
 @public_router.get("/notebook/{token}")
-async def get_shared_notebook(token: str, request: Request):
+async def get_shared_notebook(token: str, db=Depends(get_db), settings=Depends(get_settings)):
     """Public read-only view of a shared notebook."""
-    db = request.app.state.db
     notebook = await db.fetch_one(
         "SELECT id, title, mode FROM notebooks WHERE share_token = ?", (token,)
     )
@@ -61,7 +58,6 @@ async def get_shared_notebook(token: str, request: Request):
         (notebook["id"],),
     )
 
-    settings = request.app.state.settings
     return {
         "title": notebook["title"],
         "mode": notebook["mode"],
@@ -73,9 +69,8 @@ async def get_shared_notebook(token: str, request: Request):
 # -- Kanban sharing --
 
 @router.post("/kanban/boards/{board_id}/share")
-async def share_board(board_id: str, request: Request):
+async def share_board(board_id: str, db=Depends(get_db)):
     """Generate a public share link for a kanban board."""
-    db = request.app.state.db
     board = await db.fetch_one("SELECT id, share_token FROM kanban_boards WHERE id = ?", (board_id,))
     if not board:
         raise HTTPException(status_code=404, detail="Board not found")
@@ -89,17 +84,15 @@ async def share_board(board_id: str, request: Request):
 
 
 @router.delete("/kanban/boards/{board_id}/share")
-async def unshare_board(board_id: str, request: Request):
+async def unshare_board(board_id: str, db=Depends(get_db)):
     """Revoke the public share link for a kanban board."""
-    db = request.app.state.db
     await db.execute("UPDATE kanban_boards SET share_token = NULL WHERE id = ?", (board_id,))
     return {"status": "revoked"}
 
 
 @public_router.get("/board/{token}")
-async def get_shared_board(token: str, request: Request):
+async def get_shared_board(token: str, db=Depends(get_db), settings=Depends(get_settings)):
     """Public read-only view of a shared kanban board."""
-    db = request.app.state.db
     board = await db.fetch_one(
         "SELECT id, title, description FROM kanban_boards WHERE share_token = ?", (token,)
     )
@@ -116,7 +109,6 @@ async def get_shared_board(token: str, request: Request):
         (board["id"],),
     )
 
-    settings = request.app.state.settings
     return {
         "title": board["title"],
         "description": board["description"],

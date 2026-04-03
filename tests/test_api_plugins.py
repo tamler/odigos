@@ -7,17 +7,20 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.plugins import router
+from odigos.container import Container
 
 
 def _make_app(plugin_manager, settings=None) -> FastAPI:
     app = FastAPI()
     app.include_router(router)
-    app.state.plugin_manager = plugin_manager
     if settings is None:
         settings = type("S", (), {"api_key": "test-key"})()
-    app.state.settings = settings
-    app.state.config_path = "config.yaml"
-    app.state.env_path = ".env"
+    app.state.container = Container(
+        plugin_manager=plugin_manager,
+        settings=settings,
+        config_path="config.yaml",
+        env_path=".env",
+    )
     return app
 
 

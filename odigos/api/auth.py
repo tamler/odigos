@@ -6,7 +6,8 @@ import uuid
 from datetime import datetime, timezone
 
 import bcrypt as _bcrypt
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from odigos.api.deps import get_db, get_settings
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -93,9 +94,8 @@ def _set_session_cookie(response: Response, request: Request, token: str) -> Non
 # ---------------------------------------------------------------------------
 
 @router.get("/status")
-async def auth_status(request: Request):
+async def auth_status(request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Return auth status -- no auth required."""
-    db = request.app.state.db
     row = await db.fetch_one("SELECT COUNT(*) as count FROM users")
     has_users = row["count"] > 0 if row else False
 
@@ -104,7 +104,7 @@ async def auth_status(request: Request):
 
     cookie = request.cookies.get(SESSION_COOKIE)
     if cookie:
-        secret = request.app.state.settings.session_secret
+        secret = settings.session_secret
         session = _validate_session(secret, cookie)
         if session:
             authenticated = True
@@ -118,10 +118,9 @@ async def auth_status(request: Request):
 
 
 @router.post("/setup")
-async def auth_setup(body: SetupRequest, request: Request, response: Response):
+async def auth_setup(body: SetupRequest, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
     """Create the first user. Blocked if any user already exists."""
     _check_csrf(request)
-    db = request.app.state.db
     row = await db.fetch_one("SELECT COUNT(*) as count FROM users")
     if row and row["count"] > 0:
         raise HTTPException(status_code=409, detail="Setup already completed")
@@ -148,7 +147,7 @@ async def auth_setup(body: SetupRequest, request: Request, response: Response):
         (user_id, username, password_hash, display_name, 0, now, now),
     )
 
-    secret = request.app.state.settings.session_secret
+    secret = settings.session_secret
     token = _create_session(secret, {
         "user_id": user_id,
         "username": username,
@@ -160,10 +159,9 @@ async def auth_setup(body: SetupRequest, request: Request, response: Response):
 
 
 @router.post("/login")
-async def auth_login(body: LoginRequest, request: Request, response: Response):
+async def auth_login(body: LoginRequest, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
     """Validate credentials and set session cookie."""
     _check_csrf(request)
-    db = request.app.state.db
     username = body.username.strip()
     password = body.password
 
@@ -184,7 +182,7 @@ async def auth_login(body: LoginRequest, request: Request, response: Response):
     )
 
     must_change = bool(user["must_change_password"])
-    secret = request.app.state.settings.session_secret
+    secret = settings.session_secret
     token = _create_session(secret, {
         "user_id": user["id"],
         "username": user["username"],
@@ -207,10 +205,10 @@ async def auth_logout(request: Request, response: Response):
 
 
 @router.post("/change-password")
-async def auth_change_password(body: ChangePasswordRequest, request: Request, response: Response):
+async def auth_change_password(body: ChangePasswordRequest, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
     """Change password for the authenticated user (session required)."""
     _check_csrf(request)
-    secret = request.app.state.settings.session_secret
+    secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
     session = _validate_session(secret, cookie)
     if not session:
@@ -224,7 +222,6 @@ async def auth_change_password(body: ChangePasswordRequest, request: Request, re
         )
 
     user_id = session["user_id"]
-    db = request.app.state.db
 
     user = await db.fetch_one("SELECT id FROM users WHERE id = ?", (user_id,))
     if not user:
@@ -248,12 +245,9 @@ async def auth_change_password(body: ChangePasswordRequest, request: Request, re
 
 
 @router.post("/reset-password")
-async def auth_reset_password(body: ResetPasswordRequest, request: Request):
+async def auth_reset_password(body: ResetPasswordRequest, request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Reset a user's password. Requires API key (admin only)."""
     _check_csrf(request)
-    from odigos.api.deps import require_auth
-    # Manual auth check — we need API key, not session
-    settings = request.app.state.settings
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer ") or not settings.api_key:
         raise HTTPException(status_code=401, detail="API key required")
@@ -273,7 +267,6 @@ async def auth_reset_password(body: ResetPasswordRequest, request: Request):
             detail=f"Password must be at least {_MIN_PASSWORD_LENGTH} characters",
         )
 
-    db = request.app.state.db
     user = await db.fetch_one("SELECT id FROM users WHERE username = ?", (username,))
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -287,15 +280,14 @@ async def auth_reset_password(body: ResetPasswordRequest, request: Request):
 
 
 @router.get("/me")
-async def auth_me(request: Request):
+async def auth_me(request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Return info about the currently authenticated user (session required)."""
-    secret = request.app.state.settings.session_secret
+    secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
     session = _validate_session(secret, cookie)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    db = request.app.state.db
     user = await db.fetch_one(
         "SELECT id, username, display_name, must_change_password, created_at, last_login_at "
         "FROM users WHERE id = ?",
@@ -336,15 +328,14 @@ async def auth_me(request: Request):
 
 
 @router.get("/facts")
-async def get_facts(request: Request):
+async def get_facts(request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Return all stored user facts (session required)."""
-    secret = request.app.state.settings.session_secret
+    secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
     session = _validate_session(secret, cookie)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    db = request.app.state.db
     rows = await db.fetch_all(
         "SELECT * FROM user_facts ORDER BY updated_at DESC"
     )
@@ -352,15 +343,14 @@ async def get_facts(request: Request):
 
 
 @router.delete("/facts/{fact_id}")
-async def delete_fact(fact_id: str, request: Request):
+async def delete_fact(fact_id: str, request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Delete a user fact by ID (session required)."""
-    secret = request.app.state.settings.session_secret
+    secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
     session = _validate_session(secret, cookie)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    db = request.app.state.db
     await db.execute("DELETE FROM user_facts WHERE id = ?", (fact_id,))
     return {"status": "ok"}
 
@@ -375,17 +365,16 @@ class ProfileUpdate(BaseModel):
 
 
 @router.put("/profile")
-async def update_profile(body: ProfileUpdate, request: Request):
+async def update_profile(body: ProfileUpdate, request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Update the owner's learned profile fields (session required)."""
     cookie = request.cookies.get(SESSION_COOKIE)
     if not cookie:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    secret = request.app.state.settings.session_secret
+    secret = settings.session_secret
     session = _validate_session(secret, cookie)
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session")
 
-    db = request.app.state.db
     updates = []
     params: list[str] = []
     for field in (

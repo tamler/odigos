@@ -27,8 +27,9 @@ async def _authenticate_agent_ws(websocket: WebSocket) -> tuple[bool, bool]:
 
     Returns (authenticated, already_accepted).
     """
-    expected = getattr(websocket.app.state, "settings", None)
-    api_key = getattr(expected, "api_key", "") if expected else ""
+    container = getattr(websocket.app.state, "container", None)
+    settings = getattr(container, "settings", None) if container else None
+    api_key = getattr(settings, "api_key", "") if settings else ""
 
     token = websocket.query_params.get("token", "")
 
@@ -36,7 +37,7 @@ async def _authenticate_agent_ws(websocket: WebSocket) -> tuple[bool, bool]:
     if token:
         authorized = bool(api_key and hmac.compare_digest(token.encode(), api_key.encode()))
         if not authorized and token.startswith("card-sk-"):
-            card_manager = getattr(websocket.app.state, "card_manager", None)
+            card_manager = getattr(container, "card_manager", None) if container else None
             if card_manager:
                 card = await card_manager.validate_card_key(token)
                 if card and card.get("permissions") == "mesh":
@@ -60,7 +61,7 @@ async def _authenticate_agent_ws(websocket: WebSocket) -> tuple[bool, bool]:
     auth_token = data.get("token", "")
     authorized = bool(api_key and hmac.compare_digest(auth_token.encode(), api_key.encode()))
     if not authorized and auth_token.startswith("card-sk-"):
-        card_manager = getattr(websocket.app.state, "card_manager", None)
+        card_manager = getattr(container, "card_manager", None) if container else None
         if card_manager:
             card = await card_manager.validate_card_key(auth_token)
             if card and card.get("permissions") == "mesh":
@@ -82,7 +83,7 @@ async def agent_websocket(websocket: WebSocket):
     if not was_accepted:
         await websocket.accept()
 
-    agent_client: AgentClient = websocket.app.state.agent_client
+    agent_client: AgentClient = websocket.app.state.container.agent_client
     peer_name = None
     peer_ip = websocket.client.host if websocket.client else ""
 

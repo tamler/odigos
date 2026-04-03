@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from odigos.api.memory import router
+from odigos.container import Container
 from odigos.db import Database
 
 
@@ -17,9 +18,11 @@ def _make_app(db: Database, vector_memory=None) -> FastAPI:
     """Create a minimal FastAPI app with the memory router and fake state."""
     app = FastAPI()
     app.include_router(router)
-    app.state.db = db
-    app.state.vector_memory = vector_memory
-    app.state.settings = SimpleNamespace(api_key="test-key")
+    app.state.container = Container(
+        db=db,
+        vector_memory=vector_memory,
+        settings=SimpleNamespace(api_key="test-key"),
+    )
     return app
 
 

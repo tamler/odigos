@@ -6,9 +6,18 @@ import platform
 import sys
 import time
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 
-from odigos.api.deps import require_auth, get_db
+from odigos.api.deps import (
+    get_agent,
+    get_budget_tracker,
+    get_cron_manager,
+    get_db,
+    get_plugin_manager,
+    get_settings,
+    get_skill_registry,
+    require_auth,
+)
 from odigos.db import Database
 
 router = APIRouter(
@@ -35,11 +44,16 @@ def _format_uptime(seconds: float) -> str:
 
 
 @router.get("/state")
-async def get_state(request: Request, db: Database = Depends(get_db)):
+async def get_state(
+    db: Database = Depends(get_db),
+    settings=Depends(get_settings),
+    agent=Depends(get_agent),
+    budget_tracker=Depends(get_budget_tracker),
+    skill_registry=Depends(get_skill_registry),
+    plugin_manager=Depends(get_plugin_manager),
+    cron_manager=Depends(get_cron_manager),
+):
     """Return a comprehensive snapshot of agent internal state."""
-    settings = request.app.state.settings
-    agent = request.app.state.agent
-    budget_tracker = request.app.state.budget_tracker
 
     uptime_seconds = time.monotonic() - _start_time
     uptime_formatted = _format_uptime(uptime_seconds)
@@ -98,7 +112,6 @@ async def get_state(request: Request, db: Database = Depends(get_db)):
         tool_names = [t.name for t in tool_registry.list()]
 
     # -- Skills --
-    skill_registry = getattr(request.app.state, "skill_registry", None)
     skills_info = []
     if skill_registry:
         for s in skill_registry.list():
@@ -110,7 +123,6 @@ async def get_state(request: Request, db: Database = Depends(get_db)):
             })
 
     # -- Plugins --
-    plugin_manager = getattr(request.app.state, "plugin_manager", None)
     plugins_info = []
     if plugin_manager:
         for p in plugin_manager.loaded_plugins:
@@ -149,7 +161,6 @@ async def get_state(request: Request, db: Database = Depends(get_db)):
     }
 
     # -- Cron --
-    cron_manager = getattr(request.app.state, "cron_manager", None)
     cron_info = None
     if cron_manager:
         entries = getattr(cron_manager, "entries", [])
