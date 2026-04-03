@@ -267,6 +267,11 @@ class Executor:
             elif query_analysis and query_analysis.classification in ("document_query", "complex", "planning"):
                 if self._reasoning_model:
                     model_kwargs["model"] = self._reasoning_model
+            # Force tool use on turn 0 so the LLM discovers capabilities
+            # before defaulting to a text response
+            if turn == 0 and tools:
+                model_kwargs["tool_choice"] = "required"
+
             try:
                 # Use streaming when a stream_callback is provided
                 if stream_callback and hasattr(self.provider, "stream_complete"):

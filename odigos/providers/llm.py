@@ -72,11 +72,13 @@ class LLMClient(LLMProvider):
         tools = kwargs.get("tools")
         if tools:
             payload["tools"] = tools
+        tool_choice = kwargs.get("tool_choice")
+        if tool_choice and tools:
+            payload["tool_choice"] = tool_choice
 
         logger.info(
-            "LLM request: model=%s, tools=%d, messages=%d, tool_names=%s",
-            model, len(tools) if tools else 0, len(messages),
-            [t["function"]["name"] for t in tools] if tools else [],
+            "LLM request: model=%s, tools=%d, messages=%d, tool_choice=%s",
+            model, len(tools) if tools else 0, len(messages), tool_choice,
         )
 
         url = f"{self.base_url}/chat/completions"
@@ -145,6 +147,9 @@ class LLMClient(LLMProvider):
         tools = kwargs.get("tools")
         if tools:
             payload["tools"] = tools
+        tool_choice = kwargs.get("tool_choice")
+        if tool_choice and tools:
+            payload["tool_choice"] = tool_choice
 
         url = f"{self.base_url}/chat/completions"
         try:
