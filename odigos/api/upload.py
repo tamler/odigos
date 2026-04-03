@@ -8,6 +8,8 @@ import logging
 import os
 import secrets
 
+from odigos import aio
+
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
@@ -94,8 +96,7 @@ async def upload_file(
     if safety_error:
         raise HTTPException(status_code=400, detail=safety_error)
 
-    with open(dest, "wb") as f:
-        f.write(content)
+    await aio.write_bytes(dest, content)
 
     content_hash = hashlib.sha256(content).hexdigest()
 

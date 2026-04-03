@@ -5,10 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from odigos import aio
 from odigos.api.deps import get_config_path, get_container, get_env_path, get_plugin_manager, get_settings, require_auth
 from odigos.api.settings import _update_env_file
 from odigos.config import Settings
@@ -127,15 +127,13 @@ async def configure_plugin(
     if update.settings:
         yaml_config: dict = {}
         if config_path.exists():
-            with open(config_path) as f:
-                yaml_config = yaml.safe_load(f) or {}
+            yaml_config = await aio.read_yaml(config_path)
 
         plugins_config = yaml_config.setdefault("plugins", {})
         plugin_config = plugins_config.setdefault(plugin_id, {})
         plugin_config.update(update.settings)
 
-        with open(config_path, "w") as f:
-            yaml.dump(yaml_config, f, default_flow_style=False)
+        await aio.write_yaml(config_path, yaml_config)
 
     # Hot-reload: re-read settings from disk and update container
     new_settings = Settings()

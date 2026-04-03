@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from odigos import aio
 from odigos.api.deps import get_db, require_auth
 from odigos.storage import ARTIFACTS_DIR, resolve_artifact_path
 
@@ -67,7 +69,7 @@ async def get_artifact_content(artifact_id: str, db=Depends(get_db)):
     if not file_path:
         raise HTTPException(status_code=404, detail="Artifact file missing from disk")
 
-    content = file_path.read_text(encoding="utf-8")
+    content = await aio.read_text(file_path)
     return {
         "content": content,
         "content_type": content_type,
@@ -99,10 +101,10 @@ async def update_artifact_content(
         raise HTTPException(status_code=404, detail="Artifact file missing from disk")
 
     # Update file on disk
-    file_path.write_text(update.content, encoding="utf-8")
+    await aio.write_text(file_path, update.content)
 
     # Update file size in DB
-    new_size = file_path.stat().st_size
+    new_size = (await asyncio.to_thread(file_path.stat)).st_size
     await db.execute(
         "UPDATE artifacts SET file_size = ? WHERE id = ?",
         (new_size, artifact_id),
@@ -149,7 +151,7 @@ async def get_thumbnail(artifact_id: str, size: int = 400, db=Depends(get_db)):
     import io
     from PIL import Image
     size = min(max(size, 50), 800)
-    img = Image.open(str(file_path))
+    img = await asyncio.to_thread(Image.open, str(file_path))
     img.thumbnail((size, size), Image.LANCZOS)
     buf = io.BytesIO()
     img.save(buf, format="WEBP", quality=80)
@@ -173,8 +175,7 @@ async def delete_artifact(artifact_id: str, db=Depends(get_db)):
     # Delete file from disk
     artifact_dir = ARTIFACTS_DIR / artifact_id
     if artifact_dir.exists():
-        import shutil
-        shutil.rmtree(artifact_dir)
+        await aio.remove_tree(artifact_dir)
 
     await db.execute("DELETE FROM artifacts WHERE id = ?", (artifact_id,))
     return {"deleted": True}

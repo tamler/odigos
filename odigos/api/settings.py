@@ -7,10 +7,10 @@ import imaplib
 import smtplib
 from pathlib import Path
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ValidationError
 
+from odigos import aio
 from odigos.api.deps import get_config_path, get_env_path, get_settings, require_auth
 
 router = APIRouter(
@@ -50,6 +50,12 @@ def _mask_key(key: str) -> str:
 @router.get("/settings")
 async def get_settings_endpoint(settings=Depends(get_settings)):
     """Return current settings with secrets masked."""
+    email_data = settings.email.model_dump()
+    if email_data.get("password"):
+        email_data["password"] = "****"
+    calendar_data = settings.calendar.model_dump()
+    if calendar_data.get("password"):
+        calendar_data["password"] = "****"
     return {
         "llm_api_key": _mask_key(settings.llm_api_key),
         "api_key": _mask_key(settings.api_key),
@@ -64,9 +70,9 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
         "templates": settings.templates.model_dump(),
         "feed": settings.feed.model_dump(),
         "telegram": settings.telegram.model_dump(),
-        "email": settings.email.model_dump(),
+        "email": email_data,
         "voice": settings.voice.model_dump(),
-        "calendar": settings.calendar.model_dump(),
+        "calendar": calendar_data,
         "assistant": settings.assistant.model_dump(),
     }
 
@@ -91,7 +97,7 @@ def _test_imap(host: str, port: int, username: str, password: str) -> str:
         conn.logout()
         return "ok"
     except Exception as exc:
-        return str(exc)
+        return str(exc)[:200]
 
 
 def _test_smtp(host: str, port: int, username: str, password: str) -> str:
@@ -106,7 +112,7 @@ def _test_smtp(host: str, port: int, username: str, password: str) -> str:
         server.quit()
         return "ok"
     except Exception as exc:
-        return str(exc)
+        return str(exc)[:200]
 
 
 @router.post("/email/test")
@@ -145,8 +151,7 @@ async def update_settings_endpoint(
     # Load existing config.yaml
     yaml_config: dict = {}
     if config_path.exists():
-        with open(config_path) as f:
-            yaml_config = yaml.safe_load(f) or {}
+        yaml_config = await aio.read_yaml(config_path)
 
     # Merge updated sections into yaml config
     for section in ("llm", "agent", "budget", "heartbeat", "sandbox", "mesh", "templates", "feed", "telegram", "email", "voice", "calendar", "assistant"):
@@ -180,7 +185,7 @@ async def update_settings_endpoint(
 
     # Update LLM API key in .env (ignore masked placeholder)
     if update.llm_api_key is not None and update.llm_api_key != "****":
-        _update_env_file(env_path, "LLM_API_KEY", update.llm_api_key)
+        await _update_env_file(env_path, "LLM_API_KEY", update.llm_api_key)
         object.__setattr__(settings, "llm_api_key", update.llm_api_key)
 
     # Update dashboard API key (requires current key confirmation)
@@ -220,8 +225,7 @@ async def update_settings_endpoint(
         shutil.copy2(str(config_path), str(config_path.with_suffix(".yaml.bak1")))
 
     # Write config.yaml once with all updates (only after validation succeeds)
-    with open(config_path, "w") as f:
-        yaml.dump(yaml_config, f, default_flow_style=False)
+    await aio.write_yaml(config_path, yaml_config)
 
     # Hot-reload in-memory settings from validated objects
     for section, new_obj in validated_sections.items():
@@ -283,8 +287,7 @@ async def apply_profile(
     config_path = Path(config_path_str)
     yaml_config: dict = {}
     if config_path.exists():
-        with open(config_path) as f:
-            yaml_config = yaml.safe_load(f) or {}
+        yaml_config = await aio.read_yaml(config_path)
 
     # Merge profile config into yaml
     for section, values in profile["config"].items():
@@ -295,8 +298,7 @@ async def apply_profile(
         else:
             yaml_config[section] = values
 
-    with open(config_path, "w") as f:
-        yaml.dump(yaml_config, f, default_flow_style=False)
+    await aio.write_yaml(config_path, yaml_config)
 
     # Hot-reload affected settings
     for section, values in profile["config"].items():
@@ -314,7 +316,7 @@ async def apply_profile(
     return {"status": "ok", "profile": profile_id, "name": profile["name"]}
 
 
-def _update_env_file(env_path: Path, key: str, value: str) -> None:
+async def _update_env_file(env_path: Path, key: str, value: str) -> None:
     """Update or add a key=value pair in an .env file."""
     # Sanitize: strip newlines to prevent env injection
     value = value.replace("\n", "").replace("\r", "")
@@ -322,8 +324,8 @@ def _update_env_file(env_path: Path, key: str, value: str) -> None:
     found = False
 
     if env_path.exists():
-        with open(env_path) as f:
-            lines = f.readlines()
+        content = await aio.read_text(env_path)
+        lines = content.splitlines(keepends=True)
 
     new_lines: list[str] = []
     for line in lines:
@@ -337,5 +339,4 @@ def _update_env_file(env_path: Path, key: str, value: str) -> None:
     if not found:
         new_lines.append(f"{key}={value}\n")
 
-    with open(env_path, "w") as f:
-        f.writelines(new_lines)
+    await aio.write_text(env_path, "".join(new_lines))

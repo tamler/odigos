@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
+from odigos import aio
 from odigos.config import Settings
 from odigos.container import Container
 
@@ -43,7 +44,7 @@ class Bootstrapper:
         if not self.settings.api_key:
             import secrets
             self.settings.api_key = secrets.token_urlsafe(32)
-            _persist_generated_api_key(self.config_path, self.settings.api_key)
+            await _persist_generated_api_key(self.config_path, self.settings.api_key)
             logger.warning(
                 "No api_key configured -- generated and saved a random key to %s. "
                 "View it with: grep api_key %s",
@@ -74,8 +75,7 @@ class Bootstrapper:
             self.settings.session_secret = _secrets.token_urlsafe(48)
             env_path = Path(".env")
             try:
-                with open(env_path, "a") as _ef:
-                    _ef.write(f"\nSESSION_SECRET={self.settings.session_secret}\n")
+                await aio.append_text(env_path, f"\nSESSION_SECRET={self.settings.session_secret}\n")
                 logger.info("Generated SESSION_SECRET and saved to .env")
             except PermissionError:
                 logger.warning(
@@ -968,18 +968,13 @@ class Bootstrapper:
 
 # ---- Helpers ----
 
-def _persist_generated_api_key(config_path: str, api_key: str) -> None:
+async def _persist_generated_api_key(config_path: str, api_key: str) -> None:
     """Append generated api_key to config.yaml so it survives restarts."""
     try:
-        import yaml
         cp = Path(config_path)
-        data = {}
-        if cp.exists():
-            with open(cp) as f:
-                data = yaml.safe_load(f) or {}
+        data = await aio.read_yaml(cp) if cp.exists() else {}
         data["api_key"] = api_key
-        with open(cp, "w") as f:
-            yaml.dump(data, f, default_flow_style=False)
+        await aio.write_yaml(cp, data)
     except Exception:
         logger.warning("Could not persist api_key to %s", config_path)
 
@@ -993,7 +988,7 @@ async def _seed_user(db) -> None:
         return
 
     try:
-        _seed = _json.loads(_seed_path.read_text())
+        _seed = _json.loads(await aio.read_text(_seed_path))
         _row = await db.fetch_one("SELECT COUNT(*) as count FROM users")
         if _row and _row["count"] == 0:
             import uuid as _uuid
