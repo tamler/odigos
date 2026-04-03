@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { useOutletContext } from 'react-router-dom'
 import { get, put } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -29,11 +29,9 @@ interface ArtifactPreviewProps {
 type PreviewTab = 'preview' | 'code' | 'download'
 
 export function ArtifactPreview({ artifactId, onClose }: ArtifactPreviewProps) {
-  const [searchParams] = useSearchParams()
   let outletCtx: any = {}
   try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
   const { setPageContextData = () => {} } = outletCtx
-  const conversationId = searchParams.get('c') || null
   const [data, setData] = useState<ArtifactContent | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

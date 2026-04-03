@@ -28,7 +28,8 @@ import {
   Eye,
   Columns3,
   Image as ImageIcon,
-  Upload
+  Upload,
+  Key
 } from 'lucide-react'
 import { ChatPanel } from '@/components/ChatPanel'
 import { ArtifactPreview } from '@/components/ArtifactPreview'
@@ -74,6 +75,7 @@ const SETTINGS_SECTIONS = [
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'documents', label: 'Documents', icon: FileText },
   { id: 'integrations', label: 'Integrations', icon: Zap },
+  { id: 'services', label: 'Services', icon: Key },
   { id: 'mesh', label: 'Mesh', icon: Network },
   { id: 'data', label: 'Data', icon: Database },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },

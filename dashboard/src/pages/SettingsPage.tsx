@@ -11,6 +11,7 @@ import DocumentsTab from './settings/DocumentsTab'
 import AnalyticsTab from './settings/AnalyticsTab'
 import MeshTab from './settings/MeshTab'
 import IntegrationsTab from './settings/IntegrationsTab'
+import ServicesTab from './settings/ServicesTab'
 import AssistantTab from './settings/AssistantTab'
 import VoiceTab from './settings/VoiceTab'
 import EmailTab from './settings/EmailTab'
@@ -40,6 +41,7 @@ import {
   Eye,
   ChevronRight,
   MessageCircle,
+  Key,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageTransition } from '@/components/ui/page-transition'
@@ -56,6 +58,7 @@ const SECTIONS = [
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
   { id: 'documents', label: 'Documents', icon: FileText },
   { id: 'integrations', label: 'Integrations', icon: Zap },
+  { id: 'services', label: 'Services', icon: Key },
   { id: 'email', label: 'Email', icon: Mail },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'assistant', label: 'Assistant', icon: MessageCircle },
@@ -141,6 +144,7 @@ export default function SettingsPage() {
         {resolvedTab === 'plugins' && <PluginsTab active={true} />}
         {resolvedTab === 'documents' && <DocumentsTab active={true} />}
         {resolvedTab === 'integrations' && <IntegrationsTab active={true} />}
+        {resolvedTab === 'services' && <ServicesTab active={true} />}
         {resolvedTab === 'assistant' && <AssistantTab active={true} />}
         {resolvedTab === 'voice' && <VoiceTab active={true} />}
         {resolvedTab === 'email' && <EmailTab active={true} />}

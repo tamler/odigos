@@ -145,6 +145,7 @@ export const ChatPanel = memo(({
   const setArtifactPanelOpen = useUIStore(s => s.setArtifactPanelOpen)
   const setActiveArtifactId = useUIStore(s => s.setActiveArtifactId)
   const agentName = useUIStore(s => s.agentName)
+  const hasNewEmail = useUIStore(s => s.hasNewEmail)
 
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -664,6 +665,24 @@ export const ChatPanel = memo(({
               <button onClick={() => navigate('/images')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Images</button>
               <span className="text-muted-foreground/20 text-[10px]">·</span>
               <button onClick={() => navigate('/artifacts')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Documents</button>
+              <span className="text-muted-foreground/20 text-[10px]">·</span>
+              <div className="relative inline-flex">
+                <button 
+                  onClick={() => {
+                    useUIStore.getState().setHasNewEmail(false)
+                    handleSend('Check my email')
+                  }} 
+                  className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors"
+                >
+                  Email
+                </button>
+                {hasNewEmail && (
+                  <span className="absolute -top-1 -right-1.5 flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="relative rounded-2xl border border-border/50 bg-muted/30 focus-within:border-border/80 transition-colors shadow-sm">
