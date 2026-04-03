@@ -74,7 +74,7 @@ class FindToolsTool(BaseTool):
                 matches.append((overlap, tool))
 
         matches.sort(key=lambda x: x[0], reverse=True)
-        top = matches[:8]
+        top = matches[:5]
 
         if not top:
             return ToolResult(
@@ -82,9 +82,8 @@ class FindToolsTool(BaseTool):
                 data="No matching tools found. Try different search terms.",
             )
 
-        lines = ["## Available tools matching your query:\n"]
+        lines = [f"Found {len(top)} tool(s):"]
         for _, tool in top:
-            cat = f" [{tool.category}]" if tool.category else ""
-            lines.append(f"**{tool.name}**{cat}: {tool.description[:150]}")
+            lines.append(f"- {tool.name}: {tool.description[:80]}")
 
         return ToolResult(success=True, data="\n".join(lines))

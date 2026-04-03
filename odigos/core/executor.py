@@ -362,6 +362,28 @@ class Executor:
                 tc, result_content = await _run_tool(response.tool_calls[0])
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result_content})
 
+            # After find_tools call, expand tool list with discovered tools
+            for tc in response.tool_calls:
+                if tc.name == "find_tools" and self.tool_registry:
+                    # Parse tool names from the result and add their definitions
+                    for tool in self.tool_registry.list():
+                        if tool.name == "find_tools":
+                            continue
+                        # Check if this tool was mentioned in any tool result
+                        for msg in messages:
+                            if msg.get("role") == "tool" and tool.name in msg.get("content", ""):
+                                tool_def = {
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool.name,
+                                        "description": tool.description,
+                                        "parameters": tool.parameters_schema,
+                                    },
+                                }
+                                if tools and not any(t["function"]["name"] == tool.name for t in tools):
+                                    tools.append(tool_def)
+                                break
+
             # Stuck detection: warn if identical tool calls as previous turn
             current_turn_calls = {
                 f"{tc.name}:{json.dumps(tc.arguments, sort_keys=True)}"
