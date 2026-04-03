@@ -55,7 +55,9 @@ class CreateArtifactTool(BaseTool):
     description = (
         "Create a downloadable file for the user. Use this when the user asks you to "
         "generate a spreadsheet, document, report, data export, or any file they can download. "
-        "Provide the filename (with extension) and the file content as a string. "
+        "Always use a descriptive filename that reflects the content (e.g. "
+        "'quarterly_budget.csv', 'meeting_notes_apr3.md', 'recipe_pad_thai.json'). "
+        "Never use generic prefixes like 'draft', 'document', or 'file'. "
         "Supported formats: CSV, Markdown, JSON, HTML, TXT, XML, YAML, DOCX. "
         "For DOCX: content is plain text, each paragraph separated by newlines. "
         "Lines starting with # become headings."

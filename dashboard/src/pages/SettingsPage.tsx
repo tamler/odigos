@@ -132,7 +132,7 @@ export default function SettingsPage() {
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {resolvedTab === 'account' && <AccountTab active={true} />}
         {resolvedTab === 'general' && <GeneralSettings active={true} />}
         {resolvedTab === 'skills' && <SkillsTab active={true} />}

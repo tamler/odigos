@@ -320,6 +320,15 @@ def load_settings(config_path: str = "config.yaml") -> Settings:
         with open(path) as f:
             yaml_config = yaml.safe_load(f) or {}
 
+    # Migrate legacy key locations into services dict
+    services = yaml_config.setdefault("services", {})
+    _img = yaml_config.get("image_generation", {})
+    if isinstance(_img, dict) and _img.get("api_key") and not services.get("kie_ai"):
+        services["kie_ai"] = _img.pop("api_key")
+    _music = yaml_config.get("music_generation", {})
+    if isinstance(_music, dict) and _music.get("api_key") and not services.get("kie_ai"):
+        services["kie_ai"] = _music.pop("api_key")
+
     return Settings(**yaml_config)
 
 

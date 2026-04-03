@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -102,7 +103,9 @@ class GenerateImageTool(BaseTool):
                 )
 
             artifact_id = uuid.uuid4().hex
-            filename = f"generated_{artifact_id[:16]}.png"
+            # Derive a meaningful filename from the prompt
+            slug = re.sub(r"[^a-z0-9]+", "_", prompt[:60].lower()).strip("_")
+            filename = f"{slug}_{artifact_id[:8]}.png"
             filepath = await self._download_image(
                 image_url, filename,
             )
