@@ -288,7 +288,7 @@ class Settings(BaseSettings):
     auto_update: AutoUpdateConfig = AutoUpdateConfig()
     storage: StorageConfig = StorageConfig()
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     def service_key(self, name: str) -> str:
         """Get API key for an external service. Returns empty string if not configured."""
