@@ -44,8 +44,9 @@ class GenerateMusicTool(BaseTool):
                 "description": "Song title",
             },
             "instrumental": {
-                "type": "boolean",
-                "description": "Instrumental only, no vocals (default false)",
+                "type": "string",
+                "enum": ["true", "false"],
+                "description": "Instrumental only, no vocals (default 'false')",
             },
             "vocal_gender": {
                 "type": "string",
@@ -83,7 +84,7 @@ class GenerateMusicTool(BaseTool):
 
         style = (params.get("style") or "").strip()
         title = (params.get("title") or "").strip()
-        instrumental = params.get("instrumental", False)
+        instrumental = str(params.get("instrumental", "false")).lower() == "true"
         vocal_gender = self._map_vocal_gender(params.get("vocal_gender", ""))
 
         try:

@@ -120,7 +120,7 @@ class CreateCalendarEventTool(BaseTool):
             "end": {"type": "string", "description": "End datetime (optional, defaults to 1 hour after start)"},
             "location": {"type": "string", "description": "Location (optional)"},
             "description": {"type": "string", "description": "Description/notes (optional)"},
-            "all_day": {"type": "boolean", "description": "All-day event (default false)"},
+            "all_day": {"type": "string", "enum": ["true", "false"], "description": "All-day event (default 'false')"},
         },
         "required": ["title", "start"],
     }
@@ -164,7 +164,8 @@ class CreateCalendarEventTool(BaseTool):
         cal.add("version", "2.0")
         event = Event()
         event.add("summary", title)
-        if params.get("all_day"):
+        all_day = str(params.get("all_day", "false")).lower() == "true"
+        if all_day:
             event.add("dtstart", start_dt.date())
             event.add("dtend", end_dt.date())
         else:

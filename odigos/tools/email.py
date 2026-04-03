@@ -34,7 +34,7 @@ class CheckEmailTool(BaseTool):
         "type": "object",
         "properties": {
             "limit": {"type": "integer", "description": "Max emails to fetch (default 10)"},
-            "unread_only": {"type": "boolean", "description": "Only unread emails (default true)"},
+            "unread_only": {"type": "string", "enum": ["true", "false"], "description": "Only unread emails (default 'true')"},
             "folder": {"type": "string", "description": "Folder to check (default INBOX)"},
         },
     }
@@ -48,8 +48,9 @@ class CheckEmailTool(BaseTool):
         params.pop("_conversation_id", None)
         params.pop("_goal_id", None)
         try:
+            unread_only = str(params.get("unread_only", "true")).lower() == "true"
             return await asyncio.to_thread(
-                self._fetch, params.get("limit", 10), params.get("unread_only", True), params.get("folder", "INBOX"),
+                self._fetch, params.get("limit", 10), unread_only, params.get("folder", "INBOX"),
             )
         except Exception as e:
             return ToolResult(success=False, data="", error=f"Email check failed: {e}")
@@ -159,7 +160,7 @@ class ReadEmailTool(BaseTool):
         "properties": {
             "uid": {"type": "string", "description": "Email UID from check_email or search_email"},
             "folder": {"type": "string", "description": "Folder (default INBOX)"},
-            "mark_read": {"type": "boolean", "description": "Mark as read (default true)"},
+            "mark_read": {"type": "string", "enum": ["true", "false"], "description": "Mark as read (default 'true')"},
         },
         "required": ["uid"],
     }
@@ -181,7 +182,7 @@ class ReadEmailTool(BaseTool):
         from imap_tools import MailBox, AND
         uid = params.get("uid", "")
         folder = params.get("folder", "INBOX")
-        mark_read = params.get("mark_read", True)
+        mark_read = str(params.get("mark_read", "true")).lower() == "true"
         with MailBox(self._config.imap_host, self._config.imap_port).login(
             self._config.username, self._config.password, initial_folder=folder
         ) as mb:

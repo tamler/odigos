@@ -26,7 +26,7 @@ class DocTool(BaseTool):
         "type": "object",
         "properties": {
             "source": {"type": "string", "description": "File path or URL to process"},
-            "deep": {"type": "boolean", "description": "Use deep extraction (docling) for complex documents. Default false."},
+            "deep": {"type": "string", "enum": ["true", "false"], "description": "Use deep extraction (docling) for complex documents. Default 'false'."},
         },
         "required": ["source"],
     }
@@ -41,7 +41,7 @@ class DocTool(BaseTool):
         if not source:
             return ToolResult(success=False, data="", error="No source provided")
 
-        deep = params.get("deep", False)
+        deep = str(params.get("deep", "false")).lower() == "true"
 
         # Use Docling for deep extraction if requested and available
         if deep and self.docling:

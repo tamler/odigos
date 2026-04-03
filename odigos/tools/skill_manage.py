@@ -60,8 +60,9 @@ class CreateSkillTool(BaseTool):
                 "description": "Sandbox timeout seconds (default 10, max 60).",
             },
             "allow_network": {
-                "type": "boolean",
-                "description": "Allow network access (default false).",
+                "type": "string",
+                "enum": ["true", "false"],
+                "description": "Allow network access (default 'false').",
             },
         },
         "required": ["name", "description", "instructions"],
@@ -86,7 +87,7 @@ class CreateSkillTool(BaseTool):
         code = params.get("code")
         parameters = params.get("parameters")
         timeout = params.get("timeout", 10)
-        allow_network = params.get("allow_network", False)
+        allow_network = str(params.get("allow_network", "false")).lower() == "true"
 
         try:
             skill = self._registry.create(

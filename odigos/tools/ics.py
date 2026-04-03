@@ -47,8 +47,9 @@ class CalendarEventTool(BaseTool):
                 "description": "Event description/notes (optional).",
             },
             "all_day": {
-                "type": "boolean",
-                "description": "Whether this is an all-day event (default false).",
+                "type": "string",
+                "enum": ["true", "false"],
+                "description": "Whether this is an all-day event (default 'false').",
             },
         },
         "required": ["title", "start"],
@@ -93,7 +94,8 @@ class CalendarEventTool(BaseTool):
             event = Event()
             event.add("summary", title)
 
-            if params.get("all_day"):
+            all_day = str(params.get("all_day", "false")).lower() == "true"
+            if all_day:
                 event.add("dtstart", start_dt.date())
                 event.add("dtend", end_dt.date())
             else:

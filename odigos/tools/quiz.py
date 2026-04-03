@@ -104,7 +104,7 @@ class GradeResponseTool(BaseTool):
             "question": {"type": "string", "description": "The question that was asked"},
             "student_answer": {"type": "string", "description": "What the student answered"},
             "correct_answer": {"type": "string", "description": "The correct answer"},
-            "is_correct": {"type": "boolean", "description": "Whether the student's answer was correct"},
+            "is_correct": {"type": "string", "enum": ["true", "false"], "description": "Whether the student's answer was correct, default 'false'"},
             "feedback": {"type": "string", "description": "Constructive feedback for the student"},
             "topic": {"type": "string", "description": "The topic/subject area of this question"},
         },
@@ -115,7 +115,7 @@ class GradeResponseTool(BaseTool):
         self.db = db
 
     async def execute(self, params: dict) -> ToolResult:
-        is_correct = params.get("is_correct", False)
+        is_correct = str(params.get("is_correct", "false")).lower() == "true"
         feedback = params.get("feedback", "")
         topic = params.get("topic", "general")
         conversation_id = params.get("_conversation_id")
