@@ -14,20 +14,6 @@ from odigos.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
-# Tools always available regardless of classification
-ALWAYS_AVAILABLE = {
-    "web_search", "remember_fact", "find_tools",
-    "decompose_query", "check_plan", "update_plan",
-}
-
-# Which categories are relevant to each query classification
-CLASSIFICATION_CATEGORIES: dict[str, set[str]] = {
-    "simple": {"search", "memory", "create"},
-    "standard": {"search", "memory", "create", "productivity", "communication", "media"},
-    "document_query": {"search", "memory", "analysis", "create"},
-    "complex": set(),  # all tools
-    "planning": {"search", "productivity", "create", "code", "analysis"},
-}
 
 
 @dataclass
@@ -53,55 +39,19 @@ class ToolRegistry:
     def list(self) -> list[BaseTool]:
         return list(self._tools.values())
 
-    def tool_definitions(
-        self,
-        classification: str | None = None,
-        routing_rules: dict | None = None,
-    ) -> list[dict]:
-        """Return OpenAI-compatible tool definitions, filtered by classification.
-
-        If classification and routing_rules are provided, only returns tools
-        relevant to that query type. Otherwise returns all tools.
-        """
-        tools = self._filter_tools(classification, routing_rules)
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters_schema,
-                },
-            }
-            for tool in tools
-        ]
-
-    def _filter_tools(
-        self,
-        classification: str | None,
-        routing_rules: dict | None = None,
-    ) -> list[BaseTool]:
-        """Filter tools by category relevance to the classification.
-
-        Tool filtering is handled ONLY by categories on the tools themselves.
-        Routing rules (routing_rules.md) control context (RAG, documents, profile)
-        but NEVER control which tools are available. One system, one place.
-        """
-        all_tools = list(self._tools.values())
-
-        if not classification:
-            return all_tools
-
-        relevant_categories = CLASSIFICATION_CATEGORIES.get(classification)
-        if not relevant_categories:
-            return all_tools  # complex or unknown = all tools
-
-        return [
-            t for t in all_tools
-            if t.name in ALWAYS_AVAILABLE
-            or not t.category
-            or t.category in relevant_categories
-        ]
+    def tool_definitions(self, **_kwargs) -> list[dict]:
+        """Return only the find_tools definition. Everything else is discovered on demand."""
+        find = self._tools.get("find_tools")
+        if not find:
+            return []
+        return [{
+            "type": "function",
+            "function": {
+                "name": find.name,
+                "description": find.description,
+                "parameters": find.parameters_schema,
+            },
+        }]
 
     def validate_routing_rules(self, routing_rules: dict) -> list[str]:
         """Validate that routing rules reference tools that actually exist.
