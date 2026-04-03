@@ -74,29 +74,19 @@ def test_invalid_tts_provider():
     assert any("tts_provider" in w for w in warnings)
 
 
-def test_email_enabled_no_host():
+def test_email_imap_configured_missing_smtp():
     s = _settings(
         email={
-            "enabled": True,
-            "address": "",
-            "imap_host": "",
+            "imap_host": "imap.example.com",
             "smtp_host": "",
+            "address": "",
         }
     )
     warnings = validate_settings(s)
-    matches = [w for w in warnings if "Email" in w]
+    matches = [w for w in warnings if "Email" in w or "email" in w]
     assert len(matches) == 1
-    assert "imap_host" in matches[0]
     assert "smtp_host" in matches[0]
     assert "address" in matches[0]
-
-
-def test_calendar_enabled_no_url():
-    s = _settings(
-        calendar={"enabled": True, "url": ""},
-    )
-    warnings = validate_settings(s)
-    assert any("Calendar" in w for w in warnings)
 
 
 def test_approval_disabled_warning():

@@ -208,8 +208,8 @@ async def _register_tools(
     tool_registry.register(GradeResponseTool(db=db))
     logger.info("Quiz tools initialized")
 
-    # Calendar tools (only if configured)
-    if settings.calendar.enabled and settings.calendar.url:
+    # Calendar tools (auto-enabled when CalDAV URL is configured)
+    if settings.calendar.url:
         from odigos.tools.calendar import CheckCalendarTool, CreateCalendarEventTool, FindFreeTimeTool
         tool_registry.register(CheckCalendarTool(calendar_config=settings.calendar))
         tool_registry.register(CreateCalendarEventTool(calendar_config=settings.calendar))
@@ -223,8 +223,8 @@ async def _register_tools(
     tool_registry.register(CheckFeedsTool(db=db))
     logger.info("Feed monitoring tools initialized")
 
-    # Email tools (only if configured)
-    if settings.email.enabled and settings.email.imap_host:
+    # Email tools (auto-enabled when IMAP host is configured)
+    if settings.email.imap_host:
         from odigos.tools.email import CheckEmailTool, SearchEmailTool, ReadEmailTool, SendEmailTool
         tool_registry.register(CheckEmailTool(email_config=settings.email))
         tool_registry.register(SearchEmailTool(email_config=settings.email))
@@ -981,7 +981,7 @@ async def lifespan(app: FastAPI):
     agent.heartbeat = _heartbeat
 
     # Wire email config into heartbeat for periodic inbox checking
-    if settings.email.enabled:
+    if settings.email.imap_host:
         _heartbeat._email_config = settings.email
         logger.info("Email heartbeat enabled (check every %d ticks)", settings.email.check_interval_ticks)
 

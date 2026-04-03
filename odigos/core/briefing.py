@@ -158,7 +158,7 @@ async def gather_briefing_data(db: Database, settings=None) -> str:
                 )
 
     # 6. Calendar events today (if calendar configured)
-    if settings and getattr(settings, 'calendar', None) and settings.calendar.enabled:
+    if settings and getattr(settings, 'calendar', None) and settings.calendar.url:
         try:
             from odigos.tools.calendar import _get_caldav_events
             events = await _get_caldav_events(settings.calendar, today, today)

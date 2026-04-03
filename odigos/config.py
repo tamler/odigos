@@ -189,8 +189,7 @@ class AccessConfig(BaseModel):
 
 
 class CalendarConfig(BaseModel):
-    enabled: bool = False
-    url: str = ""  # CalDAV server URL
+    url: str = ""  # CalDAV server URL — set this to enable calendar
     username: str = ""
     password: str = ""
 
@@ -203,7 +202,6 @@ class AutoUpdateConfig(BaseModel):
 
 
 class EmailConfig(BaseModel):
-    enabled: bool = False
     address: str = ""
     imap_host: str = ""
     imap_port: int = 993

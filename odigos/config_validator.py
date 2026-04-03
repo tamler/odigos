@@ -76,26 +76,18 @@ def validate_settings(settings: Settings) -> list[str]:
             "exist."
         )
 
-    # Email
-    if settings.email.enabled:
+    # Email (auto-enabled when imap_host is set — check other required fields)
+    if settings.email.imap_host:
         missing = []
-        if not settings.email.imap_host:
-            missing.append("imap_host")
         if not settings.email.smtp_host:
             missing.append("smtp_host")
         if not settings.email.address:
             missing.append("address")
         if missing:
             warnings.append(
-                "Email is enabled but missing: "
+                "Email imap_host is configured but missing: "
                 f"{', '.join(missing)}."
             )
-
-    # Calendar
-    if settings.calendar.enabled and not settings.calendar.url:
-        warnings.append(
-            "Calendar is enabled but url is empty."
-        )
 
     # Auto-update interval
     if settings.auto_update.check_interval_ticks < 10:
