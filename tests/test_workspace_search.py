@@ -64,3 +64,43 @@ class TestWorkspaceSearch:
         result = await tool.execute({"query": "my", "type": "board"})
         assert "My Board" in result.data
         assert "My Notes" not in result.data
+
+    @pytest.mark.asyncio
+    async def test_find_notebook_by_content(self, db):
+        """Search should find notebooks by entry content, not just title."""
+        await db.execute(
+            "INSERT INTO notebooks (id, title, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))",
+            ("nb-content", "Creative Ideas"),
+        )
+        await db.execute(
+            "INSERT INTO notebook_entries (id, notebook_id, content, entry_type, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+            ("e1", "nb-content", "Lyrics about a cat who travels the world", "user", "active"),
+        )
+        tool = WorkspaceSearchTool(db=db)
+        result = await tool.execute({"query": "cat travels"})
+        assert result.success
+        assert "Creative Ideas" in result.data
+        assert "cat" in result.data.lower()
+
+    @pytest.mark.asyncio
+    async def test_title_match_preferred_over_content(self, db):
+        """Title matches should appear; content search fills gaps."""
+        await db.execute(
+            "INSERT INTO notebooks (id, title, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))",
+            ("nb-title", "Cat Songs"),
+        )
+        await db.execute(
+            "INSERT INTO notebooks (id, title, created_at, updated_at) VALUES (?, ?, datetime('now'), datetime('now'))",
+            ("nb-other", "Random Notes"),
+        )
+        await db.execute(
+            "INSERT INTO notebook_entries (id, notebook_id, content, entry_type, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+            ("e2", "nb-other", "I saw a cat today", "user", "active"),
+        )
+        tool = WorkspaceSearchTool(db=db)
+        result = await tool.execute({"query": "cat"})
+        assert result.success
+        assert "Cat Songs" in result.data
+        assert "Random Notes" in result.data
