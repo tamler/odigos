@@ -14,7 +14,6 @@ import {
 import { CalendarDays, Loader2 } from 'lucide-react'
 
 interface CalendarConfig {
-  enabled: boolean
   url: string
   username: string
   password: string
@@ -82,25 +81,11 @@ export default function CalendarTab({ active: isActive }: { active?: boolean }) 
     setTestResult(null)
   }
 
-  async function handleToggle() {
-    if (!config) return
-    const next = { ...config, enabled: !config.enabled }
-    setConfig(next)
-    try {
-      await post('/api/settings', { calendar: { enabled: next.enabled } })
-      toast.success(next.enabled ? 'Calendar enabled' : 'Calendar disabled')
-    } catch {
-      toast.error('Failed to update calendar setting')
-      load()
-    }
-  }
-
   async function handleSave() {
     if (!config) return
     setSaving(true)
     try {
       const payload: Record<string, any> = {
-        enabled: config.enabled,
         url: config.url,
         username: config.username,
       }
@@ -162,23 +147,7 @@ export default function CalendarTab({ active: isActive }: { active?: boolean }) 
       </div>
 
       <div className="rounded-lg border border-border/40 bg-card p-4 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label className="text-base font-semibold">Enable Calendar</Label>
-            <p className="text-xs text-muted-foreground">Connect to a CalDAV server for calendar access.</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-8 ${config.enabled ? 'bg-primary/10 text-primary border-primary/20' : 'text-muted-foreground'}`}
-            onClick={handleToggle}
-          >
-            {config.enabled ? 'Enabled' : 'Disabled'}
-          </Button>
-        </div>
-
-        {config.enabled && (
-          <div className="pt-4 border-t border-border/20 space-y-6">
+          <div className="space-y-6">
             {/* Provider Preset */}
             <div className="space-y-2">
               <Label>Provider</Label>
@@ -259,16 +228,13 @@ export default function CalendarTab({ active: isActive }: { active?: boolean }) 
               )}
             </div>
           </div>
-        )}
       </div>
 
-      {config.enabled && (
-        <div className="flex justify-end pt-4 pb-12">
-          <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
-            {saving ? 'Saving...' : 'Save Calendar Settings'}
-          </Button>
-        </div>
-      )}
+      <div className="flex justify-end pt-4 pb-12">
+        <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
+          {saving ? 'Saving...' : 'Save Calendar Settings'}
+        </Button>
+      </div>
     </div>
   )
 }

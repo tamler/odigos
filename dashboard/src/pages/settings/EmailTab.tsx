@@ -14,7 +14,6 @@ import {
 import { Mail, Loader2 } from 'lucide-react'
 
 interface EmailConfig {
-  enabled: boolean
   address: string
   imap_host: string
   imap_port: number
@@ -26,7 +25,6 @@ interface EmailConfig {
 }
 
 const DEFAULT_CONFIG: EmailConfig = {
-  enabled: false,
   address: '',
   imap_host: '',
   imap_port: 993,
@@ -182,25 +180,7 @@ export default function EmailTab({ active: isActive }: { active?: boolean }) {
         </p>
       </div>
 
-      {/* Enable toggle */}
       <div className="rounded-lg border border-border/40 bg-card p-4 space-y-6 shadow-sm">
-        <div className="flex items-center justify-between">
-          <div className="space-y-0.5">
-            <Label className="text-base font-semibold">Enable Email</Label>
-            <p className="text-xs text-muted-foreground">Allow the agent to check and send email.</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className={`h-8 ${config.enabled ? 'bg-primary/10 text-primary border-primary/20' : 'text-muted-foreground'}`}
-            onClick={() => updateConfig({ enabled: !config.enabled })}
-          >
-            {config.enabled ? 'Enabled' : 'Disabled'}
-          </Button>
-        </div>
-
-        {config.enabled && (
-          <>
             {/* Provider preset */}
             <div className="pt-4 border-t border-border/20 space-y-4">
               <div className="space-y-2">
@@ -349,12 +329,9 @@ export default function EmailTab({ active: isActive }: { active?: boolean }) {
                 </div>
               </div>
             )}
-          </>
-        )}
       </div>
 
       {/* Actions */}
-      {config.enabled && (
         <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 pb-12">
           <Button variant="outline" onClick={handleTest} disabled={testing} className="w-full sm:w-auto">
             {testing ? (
@@ -370,7 +347,6 @@ export default function EmailTab({ active: isActive }: { active?: boolean }) {
             {saving ? 'Saving...' : 'Save Email Settings'}
           </Button>
         </div>
-      )}
     </div>
   )
 }
