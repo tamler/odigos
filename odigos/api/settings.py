@@ -23,7 +23,8 @@ class SettingsUpdate(BaseModel):
     llm_api_key: str | None = None
     api_key: str | None = None
     current_api_key: str | None = None  # Required when changing api_key
-    telegram_bot_token: str | None = None
+    telegram_bot_token: str | None = None  # Legacy — prefer services.telegram
+    services: dict[str, str] | None = None
     llm: dict | None = None
     agent: dict | None = None
     budget: dict | None = None
@@ -155,7 +156,22 @@ async def update_settings_endpoint(
                 yaml_config[section] = {}
             yaml_config[section].update(section_data)
 
-    # Update Telegram bot token via services
+    # Update services (external API keys)
+    if update.services is not None:
+        if "services" not in yaml_config:
+            yaml_config["services"] = {}
+        for name, key in update.services.items():
+            if key == "****":
+                continue  # Skip masked values (no change)
+            if key == "":
+                # Empty string = remove service
+                yaml_config["services"].pop(name, None)
+                settings.services.pop(name, None)
+            else:
+                yaml_config["services"][name] = key
+                settings.services[name] = key
+
+    # Legacy: telegram_bot_token → services.telegram
     if update.telegram_bot_token is not None and update.telegram_bot_token != "****":
         if "services" not in yaml_config:
             yaml_config["services"] = {}
