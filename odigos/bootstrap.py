@@ -517,15 +517,13 @@ class Bootstrapper:
             from odigos.tools.music_gen import GenerateMusicTool
             registry.register(GenerateMusicTool(
                 api_key=kie_api_key,
-                provider=settings.music_generation.provider,
-                task_type=settings.music_generation.task_type,
                 model=settings.music_generation.model,
                 max_poll_seconds=settings.music_generation.max_poll_seconds,
                 db=db,
             ))
             logger.info(
-                "Music generation tool registered (%s)",
-                settings.music_generation.provider,
+                "Music generation tool registered (Suno %s)",
+                settings.music_generation.model,
             )
 
         # Feed publish

@@ -178,9 +178,7 @@ class ImageGenerationConfig(BaseModel):
 
 
 class MusicGenerationConfig(BaseModel):
-    provider: str = "suno"  # Kie.ai provider name (e.g. "suno", "udio")
-    task_type: str = "suno_music"  # Kie.ai taskType for this provider
-    model: str = "V5"  # Provider model version
+    model: str = "V5_5"  # V5_5, V5, V4_5PLUS, V4_5, V4
     max_poll_seconds: int = 180
 
 

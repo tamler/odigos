@@ -33,11 +33,11 @@ class GenerateMusicTool(BaseTool):
         "properties": {
             "prompt": {
                 "type": "string",
-                "description": "Lyrics or description of the music to generate (max 3000 chars)",
+                "description": "Lyrics or description of the music to generate (max 5000 chars)",
             },
             "style": {
                 "type": "string",
-                "description": "Musical style/genre (e.g., 'indie folk, acoustic'). Max 200 chars.",
+                "description": "Musical style/genre (e.g., 'indie folk, acoustic'). Max 1000 chars.",
             },
             "title": {
                 "type": "string",
@@ -62,7 +62,7 @@ class GenerateMusicTool(BaseTool):
         api_key: str,
         provider: str = "suno",
         task_type: str = "suno_music",
-        model: str = "V4_5",
+        model: str = "V5_5",
         max_poll_seconds: int = 180,
         output_dir: str = "",
         db=None,
@@ -80,7 +80,7 @@ class GenerateMusicTool(BaseTool):
         if not prompt:
             return ToolResult(success=False, data="", error="No prompt provided")
 
-        style = (params.get("style") or "").strip()[:200]
+        style = (params.get("style") or "").strip()[:1000]
         title = (params.get("title") or "").strip()[:80]
         instrumental = str(params.get("instrumental", "false")).lower() == "true"
         vocal_gender = params.get("vocal_gender", "")
@@ -181,7 +181,7 @@ class GenerateMusicTool(BaseTool):
         custom_mode = bool(style or title)
 
         payload: dict = {
-            "prompt": prompt[:3000],
+            "prompt": prompt[:5000],
             "model": self._model,
             "customMode": custom_mode,
             "instrumental": instrumental,
