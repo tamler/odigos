@@ -1,5 +1,5 @@
 ---
-priority: 4
+priority: 85
 always_include: false
 ---
 # Routing rules control CONTEXT, not tools.
