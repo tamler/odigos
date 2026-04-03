@@ -73,6 +73,11 @@ class LLMClient(LLMProvider):
         if tools:
             payload["tools"] = tools
 
+        logger.debug(
+            "LLM request: model=%s, tools=%d, messages=%d",
+            model, len(tools) if tools else 0, len(messages),
+        )
+
         url = f"{self.base_url}/chat/completions"
         response = await self._client.post(url, json=payload)
 
@@ -82,6 +87,13 @@ class LLMClient(LLMProvider):
         data = response.json()
         usage = data.get("usage", {})
         message = data["choices"][0]["message"]
+
+        logger.info(
+            "LLM response: model=%s, has_tool_calls=%s, content_preview=%s",
+            model,
+            bool(message.get("tool_calls")),
+            (message.get("content") or "")[:80],
+        )
 
         tool_calls = None
         raw_tool_calls = message.get("tool_calls")
