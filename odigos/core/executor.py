@@ -14,6 +14,13 @@ from odigos.core.context import ContextAssembler, estimate_tokens
 from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
+# Limit concurrent parallel tool execution to prevent resource exhaustion
+_TOOL_SEMAPHORE = asyncio.Semaphore(5)
+
+# Tool results older than this many turns get compressed to save context tokens
+_PRUNE_AFTER_TURNS = 2
+_PRUNED_MAX_CHARS = 200
+
 if TYPE_CHECKING:
     from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetStatus, BudgetTracker
@@ -250,6 +257,9 @@ class Executor:
                     })
                     logger.info("Budget throttle engaged at turn %d, max turns capped at %d", turn, effective_max_turns)
 
+            # Strip internal tags before sending to LLM
+            clean_messages = [{k: v for k, v in m.items() if not k.startswith("_")} for m in messages]
+
             # Call LLM -- use reasoning model for complex queries, downgrade on budget warning
             model_kwargs: dict = {}
             if budget_throttled and self._background_model:
@@ -262,7 +272,7 @@ class Executor:
                 if stream_callback and hasattr(self.provider, "stream_complete"):
                     response = None
                     async for chunk_text, final_response in self.provider.stream_complete(
-                        messages, tools=tools, **model_kwargs
+                        clean_messages, tools=tools, **model_kwargs
                     ):
                         if chunk_text is not None:
                             await stream_callback(chunk_text)
@@ -271,7 +281,7 @@ class Executor:
                     if response is None:
                         raise RuntimeError("Streaming completed without final response")
                 else:
-                    response = await self.provider.complete(messages, tools=tools, **model_kwargs)
+                    response = await self.provider.complete(clean_messages, tools=tools, **model_kwargs)
             except Exception as e:
                 logger.error("LLM call failed at turn %d: %s", turn, e)
                 if last_response is not None:
@@ -334,7 +344,8 @@ class Executor:
             if len(response.tool_calls) > 1:
                 async def _safe_run(tc):
                     try:
-                        return await _run_tool(tc)
+                        async with _TOOL_SEMAPHORE:
+                            return await _run_tool(tc)
                     except Exception as e:
                         logger.error("Parallel tool execution failed for %s: %s", tc.name, e)
                         return tc, f"Error: {e}"
@@ -358,6 +369,20 @@ class Executor:
                 })
                 logger.warning("Stuck detection triggered at turn %d", turn)
             prev_turn_calls = current_turn_calls
+
+            # Context pruning: compress old tool results to save tokens
+            if turn >= _PRUNE_AFTER_TURNS:
+                for msg in messages:
+                    if msg.get("role") == "tool" and len(msg.get("content", "")) > _PRUNED_MAX_CHARS:
+                        # Only prune if this result was NOT from the current turn
+                        if msg.get("_turn") is not None and msg["_turn"] < turn - 1:
+                            original = msg["content"]
+                            msg["content"] = original[:_PRUNED_MAX_CHARS] + " [pruned]"
+
+            # Tag current turn's tool results for future pruning
+            for msg in messages:
+                if msg.get("role") == "tool" and "_turn" not in msg:
+                    msg["_turn"] = turn
 
             # Dual-loop reasoning: verify after plan step updates
             plan_tools = {"decompose_query", "check_plan", "update_plan"}
