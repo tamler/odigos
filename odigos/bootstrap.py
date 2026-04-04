@@ -524,6 +524,7 @@ class Bootstrapper:
 
             from odigos.tools.music_gen import GenerateMusicTool
             registry.register(GenerateMusicTool(
+                http=self.container.http_client,
                 api_key=kie_api_key,
                 model=settings.music_generation.model,
                 max_poll_seconds=settings.music_generation.max_poll_seconds,
