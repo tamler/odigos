@@ -105,6 +105,9 @@ class Agent:
         status_callback: Callable[[str], Awaitable[None]] | None = None,
         stream_callback: Callable[[str], Awaitable[None]] | None = None,
         abort_event: asyncio.Event | None = None,
+        headless: bool = False,
+        plan_context: str = "",
+        background_model: str = "",
     ) -> str:
         """Process an incoming message through the ReAct loop."""
         conversation_id = await self._get_or_create_conversation(message)
@@ -121,6 +124,9 @@ class Agent:
                 context_metadata=context_metadata,
                 stream_callback=stream_callback,
                 abort_event=abort_event,
+                headless=headless,
+                plan_context=plan_context,
+                background_model=background_model,
             )
 
     async def _run(
@@ -132,6 +138,9 @@ class Agent:
         context_metadata: dict | None = None,
         stream_callback: Callable[[str], Awaitable[None]] | None = None,
         abort_event: asyncio.Event | None = None,
+        headless: bool = False,
+        plan_context: str = "",
+        background_model: str = "",
     ) -> str:
         """Execute the agent loop with timeout."""
         await self.db.execute(
@@ -174,6 +183,17 @@ class Agent:
         if status_callback:
             await status_callback("Thinking...")
 
+        # Build headless context if requested (lightweight background mode)
+        headless_messages = None
+        if headless:
+            try:
+                headless_messages = await self.context_assembler.build_headless(
+                    step_description=message.content,
+                    plan_context=plan_context,
+                )
+            except Exception:
+                logger.warning("Headless context build failed, falling back to normal mode", exc_info=True)
+
         try:
             result = await asyncio.wait_for(
                 self.executor.execute(
@@ -183,6 +203,8 @@ class Agent:
                     status_callback=status_callback,
                     context_metadata=context_metadata,
                     stream_callback=stream_callback,
+                    headless_messages=headless_messages,
+                    override_model=background_model,
                 ),
                 timeout=self._run_timeout,
             )

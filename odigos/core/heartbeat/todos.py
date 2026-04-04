@@ -48,7 +48,17 @@ async def execute_todo(hb: "Heartbeat", todo: dict) -> None:
             timestamp=datetime.now(timezone.utc),
             metadata=metadata,
         )
-        result = await hb.agent.handle_message(message)
+        bg_model = getattr(hb, "background_model", "")
+        todo_context = f"Todo task: {description[:200]}"
+        if goal_id:
+            todo_context += f"\nGoal ID: {goal_id}"
+
+        result = await hb.agent.handle_message(
+            message,
+            headless=True,
+            plan_context=todo_context,
+            background_model=bg_model,
+        )
         await hb.goal_store.complete_todo(
             todo_id, result=result[:4000] if result else None
         )

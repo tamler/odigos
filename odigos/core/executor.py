@@ -252,6 +252,8 @@ class Executor:
         status_callback: Callable[[str], Awaitable[None]] | None = None,
         context_metadata: dict | None = None,
         stream_callback: Callable[[str], Awaitable[None]] | None = None,
+        headless_messages: list[dict] | None = None,
+        override_model: str = "",
     ) -> ExecuteResult:
         start_time = time.monotonic()
         tools_used: set[str] = set()
@@ -262,12 +264,15 @@ class Executor:
         self._pending_skill_prompt = None
         self._pending_suggested_actions: list[str] | None = None
 
-        # Build initial context
-        messages = await self.context_assembler.build(
-            conversation_id, message_content,
-            query_analysis=query_analysis,
-            context_metadata=context_metadata,
-        )
+        # Build initial context -- use pre-built headless messages if provided
+        if headless_messages is not None:
+            messages = list(headless_messages)
+        else:
+            messages = await self.context_assembler.build(
+                conversation_id, message_content,
+                query_analysis=query_analysis,
+                context_metadata=context_metadata,
+            )
 
         # JIT tool injection: resolve likely tools from classification, inject schemas
         tools = None
@@ -342,7 +347,9 @@ class Executor:
 
             # Call LLM -- use reasoning model for complex queries, downgrade on budget warning
             model_kwargs: dict = {}
-            if budget_throttled and self._background_model:
+            if override_model:
+                model_kwargs["model"] = override_model
+            elif budget_throttled and self._background_model:
                 model_kwargs["model"] = self._background_model
             elif query_analysis and query_analysis.classification in ("document_query", "complex", "planning"):
                 if self._reasoning_model:
