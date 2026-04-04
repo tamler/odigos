@@ -102,7 +102,72 @@ class GenerateMusicTool(APITool):
                 prompt=prompt, style=style, title=title,
                 instrumental=instrumental, vocal_gender=vocal_gender,
             )
-            tracks = await self._poll_result(task_id)
+            return ToolResult(
+                success=True,
+                status="pending",
+                task_id=task_id,
+                data=f"Music generation started for: {(title or prompt)[:80]}. I'll notify you when it's ready.",
+                side_effect={
+                    "background_task": {
+                        "tool_name": self.name,
+                        "external_task_id": task_id,
+                        "conversation_id": conversation_id,
+                        "arguments": {
+                            "prompt": prompt,
+                            "style": style,
+                            "title": title,
+                            "instrumental": instrumental,
+                            "vocal_gender": vocal_gender,
+                        },
+                    }
+                },
+            )
+        except ToolAPIError as e:
+            logger.error("Music generation API error: %s", e.message)
+            return ToolResult(
+                success=False, data="", error=e.message,
+                failure_category=e.failure_category,
+            )
+        except Exception as e:
+            logger.error("Music generation failed: %s", e)
+            return ToolResult(success=False, data="", error=str(e))
+
+    async def complete_background(self, task_id: str, conversation_id: str) -> ToolResult:
+        """Poll once and complete if ready. Called by heartbeat."""
+        try:
+            status, result = await self.poll_once(
+                f"{KIE_BASE}/generate/record-info",
+                api_key=self._api_key,
+                params={"taskId": task_id},
+                success_check=lambda d: (
+                    d.get("code") == 200
+                    and (d.get("data", {}).get("status") or d.get("data", {}).get("state", ""))
+                    == "SUCCESS"
+                ),
+                failure_check=lambda d: (
+                    d.get("code") == 200
+                    and (d.get("data", {}).get("status") or d.get("data", {}).get("state", ""))
+                    in FAILURE_STATES
+                ),
+                extract=lambda d: d.get("data", {}).get("response", {}),
+            )
+
+            if status == "pending":
+                return ToolResult(success=True, status="pending", data="Still processing...")
+
+            if status == "failed":
+                return ToolResult(
+                    success=False, data="", error="Music generation failed",
+                    failure_category="transient",
+                )
+
+            # status == "done" — download and store artifacts
+            tracks = self._extract_tracks(result)
+            if not tracks:
+                return ToolResult(
+                    success=False, data="",
+                    error="No audio tracks returned from generation",
+                )
 
             artifacts = []
             for i, track in enumerate(tracks):
@@ -111,7 +176,7 @@ class GenerateMusicTool(APITool):
                     continue
 
                 track_id = uuid.uuid4().hex
-                track_title = track.get("title") or title or f"track_{i + 1}"
+                track_title = track.get("title") or f"track_{i + 1}"
                 safe_title = "".join(
                     c if c.isalnum() or c in "-_ " else ""
                     for c in track_title
@@ -160,14 +225,8 @@ class GenerateMusicTool(APITool):
                 data="Generated tracks: " + ", ".join(summary_parts),
                 side_effect={"artifacts": artifacts},
             )
-        except ToolAPIError as e:
-            logger.error("Music generation API error: %s", e.message)
-            return ToolResult(
-                success=False, data="", error=e.message,
-                failure_category=e.failure_category,
-            )
         except Exception as e:
-            logger.error("Music generation failed: %s", e)
+            logger.error("Background music completion failed: %s", e)
             return ToolResult(success=False, data="", error=str(e))
 
     async def _create_task(
