@@ -19,6 +19,44 @@ from odigos.personality.prompt_builder import build_system_prompt
 
 _context_filter = ContentFilter()
 
+_FALLBACK_TOOLS = {
+    "simple": [],
+    "standard": ["search_web", "search_documents"],
+    "document_query": ["search_documents", "read_file"],
+    "complex": ["search_web", "search_documents", "run_code"],
+    "planning": ["decompose_query"],
+    "code": ["run_code", "create_file"],
+    "creative": ["generate_image", "generate_music"],
+    "email": ["check_email", "send_email", "search_email"],
+}
+
+_CLASS_CATEGORIES = {
+    "standard": ["search"],
+    "document_query": ["search", "analysis"],
+    "complex": ["search", "code"],
+    "creative": ["create", "media"],
+    "email": ["communication"],
+    "code": ["code"],
+}
+
+
+async def _get_likely_tools(db, classification: str) -> list[str]:
+    """Get tools historically used for this classification type from query_log."""
+    rows = await db.fetch_all(
+        "SELECT tools_used, COUNT(*) as cnt FROM query_log "
+        "WHERE classification = ? AND tools_used IS NOT NULL AND tools_used != '' "
+        "GROUP BY tools_used ORDER BY cnt DESC LIMIT 5",
+        (classification,),
+    )
+    tools: set[str] = set()
+    for row in rows:
+        raw = row["tools_used"]
+        if raw.startswith("["):
+            tools.update(json.loads(raw))
+        else:
+            tools.update(t.strip() for t in raw.split(",") if t.strip())
+    return list(tools)
+
 if TYPE_CHECKING:
     from odigos.core.checkpoint import CheckpointManager
     from odigos.core.classifier import QueryAnalysis
@@ -236,16 +274,51 @@ class ContextAssembler:
             if not self.db or skip_experiences:
                 return ""
             try:
-                exp_rows = await self.db.fetch_all(
-                    "SELECT tool_name, lesson FROM agent_experiences "
-                    "WHERE times_applied > 0 OR success = 0 "
-                    "ORDER BY updated_at DESC LIMIT 10"
+                classification_type = (
+                    query_analysis.classification if query_analysis else "standard"
                 )
-                if exp_rows:
-                    lines = ["## Tactical experience (learned from past interactions)"]
-                    for row in exp_rows:
-                        lines.append(f"- {row['tool_name']}: {row['lesson']}")
-                    return "\n".join(lines)
+
+                # Tier 1: Dynamic lookup from query_log history
+                tool_names = await _get_likely_tools(self.db, classification_type)
+
+                # Tier 2: Static fallback map
+                if not tool_names:
+                    tool_names = _FALLBACK_TOOLS.get(classification_type, [])
+
+                # Tier 3: Category-based fallback from tool registry
+                if not tool_names:
+                    cats = _CLASS_CATEGORIES.get(classification_type, [])
+                    if cats and hasattr(self, 'tool_registry') and self.tool_registry:
+                        tool_names = [
+                            t.name for t in self.tool_registry.list()
+                            if t.category in cats
+                        ]
+
+                if tool_names:
+                    placeholders = ",".join("?" * len(tool_names))
+                    exp_rows = await self.db.fetch_all(
+                        f"SELECT tool_name, lesson, success, confidence "
+                        f"FROM agent_experiences "
+                        f"WHERE tool_name IN ({placeholders}) "
+                        f"ORDER BY confidence DESC, updated_at DESC LIMIT 5",
+                        tool_names,
+                    )
+                else:
+                    exp_rows = await self.db.fetch_all(
+                        "SELECT tool_name, lesson, success, confidence "
+                        "FROM agent_experiences "
+                        "WHERE confidence >= 0.7 OR success = 0 "
+                        "ORDER BY confidence DESC, updated_at DESC LIMIT 5"
+                    )
+
+                if not exp_rows:
+                    return ""
+
+                lines = ["## Tactical experience (learned from past interactions)"]
+                for row in exp_rows:
+                    prefix = "Warning" if not row["success"] else "Tip"
+                    lines.append(f"- [{prefix}] {row['tool_name']}: {row['lesson']}")
+                return "\n".join(lines)
             except Exception:
                 logger.debug("Could not load experiences", exc_info=True)
             return ""
