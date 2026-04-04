@@ -17,6 +17,20 @@ warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 err()   { echo -e "${RED}[x]${NC} $1"; }
 bold()  { echo -e "${BOLD}$1${NC}"; }
 
+# Set a key=value in .env (works on macOS and Linux, handles missing keys)
+set_env() {
+    local key="$1" val="$2" file="${3:-.env}"
+    if grep -q "^${key}=" "$file" 2>/dev/null; then
+        if [[ "$OSTYPE" == darwin* ]]; then
+            sed -i '' "s|^${key}=.*|${key}=${val}|" "$file"
+        else
+            sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+        fi
+    else
+        echo "${key}=${val}" >> "$file"
+    fi
+}
+
 echo ""
 bold "=== Odigos Bare-Metal Setup ==="
 echo ""
@@ -60,6 +74,11 @@ info "Installing Python dependencies (this takes a minute on first run)..."
 uv sync --quiet 2>&1 || uv sync
 info "Dependencies installed"
 
+# ── Download NLTK data (TextBlob) ───────────────────────────────────
+info "Downloading NLTK data for text analysis..."
+uv run python3 -m textblob.download_corpora lite 2>&1 | tail -1 || true
+info "NLTK data ready"
+
 # ── Download embedding model ────────────────────────────────────────
 info "Pre-downloading embedding model (one-time, ~500MB)..."
 uv run python3 -c "
@@ -95,11 +114,7 @@ fi
 # ── Generate API_KEY if not set ─────────────────────────────────────
 if ! grep -q "^API_KEY=.\+" .env 2>/dev/null; then
     dashboard_key=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-    if grep -q "^API_KEY=" .env 2>/dev/null; then
-        sed -i.bak "s/^API_KEY=.*/API_KEY=${dashboard_key}/" .env && rm -f .env.bak
-    else
-        echo "API_KEY=${dashboard_key}" >> .env
-    fi
+    set_env "API_KEY" "$dashboard_key"
     info "Generated API_KEY"
 else
     dashboard_key=$(grep "^API_KEY=" .env | cut -d= -f2-)
@@ -167,10 +182,10 @@ else
         done
     fi
 
-    sed -i.bak "s|^LLM_API_KEY=.*|LLM_API_KEY=${llm_key}|" .env && rm -f .env.bak
-    sed -i.bak "s|^LLM_BASE_URL=.*|LLM_BASE_URL=${base_url}|" .env && rm -f .env.bak
-    sed -i.bak "s|^LLM_DEFAULT_MODEL=.*|LLM_DEFAULT_MODEL=${default_model}|" .env && rm -f .env.bak
-    sed -i.bak "s|^LLM_FALLBACK_MODEL=.*|LLM_FALLBACK_MODEL=${fallback_model}|" .env && rm -f .env.bak
+    set_env "LLM_API_KEY" "$llm_key"
+    set_env "LLM_BASE_URL" "$base_url"
+    set_env "LLM_DEFAULT_MODEL" "$default_model"
+    set_env "LLM_FALLBACK_MODEL" "$fallback_model"
     info "Updated .env with LLM settings"
 
     # ── Agent Name ────────────────────────────────────────────────────
@@ -192,11 +207,7 @@ else
             warn "Groq API key is required for voice STT."
             read -rp "  Enter your Groq API key: " groq_key
         done
-        if grep -q "^GROQ_API_KEY=" .env 2>/dev/null; then
-            sed -i.bak "s|^GROQ_API_KEY=.*|GROQ_API_KEY=${groq_key}|" .env && rm -f .env.bak
-        else
-            echo "GROQ_API_KEY=${groq_key}" >> .env
-        fi
+        set_env "GROQ_API_KEY" "$groq_key"
         info "Added GROQ_API_KEY to .env"
         voice_stt="groq"
         voice_tts="edge"
@@ -295,6 +306,8 @@ if [[ "$create_account" =~ ^[Yy]$ ]]; then
 {"username": "$owner_username", "password": "$owner_password", "must_change_password": false}
 SEEDEOF
     info "Account will be created on first startup"
+    warn "Note: data/seed_user.json contains your password in plaintext."
+    warn "It will be consumed and deleted on first startup."
 fi
 
 # ── Systemd service (Linux only) ────────────────────────────────────
