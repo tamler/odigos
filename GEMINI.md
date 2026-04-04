@@ -10,7 +10,11 @@ Frontend engineer. You own the dashboard UI at `dashboard/`. Claude handles back
 
 ## Current Assignment
 
-Read `docs/GEMINI-HANDOFF.md` for your full task list, architecture reference, and API documentation. Start with tasks G1-G3 (bug fixes), then G4 (mobile polish), then G5 (cowork layout).
+Check for handoff docs in this order:
+1. `GEMINI-BACKGROUND-TASKS-HANDOFF.md` (background task UI)
+2. `GEMINI-SERVICES-HANDOFF.md` (services config)
+3. `GEMINI-POLISH-HANDOFF.md` (polish tasks)
+4. `docs/GEMINI-HANDOFF.md` (main task list)
 
 ## How We Work
 
@@ -32,18 +36,71 @@ Read `docs/GEMINI-HANDOFF.md` for your full task list, architecture reference, a
 - Primary responsive breakpoint is `lg` (1024px)
 - API responses are flat objects (not nested under a key)
 
+## Frontend Architecture (Recently Refactored)
+
+The frontend was decomposed for maintainability. Know this structure:
+
+### Layouts (AppLayout decomposed)
+```
+dashboard/src/layouts/
+├── AppLayout.tsx              -- Layout shell (~200 lines), hook calls + render
+├── AppSidebar.tsx             -- Navigation sidebar (memoized)
+└── hooks/
+    ├── useWebSocketHandler.ts -- WebSocket connection + all message routing
+    ├── useConversationActions.ts -- CRUD handlers (new, select, rename, delete, export)
+    ├── useRouteState.ts       -- Route detection flags (isSettings, isNotebook, etc.)
+    └── useKeyboardShortcuts.ts -- Cmd+K, Cmd+N, Escape
+```
+
+### Chat Components (ChatPanel decomposed)
+```
+dashboard/src/components/
+├── ChatPanel.tsx              -- Orchestrator (~400 lines), state + effects + handlers
+└── chat/
+    ├── MessageDisplay.tsx     -- Message list, streaming, thinking, history
+    ├── ChatInputArea.tsx      -- Textarea, file uploads, action buttons, background task indicator
+    ├── SuggestedActions.tsx   -- Action chips
+    ├── ArtifactGallery.tsx    -- Image/audio artifact cards
+    ├── WelcomeView.tsx        -- Empty state with prompts
+    └── VoiceModePanel.tsx     -- Voice mode overlay
+```
+
+### Zustand Stores
+```
+dashboard/src/stores/
+├── uiStore.ts           -- Sidebar, mobile, focus mode, artifacts, backgroundTasks
+├── chatStore.ts         -- Messages, streaming, thinking, status
+└── conversationStore.ts -- Conversations, notebooks, boards, images, search
+```
+
+### WebSocket Message Types
+| Type | Direction | Purpose |
+|------|-----------|---------|
+| `chat_chunk` | Server→Client | Streaming response token |
+| `chat_response` | Server→Client | Complete response with metadata |
+| `stream_end` | Server→Client | Streaming finished |
+| `task_started` | Server→Client | Background tool initiated |
+| `task_completed` | Server→Client | Background tool finished (artifact, result) |
+| `title_updated` | Server→Client | Conversation auto-title |
+| `notification` | Server→Client | Push notification |
+| `status` | Server→Client | Status text (e.g., "Searching...") |
+| `queue_update` | Server→Client | Queue depth |
+
 ## Key Files
 
 | File | What |
 |---|---|
-| `docs/GEMINI-HANDOFF.md` | Your task list and full reference |
+| `docs/GEMINI-HANDOFF.md` | Main task list and full reference |
 | `dashboard/src/App.tsx` | Routes |
-| `dashboard/src/layouts/AppLayout.tsx` | Layout, sidebar, WebSocket, navigation |
-| `dashboard/src/pages/ChatPage.tsx` | Main chat interface |
-| `dashboard/src/lib/api.ts` | HTTP helpers |
-| `dashboard/src/lib/ws.ts` | WebSocket client |
-| `dashboard/src/components/ui/` | All UI components |
+| `dashboard/src/layouts/AppLayout.tsx` | Layout shell (slim -- logic in hooks/) |
+| `dashboard/src/layouts/hooks/useWebSocketHandler.ts` | WebSocket message routing |
+| `dashboard/src/components/ChatPanel.tsx` | Chat orchestrator (slim -- UI in chat/) |
+| `dashboard/src/components/chat/MessageDisplay.tsx` | Message rendering |
+| `dashboard/src/components/chat/ChatInputArea.tsx` | Input area + background task indicator |
+| `dashboard/src/stores/uiStore.ts` | Global UI state including backgroundTasks |
+| `dashboard/src/lib/api.ts` | HTTP helpers (get/post/patch/del) |
+| `dashboard/src/components/ui/` | shadcn/ui components |
 
 ## Tech Stack
 
-React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui, react-router-dom v7, Recharts, lucide-react, Sonner
+React 19, TypeScript, Vite, Tailwind CSS v4, shadcn/ui, react-router-dom v7, Zustand, Recharts, lucide-react, Sonner
