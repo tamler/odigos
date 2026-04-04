@@ -690,6 +690,95 @@ class ContextAssembler:
 
         return messages
 
+    async def build_headless(
+        self,
+        step_description: str,
+        plan_context: str = "",
+    ) -> list[dict]:
+        """Build a lightweight context for headless/background execution.
+
+        Skips conversation history, page context, recovery briefing, skill catalog,
+        and memory index. Includes RAG recall, experiences, and user profile.
+        """
+        async def _memory_context():
+            if not self.memory_manager:
+                return ""
+            try:
+                return await self.memory_manager.recall(step_description)
+            except Exception:
+                logger.debug("Headless memory recall failed", exc_info=True)
+                return ""
+
+        async def _experiences():
+            if not self.db:
+                return ""
+            try:
+                exp_rows = await self.db.fetch_all(
+                    "SELECT tool_name, lesson, success, confidence "
+                    "FROM agent_experiences "
+                    "WHERE confidence >= 0.7 OR success = 0 "
+                    "ORDER BY confidence DESC, updated_at DESC LIMIT 5"
+                )
+                if not exp_rows:
+                    return ""
+                lines = ["## Tactical experience (learned from past interactions)"]
+                for row in exp_rows:
+                    prefix = "Warning" if not row["success"] else "Tip"
+                    lines.append(f"- [{prefix}] {row['tool_name']}: {row['lesson']}")
+                return "\n".join(lines)
+            except Exception:
+                logger.debug("Headless experiences failed", exc_info=True)
+                return ""
+
+        async def _user_profile():
+            if not self.db:
+                return ""
+            parts = []
+            try:
+                profile_row = await get_user_profile(self.db)
+                if profile_row and profile_row.get("summary"):
+                    lines = ["## About your user"]
+                    if profile_row["summary"]:
+                        lines.append(profile_row["summary"])
+                    parts.append("\n".join(lines))
+            except Exception:
+                logger.debug("Headless profile failed", exc_info=True)
+            try:
+                v2_row = await self.db.fetch_one(
+                    "SELECT profile_json FROM user_profile_v2 WHERE id = 'owner'"
+                )
+                if v2_row and v2_row["profile_json"]:
+                    profile = UserProfile.from_json(v2_row["profile_json"])
+                    parts.append(format_profile_for_context(profile))
+            except Exception:
+                logger.debug("Headless structured profile failed", exc_info=True)
+            return "\n\n".join(parts)
+
+        async def _sections():
+            if self.checkpoint_manager:
+                return await self.checkpoint_manager.get_working_sections()
+            return self.fallback_registry.load_all()
+
+        # Run context queries in parallel
+        memory_context, experiences_section, user_profile, sections = await asyncio.gather(
+            _memory_context(), _experiences(), _user_profile(), _sections(),
+        )
+
+        system_prompt = build_system_prompt(
+            sections=sections,
+            memory_context=memory_context,
+            agent_name=self.agent_name,
+            experiences=experiences_section,
+            user_profile=user_profile,
+            active_plan=f"## Current plan context\n{plan_context}" if plan_context else "",
+            concise_mode=True,
+        )
+
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": step_description},
+        ]
+
     def _trim_to_budget(self, messages: list[dict], max_tokens: int) -> list[dict]:
         """Trim summary messages first, then history (oldest first) to fit within token budget."""
         total = sum(estimate_tokens(m["content"]) for m in messages)

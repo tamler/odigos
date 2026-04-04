@@ -19,6 +19,44 @@ _MAX_PLAN_RETRIES: int = 3
 _FAIL_MARKERS = ("couldn't process", "having trouble reaching", "ran out of time", "went wrong")
 
 
+async def build_plan_summary(db, plan_id: str) -> str:
+    """Build a compact summary of a plan for headless context (~200-400 tokens)."""
+    try:
+        row = await db.fetch_one(
+            "SELECT goal, steps FROM task_plans WHERE id = ?", (plan_id,)
+        )
+        if not row:
+            return ""
+
+        goal = row.get("goal") or "No goal specified"
+        steps = json.loads(row["steps"])
+
+        done_steps = [s for s in steps if s.get("status") == "done"]
+        pending_steps = [s for s in steps if s.get("status") in (None, "pending", "in_progress")]
+
+        lines = [f"Goal: {goal}"]
+        lines.append(f"Progress: {len(done_steps)}/{len(steps)} steps complete")
+
+        # Last 5 completed steps with result previews
+        if done_steps:
+            lines.append("\nCompleted:")
+            for s in done_steps[-5:]:
+                result_preview = (s.get("result") or "")[:80]
+                suffix = f" -> {result_preview}" if result_preview else ""
+                lines.append(f"  Step {s.get('step', '?')}: {s.get('task', '')[:100]}{suffix}")
+
+        # Current/next pending steps
+        if pending_steps:
+            lines.append("\nRemaining:")
+            for s in pending_steps[:3]:
+                lines.append(f"  Step {s.get('step', '?')}: {s.get('task', '')[:100]}")
+
+        return "\n".join(lines)
+    except Exception:
+        logger.debug("Could not build plan summary", exc_info=True)
+        return ""
+
+
 async def work_in_progress_plans(hb: "Heartbeat") -> bool:
     """Phase 4e: Pick up in-progress plans and execute the next pending step."""
     if hb._plan_fail_count >= _MAX_PLAN_RETRIES:
@@ -103,7 +141,16 @@ async def work_in_progress_plans(hb: "Heartbeat") -> bool:
             (json.dumps(steps), datetime.now(timezone.utc).isoformat(), plan_id),
         )
 
-        result = await hb.agent.handle_message(message)
+        # Build plan summary for headless context
+        plan_summary = await build_plan_summary(hb.db, plan_id)
+        bg_model = getattr(hb, "background_model", "")
+
+        result = await hb.agent.handle_message(
+            message,
+            headless=True,
+            plan_context=plan_summary,
+            background_model=bg_model,
+        )
 
         if result and any(m in result.lower() for m in _FAIL_MARKERS):
             hb._plan_fail_count += 1
