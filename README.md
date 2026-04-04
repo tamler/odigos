@@ -175,13 +175,15 @@ Odigos improves itself without human intervention. The evolution engine runs a c
 
 ### Smart Tool Registry
 
-The agent has 45+ tools but never presents them all at once. Research shows LLM tool selection degrades above 15-20 tools in context. The registry uses a three-layer filtering system:
+The agent has 45+ tools but never presents them all at once. Research shows LLM tool selection degrades above 15-20 tools in context. The registry uses a three-layer approach:
 
-1. **Always-available set** -- 6 core tools (web search, memory, planning, tool discovery) are present in every turn regardless of query type.
-2. **Classification-based filtering** -- each query classification (simple, standard, complex, planning, document_query) maps to relevant tool categories. Simple queries see ~8 tools, not 45.
-3. **Progressive discovery** -- the `find_tools` meta-tool lets the agent search for specialized capabilities by description ("send email", "create kanban card"). Matching tools are returned with descriptions so the agent knows what's available without loading every schema.
+1. **JIT schema injection** -- When a query arrives, the classifier determines its type. The executor looks up which tools were historically used for this type (from the query log) and injects their full schemas into the LLM call. The agent gets the most likely tools ready to use immediately, saving a round trip.
+2. **Progressive discovery** -- the `find_tools` meta-tool is always included as a fallback. If the JIT-injected tools don't cover the query, the agent searches for specialized capabilities by description ("send email", "create kanban card"). Matching tools are returned with descriptions so the agent knows what's available without loading every schema.
+3. **Dynamic adaptation** -- As usage patterns change (new tools added, user behavior shifts), the JIT injection adapts automatically. No static mapping to maintain.
 
-Every tool declares a category (search, create, productivity, communication, code, memory, analysis, media) and follows a strict description format: what it does, when to use it, when NOT to use it. Parameter schemas use enum constraints wherever values are finite, reducing parameter hallucination by 60% (per Gorilla research). Tool results over 4000 characters are truncated to preserve context for reasoning.
+Tools are organized in a type hierarchy: `APITool` (external HTTP APIs with shared connection pooling, polling, and retry), `CLITool` (subprocess execution with input hardening and JSON-first output), and local tools (code, file, notebook). All tools share a standard contract: category, description, parameter schema with enum constraints (reducing parameter hallucination by 60% per Gorilla research), and execution policy (retry counts, timeouts, cost limits). The executor validates all parameters against the JSON schema before execution, catching hallucinated values in 1ms instead of waiting for an API error.
+
+Tool results are filtered before reaching the context window. Each tool defines a `format_for_context()` method to summarize its output. For tools that don't override this, an automatic distillation heuristic extracts signal (errors, key results) from verbose output, preventing context rot from chatty tools.
 
 ### Tool Execution Contracts
 
@@ -191,9 +193,13 @@ Every tool declares a category (search, create, productivity, communication, cod
 
 Every tool has an execution contract that defines retry behavior, timeouts, and failure handling. When a tool fails, the error is classified into a failure taxonomy (transient, input, permission, unavailable, unknown) with per-category recovery strategies. Transient failures (timeouts, rate limits, connection resets) are retried transparently with exponential backoff -- the LLM never sees the retry. Input and permission errors surface immediately. This makes the agent resilient to flaky APIs without wasting tool turns.
 
+### Background Tool Execution
+
+Long-running tools (image generation, music generation) run in the background instead of blocking the conversation. When the agent calls `generate_image`, the tool submits the API request, returns immediately with a "pending" status, and the conversation continues. The heartbeat loop polls for completion every 30 seconds. When the result is ready, the artifact is downloaded, a system message is injected into the conversation ("Image generated: sunset.png"), and a WebSocket notification pushes to the frontend. The user gets a toast and the result appears in chat -- even if they've moved to a different conversation.
+
 ### Autonomous Behavior
 
-The agent works proactively during idle time. When no user messages are pending, the heartbeat picks up in-progress plans and executes the next pending step autonomously. Every tool call carries goal ancestry -- a reference to the user goal or plan step that motivated it -- so the evaluator scores actions against the original intent, not just keyword overlap. Completed autonomous work is logged in a session table and injected into context for the next cycle, so the agent picks up where it left off.
+The agent works proactively during idle time. When no user messages are pending, the heartbeat picks up in-progress plans and executes the next pending step autonomously using headless mode -- a lightweight execution path that replaces full conversation history with a plan context summary (goal, completed steps, current step) while keeping RAG, experiences, and entity knowledge. This saves ~67% of tokens on background work compared to replaying the full chat history. Every tool call carries goal ancestry -- a reference to the user goal or plan step that motivated it -- so the evaluator scores actions against the original intent, not just keyword overlap. Completed autonomous work is logged in a session table and injected into context for the next cycle, so the agent picks up where it left off.
 
 Near budget limits, the agent throttles gracefully: it switches to the background model, caps remaining tool turns, and injects a conciseness instruction. This is a gradual degradation, not a hard wall.
 
@@ -261,11 +267,11 @@ When the user says "remember that I prefer Python" or "I'm allergic to shellfish
 ### Layer 4: User Profile (Dreaming)
 During idle heartbeat cycles, the agent "dreams" -- analyzing recent conversations to build a structured user profile. This captures communication style, expertise areas, preferences, and engagement patterns. The profile is built automatically without the user explicitly stating anything. Inspired by [Honcho](https://github.com/plastic-labs/honcho) and [ChatGPT's memory architecture](https://manthanguptaa.in/posts/chatgpt_memory/).
 
-### Layer 5: Tactical Experiences
-The agent learns from its own tool usage. When a tool call succeeds or fails, the experience is stored with the context, outcome, and a lesson. These experiences are injected into future conversations so the agent avoids repeating mistakes. Inspired by [XSkill](https://arxiv.org/html/2603.12056v2).
+### Layer 5: Tactical Experiences (XSkill)
+The agent learns from its own tool usage. When a tool call succeeds or fails, the experience is stored with the context, outcome, and a lesson. A confidence score tracks reliability -- successes boost confidence (+0.05), retryable failures erode it (-0.1). Experiences are surfaced via dynamic tool mapping: the system looks up which tools were historically used for the current query type and retrieves relevant lessons. Three fallback tiers ensure coverage: query log history, static classification map, and tool category matching. Stale experiences (30 days unused) and low-confidence lessons (<0.2) are automatically pruned. Inspired by [XSkill](https://arxiv.org/html/2603.12056v2).
 
 ### Entity Graph
-Spanning all layers, an entity graph tracks people, tools, documents, and concepts mentioned across conversations. Entities are linked with relationships and confidence scores. The graph enables the agent to answer "who is Sarah?" or "what documents mention the Q3 budget?" by traversing connections rather than relying solely on keyword matching.
+Spanning all layers, an entity graph tracks people, tools, documents, and concepts mentioned across conversations. Entities are linked with typed relationships and confidence scores. The graph supports multi-hop traversal -- when the agent encounters "The Q3 Project," it pulls in related entities like "Sarah (Lead)" and "Budget.docx" automatically via 2-hop graph traversal, even if they aren't in the same text chunk. Relationship paths are shown in context (`-> works_on -> Odigos -> uses -> SQLite`) so the agent can trace reasoning chains.
 
 ### Active Reasoning Critique
 Inspired by [AREW](https://arxiv.org/abs/2603.12109), the evaluator scores two dimensions after every response: **Action Selection** (did the agent use appropriate tools to gather information?) and **Belief Tracking** (did the agent actually use the information it retrieved?). User sentiment is tracked on every message via TextBlob NLP -- polarity and subjectivity feed directly into the evolution engine. These signals feed into the strategist, which proposes improvements when the agent shows patterns of ignoring its own memory or tools.
@@ -285,8 +291,9 @@ One process. One database. No microservices.
 - **Unified HTTP client** (`api.ts`) -- all frontend HTTP through one module with CSRF
 - **Unified LLM wrapper** (`call_llm`) -- standard retry, logging, and cost tracking
 - **Single-task prompts** -- each LLM call does one thing. Entity extraction, correction detection, classification, evaluation, and profiling are separate calls. No multi-task prompts that mix response generation with metadata extraction.
-- **Background processing** -- entity extraction and correction detection run as fire-and-forget tasks after each response, using the background model
-- **Heartbeat loop** for goal tracking, evolution trials, proactive plan execution, nudges, follow-up detection, idle research, auto-updates, storage quota monitoring
+- **Background processing** -- entity extraction and correction detection run as fire-and-forget tasks after each response, using the background model. Long-running tools (image/music generation) execute asynchronously via heartbeat polling.
+- **Heartbeat loop** -- modular 9-file package (orchestrator, scheduled, todos, plans, peers, idle, profiling, maintenance, background) for goal tracking, evolution trials, proactive plan execution, background task polling, nudges, follow-up detection, idle research, auto-updates, storage quota monitoring. Headless execution mode uses plan context summaries instead of full chat history (~67% token savings).
+- **Tool type hierarchy** -- `APITool` (shared HTTP client, polling, retry), `CLITool` (subprocess, input hardening, JSON-first), and local tools. Parameter validation via jsonschema. Observation filtering via `format_for_context()` with auto-distill fallback.
 - **Failure taxonomy** classifies tool errors (transient, input, permission, unavailable) with per-category retry strategies
 - **Parallel context assembly** -- 13 context queries run concurrently via asyncio.gather
 - **WebRTC VAD** -- server-side voice activity detection prevents sending silence to Whisper
