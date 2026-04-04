@@ -164,6 +164,52 @@ class EntityGraph:
             (entity_id, entity_id, entity_id, depth, entity_id),
         )
 
+    async def traverse_with_paths(self, entity_id: str, depth: int = 2) -> list[dict]:
+        """Multi-hop traversal returning entities with relationship paths.
+
+        Returns dicts with entity fields plus:
+        - hop: distance from seed (1 = direct neighbor, 2 = two hops away)
+        - relationship: the edge relationship type (e.g., 'works_on')
+        - from_name: name of the entity this was reached from
+        """
+        return await self.db.fetch_all(
+            """
+            WITH RECURSIVE paths(entity_id, hop, relationship, from_id) AS (
+                -- Seed: direct neighbors with their edge info
+                SELECT
+                    CASE WHEN edges.source_id = ? THEN edges.target_id ELSE edges.source_id END,
+                    1,
+                    edges.relationship,
+                    ?
+                FROM edges
+                WHERE edges.source_id = ? OR edges.target_id = ?
+
+                UNION
+
+                -- Recurse: next hop
+                SELECT
+                    CASE WHEN edges.source_id = paths.entity_id THEN edges.target_id ELSE edges.source_id END,
+                    paths.hop + 1,
+                    edges.relationship,
+                    paths.entity_id
+                FROM edges
+                JOIN paths ON (edges.source_id = paths.entity_id OR edges.target_id = paths.entity_id)
+                WHERE paths.hop < ?
+            )
+            SELECT DISTINCT
+                e.*,
+                p.hop,
+                p.relationship,
+                f.name AS from_name
+            FROM paths p
+            JOIN entities e ON e.id = p.entity_id
+            JOIN entities f ON f.id = p.from_id
+            WHERE e.id != ? AND e.status = 'active'
+            ORDER BY p.hop ASC, e.confidence DESC
+            """,
+            (entity_id, entity_id, entity_id, entity_id, depth, entity_id),
+        )
+
     async def merge_entities(self, keep_id: str, remove_id: str) -> None:
         """Merge remove_id into keep_id: reassign edges, combine aliases, delete duplicate."""
         keep = await self.get_entity(keep_id)
