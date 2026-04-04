@@ -40,6 +40,13 @@ class Bootstrapper:
         self.container.env_path = ".env"
         self.container.upload_dir = str(FILES_DIR)
 
+        # Shared HTTP client for API tools
+        import httpx
+        self.container.http_client = httpx.AsyncClient(
+            timeout=30,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+
         # Auto-generate API key if not configured
         if not self.settings.api_key:
             import secrets

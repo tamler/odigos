@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import httpx
     from odigos.channels.base import ChannelRegistry
     from odigos.config import Settings
     from odigos.core.agent import Agent
@@ -61,6 +62,7 @@ class Container:
 
     # Phase 5: Tools
     tool_registry: ToolRegistry | None = None
+    http_client: httpx.AsyncClient | None = None
 
     # Phase 6: Plugins & Channels
     plugin_manager: PluginManager | None = None
@@ -127,6 +129,8 @@ class Container:
             await self.template_index.close()
         if self._scraper:
             await self._scraper.close()
+        if self.http_client:
+            await self.http_client.aclose()
         if self.embeddings:
             await self.embeddings.close()
         if self.llm_provider:
