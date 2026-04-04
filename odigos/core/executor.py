@@ -10,9 +10,12 @@ from datetime import datetime, timezone
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
+import jsonschema
+
 from odigos.core.context import ContextAssembler, estimate_tokens
 from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
+from odigos.tools.base import auto_distill
 
 # Limit concurrent parallel tool execution to prevent resource exhaustion
 _TOOL_SEMAPHORE = asyncio.Semaphore(5)
@@ -121,6 +124,32 @@ _GENERIC_STATUSES = [
 def _friendly_tool_status(tool_name: str) -> str:
     options = _TOOL_STATUS_MAP.get(tool_name, _GENERIC_STATUSES)
     return random.choice(options)
+
+
+def _coerce_and_validate(params: dict, schema: dict) -> dict:
+    """Coerce LLM string params to schema types, then validate constraints."""
+    properties = schema.get("properties", {})
+    coerced = dict(params)
+
+    for key, spec in properties.items():
+        if key not in coerced:
+            continue
+        val = coerced[key]
+        if spec.get("type") == "boolean":
+            coerced[key] = str(val).lower() == "true"
+        elif spec.get("type") == "integer":
+            try:
+                coerced[key] = int(val)
+            except (ValueError, TypeError):
+                pass
+        elif spec.get("type") == "number":
+            try:
+                coerced[key] = float(val)
+            except (ValueError, TypeError):
+                pass
+
+    jsonschema.validate(coerced, schema)
+    return coerced
 
 
 @dataclass
@@ -560,6 +589,20 @@ class Executor:
 
         contract = getattr(tool, "contract", None) or ToolContract()
         args = {**tool_call.arguments, "_conversation_id": conversation_id, "_goal_id": goal_id}
+
+        # Parameter validation: strip internal params, coerce types, validate schema
+        internal = {k: args.pop(k) for k in list(args) if k.startswith("_")}
+        try:
+            args = _coerce_and_validate(args, tool.parameters_schema)
+        except jsonschema.ValidationError as e:
+            logger.warning("Tool %s: invalid params: %s", tool_call.name, e.message)
+            await self._emit_trace(
+                conversation_id, "tool_result",
+                {"tool": tool_call.name, "success": False, "error": f"Invalid parameters: {e.message}"},
+            )
+            return f"Error: Invalid parameters for {tool_call.name}: {e.message}"
+        args.update(internal)
+
         attempt = 0
 
         while True:
@@ -662,7 +705,10 @@ class Executor:
                     logger.debug("Could not log tool error", exc_info=True)
 
             if result.success:
-                return result.data
+                display = tool.format_for_context(result)
+                if display == result.data and len(display) > 2000:
+                    display = auto_distill(display)
+                return display
             return f"Error: {result.error}"
 
     async def _persist_plan(
