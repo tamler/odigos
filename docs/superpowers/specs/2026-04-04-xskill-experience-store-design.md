@@ -84,6 +84,20 @@ async def _experiences():
     tool_names = await _get_likely_tools(self.db, classification_type)
     if not tool_names:
         tool_names = _FALLBACK_TOOLS.get(classification_type, [])
+    if not tool_names:
+        # Third-tier fallback: get tools by category from the registry
+        # Maps classification to tool categories for broad matching
+        _CLASS_CATEGORIES = {
+            "standard": ["search"], "document_query": ["search", "analysis"],
+            "complex": ["search", "code"], "creative": ["create", "media"],
+            "email": ["communication"], "code": ["code"],
+        }
+        cats = _CLASS_CATEGORIES.get(classification_type, [])
+        if cats and self.tool_registry:
+            tool_names = [
+                t.name for t in self.tool_registry.list()
+                if t.category in cats
+            ]
 
     if tool_names:
         placeholders = ",".join("?" * len(tool_names))
