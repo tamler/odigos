@@ -5,6 +5,8 @@ import httpx
 from odigos.tools.api_tool import APITool, ToolAPIError
 from odigos.tools.base import ToolResult
 
+# conftest.py provides the fake_db fixture
+
 
 class FakeBgTool(APITool):
     name = "fake_bg"
@@ -59,3 +61,24 @@ class TestPollOnce:
         assert status == "failed"
         assert result["error"] == "bad input"
         await client.aclose()
+
+
+class TestPendingDetection:
+    @pytest.mark.asyncio
+    async def test_store_background_task(self, fake_db):
+        from odigos.core.executor import _store_background_task
+        bg_info = {
+            "tool_name": "generate_image",
+            "external_task_id": "ext123",
+            "conversation_id": "conv456",
+            "arguments": {"prompt": "sunset"},
+        }
+        task_id = await _store_background_task(fake_db, bg_info)
+        assert task_id is not None
+
+        row = await fake_db.fetch_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        assert row is not None
+        assert row["type"] == "background_poll"
+        assert row["status"] == "pending"
+        assert "generate_image" in row["payload_json"]
+        assert row["conversation_id"] == "conv456"
