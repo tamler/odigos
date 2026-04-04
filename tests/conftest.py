@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 from collections.abc import AsyncGenerator
 
+import aiosqlite
 import pytest
 import pytest_asyncio
 
@@ -39,6 +40,60 @@ async def tmp_db_path() -> AsyncGenerator[str, None]:
         path = f.name
     yield path
     os.unlink(path)
+
+
+class FakeDB:
+    """Minimal async database wrapper for tests."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self._conn.row_factory = aiosqlite.Row
+
+    async def execute(self, sql, params=()):
+        cursor = await self._conn.execute(sql, params)
+        await self._conn.commit()
+        return cursor
+
+    async def fetch_all(self, sql, params=()):
+        cursor = await self._conn.execute(sql, params)
+        return await cursor.fetchall()
+
+    async def fetch_one(self, sql, params=()):
+        cursor = await self._conn.execute(sql, params)
+        return await cursor.fetchone()
+
+
+@pytest_asyncio.fixture
+async def fake_db():
+    async with aiosqlite.connect(":memory:") as conn:
+        conn.row_factory = aiosqlite.Row
+        db = FakeDB(conn)
+        await conn.execute("""
+            CREATE TABLE query_log (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT,
+                classification TEXT,
+                tools_used TEXT,
+                created_at TEXT
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE agent_experiences (
+                id TEXT PRIMARY KEY,
+                tool_name TEXT NOT NULL,
+                situation TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                lesson TEXT NOT NULL,
+                success INTEGER DEFAULT 1,
+                times_applied INTEGER DEFAULT 0,
+                confidence REAL DEFAULT 0.8,
+                applicability TEXT DEFAULT 'sometimes',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        await conn.commit()
+        yield db
 
 
 if Settings is not None:
