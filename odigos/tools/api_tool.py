@@ -87,3 +87,26 @@ class APITool(BaseTool):
                 raise ToolAPIError(0, f"Task failed: {data}")
             delay = min(delay * 1.5, max_delay)
         raise ToolAPIError(0, "Polling timed out")
+
+    async def poll_once(
+        self,
+        url: str,
+        api_key: str,
+        params: dict,
+        success_check: Callable[[dict], bool],
+        failure_check: Callable[[dict], bool],
+        extract: Callable[[dict], Any],
+    ) -> tuple[str, Any]:
+        """Single poll attempt for background tasks.
+
+        Returns:
+            ("done", extracted_result) on success
+            ("failed", error_data) on failure
+            ("pending", None) if still processing
+        """
+        data = await self.api_get(url, api_key, params)
+        if success_check(data):
+            return "done", extract(data)
+        if failure_check(data):
+            return "failed", data
+        return "pending", None
