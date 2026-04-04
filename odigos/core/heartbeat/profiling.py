@@ -27,6 +27,25 @@ _EXPERIENCE_FALLBACK = (
 )
 
 
+async def prune_stale_experiences(db) -> int:
+    """Remove stale and low-confidence experiences.
+
+    Prunes:
+    - Never-applied experiences older than 30 days
+    - Experiences with confidence below 0.2
+    """
+    try:
+        cursor = await db.execute(
+            "DELETE FROM agent_experiences "
+            "WHERE (times_applied = 0 AND created_at < datetime('now', '-30 days')) "
+            "OR confidence < 0.2"
+        )
+        return getattr(cursor, 'rowcount', 0)
+    except Exception:
+        logger.debug("Experience pruning failed", exc_info=True)
+        return 0
+
+
 async def dream_analyze_user(hb: "Heartbeat") -> None:
     """Analyze recent conversations to build/update the user profile."""
     try:
@@ -280,6 +299,11 @@ async def extract_experiences(hb: "Heartbeat") -> None:
 
         if inserted:
             logger.info("Extracted %d new tactical experiences", inserted)
+
+        # Prune stale and low-confidence experiences
+        pruned = await prune_stale_experiences(hb.db)
+        if pruned:
+            logger.info("Pruned %d stale/low-confidence experiences", pruned)
 
     except Exception:
         logger.debug("Experience extraction failed", exc_info=True)
