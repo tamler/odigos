@@ -91,11 +91,59 @@ class GenerateImageTool(APITool):
 
         try:
             task_id = await self._create_task(prompt, ratio)
-            image_url = await self._poll_result(task_id)
+            return ToolResult(
+                success=True,
+                status="pending",
+                task_id=task_id,
+                data=f"Image generation started for: {prompt[:80]}. I'll notify you when it's ready.",
+                side_effect={
+                    "background_task": {
+                        "tool_name": self.name,
+                        "external_task_id": task_id,
+                        "conversation_id": conversation_id,
+                        "arguments": {"prompt": prompt, "aspect_ratio": ratio},
+                    }
+                },
+            )
+        except ToolAPIError as e:
+            logger.error("Image generation API error: %s", e.message)
+            return ToolResult(
+                success=False, data="", error=e.message,
+                failure_category=e.failure_category,
+            )
+        except Exception as e:
+            logger.error("Image generation failed: %s", e)
+            return ToolResult(success=False, data="", error=str(e))
+
+    async def complete_background(self, task_id: str, conversation_id: str) -> ToolResult:
+        """Poll once and complete if ready. Called by heartbeat."""
+        try:
+            status, result = await self.poll_once(
+                f"{KIE_BASE}/jobs/recordInfo",
+                api_key=self._api_key,
+                params={"taskId": task_id},
+                success_check=lambda d: d.get("code") == 200 and d.get("data", {}).get("state") == "success",
+                failure_check=lambda d: d.get("code") == 200 and d.get("data", {}).get("state") == "fail",
+                extract=lambda d: json.loads(d["data"].get("resultJson", "{}")).get("resultUrls", [None])[0],
+            )
+
+            if status == "pending":
+                return ToolResult(success=True, status="pending", data="Still processing...")
+
+            if status == "failed":
+                return ToolResult(
+                    success=False, data="", error="Image generation failed",
+                    failure_category="transient",
+                )
+
+            # status == "done" — download and store artifact
+            image_url = result
+            if not image_url:
+                return ToolResult(success=False, data="", error="No image URL in result")
 
             artifact_id = uuid.uuid4().hex
-            slug = re.sub(r"[^a-z0-9]+", "_", prompt[:60].lower()).strip("_")
-            filename = f"{slug}_{artifact_id[:8]}.png"
+            slug = re.sub(r"[^a-z0-9]+", "_", task_id[:20].lower()).strip("_")
+            filename = f"bg_{slug}_{artifact_id[:8]}.png"
             filepath = await self._download_image(image_url, filename)
             file_size = os.path.getsize(filepath)
 
@@ -103,11 +151,9 @@ class GenerateImageTool(APITool):
                 now = datetime.now(timezone.utc).isoformat()
                 await self._db.execute(
                     "INSERT INTO artifacts "
-                    "(id, conversation_id, filename, content_type, "
-                    "file_size, file_path, created_at) "
+                    "(id, conversation_id, filename, content_type, file_size, file_path, created_at) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (artifact_id, conversation_id, filename,
-                     "image/png", file_size, filepath, now),
+                    (artifact_id, conversation_id, filename, "image/png", file_size, filepath, now),
                 )
 
             return ToolResult(
@@ -124,14 +170,8 @@ class GenerateImageTool(APITool):
                     }
                 },
             )
-        except ToolAPIError as e:
-            logger.error("Image generation API error: %s", e.message)
-            return ToolResult(
-                success=False, data="", error=e.message,
-                failure_category=e.failure_category,
-            )
         except Exception as e:
-            logger.error("Image generation failed: %s", e)
+            logger.error("Background image completion failed: %s", e)
             return ToolResult(success=False, data="", error=str(e))
 
     async def _create_task(self, prompt: str, ratio: str) -> str:

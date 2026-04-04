@@ -52,10 +52,12 @@ class Heartbeat:
         ws_port: int = 8001,
         settings=None,
         budget_tracker=None,
+        tool_registry=None,
     ) -> None:
         self.db = db
         self.settings = settings
         self._budget_tracker = budget_tracker
+        self.tool_registry = tool_registry
         self.agent = agent
         self.channel_registry = channel_registry
         self.goal_store = goal_store
@@ -155,6 +157,10 @@ class Heartbeat:
 
         # Phase 3b: Run legacy cron jobs (old table, for backward compat)
         did_work |= await maintenance.run_cron_jobs(self)
+
+        # Phase 3c: Poll pending background tasks (HTTP only, no LLM)
+        from odigos.core.heartbeat import background
+        did_work |= await background.poll_background_tasks(self)
 
         # Phase 4: Process inbound peer messages
         if self.agent_client:

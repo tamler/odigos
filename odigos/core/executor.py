@@ -126,6 +126,24 @@ def _friendly_tool_status(tool_name: str) -> str:
     return random.choice(options)
 
 
+async def _store_background_task(db, background_info: dict) -> str:
+    """Store a pending background task for heartbeat polling."""
+    import json as _json
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, type, status, description, payload_json, "
+        "conversation_id, created_by) "
+        "VALUES (?, 'background_poll', 'pending', ?, ?, ?, 'system')",
+        (
+            task_id,
+            f"Background: {background_info['tool_name']}",
+            _json.dumps(background_info),
+            background_info.get("conversation_id", ""),
+        ),
+    )
+    return task_id
+
+
 async def _update_experience_feedback(
     db, tool_name: str, success: bool, failure_category: str | None,
 ) -> None:
@@ -744,6 +762,13 @@ class Executor:
                     success=result.success,
                     failure_category=category,
                 )
+
+            # Background task: store for heartbeat polling and return immediately
+            if result and result.status == "pending":
+                bg = result.side_effect.get("background_task") if result.side_effect else None
+                if bg and self.db:
+                    await _store_background_task(self.db, bg)
+                return result.data
 
             if result.success:
                 display = tool.format_for_context(result)

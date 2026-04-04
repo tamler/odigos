@@ -897,6 +897,7 @@ class Bootstrapper:
             ws_port=s.server.ws_port,
             settings=s,
             budget_tracker=self.container.budget_tracker,
+            tool_registry=self.container.tool_registry,
         )
         self.container.agent.heartbeat = heartbeat
         self.container.heartbeat = heartbeat

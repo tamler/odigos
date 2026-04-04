@@ -92,6 +92,24 @@ async def fake_db():
                 updated_at TEXT NOT NULL
             )
         """)
+        await conn.execute("""
+            CREATE TABLE tasks (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                description TEXT,
+                payload_json TEXT,
+                conversation_id TEXT,
+                result_json TEXT,
+                error TEXT,
+                retry_count INTEGER DEFAULT 0,
+                max_retries INTEGER DEFAULT 3,
+                started_at TEXT,
+                completed_at TEXT,
+                created_by TEXT DEFAULT 'system',
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
         await conn.commit()
         yield db
 
