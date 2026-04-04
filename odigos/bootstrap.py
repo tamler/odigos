@@ -40,6 +40,13 @@ class Bootstrapper:
         self.container.env_path = ".env"
         self.container.upload_dir = str(FILES_DIR)
 
+        # Shared HTTP client for API tools
+        import httpx
+        self.container.http_client = httpx.AsyncClient(
+            timeout=30,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+
         # Auto-generate API key if not configured
         if not self.settings.api_key:
             import secrets
@@ -506,6 +513,7 @@ class Bootstrapper:
         if kie_api_key:
             from odigos.tools.image_gen import GenerateImageTool
             registry.register(GenerateImageTool(
+                http=self.container.http_client,
                 api_key=kie_api_key,
                 default_ratio=settings.image_generation.default_aspect_ratio,
                 nsfw_filter=settings.image_generation.nsfw_filter,
@@ -516,6 +524,7 @@ class Bootstrapper:
 
             from odigos.tools.music_gen import GenerateMusicTool
             registry.register(GenerateMusicTool(
+                http=self.container.http_client,
                 api_key=kie_api_key,
                 model=settings.music_generation.model,
                 max_poll_seconds=settings.music_generation.max_poll_seconds,

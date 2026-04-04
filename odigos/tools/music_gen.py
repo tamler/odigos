@@ -1,7 +1,6 @@
 """Music generation via Kie.ai Suno API."""
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import uuid
@@ -9,14 +8,22 @@ from datetime import datetime, timezone
 
 import httpx
 
-from odigos.tools.base import BaseTool, ToolContract, ToolResult
+from odigos.tools.api_tool import APITool, ToolAPIError
+from odigos.tools.base import ToolContract, ToolResult
 
 logger = logging.getLogger(__name__)
 
 KIE_BASE = "https://api.kie.ai/api/v1"
 
+FAILURE_STATES = {
+    "CREATE_TASK_FAILED",
+    "GENERATE_AUDIO_FAILED",
+    "SENSITIVE_WORD_ERROR",
+    "CALLBACK_EXCEPTION",
+}
 
-class GenerateMusicTool(BaseTool):
+
+class GenerateMusicTool(APITool):
     name = "generate_music"
     category = "create"
     contract = ToolContract(
@@ -44,9 +51,8 @@ class GenerateMusicTool(BaseTool):
                 "description": "Song title (max 80 chars)",
             },
             "instrumental": {
-                "type": "string",
-                "enum": ["true", "false"],
-                "description": "Instrumental only, no vocals (default 'false')",
+                "type": "boolean",
+                "description": "Instrumental only, no vocals (default false)",
             },
             "vocal_gender": {
                 "type": "string",
@@ -56,17 +62,18 @@ class GenerateMusicTool(BaseTool):
         },
         "required": ["prompt"],
     }
+    API_DOCS = "https://docs.kie.ai/suno-api/generate-music"
 
     def __init__(
         self,
+        http: httpx.AsyncClient,
         api_key: str,
-        provider: str = "suno",
-        task_type: str = "suno_music",
         model: str = "V5_5",
         max_poll_seconds: int = 180,
         output_dir: str = "",
         db=None,
     ):
+        super().__init__(http=http)
         self._api_key = api_key
         self._model = model
         self._max_poll = max_poll_seconds
@@ -82,7 +89,10 @@ class GenerateMusicTool(BaseTool):
 
         style = (params.get("style") or "").strip()[:1000]
         title = (params.get("title") or "").strip()[:80]
-        instrumental = str(params.get("instrumental", "false")).lower() == "true"
+        # instrumental is now a bool (coerced by executor)
+        instrumental = params.get("instrumental", False)
+        if isinstance(instrumental, str):
+            instrumental = instrumental.lower() == "true"
         vocal_gender = params.get("vocal_gender", "")
         if vocal_gender not in ("m", "f"):
             vocal_gender = ""
@@ -92,22 +102,10 @@ class GenerateMusicTool(BaseTool):
                 prompt=prompt, style=style, title=title,
                 instrumental=instrumental, vocal_gender=vocal_gender,
             )
-            if not task_id:
-                return ToolResult(
-                    success=False, data="",
-                    error="Failed to create music generation task",
-                )
-
             tracks = await self._poll_result(task_id)
-            if not tracks:
-                return ToolResult(
-                    success=False, data="",
-                    error="Music generation timed out or failed",
-                )
 
             artifacts = []
             for i, track in enumerate(tracks):
-                # API uses both audio_url (callback) and audioUrl (poll)
                 audio_url = track.get("audio_url") or track.get("audioUrl", "")
                 if not audio_url:
                     continue
@@ -162,6 +160,12 @@ class GenerateMusicTool(BaseTool):
                 data="Generated tracks: " + ", ".join(summary_parts),
                 side_effect={"artifacts": artifacts},
             )
+        except ToolAPIError as e:
+            logger.error("Music generation API error: %s", e.message)
+            return ToolResult(
+                success=False, data="", error=e.message,
+                failure_category=e.failure_category,
+            )
         except Exception as e:
             logger.error("Music generation failed: %s", e)
             return ToolResult(success=False, data="", error=str(e))
@@ -173,13 +177,9 @@ class GenerateMusicTool(BaseTool):
         title: str = "",
         instrumental: bool = False,
         vocal_gender: str = "",
-    ) -> str | None:
-        """Submit music generation task to Kie.ai API.
-
-        See: https://docs.kie.ai/suno-api/generate-music
-        """
+    ) -> str:
+        """Submit music generation task. Returns taskId."""
         custom_mode = bool(style or title)
-
         payload: dict = {
             "prompt": prompt[:5000],
             "model": self._model,
@@ -195,71 +195,37 @@ class GenerateMusicTool(BaseTool):
         if vocal_gender:
             payload["vocalGender"] = vocal_gender
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            try:
-                resp = await client.post(
-                    f"{KIE_BASE}/generate",
-                    headers={
-                        "Authorization": f"Bearer {self._api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                data = resp.json()
-            except Exception as e:
-                logger.error("Kie.ai request failed: %s", e)
-                return None
-
-            if data.get("code") == 200:
-                return data["data"]["taskId"]
-
-            logger.error(
-                "Kie.ai create failed (code %s): %s",
-                data.get("code"), data.get("msg"),
-            )
-            return None
+        data = await self.api_post(
+            f"{KIE_BASE}/generate",
+            payload=payload,
+            api_key=self._api_key,
+        )
+        if data.get("code") != 200:
+            raise ToolAPIError(0, data.get("msg", "Create task failed"), "transient")
+        return data["data"]["taskId"]
 
     async def _poll_result(self, task_id: str) -> list[dict]:
-        """Poll for music generation completion."""
-        async with httpx.AsyncClient(timeout=30) as client:
-            delay = 5.0
-            elapsed = 0.0
-            while elapsed < self._max_poll:
-                await asyncio.sleep(delay)
-                elapsed += delay
-
-                try:
-                    resp = await client.get(
-                        f"{KIE_BASE}/generate/record-info",
-                        headers={"Authorization": f"Bearer {self._api_key}"},
-                        params={"taskId": task_id},
-                    )
-                    data = resp.json()
-                except Exception as e:
-                    logger.warning("Poll failed: %s", e)
-                    delay = min(delay * 1.5, 15.0)
-                    continue
-
-                if data.get("code") != 200:
-                    delay = min(delay * 1.5, 15.0)
-                    continue
-
-                info = data.get("data", {})
-                status = info.get("status") or info.get("state", "")
-
-                if status == "SUCCESS":
-                    return self._extract_tracks(info.get("response", {}))
-
-                if status in (
-                    "CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED",
-                    "SENSITIVE_WORD_ERROR", "CALLBACK_EXCEPTION",
-                ):
-                    logger.error("Music gen failed: %s", info.get("errorMessage", status))
-                    return []
-
-                delay = min(delay * 1.5, 15.0)
-
-        return []
+        """Poll for music generation completion. Returns track list."""
+        raw = await self.poll_until(
+            f"{KIE_BASE}/generate/record-info",
+            api_key=self._api_key,
+            params={"taskId": task_id},
+            success_check=lambda d: (
+                d.get("code") == 200
+                and (d.get("data", {}).get("status") or d.get("data", {}).get("state", ""))
+                == "SUCCESS"
+            ),
+            failure_check=lambda d: (
+                d.get("code") == 200
+                and (d.get("data", {}).get("status") or d.get("data", {}).get("state", ""))
+                in FAILURE_STATES
+            ),
+            extract=lambda d: d.get("data", {}).get("response", {}),
+            max_seconds=self._max_poll,
+            initial_delay=5.0,
+            max_delay=15.0,
+        )
+        return self._extract_tracks(raw)
 
     @staticmethod
     def _extract_tracks(response: object) -> list[dict]:
@@ -280,10 +246,14 @@ class GenerateMusicTool(BaseTool):
         os.makedirs(self._output_dir, exist_ok=True)
         filepath = os.path.join(self._output_dir, filename)
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            await aio.write_bytes(filepath, resp.content)
+        resp = await self.http.get(url, timeout=httpx.Timeout(120))
+        resp.raise_for_status()
+        await aio.write_bytes(filepath, resp.content)
 
         logger.info("Downloaded audio: %s (%d bytes)", filepath, os.path.getsize(filepath))
         return filepath
+
+    def format_for_context(self, result: ToolResult) -> str:
+        if result.success:
+            return result.data
+        return f"Music generation failed: {result.error}"

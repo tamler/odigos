@@ -33,6 +33,7 @@ dependencies = [
     "pywebpush>=2.3.0",
     "py-vapid>=1.9.4",
     "deep-translator>=1.11.4",
+    "jsonschema>=4.0",
     "webauthn",
     "grokipedia-api>=0.3.0",
     "wikipedia>=1.4.0",
