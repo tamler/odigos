@@ -3,7 +3,7 @@ import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
-import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera, Music } from 'lucide-react'
+import { ArrowUp, Paperclip, X, Mic, PanelRightClose, Square, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
 import { StreamingText } from '@/components/ui/streaming-text'
@@ -13,15 +13,17 @@ import {
   ChatContainerScrollAnchor,
 } from '@/components/ui/chat-container'
 import { FileUpload, FileUploadTrigger, FileUploadContent } from '@/components/ui/file-upload'
-import { Artifact, ArtifactCard, getFileIcon, formatFileSize } from '@/components/ArtifactCard'
+import { Artifact, getFileIcon, formatFileSize } from '@/components/ArtifactCard'
 import { MessageActions } from '@/components/MessageActions'
-import { VoiceOrb } from '@/components/VoiceOrb'
 import { useVoiceMode } from '@/hooks/useVoiceMode'
 import { usePushToTalk } from '@/hooks/usePushToTalk'
 import type { ChatMessage } from '@/layouts/AppLayout'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useChatStore } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
+import { WelcomeView } from '@/components/chat/WelcomeView'
+import { ArtifactGallery } from '@/components/chat/ArtifactGallery'
+import { VoiceModePanel } from '@/components/chat/VoiceModePanel'
 
 interface ChatPanelProps {
   activeConversationId: string | null
@@ -32,86 +34,6 @@ interface ChatPanelProps {
   onClose?: () => void
 }
 
-const ImageArtifact = ({ artifact, onClick }: { artifact: Artifact, onClick: () => void }) => {
-
-  return (
-    <div className="rounded-xl overflow-hidden border border-border/40 max-w-xs cursor-pointer hover:opacity-95 transition-all shadow-sm group/img"
-         onClick={onClick}>
-      <div className="relative aspect-square bg-muted flex items-center justify-center overflow-hidden">
-        <img
-          src={`/api/artifacts/${artifact.id}/thumbnail?size=400`}
-          alt={artifact.filename}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
-      </div>
-    </div>
-  )
-}
-
-const AudioArtifact = ({ artifact, onClick }: { artifact: Artifact, onClick: () => void }) => {
-  return (
-    <div
-      className="rounded-xl overflow-hidden border border-border/40 max-w-xs cursor-pointer hover:border-border transition-all shadow-sm"
-      onClick={onClick}
-    >
-      <div className="p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 bg-primary/10 rounded-md flex items-center justify-center shrink-0">
-            <Music className="h-4 w-4 text-primary" />
-          </div>
-          <span className="text-xs font-medium truncate">{artifact.filename}</span>
-        </div>
-        <audio
-          controls
-          preload="metadata"
-          className="w-full h-8"
-          src={`/api/artifacts/${artifact.id}/download`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          Your browser does not support the audio element.
-        </audio>
-      </div>
-    </div>
-  )
-}
-
-function WelcomeView({ agentName, onSuggest }: { agentName: string; onSuggest: (text: string) => void }) {
-  const suggestions = [
-    { text: "What can you do?", label: "Capabilities" },
-    { text: "Start a journal entry", label: "Journal" },
-    { text: "Create a task board for my project", label: "Task Board" },
-    { text: "Research the latest trends in AI agents", label: "Research" },
-  ]
-
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-500">
-      <div className="max-w-md space-y-6">
-        <div className="space-y-2">
-          <div className="h-12 w-12 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl font-bold text-primary">{(agentName || 'O')[0]}</span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Hello, I'm {agentName}</h1>
-          <p className="text-muted-foreground">Your personal AI assistant that learns and improves over time. How can I help you today?</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {suggestions.map((s, i) => (
-            <button
-              key={s.label}
-              onClick={() => onSuggest(s.text)}
-              className="p-4 rounded-xl border border-border/40 bg-card hover:border-primary/50 hover:bg-primary/5 transition-all text-left group animate-in fade-in slide-in-from-bottom-3 fill-mode-backwards will-change-transform"
-              style={{ animationDelay: `${i * 100}ms` }}
-            >
-              <p className="text-xs font-semibold text-primary mb-1 uppercase tracking-wider">{s.label}</p>
-              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">{s.text}</p>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export const ChatPanel = memo(({
   activeConversationId,
@@ -414,23 +336,12 @@ export const ChatPanel = memo(({
               ) : (
                 <div className="flex-1 flex flex-col h-full min-h-0">
                   {voiceMode.active ? (
-                    <div className="flex-1 flex flex-col h-full">
-                      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 opacity-40 hover:opacity-100 transition-opacity">
-                         {messages.slice(-5).map((msg: ChatMessage) => (
-                           <div key={msg.timestamp} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                             <div className={`max-w-[80%] rounded-2xl px-4 py-2 text-xs ${msg.role === 'user' ? 'bg-primary/20' : 'bg-muted/40'}`}>
-                               {msg.content}
-                             </div>
-                           </div>
-                         ))}
-                      </div>
-                      <VoiceOrb
-                        state={voiceMode.phase as any}
-                        amplitude={voiceAmplitude}
-                        onExit={() => voiceMode.exit()}
-                        onToggleMic={() => {}}
-                      />
-                    </div>
+                    <VoiceModePanel
+                      messages={messages}
+                      amplitude={voiceAmplitude}
+                      phase={voiceMode.phase}
+                      onExit={() => voiceMode.exit()}
+                    />
                   ) : switchingConversation ? (
                     <div className="space-y-6 py-6">
                       <div className="flex justify-end gap-3">
@@ -547,27 +458,13 @@ export const ChatPanel = memo(({
                         </div>
                       )}
 
-                      {artifacts.length > 0 && (
-                        <div className="pt-2 mt-4">
-                          <div className="flex flex-wrap gap-3">
-                            {artifacts.map(a => (
-                              a.content_type?.startsWith('image/') ? (
-                                <ImageArtifact key={a.id} artifact={a} onClick={() => {
-                                  setActiveArtifactId(a.id)
-                                  setArtifactPanelOpen(true)
-                                }} />
-                              ) : a.content_type?.startsWith('audio/') ? (
-                                <AudioArtifact key={a.id} artifact={a} onClick={() => {
-                                  setActiveArtifactId(a.id)
-                                  setArtifactPanelOpen(true)
-                                }} />
-                              ) : (
-                                <ArtifactCard key={a.id} artifact={a} />
-                              )
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      <ArtifactGallery
+                        artifacts={artifacts}
+                        onOpenArtifact={(id) => {
+                          setActiveArtifactId(id)
+                          setArtifactPanelOpen(true)
+                        }}
+                      />
                     </div>
                   )}
                 </div>
