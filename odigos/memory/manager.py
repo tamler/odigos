@@ -126,23 +126,41 @@ class MemoryManager:
         if conv_lines:
             sections.append("## Conversation history\n" + "\n".join(conv_lines))
 
-        # 3. Entity lookup
+        # 3. Entity lookup with 2-hop graph traversal
         entity_lines = []
         words = [w for w in query.split() if len(w) > 2]
-        seen_entities = set()
+        seen_entities: set[str] = set()
+        max_related = 8  # Cap total related entities to control token cost
+
         for word in words:
             entities = await self.graph.find_entity(word)
             for entity in entities:
-                if entity["id"] not in seen_entities:
-                    seen_entities.add(entity["id"])
-                    related = await self.graph.get_related(entity["id"])
-                    related_names = [r["name"] for r in related[:3]]
-                    line = f"- {entity['name']}: {entity['type']}"
-                    if entity.get("summary"):
-                        line += f", {entity['summary']}"
-                    if related_names:
-                        line += f" (related: {', '.join(related_names)})"
-                    entity_lines.append(line)
+                if entity["id"] in seen_entities:
+                    continue
+                seen_entities.add(entity["id"])
+
+                line = f"- {entity['name']}: {entity['type']}"
+                if entity.get("summary"):
+                    line += f", {entity['summary']}"
+                entity_lines.append(line)
+
+                # 2-hop traversal with relationship paths
+                related = await self.graph.traverse_with_paths(
+                    entity["id"], depth=2,
+                )
+                related_count = 0
+                for r in related:
+                    if related_count >= max_related:
+                        break
+                    if r["id"] in seen_entities:
+                        continue
+                    seen_entities.add(r["id"])
+                    related_count += 1
+                    hop_prefix = "  " * r["hop"]
+                    entity_lines.append(
+                        f"{hop_prefix}-> {r['relationship']} -> "
+                        f"{r['name']} ({r['type']})"
+                    )
 
         if entity_lines:
             sections.append("## Known entities\n" + "\n".join(entity_lines))

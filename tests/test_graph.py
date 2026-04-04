@@ -82,6 +82,48 @@ class TestEntityGraph:
         assert "Odigos" in names
         assert "SQLite" in names
 
+    async def test_traverse_with_paths(self, graph: EntityGraph):
+        """Multi-hop traversal returns entities with relationship info."""
+        id_a = await graph.create_entity(entity_type="person", name="Alice")
+        id_b = await graph.create_entity(entity_type="project", name="Odigos")
+        id_c = await graph.create_entity(entity_type="concept", name="SQLite")
+
+        await graph.create_edge(source_id=id_a, relationship="works_on", target_id=id_b)
+        await graph.create_edge(source_id=id_b, relationship="uses", target_id=id_c)
+
+        results = await graph.traverse_with_paths(id_a, depth=2)
+        names = [r["name"] for r in results]
+        assert "Odigos" in names
+        assert "SQLite" in names
+
+        # Check that relationship info is included
+        odigos_result = next(r for r in results if r["name"] == "Odigos")
+        assert odigos_result["hop"] == 1
+        assert odigos_result["relationship"] == "works_on"
+        assert odigos_result["from_name"] == "Alice"
+
+        sqlite_result = next(r for r in results if r["name"] == "SQLite")
+        assert sqlite_result["hop"] == 2
+        assert sqlite_result["relationship"] == "uses"
+        assert sqlite_result["from_name"] == "Odigos"
+
+    async def test_traverse_with_paths_caps_depth(self, graph: EntityGraph):
+        """Traversal respects depth limit."""
+        id_a = await graph.create_entity(entity_type="person", name="Alice")
+        id_b = await graph.create_entity(entity_type="project", name="Odigos")
+        id_c = await graph.create_entity(entity_type="concept", name="SQLite")
+        id_d = await graph.create_entity(entity_type="concept", name="WAL")
+
+        await graph.create_edge(source_id=id_a, relationship="works_on", target_id=id_b)
+        await graph.create_edge(source_id=id_b, relationship="uses", target_id=id_c)
+        await graph.create_edge(source_id=id_c, relationship="feature", target_id=id_d)
+
+        # Depth 1 should only reach Odigos
+        results = await graph.traverse_with_paths(id_a, depth=1)
+        names = [r["name"] for r in results]
+        assert "Odigos" in names
+        assert "SQLite" not in names
+
     async def test_merge_entities(self, graph: EntityGraph):
         """Merging two entities reassigns edges and removes the duplicate."""
         id_keep = await graph.create_entity(entity_type="person", name="Robert")
