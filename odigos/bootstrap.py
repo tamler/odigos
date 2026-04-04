@@ -513,6 +513,7 @@ class Bootstrapper:
         if kie_api_key:
             from odigos.tools.image_gen import GenerateImageTool
             registry.register(GenerateImageTool(
+                http=self.container.http_client,
                 api_key=kie_api_key,
                 default_ratio=settings.image_generation.default_aspect_ratio,
                 nsfw_filter=settings.image_generation.nsfw_filter,

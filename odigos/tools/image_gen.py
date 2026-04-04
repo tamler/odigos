@@ -1,7 +1,6 @@
 """Image generation via Kie.ai Z-Image API."""
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -11,7 +10,8 @@ from datetime import datetime, timezone
 
 import httpx
 
-from odigos.tools.base import BaseTool, ToolContract, ToolResult
+from odigos.tools.api_tool import APITool, ToolAPIError
+from odigos.tools.base import ToolContract, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,13 @@ KIE_BASE = "https://api.kie.ai/api/v1"
 VALID_RATIOS = {"1:1", "4:3", "3:4", "16:9", "9:16"}
 
 
-class GenerateImageTool(BaseTool):
+class GenerateImageTool(APITool):
     name = "generate_image"
     category = "create"
-    contract = ToolContract(timeout_seconds=180, max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
+    contract = ToolContract(
+        timeout_seconds=180,
+        max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1},
+    )
     description = (
         "Generate an image from a text description using Z-Image AI. "
         "Provide a detailed prompt describing the image you want. "
@@ -52,9 +55,11 @@ class GenerateImageTool(BaseTool):
         },
         "required": ["prompt"],
     }
+    API_DOCS = "https://docs.kie.ai/api/z-image"
 
     def __init__(
         self,
+        http: httpx.AsyncClient,
         api_key: str,
         default_ratio: str = "1:1",
         nsfw_filter: bool = True,
@@ -62,6 +67,7 @@ class GenerateImageTool(BaseTool):
         output_dir: str = "",
         db=None,
     ):
+        super().__init__(http=http)
         self._api_key = api_key
         self._default_ratio = default_ratio
         self._nsfw_filter = nsfw_filter
@@ -74,9 +80,7 @@ class GenerateImageTool(BaseTool):
         conversation_id = params.pop("_conversation_id", None)
         prompt = (params.get("prompt") or "").strip()
         if not prompt:
-            return ToolResult(
-                success=False, data="", error="No prompt provided"
-            )
+            return ToolResult(success=False, data="", error="No prompt provided")
 
         if len(prompt) > 1000:
             prompt = prompt[:1000]
@@ -87,31 +91,14 @@ class GenerateImageTool(BaseTool):
 
         try:
             task_id = await self._create_task(prompt, ratio)
-            if not task_id:
-                return ToolResult(
-                    success=False,
-                    data="",
-                    error="Failed to create image task",
-                )
-
             image_url = await self._poll_result(task_id)
-            if not image_url:
-                return ToolResult(
-                    success=False,
-                    data="",
-                    error="Image generation timed out or failed",
-                )
 
             artifact_id = uuid.uuid4().hex
-            # Derive a meaningful filename from the prompt
             slug = re.sub(r"[^a-z0-9]+", "_", prompt[:60].lower()).strip("_")
             filename = f"{slug}_{artifact_id[:8]}.png"
-            filepath = await self._download_image(
-                image_url, filename,
-            )
+            filepath = await self._download_image(image_url, filename)
             file_size = os.path.getsize(filepath)
 
-            # Register in artifacts database
             if self._db:
                 now = datetime.now(timezone.utc).isoformat()
                 await self._db.execute(
@@ -125,118 +112,82 @@ class GenerateImageTool(BaseTool):
 
             return ToolResult(
                 success=True,
-                data=f"Image generated: {filename}"
-                f" ({file_size} bytes)",
+                data=f"Image generated: {filename} ({file_size} bytes)",
                 side_effect={
                     "artifact": {
                         "id": artifact_id,
                         "filename": filename,
                         "content_type": "image/png",
                         "file_size": file_size,
-                        "download_url":
-                            f"/api/artifacts/"
-                            f"{artifact_id}/download",
+                        "download_url": f"/api/artifacts/{artifact_id}/download",
                         "path": filepath,
                     }
                 },
             )
+        except ToolAPIError as e:
+            logger.error("Image generation API error: %s", e.message)
+            return ToolResult(
+                success=False, data="", error=e.message,
+                failure_category=e.failure_category,
+            )
         except Exception as e:
             logger.error("Image generation failed: %s", e)
-            return ToolResult(
-                success=False, data="", error=str(e),
-            )
+            return ToolResult(success=False, data="", error=str(e))
 
-    async def _create_task(
-        self, prompt: str, ratio: str,
-    ) -> str | None:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{KIE_BASE}/jobs/createTask",
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Content-Type": "application/json",
+    async def _create_task(self, prompt: str, ratio: str) -> str:
+        """Submit image generation task. Returns taskId."""
+        data = await self.api_post(
+            f"{KIE_BASE}/jobs/createTask",
+            payload={
+                "model": "z-image",
+                "input": {
+                    "prompt": prompt,
+                    "aspect_ratio": ratio,
+                    "nsfw_checker": self._nsfw_filter,
                 },
-                json={
-                    "model": "z-image",
-                    "input": {
-                        "prompt": prompt,
-                        "aspect_ratio": ratio,
-                        "nsfw_checker": self._nsfw_filter,
-                    },
-                },
-            )
-            data = resp.json()
-            if data.get("code") == 200:
-                return data["data"]["taskId"]
-            logger.error(
-                "Kie.ai create failed: %s",
-                data.get("msg"),
-            )
-            return None
+            },
+            api_key=self._api_key,
+        )
+        if data.get("code") != 200:
+            raise ToolAPIError(0, data.get("msg", "Create task failed"), "transient")
+        return data["data"]["taskId"]
 
-    async def _poll_result(
-        self, task_id: str,
-    ) -> str | None:
-        """Poll for task completion with exponential backoff."""
-        async with httpx.AsyncClient(timeout=30) as client:
-            delay = 2.0
-            elapsed = 0.0
-            while elapsed < self._max_poll:
-                await asyncio.sleep(delay)
-                elapsed += delay
+    async def _poll_result(self, task_id: str) -> str:
+        """Poll for task completion. Returns image URL."""
+        return await self.poll_until(
+            f"{KIE_BASE}/jobs/recordInfo",
+            api_key=self._api_key,
+            params={"taskId": task_id},
+            success_check=lambda d: (
+                d.get("code") == 200
+                and d.get("data", {}).get("state") == "success"
+            ),
+            failure_check=lambda d: (
+                d.get("code") == 200
+                and d.get("data", {}).get("state") == "fail"
+            ),
+            extract=lambda d: json.loads(
+                d["data"].get("resultJson", "{}")
+            ).get("resultUrls", [None])[0],
+            max_seconds=self._max_poll,
+            initial_delay=2.0,
+            max_delay=10.0,
+        )
 
-                resp = await client.get(
-                    f"{KIE_BASE}/jobs/recordInfo",
-                    headers={
-                        "Authorization": (
-                            f"Bearer {self._api_key}"
-                        ),
-                    },
-                    params={"taskId": task_id},
-                )
-                data = resp.json()
-                if data.get("code") != 200:
-                    continue
-
-                info = data.get("data", {})
-                state = info.get("state", "")
-
-                if state == "success":
-                    result_json = info.get(
-                        "resultJson", "{}"
-                    )
-                    result = json.loads(result_json)
-                    urls = result.get("resultUrls", [])
-                    if urls:
-                        return urls[0]
-                    return None
-                elif state == "fail":
-                    logger.error(
-                        "Image gen failed: %s",
-                        info.get("failMsg", "unknown"),
-                    )
-                    return None
-
-                delay = min(delay * 1.5, 10.0)
-
-        return None
-
-    async def _download_image(
-        self, url: str, filename: str,
-    ) -> str:
+    async def _download_image(self, url: str, filename: str) -> str:
         """Download image and save to output directory."""
         os.makedirs(self._output_dir, exist_ok=True)
         filepath = os.path.join(self._output_dir, filename)
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            with open(filepath, "wb") as f:
-                f.write(resp.content)
+        resp = await self.http.get(url, timeout=httpx.Timeout(60))
+        resp.raise_for_status()
+        with open(filepath, "wb") as f:
+            f.write(resp.content)
 
-        logger.info(
-            "Downloaded image: %s (%d bytes)",
-            filepath,
-            os.path.getsize(filepath),
-        )
+        logger.info("Downloaded image: %s (%d bytes)", filepath, os.path.getsize(filepath))
         return filepath
+
+    def format_for_context(self, result: ToolResult) -> str:
+        if result.success:
+            return result.data
+        return f"Image generation failed: {result.error}"
