@@ -28,6 +28,27 @@ class ToolResult:
     error: str | None = None
     side_effect: dict | None = None
     failure_category: str | None = None  # transient, input, permission, unavailable, unknown
+    status: str | None = None      # forward-compat: "pending", "complete"
+    task_id: str | None = None     # forward-compat: for backgroundable tasks
+
+
+def auto_distill(text: str) -> str:
+    """Head-tail with signal extraction for verbose output.
+
+    Used by the executor as a fallback and by CLITool as a default.
+    """
+    signal_words = {"error", "exception", "fail", "warning", "traceback", "exit"}
+    lines = text.splitlines()
+    if len(lines) <= 30:
+        return text
+    head = "\n".join(lines[:15])
+    tail = "\n".join(lines[-15:])
+    middle_signals = [
+        line for line in lines[15:-15]
+        if any(w in line.lower() for w in signal_words)
+    ]
+    mid = "\n".join(middle_signals[:10]) if middle_signals else "[...truncated...]"
+    return f"{head}\n\n{mid}\n\n{tail}"
 
 
 # Tool categories for smart filtering
@@ -52,3 +73,12 @@ class BaseTool(ABC):
     async def execute(self, params: dict) -> ToolResult:
         """Execute the tool with the given parameters."""
         ...
+
+    def format_for_context(self, result: ToolResult) -> str:
+        """Format tool output for the LLM context window.
+
+        Override to summarize verbose output. Default: return data as-is.
+        The executor applies auto-distill if this default is used and output
+        exceeds 2000 characters.
+        """
+        return result.data

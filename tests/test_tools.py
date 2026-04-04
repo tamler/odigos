@@ -52,3 +52,46 @@ class TestToolRegistry:
         result = await tool.execute({"key": "value"})
         assert result.success is True
         assert "key" in result.data
+
+
+class TestFormatForContext:
+    def test_default_returns_data(self):
+        """BaseTool.format_for_context returns result.data unchanged by default."""
+        tool = FakeTool()
+        result = ToolResult(success=True, data="some output")
+        assert tool.format_for_context(result) == "some output"
+
+    def test_default_returns_empty_on_empty(self):
+        tool = FakeTool()
+        result = ToolResult(success=True, data="")
+        assert tool.format_for_context(result) == ""
+
+
+class TestAutoDistill:
+    def test_short_text_unchanged(self):
+        from odigos.tools.base import auto_distill
+        assert auto_distill("short") == "short"
+
+    def test_long_text_truncated(self):
+        from odigos.tools.base import auto_distill
+        lines = [f"line {i}" for i in range(200)]
+        text = "\n".join(lines)
+        result = auto_distill(text)
+        assert len(result) < len(text)
+        assert "line 0" in result
+        assert "line 199" in result
+
+
+class TestToolResultForwardCompat:
+    def test_status_defaults_none(self):
+        result = ToolResult(success=True, data="ok")
+        assert result.status is None
+
+    def test_task_id_defaults_none(self):
+        result = ToolResult(success=True, data="ok")
+        assert result.task_id is None
+
+    def test_status_can_be_set(self):
+        result = ToolResult(success=True, data="ok", status="pending", task_id="abc123")
+        assert result.status == "pending"
+        assert result.task_id == "abc123"
