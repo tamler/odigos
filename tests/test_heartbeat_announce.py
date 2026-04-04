@@ -1,10 +1,29 @@
 """Test heartbeat peer maintenance phase."""
 import time
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from odigos.core.heartbeat import Heartbeat
+
+# Common patches for all tick-level module calls
+_MODULE_PATCHES = [
+    ("odigos.core.heartbeat.scheduled.maybe_send_briefing", AsyncMock),
+    ("odigos.core.heartbeat.scheduled.process_scheduled_tasks", AsyncMock),
+    ("odigos.core.heartbeat.scheduled.fire_reminders", AsyncMock),
+    ("odigos.core.heartbeat.todos.work_todos", AsyncMock),
+    ("odigos.core.heartbeat.peers.deliver_subagent_results", AsyncMock),
+    ("odigos.core.heartbeat.maintenance.run_cron_jobs", AsyncMock),
+    ("odigos.core.heartbeat.maintenance.send_nudges", AsyncMock),
+    ("odigos.core.heartbeat.maintenance.check_followups", AsyncMock),
+    ("odigos.core.heartbeat.plans.work_in_progress_plans", AsyncMock),
+    ("odigos.core.heartbeat.idle.idle_think", AsyncMock),
+    ("odigos.core.heartbeat.maintenance.run_evolution", AsyncMock),
+    ("odigos.core.heartbeat.profiling.dream_analyze_user", AsyncMock),
+    ("odigos.core.heartbeat.profiling.extract_experiences", AsyncMock),
+    ("odigos.core.heartbeat.profiling.evaluate_plan_outcomes", AsyncMock),
+    ("odigos.core.heartbeat.maintenance.check_storage_quota", AsyncMock),
+]
 
 
 def _build_heartbeat(**overrides):
@@ -48,25 +67,11 @@ def _build_heartbeat(**overrides):
     hb._update_tick_counter = 0
     hb._email_tick_counter = 0
     hb.settings = None
-    hb._fire_reminders = AsyncMock(return_value=False)
-    hb._work_todos = AsyncMock(return_value=False)
-    hb._deliver_subagent_results = AsyncMock(return_value=False)
-    hb._idle_think = AsyncMock()
     hb._background_model = ""
     hb._budget_tracker = None
     hb._quota_tick_counter = 0
     hb._email_config = None
-    hb._maybe_send_briefing = AsyncMock()
-    hb._process_scheduled_tasks = AsyncMock(return_value=False)
-    hb._run_cron_jobs = AsyncMock(return_value=False)
-    hb._send_nudges = AsyncMock(return_value=False)
-    hb._check_followups = AsyncMock(return_value=False)
-    hb._work_in_progress_plans = AsyncMock(return_value=False)
-    hb._run_evolution = AsyncMock()
-    hb._dream_analyze_user = AsyncMock()
-    hb._extract_experiences = AsyncMock()
-    hb._evaluate_plan_outcomes = AsyncMock()
-    hb._check_storage_quota = AsyncMock()
+    hb._plan_fail_count = 0
     return hb
 
 
@@ -80,7 +85,26 @@ async def test_tick_announces_and_flushes():
     agent_client.get_unprocessed_inbound = AsyncMock(return_value=[])
 
     hb = _build_heartbeat(agent_client=agent_client)
-    await hb._tick()
+
+    # Patch all module calls except peers (which we want to exercise)
+    patches = [patch(target, new_callable=cls, return_value=False) for target, cls in _MODULE_PATCHES]
+    # Also need to NOT patch peers.peer_maintenance and peers.process_peer_messages
+    with patch("odigos.core.heartbeat.scheduled.maybe_send_briefing", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.scheduled.process_scheduled_tasks", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.scheduled.fire_reminders", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.todos.work_todos", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.peers.deliver_subagent_results", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.run_cron_jobs", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.send_nudges", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.check_followups", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.plans.work_in_progress_plans", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.idle.idle_think", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.maintenance.run_evolution", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.dream_analyze_user", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.extract_experiences", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.evaluate_plan_outcomes", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.maintenance.check_storage_quota", new_callable=AsyncMock):
+        await hb._tick()
 
     agent_client.broadcast_announce.assert_called_once()
     agent_client.mark_stale_peers.assert_called_once()
@@ -100,7 +124,23 @@ async def test_tick_inert_when_no_peers():
     db.fetch_one = AsyncMock(return_value=None)  # No online peers in registry
 
     hb = _build_heartbeat(agent_client=agent_client, db=db)
-    await hb._tick()
+
+    with patch("odigos.core.heartbeat.scheduled.maybe_send_briefing", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.scheduled.process_scheduled_tasks", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.scheduled.fire_reminders", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.todos.work_todos", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.peers.deliver_subagent_results", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.run_cron_jobs", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.send_nudges", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.check_followups", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.plans.work_in_progress_plans", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.idle.idle_think", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.maintenance.run_evolution", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.dream_analyze_user", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.extract_experiences", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.evaluate_plan_outcomes", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.maintenance.check_storage_quota", new_callable=AsyncMock):
+        await hb._tick()
 
     agent_client.broadcast_announce.assert_not_called()
     agent_client.flush_outbox.assert_not_called()
@@ -131,7 +171,22 @@ async def test_tick_processes_inbound_messages():
     hb.agent = AsyncMock()
     hb.agent.handle_message = AsyncMock(return_value="I'll look into the disk usage.")
 
-    await hb._tick()
+    with patch("odigos.core.heartbeat.scheduled.maybe_send_briefing", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.scheduled.process_scheduled_tasks", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.scheduled.fire_reminders", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.todos.work_todos", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.peers.deliver_subagent_results", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.run_cron_jobs", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.send_nudges", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.check_followups", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.plans.work_in_progress_plans", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.idle.idle_think", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.maintenance.run_evolution", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.dream_analyze_user", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.extract_experiences", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.evaluate_plan_outcomes", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.maintenance.check_storage_quota", new_callable=AsyncMock):
+        await hb._tick()
 
     # Agent should have been called with a UniversalMessage containing the peer message
     hb.agent.handle_message.assert_called_once()
@@ -150,5 +205,21 @@ async def test_tick_processes_inbound_messages():
 async def test_tick_skips_peer_when_no_agent_client():
     """No crash when agent_client is None."""
     hb = _build_heartbeat(agent_client=None)
-    await hb._tick()
+
+    with patch("odigos.core.heartbeat.scheduled.maybe_send_briefing", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.scheduled.process_scheduled_tasks", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.scheduled.fire_reminders", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.todos.work_todos", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.peers.deliver_subagent_results", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.run_cron_jobs", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.send_nudges", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.maintenance.check_followups", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.plans.work_in_progress_plans", new_callable=AsyncMock, return_value=False), \
+         patch("odigos.core.heartbeat.idle.idle_think", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.maintenance.run_evolution", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.dream_analyze_user", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.extract_experiences", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.profiling.evaluate_plan_outcomes", new_callable=AsyncMock), \
+         patch("odigos.core.heartbeat.maintenance.check_storage_quota", new_callable=AsyncMock):
+        await hb._tick()
     # Should complete without error

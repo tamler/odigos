@@ -10,7 +10,7 @@ from odigos.channels.base import UniversalMessage
 from odigos.core.heartbeat.utils import log_heartbeat_session, send_notification
 
 if TYPE_CHECKING:
-    from odigos.core.heartbeat_old import Heartbeat
+    from odigos.core.heartbeat.orchestrator import Heartbeat
 
 logger = logging.getLogger(__name__)
 

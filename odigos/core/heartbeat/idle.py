@@ -10,7 +10,7 @@ from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 
 if TYPE_CHECKING:
-    from odigos.core.heartbeat_old import Heartbeat
+    from odigos.core.heartbeat.orchestrator import Heartbeat
 
 logger = logging.getLogger(__name__)
 

@@ -13,7 +13,7 @@ from odigos.core.content_filter import ContentFilter
 from odigos.core.heartbeat.utils import send_notification
 
 if TYPE_CHECKING:
-    from odigos.core.heartbeat_old import Heartbeat
+    from odigos.core.heartbeat.orchestrator import Heartbeat
 
 logger = logging.getLogger(__name__)
 

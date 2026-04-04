@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from odigos.core.heartbeat_old import Heartbeat
+    from odigos.core.heartbeat.orchestrator import Heartbeat
 
 logger = logging.getLogger(__name__)
 

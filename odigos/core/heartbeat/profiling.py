@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from odigos.core.llm_prompt import run_prompt
 
 if TYPE_CHECKING:
-    from odigos.core.heartbeat_old import Heartbeat
+    from odigos.core.heartbeat.orchestrator import Heartbeat
 
 logger = logging.getLogger(__name__)
 
