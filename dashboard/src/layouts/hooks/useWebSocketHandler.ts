@@ -102,7 +102,33 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           ui.setHasNewEmail(true)
           toast.info(`New email: ${msg.subject || 'New message'}`, { duration: 5000 })
         }
-        if (msg.type === 'task_completed') toast.success(`Completed: ${msg.task || 'Background task'}`, { duration: 3000 })
+        if (msg.type === 'task_started' && msg.task) {
+          const task = msg.task as any
+          ui.addBackgroundTask({
+            id: task.id,
+            toolName: task.tool_name,
+            description: task.description,
+            startedAt: task.started_at,
+            conversationId: msg.conversation_id as string,
+          })
+        }
+        if (msg.type === 'task_completed') {
+          ui.removeBackgroundTask(msg.task_id as string)
+          const toolLabel = (msg.tool_name as string)?.replace('generate_', '') || 'Task'
+          const resultText = msg.result as string || 'Ready'
+          toast.success(`${toolLabel} complete: ${resultText}`, { duration: 5000 })
+
+          // Add system message to chat if it's the active conversation
+          if (msg.conversation_id === activeIdRef.current) {
+            chat.setMessages((prev) => [...prev, {
+              role: 'system',
+              content: `[Background task completed] ${resultText}`,
+              timestamp: new Date().toISOString(),
+            }])
+          }
+          // Refresh conversation list to update message counts/last activity
+          useConversationStore.getState().refreshConversations()
+        }
       },
       (isConnected) => {
         const wasConnected = useUIStore.getState().connected

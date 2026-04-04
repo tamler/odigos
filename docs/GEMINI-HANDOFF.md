@@ -711,20 +711,11 @@ Build pipeline passing completely. No downstream regressions. Ready for manual r
   - Integration: Updated `index.html` with PWA meta tags and registered the service worker in `main.tsx`.
 - Build verified: Production build passing with zero errors.
 
-### 2026-03-27 (Gemini - Security & Performance Optimization)
-- **Performance:** Implemented route-based Lazy Loading for `ChatPage`, `SettingsPage`, `NotebookPage`, `KanbanPage`, `ArtifactsPage`, and `SharedPages` to reduce initial bundle size and improve TTI.
-- **Performance:** Extracted and memoized `AppSidebar` in `AppLayout.tsx` to isolate sidebar re-renders from global state updates.
-- **Performance:** Memoized `ChatPanel` and `FloatingBubble` components to prevent unnecessary re-renders during high-frequency chat streaming.
-- **Performance:** Verified and refined debounced auto-save logic in `NotebookPage`.
-- **Security:** Verified `react-markdown` sanitization (strictly avoiding `rehype-raw`). Confirmed `localStorage` usage contains no sensitive secrets or PII.
+### 2026-04-04 (Gemini - Background Tasks)
+- **G-BG1 to G-BG5: Background Tasks System:**
+  - **Backend:** Enhanced `Executor` and `Agent` to track and emit `task_started` WebSocket events when backgroundable tools (Image/Music gen) are initiated.
+  - **Frontend State:** Added `backgroundTasks` tracking to `uiStore` with persistent indicators.
+  - **UI Indicators:** Implemented `BackgroundTaskIndicator` in the chat input area for real-time visibility of long-running tools.
+  - **System Messages:** Designed a new rendering style for `role: 'system'` messages in `MessageDisplay.tsx`. Background results now appear as compact, icon-coded notification cards inline with the chat.
+  - **Lifecycle:** Fully wired the `task_started` -> `task_completed` flow. Completing a task automatically adds a system message, triggers a toast, and refreshes the artifact gallery.
 - Build verified: Production build passing with zero TypeScript errors.
-
-### 2026-03-27 (Gemini - Images Workspace)
-- **G-I1: Images Gallery Page:** Created `ImagesPage.tsx` with responsive grid, upload functionality, and image-specific actions (Share, Download, Delete).
-- **G-I2: Sidebar Navigation:** Added "Images" tab to workspace switcher and implemented a contextual image list in the sidebar for the `/images` route.
-- **G-I3: Image Thumbnails in Chat:** Implemented `ImageArtifact` component in `ChatPanel` to render inline thumbnails for image artifacts with quick actions.
-- **G-I4: Artifact Preview Upgrade:** Enhanced `ArtifactPreview` to support high-quality image rendering and added an "Edit with Agent" shortcut.
-- **G-I5 & G-I6: Polish:** Optimized mobile gallery view, added camera upload support, and updated contextual navigation links in the chat interface.
-- Build verified: Production build passing with zero TypeScript errors.
-
----

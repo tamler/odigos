@@ -228,6 +228,17 @@ async def websocket_endpoint(websocket: WebSocket):
                             "actions": actions,
                             "conversation_id": conversation_id,
                         })
+
+                    # Send task_started if background tasks were initiated
+                    bg_tasks_map = getattr(agent, "_background_tasks_by_convo", {})
+                    bg_tasks = bg_tasks_map.pop(conversation_id, None)
+                    if bg_tasks:
+                        for bt in bg_tasks:
+                            await websocket.send_json({
+                                "type": "task_started",
+                                "task": bt,
+                                "conversation_id": conversation_id,
+                            })
                 except Exception:
                     pass  # Client disconnected, response is still saved in DB
                 agent = agent_service.agent

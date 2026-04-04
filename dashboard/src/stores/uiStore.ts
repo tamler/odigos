@@ -1,5 +1,13 @@
 import { create } from 'zustand'
 
+interface BackgroundTask {
+  id: string
+  toolName: string
+  description: string
+  startedAt: string
+  conversationId: string
+}
+
 interface UIState {
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
@@ -23,6 +31,10 @@ interface UIState {
   setAgentName: (name: string) => void
   hasNewEmail: boolean
   setHasNewEmail: (hasNew: boolean) => void
+  backgroundTasks: BackgroundTask[]
+  addBackgroundTask: (task: BackgroundTask) => void
+  removeBackgroundTask: (id: string) => void
+  clearBackgroundTasks: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -48,4 +60,12 @@ export const useUIStore = create<UIState>((set) => ({
   setAgentName: (name) => set({ agentName: name }),
   hasNewEmail: false,
   setHasNewEmail: (hasNew) => set({ hasNewEmail: hasNew }),
+  backgroundTasks: [],
+  addBackgroundTask: (task) => set((s) => ({
+    backgroundTasks: [...s.backgroundTasks, task]
+  })),
+  removeBackgroundTask: (id) => set((s) => ({
+    backgroundTasks: s.backgroundTasks.filter(t => t.id !== id)
+  })),
+  clearBackgroundTasks: () => set({ backgroundTasks: [] }),
 }))

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, memo } from 'react'
-import { useSearchParams, useOutletContext, useNavigate } from 'react-router-dom'
+import { useSearchParams, useOutletContext } from 'react-router-dom'
 import { ChatSocket } from '@/lib/ws'
 import { get, uploadFile } from '@/lib/api'
 import { toast } from 'sonner'
@@ -35,7 +35,6 @@ export const ChatPanel = memo(({
   onClose,
 }: ChatPanelProps) => {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
 
   let outletCtx: any = {}
   try { outletCtx = useOutletContext<any>() || {} } catch { outletCtx = {} }
@@ -370,7 +369,6 @@ export const ChatPanel = memo(({
           canSend={!!canSend}
           isStreaming={isStreaming}
           sttAvailable={sttAvailable}
-          useCamera={useCamera}
           setUseCamera={setUseCamera}
           agentName={agentName}
           isSidePanel={isSidePanel}

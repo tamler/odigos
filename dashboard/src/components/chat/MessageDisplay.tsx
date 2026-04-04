@@ -1,5 +1,6 @@
 import { Markdown } from '@/components/ui/markdown'
 import { StreamingText } from '@/components/ui/streaming-text'
+import { CheckCircle2, Music, Image as ImageIcon, Info } from 'lucide-react'
 import {
   ChatContainerRoot,
   ChatContainerContent,
@@ -43,6 +44,33 @@ interface MessageDisplayProps {
   onOpenArtifact: (id: string) => void
   onSuggest: (text: string) => void
   getPreviousUserMessage: (assistantIndex: number) => string
+}
+
+function SystemMessage({ content }: { content: string }) {
+  const isBackgroundResult = content.startsWith('[Background task completed]')
+  const displayText = content.replace('[Background task completed] ', '')
+  const isMusic = displayText.toLowerCase().includes('music') || displayText.toLowerCase().includes('audio')
+  const isImage = displayText.toLowerCase().includes('image') || displayText.toLowerCase().includes('picture')
+
+  return (
+    <div className="flex justify-center my-6">
+      <div className="inline-flex items-center gap-2.5 rounded-full bg-muted/40 border border-border/20 px-4 py-2 text-xs text-muted-foreground shadow-sm transition-all hover:bg-muted/60">
+        {isBackgroundResult ? (
+          <>
+            <div className="flex items-center justify-center p-1 bg-background rounded-full">
+              {isMusic ? <Music className="h-3 w-3 text-blue-500" /> : isImage ? <ImageIcon className="h-3 w-3 text-purple-500" /> : <CheckCircle2 className="h-3 w-3 text-green-500" />}
+            </div>
+            <span className="font-medium">{displayText}</span>
+          </>
+        ) : (
+          <>
+            <Info className="h-3 w-3" />
+            <span>{displayText}</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export function MessageDisplay({
@@ -124,6 +152,9 @@ export function MessageDisplay({
                     const offset = Math.max(0, messages.length - messageDisplayLimit)
                     return messages.slice(-messageDisplayLimit).map((msg: ChatMessage, i: number) => {
                       const actualIndex = offset + i
+                      if (msg.role === 'system') {
+                        return <SystemMessage key={`${msg.role}-${msg.timestamp}-${i}`} content={msg.content} />
+                      }
                       return (
                         <div key={`${msg.role}-${msg.timestamp}-${i}`}>
                           {msg.role === 'user' ? (

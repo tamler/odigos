@@ -225,6 +225,12 @@ class Agent:
         if result.suggested_actions:
             self._suggested_actions_by_convo[conversation_id] = result.suggested_actions
 
+        # Store background tasks for retrieval by WS channel
+        if not hasattr(self, "_background_tasks_by_convo"):
+            self._background_tasks_by_convo = {}
+        if result.background_tasks:
+            self._background_tasks_by_convo[conversation_id] = result.background_tasks
+
         clean_content = await self.reflector.reflect(
             conversation_id,
             result.response,

@@ -20,12 +20,11 @@ interface ChatInputAreaProps {
   onSend: () => void
   onRemoveFile: (file: File) => void
   onKeyDown: (e: React.KeyboardEvent) => void
-  textareaRef: React.RefObject<HTMLTextAreaElement>
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>
   connected: boolean
   canSend: boolean
   isStreaming: boolean
   sttAvailable: boolean
-  useCamera: boolean | 'environment'
   setUseCamera: (value: boolean | 'environment') => void
   agentName: string
   isSidePanel: boolean
@@ -41,6 +40,23 @@ interface ChatInputAreaProps {
   onEmailClick: () => void
 }
 
+function BackgroundTaskIndicator() {
+  const tasks = useUIStore(s => s.backgroundTasks)
+  if (tasks.length === 0) return null
+
+  return (
+    <div className="flex items-center gap-2 text-[10px] text-muted-foreground bg-muted/30 px-2 py-0.5 rounded-full border border-border/30">
+      <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+      <span className="font-medium">
+        {tasks.length === 1
+          ? `${tasks[0].description}...`
+          : `${tasks.length} tasks running...`
+        }
+      </span>
+    </div>
+  )
+}
+
 export function ChatInputArea({
   inputValue,
   setInputValue,
@@ -53,7 +69,6 @@ export function ChatInputArea({
   canSend,
   isStreaming,
   sttAvailable,
-  useCamera,
   setUseCamera,
   agentName,
   isSidePanel,
@@ -103,29 +118,32 @@ export function ChatInputArea({
           </div>
         )}
 
-        <div className="flex items-center gap-3 px-1 mb-2">
-          <button onClick={() => navigate('/notebooks')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Journal</button>
-          <span className="text-muted-foreground/20 text-[10px]">·</span>
-          <button onClick={() => navigate('/kanban')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Board</button>
-          <span className="text-muted-foreground/20 text-[10px]">·</span>
-          <button onClick={() => navigate('/images')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Images</button>
-          <span className="text-muted-foreground/20 text-[10px]">·</span>
-          <button onClick={() => navigate('/artifacts')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Documents</button>
-          <span className="text-muted-foreground/20 text-[10px]">·</span>
-          <div className="relative inline-flex">
-            <button
-              onClick={onEmailClick}
-              className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors"
-            >
-              Email
-            </button>
-            {hasNewEmail && (
-              <span className="absolute -top-1 -right-1.5 flex h-1.5 w-1.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
-              </span>
-            )}
+        <div className="flex items-center justify-between px-1 mb-2">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/notebooks')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Journal</button>
+            <span className="text-muted-foreground/20 text-[10px]">·</span>
+            <button onClick={() => navigate('/kanban')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Board</button>
+            <span className="text-muted-foreground/20 text-[10px]">·</span>
+            <button onClick={() => navigate('/images')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Images</button>
+            <span className="text-muted-foreground/20 text-[10px]">·</span>
+            <button onClick={() => navigate('/artifacts')} className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors">Documents</button>
+            <span className="text-muted-foreground/20 text-[10px]">·</span>
+            <div className="relative inline-flex">
+              <button
+                onClick={onEmailClick}
+                className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 hover:text-primary transition-colors"
+              >
+                Email
+              </button>
+              {hasNewEmail && (
+                <span className="absolute -top-1 -right-1.5 flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
+                </span>
+              )}
+            </div>
           </div>
+          <BackgroundTaskIndicator />
         </div>
 
         <div className="relative rounded-2xl border border-border/50 bg-muted/30 focus-within:border-border/80 transition-colors shadow-sm">

@@ -202,6 +202,7 @@ class ExecuteResult:
     """Result from executor: LLM response + metadata."""
     response: LLMResponse
     suggested_actions: list[str] | None = None
+    background_tasks: list[dict] | None = None
 
 
 class Executor:
@@ -263,6 +264,7 @@ class Executor:
         self._active_skill_tools = set()
         self._pending_skill_prompt = None
         self._pending_suggested_actions: list[str] | None = None
+        self._pending_background_tasks: list[dict] = []
 
         # Build initial context -- use pre-built headless messages if provided
         if headless_messages is not None:
@@ -602,7 +604,11 @@ class Executor:
             tool_calls=last_response.tool_calls,
         )
 
-        return ExecuteResult(response=aggregated, suggested_actions=self._pending_suggested_actions)
+        return ExecuteResult(
+            response=aggregated,
+            suggested_actions=self._pending_suggested_actions,
+            background_tasks=self._pending_background_tasks,
+        )
 
     async def _execute_tool(
         self, conversation_id: str, tool_call: ToolCall, *, message_content: str = "",
@@ -774,7 +780,14 @@ class Executor:
             if result and result.status == "pending":
                 bg = result.side_effect.get("background_task") if result.side_effect else None
                 if bg and self.db:
-                    await _store_background_task(self.db, bg)
+                    task_id = await _store_background_task(self.db, bg)
+                    self._pending_background_tasks.append({
+                        "id": task_id,
+                        "tool_name": bg["tool_name"],
+                        "description": f"Background: {bg['tool_name']}",
+                        "conversation_id": bg.get("conversation_id", ""),
+                        "started_at": datetime.now(timezone.utc).isoformat(),
+                    })
                 return result.data
 
             if result.success:

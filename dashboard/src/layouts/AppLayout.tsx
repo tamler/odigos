@@ -32,7 +32,7 @@ export interface AssistantConfig {
 }
 
 export interface ChatMessage {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: string
   attachments?: { id: string; filename: string; size: number }[]
