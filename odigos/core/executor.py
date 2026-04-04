@@ -126,6 +126,33 @@ def _friendly_tool_status(tool_name: str) -> str:
     return random.choice(options)
 
 
+async def _update_experience_feedback(
+    db, tool_name: str, success: bool, failure_category: str | None,
+) -> None:
+    """Update experience confidence based on tool execution outcome."""
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        if success:
+            await db.execute(
+                "UPDATE agent_experiences "
+                "SET times_applied = times_applied + 1, "
+                "    confidence = MIN(confidence + 0.05, 1.0), "
+                "    updated_at = ? "
+                "WHERE tool_name = ?",
+                (now, tool_name),
+            )
+        elif failure_category not in ("input", "permission"):
+            await db.execute(
+                "UPDATE agent_experiences "
+                "SET confidence = MAX(confidence - 0.1, 0.0), "
+                "    updated_at = ? "
+                "WHERE tool_name = ? AND success = 1",
+                (now, tool_name),
+            )
+    except Exception:
+        logger.debug("Experience feedback update failed", exc_info=True)
+
+
 def _coerce_and_validate(params: dict, schema: dict) -> dict:
     """Coerce LLM string params to schema types, then validate constraints."""
     properties = schema.get("properties", {})
@@ -703,6 +730,14 @@ class Executor:
                     )
                 except Exception:
                     logger.debug("Could not log tool error", exc_info=True)
+
+            # Experience feedback: update confidence based on outcome
+            if self.db:
+                await _update_experience_feedback(
+                    self.db, tool_call.name,
+                    success=result.success,
+                    failure_category=category,
+                )
 
             if result.success:
                 display = tool.format_for_context(result)
