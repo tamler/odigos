@@ -39,19 +39,46 @@ class ToolRegistry:
     def list(self) -> list[BaseTool]:
         return list(self._tools.values())
 
-    def tool_definitions(self, **_kwargs) -> list[dict]:
-        """Return only find_tools. Everything else is discovered on demand."""
+    def tool_definitions(
+        self, inject_tools: list[str] | None = None, **_kwargs,
+    ) -> list[dict]:
+        """Return find_tools + JIT-injected tools based on classification.
+
+        Args:
+            inject_tools: Optional list of tool names to include alongside
+                find_tools. Resolved by the executor from query classification.
+        """
+        defs = []
+
+        # Always include find_tools as a discovery fallback
         find = self._tools.get("find_tools")
-        if not find:
-            return []
-        return [{
+        if find:
+            defs.append(self._tool_to_def(find))
+
+        # JIT: inject likely tools for this query's classification
+        if inject_tools:
+            seen = {"find_tools"}
+            for name in inject_tools[:5]:
+                if name in seen:
+                    continue
+                tool = self._tools.get(name)
+                if tool:
+                    defs.append(self._tool_to_def(tool))
+                    seen.add(name)
+
+        return defs
+
+    @staticmethod
+    def _tool_to_def(tool: BaseTool) -> dict:
+        """Convert a BaseTool to an OpenAI-compatible tool definition."""
+        return {
             "type": "function",
             "function": {
-                "name": find.name,
-                "description": find.description,
-                "parameters": find.parameters_schema,
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters_schema,
             },
-        }]
+        }
 
     def validate_routing_rules(self, routing_rules: dict) -> list[str]:
         """Validate that routing rules reference tools that actually exist.

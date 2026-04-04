@@ -251,11 +251,17 @@ class Executor:
             context_metadata=context_metadata,
         )
 
-        # Tool filtering by category (routing_rules.md controls context, not tools)
+        # JIT tool injection: resolve likely tools from classification, inject schemas
         tools = None
         if self.tool_registry and self.tool_registry.list():
             classification = query_analysis.classification if query_analysis else None
-            tools = self.tool_registry.tool_definitions(classification=classification)
+            inject_tools = []
+            if classification and self.db:
+                from odigos.core.context import _get_likely_tools, _FALLBACK_TOOLS
+                inject_tools = await _get_likely_tools(self.db, classification)
+                if not inject_tools:
+                    inject_tools = _FALLBACK_TOOLS.get(classification, [])
+            tools = self.tool_registry.tool_definitions(inject_tools=inject_tools or None)
 
         # Count context tokens for efficiency tracking
         context_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)
