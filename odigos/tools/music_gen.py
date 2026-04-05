@@ -237,19 +237,23 @@ class GenerateMusicTool(APITool):
     async def complete_from_callback(
         self, task_id: str, conversation_id: str, callback_data: dict,
     ) -> ToolResult:
-        """Process callback from Kie.ai when music generation completes."""
-        try:
-            # Kie.ai callback format varies: try all known paths
-            data = callback_data.get("data", {})
-            tracks = (
-                self._extract_tracks(data.get("data", []))        # callback: {data: {data: [tracks]}}
-                or self._extract_tracks(data.get("response", {}))  # poll: {data: {response: ...}}
-                or self._extract_tracks(data)                      # flat: {data: [tracks]}
-                or self._extract_tracks(callback_data)             # raw: [tracks]
-            )
+        """Process callback from Kie.ai when music generation completes.
 
-            if not tracks:
-                logger.warning("No tracks found in callback. Keys: %s", list(callback_data.keys()))
+        Kie.ai callback format (documented from actual payload):
+            {"code": 200, "data": {"callbackType": "complete", "data": [
+                {"audio_url": "...", "title": "...", "duration": 17.92, ...},
+                ...
+            ]}}
+        Tracks are at: callback_data["data"]["data"]
+        """
+        try:
+            tracks = callback_data.get("data", {}).get("data", [])
+            if not isinstance(tracks, list) or not tracks:
+                logger.error(
+                    "Unexpected callback format. code=%s, data_keys=%s",
+                    callback_data.get("code"),
+                    list(callback_data.get("data", {}).keys()) if isinstance(callback_data.get("data"), dict) else type(callback_data.get("data")),
+                )
                 return ToolResult(success=False, data="", error="No tracks in callback data")
 
             artifacts = []
