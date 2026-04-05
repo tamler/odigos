@@ -244,7 +244,7 @@ class GenerateMusicTool(APITool):
             "model": self._model,
             "customMode": custom_mode,
             "instrumental": instrumental,
-            "callBackUrl": "",
+            "callBackUrl": "https://localhost/callback",
         }
         if custom_mode:
             if style:
