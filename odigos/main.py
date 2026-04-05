@@ -12,6 +12,7 @@ from odigos.bootstrap import Bootstrapper
 from odigos.config import load_settings
 from odigos.config_validator import validate_settings
 
+from odigos.api.callbacks import router as callbacks_router
 from odigos.api.workspace import router as workspace_router
 from odigos.api.agent import router as agent_router
 from odigos.api.system import router as system_router
@@ -69,6 +70,7 @@ app.add_middleware(
     allow_credentials=False,
 )
 
+app.include_router(callbacks_router)  # No auth — external APIs POST here
 app.include_router(system_router)
 app.include_router(agent_router)
 app.include_router(workspace_router)

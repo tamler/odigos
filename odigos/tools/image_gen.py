@@ -90,7 +90,10 @@ class GenerateImageTool(APITool):
             ratio = self._default_ratio
 
         try:
-            task_id = await self._create_task(prompt, ratio)
+            internal_task_id = uuid.uuid4().hex
+            cb_url = self.callback_url(internal_task_id)
+
+            task_id = await self._create_task(prompt, ratio, callback_url=cb_url)
             return ToolResult(
                 success=True,
                 status="pending",
@@ -98,6 +101,7 @@ class GenerateImageTool(APITool):
                 data=f"Image generation started for: {prompt[:80]}. I'll notify you when it's ready.",
                 side_effect={
                     "background_task": {
+                        "id": internal_task_id,
                         "tool_name": self.name,
                         "external_task_id": task_id,
                         "conversation_id": conversation_id,
@@ -174,18 +178,75 @@ class GenerateImageTool(APITool):
             logger.error("Background image completion failed: %s", e)
             return ToolResult(success=False, data="", error=str(e))
 
-    async def _create_task(self, prompt: str, ratio: str) -> str:
+    async def complete_from_callback(
+        self, task_id: str, conversation_id: str, callback_data: dict,
+    ) -> ToolResult:
+        """Process callback from Kie.ai when image generation completes."""
+        try:
+            # Extract image URL from callback payload — try standard paths
+            data_block = callback_data.get("data", callback_data)
+            result_json_raw = data_block.get("resultJson", "{}")
+            if isinstance(result_json_raw, str):
+                result_json = json.loads(result_json_raw)
+            else:
+                result_json = result_json_raw
+
+            image_url = (result_json.get("resultUrls") or [None])[0]
+            if not image_url:
+                # Fallback: check alternate field names
+                image_url = data_block.get("imageUrl") or data_block.get("image_url")
+
+            if not image_url:
+                return ToolResult(success=False, data="", error="No image URL in callback data")
+
+            artifact_id = uuid.uuid4().hex
+            slug = re.sub(r"[^a-z0-9]+", "_", task_id[:20].lower()).strip("_")
+            filename = f"cb_{slug}_{artifact_id[:8]}.png"
+            filepath = await self._download_image(image_url, filename)
+            file_size = os.path.getsize(filepath)
+
+            if self._db:
+                now = datetime.now(timezone.utc).isoformat()
+                await self._db.execute(
+                    "INSERT INTO artifacts "
+                    "(id, conversation_id, filename, content_type, file_size, file_path, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (artifact_id, conversation_id, filename, "image/png", file_size, filepath, now),
+                )
+
+            return ToolResult(
+                success=True,
+                data=f"Image generated: {filename} ({file_size} bytes)",
+                side_effect={
+                    "artifact": {
+                        "id": artifact_id,
+                        "filename": filename,
+                        "content_type": "image/png",
+                        "file_size": file_size,
+                        "download_url": f"/api/artifacts/{artifact_id}/download",
+                        "path": filepath,
+                    }
+                },
+            )
+        except Exception as e:
+            logger.error("Callback image completion failed: %s", e)
+            return ToolResult(success=False, data="", error=str(e))
+
+    async def _create_task(self, prompt: str, ratio: str, callback_url: str = "") -> str:
         """Submit image generation task. Returns taskId."""
+        payload: dict = {
+            "model": "z-image",
+            "input": {
+                "prompt": prompt,
+                "aspect_ratio": ratio,
+                "nsfw_checker": self._nsfw_filter,
+            },
+        }
+        if callback_url:
+            payload["callBackUrl"] = callback_url
         data = await self.api_post(
             f"{KIE_BASE}/jobs/createTask",
-            payload={
-                "model": "z-image",
-                "input": {
-                    "prompt": prompt,
-                    "aspect_ratio": ratio,
-                    "nsfw_checker": self._nsfw_filter,
-                },
-            },
+            payload=payload,
             api_key=self._api_key,
         )
         if data.get("code") != 200:

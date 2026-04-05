@@ -98,9 +98,13 @@ class GenerateMusicTool(APITool):
             vocal_gender = ""
 
         try:
+            internal_task_id = uuid.uuid4().hex
+            cb_url = self.callback_url(internal_task_id)
+
             task_id = await self._create_task(
                 prompt=prompt, style=style, title=title,
                 instrumental=instrumental, vocal_gender=vocal_gender,
+                callback_url=cb_url,
             )
             return ToolResult(
                 success=True,
@@ -109,6 +113,7 @@ class GenerateMusicTool(APITool):
                 data=f"Music generation started for: {(title or prompt)[:80]}. I'll notify you when it's ready.",
                 side_effect={
                     "background_task": {
+                        "id": internal_task_id,
                         "tool_name": self.name,
                         "external_task_id": task_id,
                         "conversation_id": conversation_id,
@@ -229,6 +234,78 @@ class GenerateMusicTool(APITool):
             logger.error("Background music completion failed: %s", e)
             return ToolResult(success=False, data="", error=str(e))
 
+    async def complete_from_callback(
+        self, task_id: str, conversation_id: str, callback_data: dict,
+    ) -> ToolResult:
+        """Process callback from Kie.ai when music generation completes."""
+        try:
+            # Try standard nested path first, then top-level
+            tracks = self._extract_tracks(
+                callback_data.get("data", {}).get("response", callback_data)
+            )
+            if not tracks:
+                tracks = self._extract_tracks(callback_data)
+
+            if not tracks:
+                return ToolResult(success=False, data="", error="No tracks in callback data")
+
+            artifacts = []
+            for i, track in enumerate(tracks):
+                audio_url = track.get("audio_url") or track.get("audioUrl", "")
+                if not audio_url:
+                    continue
+
+                track_id = uuid.uuid4().hex
+                track_title = track.get("title") or f"track_{i + 1}"
+                safe_title = "".join(
+                    c if c.isalnum() or c in "-_ " else ""
+                    for c in track_title
+                ).strip().replace(" ", "_")
+                filename = f"{safe_title}_{track_id[:12]}.mp3"
+
+                filepath = await self._download_audio(audio_url, filename)
+                file_size = os.path.getsize(filepath)
+
+                if self._db:
+                    now = datetime.now(timezone.utc).isoformat()
+                    await self._db.execute(
+                        "INSERT INTO artifacts "
+                        "(id, conversation_id, filename, content_type, "
+                        "file_size, file_path, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (track_id, conversation_id, filename,
+                         "audio/mpeg", file_size, filepath, now),
+                    )
+
+                artifacts.append({
+                    "id": track_id,
+                    "filename": filename,
+                    "content_type": "audio/mpeg",
+                    "file_size": file_size,
+                    "download_url": f"/api/artifacts/{track_id}/download",
+                    "path": filepath,
+                    "title": track_title,
+                    "duration": track.get("duration", 0),
+                })
+
+            if not artifacts:
+                return ToolResult(success=False, data="", error="No downloadable audio tracks in callback")
+
+            summary_parts = []
+            for art in artifacts:
+                duration = art.get("duration", 0)
+                dur_str = f" ({duration:.0f}s)" if duration else ""
+                summary_parts.append(f"{art['filename']}{dur_str}")
+
+            return ToolResult(
+                success=True,
+                data="Generated tracks: " + ", ".join(summary_parts),
+                side_effect={"artifacts": artifacts},
+            )
+        except Exception as e:
+            logger.error("Callback music completion failed: %s", e)
+            return ToolResult(success=False, data="", error=str(e))
+
     async def _create_task(
         self,
         prompt: str,
@@ -236,6 +313,7 @@ class GenerateMusicTool(APITool):
         title: str = "",
         instrumental: bool = False,
         vocal_gender: str = "",
+        callback_url: str = "",
     ) -> str:
         """Submit music generation task. Returns taskId."""
         custom_mode = bool(style or title)
@@ -244,7 +322,7 @@ class GenerateMusicTool(APITool):
             "model": self._model,
             "customMode": custom_mode,
             "instrumental": instrumental,
-            "callBackUrl": "https://localhost/callback",
+            "callBackUrl": callback_url or "https://localhost/callback",
         }
         if custom_mode:
             if style:

@@ -88,6 +88,17 @@ class APITool(BaseTool):
             delay = min(delay * 1.5, max_delay)
         raise ToolAPIError(0, "Polling timed out")
 
+    def callback_url(self, task_id: str) -> str:
+        """Build the callback URL for this task.
+
+        Returns the public URL that external APIs should POST to when done.
+        Uses ODIGOS_DOMAIN env var or falls back to localhost.
+        """
+        import os
+        domain = os.environ.get("ODIGOS_DOMAIN", "localhost:8000")
+        scheme = "https" if domain != "localhost:8000" else "http"
+        return f"{scheme}://{domain}/api/callbacks/{task_id}"
+
     async def poll_once(
         self,
         url: str,

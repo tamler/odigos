@@ -129,7 +129,7 @@ def _friendly_tool_status(tool_name: str) -> str:
 async def _store_background_task(db, background_info: dict) -> str:
     """Store a pending background task for heartbeat polling."""
     import json as _json
-    task_id = str(uuid.uuid4())
+    task_id = background_info.get("id") or str(uuid.uuid4())
     await db.execute(
         "INSERT INTO tasks (id, type, conversation_id, tool_name, external_task_id, "
         "status, arguments_json) VALUES (?, 'background_poll', ?, ?, ?, 'pending', ?)",
