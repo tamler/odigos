@@ -105,7 +105,10 @@ export const AppSidebar = memo(({
   const notebooks = useConversationStore(s => s.notebooks)
   const boards = useConversationStore(s => s.boards)
   const images = useConversationStore(s => s.images)
-  const filteredConversations = useConversationStore(s => s.filteredConversations)()
+  const conversations = useConversationStore(s => s.conversations)
+  const filteredConversations = searchQuery
+    ? conversations.filter(c => (c.title || c.id.slice(0, 8)).toLowerCase().includes(searchQuery.toLowerCase()))
+    : conversations
   const activeId = useChatStore(s => s.activeConversationId)
   const navigate = useNavigate()
   const location = useLocation()

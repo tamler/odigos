@@ -15,10 +15,14 @@ async def poll_background_tasks(hb) -> bool:
     Called from heartbeat _tick() as Phase 3c. Not budget-gated
     because polling is HTTP, not LLM.
     """
-    rows = await hb.db.fetch_all(
-        "SELECT * FROM tasks WHERE type = 'background_poll' AND status = 'pending' "
-        "ORDER BY created_at LIMIT 5"
-    )
+    try:
+        rows = await hb.db.fetch_all(
+            "SELECT * FROM tasks WHERE type = 'background_poll' AND status = 'pending' "
+            "ORDER BY created_at LIMIT 5"
+        )
+    except Exception:
+        # Table may not exist on older databases — not critical
+        return False
     if not rows:
         return False
 
