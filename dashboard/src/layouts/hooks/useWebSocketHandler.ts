@@ -14,6 +14,7 @@ import { useConversationStore } from '@/stores/conversationStore'
 
 export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record<string, string>>) {
   const socketRef = useRef<ChatSocket | null>(null)
+  const streamPromotedRef = useRef(false)
   const navigate = useNavigate()
   const navigateRef = useRef(navigate)
   navigateRef.current = navigate
@@ -63,14 +64,19 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           chat.setThinking(false)
           chat.setStatus(null)
           chat.setStreamingContent('')
-          const content = msg.content as string
-          chat.setMessages((prev) => [...prev, {
-            role: 'assistant',
-            content,
-            timestamp: new Date().toISOString(),
-          }])
-          if (ui.focusMode && shouldPlayTTS(content)) {
-            playTTS(stripForTTS(content))
+          if (streamPromotedRef.current) {
+            streamPromotedRef.current = false
+          } else {
+            const content = msg.content as string
+            chat.setMessages((prev) => [...prev, {
+              role: 'assistant',
+              content,
+              timestamp: new Date().toISOString(),
+            }])
+          }
+          const ttsContent = msg.content as string
+          if (ui.focusMode && shouldPlayTTS(ttsContent)) {
+            playTTS(stripForTTS(ttsContent))
           }
           if (Array.isArray(msg.actions) && msg.actions.length > 0) {
             executeActions(msg.actions as UIAction[], navigateRef.current, {
@@ -82,7 +88,20 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
             })
           }
         }
-        if (msg.type === 'stream_end') { chat.setThinking(false); chat.setStatus(null) }
+        if (msg.type === 'stream_end') {
+          const currentStreaming = useChatStore.getState().streamingContent
+          if (currentStreaming) {
+            chat.setMessages((prev) => [...prev, {
+              role: 'assistant' as const,
+              content: currentStreaming,
+              timestamp: new Date().toISOString(),
+            }])
+            chat.setStreamingContent('')
+            streamPromotedRef.current = true
+          }
+          chat.setThinking(false)
+          chat.setStatus(null)
+        }
         if (msg.type === 'queue_update') {
           const queued = msg.queued as number
           chat.setQueuedCount(queued)

@@ -67,6 +67,7 @@ async def get_conversation(
     db: Database = Depends(get_db),
 ):
     """Get a single conversation by ID."""
+    conversation_id = await _resolve_conversation_id(db, conversation_id)
     conversation = await db.fetch_one(
         "SELECT * FROM conversations WHERE id = ?",
         (conversation_id,),
@@ -195,6 +196,7 @@ async def export_conversation(
     db: Database = Depends(get_db),
 ):
     """Export a conversation as markdown or JSON."""
+    conversation_id = await _resolve_conversation_id(db, conversation_id)
     if format == "json":
         result = await _export_json(db, conversation_id)
         media_type = "application/json"

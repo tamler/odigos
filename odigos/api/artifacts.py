@@ -26,6 +26,12 @@ router = APIRouter(
 async def list_artifacts(conversation_id: str | None = None, db=Depends(get_db)):
     """List artifacts, optionally filtered by conversation."""
     if conversation_id:
+        row = await db.fetch_one(
+            "SELECT id FROM conversations WHERE id = ? OR id = ?",
+            (conversation_id, f"web:{conversation_id}"),
+        )
+        if row:
+            conversation_id = row["id"]
         rows = await db.fetch_all(
             "SELECT * FROM artifacts WHERE conversation_id = ? ORDER BY created_at DESC",
             (conversation_id,),
