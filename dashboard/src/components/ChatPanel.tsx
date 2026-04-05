@@ -250,20 +250,31 @@ export const ChatPanel = memo(({
     setPendingFiles((prev) => prev.filter((p) => p.file !== file))
   }, [])
 
+  const pendingSendRef = useRef<{content: string, attachments: any[], context: any} | null>(null)
+
+  // Flush buffered message when connection comes up
+  useEffect(() => {
+    if (connected && pendingSendRef.current) {
+      const { content, attachments, context } = pendingSendRef.current
+      pendingSendRef.current = null
+      socketRef.current?.send('chat', {
+        content,
+        conversation_id: activeConversationId || 'new',
+        attachments: attachments.length > 0 ? attachments : undefined,
+        context,
+      })
+    }
+  }, [connected, activeConversationId, socketRef])
+
   const handleSend = useCallback((overrideContent?: string) => {
     const content = (overrideContent ?? inputValue).trim()
     if (!content && pendingFiles.length === 0) return
-
-    // Check connection — show feedback instead of silent failure
-    if (!connected) {
-      toast.error('Not connected. Reconnecting...')
-      return
-    }
 
     const attachments = pendingFiles
       .filter((p) => p.id)
       .map((p) => ({ id: p.id!, filename: p.file.name, size: p.file.size }))
 
+    // Show the message in UI immediately regardless of connection
     setMessages((prev: ChatMessage[]) => [...prev, {
       role: 'user',
       content,
@@ -273,12 +284,19 @@ export const ChatPanel = memo(({
     useChatStore.getState().setThinking(true)
     useChatStore.getState().setSuggestedActions([])
 
-    socketRef.current?.send('chat', {
-      content,
-      conversation_id: activeConversationId || 'new',
-      attachments: attachments.length > 0 ? attachments : undefined,
-      context: chatContext,
-    })
+    // Send now if connected, buffer if not
+    if (socketRef.current && connected) {
+      socketRef.current.send('chat', {
+        content,
+        conversation_id: activeConversationId || 'new',
+        attachments: attachments.length > 0 ? attachments : undefined,
+        context: chatContext,
+      })
+    } else {
+      // Buffer — will flush when connection comes up
+      pendingSendRef.current = { content, attachments, context: chatContext }
+      toast('Connecting...', { duration: 2000 })
+    }
 
     setInputValue('')
     localStorage.removeItem('odigos-draft')
@@ -292,9 +310,9 @@ export const ChatPanel = memo(({
     }
   }, [handleSend])
 
-  // canSend: only gate on connection + content. Don't block on thinking/queue —
-  // the backend handles queuing, and blocking the UI is hostile UX.
-  const canSend = connected && (inputValue.trim() || pendingFiles.length > 0)
+  // canSend: only gate on having content. Never disable for connection/thinking/queue.
+  // If not connected, handleSend buffers the message and sends when connection comes up.
+  const canSend = !!(inputValue.trim() || pendingFiles.length > 0)
 
   return (
     <FileUpload onFilesAdded={handleFilesAdded} capture={useCamera || undefined}>
