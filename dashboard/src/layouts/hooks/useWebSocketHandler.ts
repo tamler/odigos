@@ -14,7 +14,7 @@ import { useConversationStore } from '@/stores/conversationStore'
 
 export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record<string, string>>) {
   const socketRef = useRef<ChatSocket | null>(null)
-  const streamPromotedRef = useRef(false)
+  // streamPromotedRef removed — chat_response now uses streamed content directly
   const navigate = useNavigate()
   const navigateRef = useRef(navigate)
   navigateRef.current = navigate
@@ -63,17 +63,16 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           }
           chat.setThinking(false)
           chat.setStatus(null)
+          // Use streamed content if available (prevents flash from server
+          // sending a different/shorter final response than what was streamed)
+          const streamedContent = useChatStore.getState().streamingContent
+          const finalContent = streamedContent || (msg.content as string)
           chat.setStreamingContent('')
-          if (streamPromotedRef.current) {
-            streamPromotedRef.current = false
-          } else {
-            const content = msg.content as string
-            chat.setMessages((prev) => [...prev, {
-              role: 'assistant',
-              content,
-              timestamp: new Date().toISOString(),
-            }])
-          }
+          chat.setMessages((prev) => [...prev, {
+            role: 'assistant' as const,
+            content: finalContent,
+            timestamp: new Date().toISOString(),
+          }])
           const ttsContent = msg.content as string
           if (ui.focusMode && shouldPlayTTS(ttsContent)) {
             playTTS(stripForTTS(ttsContent))
@@ -97,7 +96,6 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
               timestamp: new Date().toISOString(),
             }])
             chat.setStreamingContent('')
-            streamPromotedRef.current = true
           }
           chat.setThinking(false)
           chat.setStatus(null)

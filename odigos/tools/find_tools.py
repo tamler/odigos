@@ -21,11 +21,12 @@ class FindToolsTool(BaseTool):
     name = "find_tools"
     category = "memory"
     description = (
-        "Search for available tools by describing what you need to do. "
-        "Returns matching tool names and descriptions. Use when you need "
-        "a capability not in your current tool set — for example, "
-        "'send an email', 'create a kanban card', or 'generate an image'. "
-        "Do not use if the tool you need is already available in this turn."
+        "IMPORTANT: You have 40+ tools available but only see a few right now. "
+        "ALWAYS call this tool FIRST when the user asks you to DO something "
+        "(generate, create, send, search, manage, process, analyze). "
+        "Returns matching tools you can then call. Examples: 'generate music', "
+        "'create image', 'send email', 'manage kanban'. "
+        "NEVER say 'I can't do that' without calling find_tools first."
     )
     parameters_schema = {
         "type": "object",
