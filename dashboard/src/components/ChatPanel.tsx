@@ -49,7 +49,7 @@ export const ChatPanel = memo(({
   const streamingContent = useChatStore(s => s.streamingContent)
   const thinking = useChatStore(s => s.thinking)
   const status = useChatStore(s => s.status)
-  const queuedCount = useChatStore(s => s.queuedCount)
+
   const suggestedActions = useChatStore(s => s.suggestedActions)
   const isStreaming = useChatStore(s => s.isStreaming)
 
@@ -188,15 +188,7 @@ export const ChatPanel = memo(({
     }
   }, [inputValue])
 
-  // Timeout fallback for thinking state
-  useEffect(() => {
-    if (!thinking) return
-    const timer = setTimeout(() => {
-      useChatStore.getState().setThinking(false)
-      useChatStore.getState().setStatus(null)
-    }, 60000)
-    return () => clearTimeout(timer)
-  }, [thinking, status])
+  // (Removed conflicting 60s thinking timeout — the 300s one above is sufficient)
 
   useEffect(() => {
     get<Record<string, any>>('/api/settings')
@@ -262,6 +254,12 @@ export const ChatPanel = memo(({
     const content = (overrideContent ?? inputValue).trim()
     if (!content && pendingFiles.length === 0) return
 
+    // Check connection — show feedback instead of silent failure
+    if (!connected) {
+      toast.error('Not connected. Reconnecting...')
+      return
+    }
+
     const attachments = pendingFiles
       .filter((p) => p.id)
       .map((p) => ({ id: p.id!, filename: p.file.name, size: p.file.size }))
@@ -285,7 +283,7 @@ export const ChatPanel = memo(({
     setInputValue('')
     localStorage.removeItem('odigos-draft')
     setPendingFiles([])
-  }, [inputValue, pendingFiles, activeConversationId, chatContext, socketRef, setMessages])
+  }, [inputValue, pendingFiles, activeConversationId, chatContext, socketRef, setMessages, connected])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -294,7 +292,9 @@ export const ChatPanel = memo(({
     }
   }, [handleSend])
 
-  const canSend = connected && (inputValue.trim() || pendingFiles.length > 0) && queuedCount < 3 && !thinking
+  // canSend: only gate on connection + content. Don't block on thinking/queue —
+  // the backend handles queuing, and blocking the UI is hostile UX.
+  const canSend = connected && (inputValue.trim() || pendingFiles.length > 0)
 
   return (
     <FileUpload onFilesAdded={handleFilesAdded} capture={useCamera || undefined}>
