@@ -76,8 +76,9 @@ class TestPendingDetection:
         task_id = await _store_background_task(fake_db, bg_info)
         assert task_id is not None
 
-        row = await fake_db.fetch_one("SELECT * FROM background_tasks WHERE id = ?", (task_id,))
+        row = await fake_db.fetch_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
         assert row is not None
+        assert row["type"] == "background_poll"
         assert row["tool_name"] == "generate_image"
         assert row["external_task_id"] == "ext123"
         assert row["status"] == "pending"

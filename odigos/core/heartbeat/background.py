@@ -9,14 +9,14 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 
-async def poll_background_tasks(hb) -> bool:
+async def poll_tasks(hb) -> bool:
     """Poll pending background tasks. Returns True if any work was done.
 
     Called from heartbeat _tick() as Phase 3c. Not budget-gated
     because polling is HTTP, not LLM.
     """
     rows = await hb.db.fetch_all(
-        "SELECT * FROM background_tasks WHERE status = 'pending' "
+        "SELECT * FROM tasks WHERE type = 'background_poll' AND status = 'pending' "
         "ORDER BY created_at LIMIT 5"
     )
     if not rows:
@@ -34,7 +34,7 @@ async def poll_background_tasks(hb) -> bool:
         if not tool or not hasattr(tool, "complete_background"):
             logger.warning("Tool %s not available for background completion", tool_name)
             await hb.db.execute(
-                "UPDATE background_tasks SET status = 'failed', error = 'Tool not available' WHERE id = ?",
+                "UPDATE tasks SET status = 'failed', error = 'Tool not available' WHERE id = ?",
                 (task["id"],),
             )
             continue
@@ -49,7 +49,7 @@ async def poll_background_tasks(hb) -> bool:
 
             if result.success:
                 await hb.db.execute(
-                    "UPDATE background_tasks SET status = 'completed', result_json = ?, "
+                    "UPDATE tasks SET status = 'completed', result_json = ?, "
                     "completed_at = datetime('now') WHERE id = ?",
                     (json.dumps(result.side_effect or {}), task["id"]),
                 )
@@ -84,7 +84,7 @@ async def poll_background_tasks(hb) -> bool:
                     })
             else:
                 await hb.db.execute(
-                    "UPDATE background_tasks SET status = 'failed', error = ? WHERE id = ?",
+                    "UPDATE tasks SET status = 'failed', error = ? WHERE id = ?",
                     ((result.error or "Unknown error")[:500], task["id"]),
                 )
                 if hb.notifier:
@@ -97,11 +97,11 @@ async def poll_background_tasks(hb) -> bool:
         except Exception:
             logger.exception("Background poll failed for task %s", task["id"])
             await hb.db.execute(
-                "UPDATE background_tasks SET retry_count = retry_count + 1 WHERE id = ?",
+                "UPDATE tasks SET retry_count = retry_count + 1 WHERE id = ?",
                 (task["id"],),
             )
             await hb.db.execute(
-                "UPDATE background_tasks SET status = 'failed', error = 'Max retries exceeded' "
+                "UPDATE tasks SET status = 'failed', error = 'Max retries exceeded' "
                 "WHERE id = ? AND retry_count >= max_retries",
                 (task["id"],),
             )

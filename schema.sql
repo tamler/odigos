@@ -196,13 +196,17 @@ CREATE TABLE IF NOT EXISTS scheduled_tasks (
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next ON scheduled_tasks(next_run_at);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_type ON scheduled_tasks(type);
 
--- Background tasks: tracks async tool execution (image gen, music gen, etc.)
-CREATE TABLE IF NOT EXISTS background_tasks (
+-- General-purpose task tracking. type field distinguishes task kinds:
+--   background_poll: async tool execution (image gen, music gen)
+--   (future types added here without new tables)
+CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
-    conversation_id TEXT,
-    tool_name TEXT NOT NULL,
-    external_task_id TEXT NOT NULL,
+    type TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
+    description TEXT,
+    conversation_id TEXT,
+    tool_name TEXT,
+    external_task_id TEXT,
     arguments_json TEXT,
     result_json TEXT,
     error TEXT,
@@ -212,7 +216,8 @@ CREATE TABLE IF NOT EXISTS background_tasks (
     completed_at TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_background_tasks_status ON background_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
 
 -- Task plans: multi-step plan persistence
 CREATE TABLE IF NOT EXISTS task_plans (

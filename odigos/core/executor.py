@@ -131,8 +131,8 @@ async def _store_background_task(db, background_info: dict) -> str:
     import json as _json
     task_id = str(uuid.uuid4())
     await db.execute(
-        "INSERT INTO background_tasks (id, conversation_id, tool_name, external_task_id, "
-        "status, arguments_json) VALUES (?, ?, ?, ?, 'pending', ?)",
+        "INSERT INTO tasks (id, type, conversation_id, tool_name, external_task_id, "
+        "status, arguments_json) VALUES (?, 'background_poll', ?, ?, ?, 'pending', ?)",
         (
             task_id,
             background_info.get("conversation_id", ""),

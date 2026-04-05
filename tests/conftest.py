@@ -93,12 +93,14 @@ async def fake_db():
             )
         """)
         await conn.execute("""
-            CREATE TABLE background_tasks (
+            CREATE TABLE tasks (
                 id TEXT PRIMARY KEY,
-                conversation_id TEXT,
-                tool_name TEXT NOT NULL,
-                external_task_id TEXT NOT NULL,
+                type TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
+                description TEXT,
+                conversation_id TEXT,
+                tool_name TEXT,
+                external_task_id TEXT,
                 arguments_json TEXT,
                 result_json TEXT,
                 error TEXT,
