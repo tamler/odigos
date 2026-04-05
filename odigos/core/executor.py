@@ -126,26 +126,22 @@ def _friendly_tool_status(tool_name: str) -> str:
     return random.choice(options)
 
 
-async def _store_background_task(db, background_info: dict) -> str | None:
+async def _store_background_task(db, background_info: dict) -> str:
     """Store a pending background task for heartbeat polling."""
     import json as _json
     task_id = str(uuid.uuid4())
-    try:
-        await db.execute(
-            "INSERT INTO tasks (id, type, status, description, payload_json, "
-            "conversation_id, created_by) "
-            "VALUES (?, 'background_poll', 'pending', ?, ?, ?, 'system')",
-            (
-                task_id,
-                f"Background: {background_info['tool_name']}",
-                _json.dumps(background_info),
-                background_info.get("conversation_id", ""),
-            ),
-        )
-        return task_id
-    except Exception:
-        logger.debug("Could not store background task (table may not exist)", exc_info=True)
-        return None
+    await db.execute(
+        "INSERT INTO background_tasks (id, conversation_id, tool_name, external_task_id, "
+        "status, arguments_json) VALUES (?, ?, ?, ?, 'pending', ?)",
+        (
+            task_id,
+            background_info.get("conversation_id", ""),
+            background_info["tool_name"],
+            background_info["external_task_id"],
+            _json.dumps(background_info.get("arguments", {})),
+        ),
+    )
+    return task_id
 
 
 async def _update_experience_feedback(

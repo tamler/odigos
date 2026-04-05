@@ -69,6 +69,8 @@ class Database:
         except AttributeError:
             logger.warning("sqlite3 extension loading not supported in this Python build")
 
+        # Ensure base schema exists (creates all tables on fresh databases)
+        await self._ensure_schema()
         await self.run_migrations()
 
     async def close(self) -> None:
@@ -82,6 +84,31 @@ class Database:
         if self._conn is None:
             raise RuntimeError("Database not initialized. Call initialize() first.")
         return self._conn
+
+    async def _ensure_schema(self) -> None:
+        """Run schema.sql to ensure all tables exist.
+
+        Uses IF NOT EXISTS so it's safe on existing databases.
+        Runs before migrations so fresh databases get the full schema
+        without needing to replay 50+ migration files.
+        """
+        schema_path = Path(__file__).parent.parent / "schema.sql"
+        if not schema_path.exists():
+            return
+        sql = schema_path.read_text()
+        # Strip vec0 tables if extension not loaded
+        if not self._vec_loaded and "vec0" in sql:
+            import re
+            sql = re.sub(
+                r"CREATE\s+VIRTUAL\s+TABLE[^;]*USING\s+vec0\([^)]*\)\s*;",
+                "-- (vec0 table skipped, extension not loaded)",
+                sql,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+        try:
+            await self.conn.executescript(sql)
+        except Exception as e:
+            logger.warning("Schema initialization: %s", e)
 
     async def run_migrations(self) -> None:
         """Apply SQL migration files in order, tracking which have been applied."""
