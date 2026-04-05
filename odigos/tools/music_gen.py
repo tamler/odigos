@@ -239,14 +239,17 @@ class GenerateMusicTool(APITool):
     ) -> ToolResult:
         """Process callback from Kie.ai when music generation completes."""
         try:
-            # Try standard nested path first, then top-level
-            tracks = self._extract_tracks(
-                callback_data.get("data", {}).get("response", callback_data)
+            # Kie.ai callback format varies: try all known paths
+            data = callback_data.get("data", {})
+            tracks = (
+                self._extract_tracks(data.get("data", []))        # callback: {data: {data: [tracks]}}
+                or self._extract_tracks(data.get("response", {}))  # poll: {data: {response: ...}}
+                or self._extract_tracks(data)                      # flat: {data: [tracks]}
+                or self._extract_tracks(callback_data)             # raw: [tracks]
             )
-            if not tracks:
-                tracks = self._extract_tracks(callback_data)
 
             if not tracks:
+                logger.warning("No tracks found in callback. Keys: %s", list(callback_data.keys()))
                 return ToolResult(success=False, data="", error="No tracks in callback data")
 
             artifacts = []
