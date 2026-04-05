@@ -20,6 +20,21 @@ router = APIRouter(
 )
 
 
+async def _resolve_conversation_id(db: Database, conversation_id: str) -> str:
+    """Resolve a conversation ID, handling web: prefix mismatch.
+
+    The frontend strips the 'web:' prefix from URLs but the DB stores it.
+    This tries both formats and returns the actual DB ID.
+    """
+    row = await db.fetch_one(
+        "SELECT id FROM conversations WHERE id = ? OR id = ?",
+        (conversation_id, f"web:{conversation_id}"),
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return row["id"]
+
+
 @router.get("/conversations/{conversation_id:path}/messages")
 async def get_conversation_messages(
     conversation_id: str,
@@ -28,12 +43,7 @@ async def get_conversation_messages(
     db: Database = Depends(get_db),
 ):
     """Get messages for a conversation with pagination (newest last)."""
-    conversation = await db.fetch_one(
-        "SELECT id FROM conversations WHERE id = ?",
-        (conversation_id,),
-    )
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation_id = await _resolve_conversation_id(db, conversation_id)
 
     total = await db.fetch_one(
         "SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = ?",
@@ -110,12 +120,7 @@ async def update_conversation(
     db: Database = Depends(get_db),
 ):
     """Rename a conversation."""
-    conversation = await db.fetch_one(
-        "SELECT id FROM conversations WHERE id = ?",
-        (conversation_id,),
-    )
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation_id = await _resolve_conversation_id(db, conversation_id)
 
     if update.title is not None:
         await db.execute(
@@ -131,12 +136,7 @@ async def delete_conversation(
     db: Database = Depends(get_db),
 ):
     """Archive a conversation (soft delete)."""
-    conversation = await db.fetch_one(
-        "SELECT id FROM conversations WHERE id = ?",
-        (conversation_id,),
-    )
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    conversation_id = await _resolve_conversation_id(db, conversation_id)
 
     await db.execute(
         "UPDATE conversations SET archived = 1 WHERE id = ?",
