@@ -65,14 +65,22 @@ for entry in "${BARE_METAL[@]}"; do
     # Ensure TextBlob NLTK data is present
     sudo -u "$SVC_USER" bash -c "cd $DIR && source .venv/bin/activate && python -m textblob.download_corpora lite" &>/dev/null || true
 
-    # Rebuild dashboard (install deps if lock file changed)
-    if [ "$SKIP" != "true" ] && [ -d dashboard ]; then
-      cd dashboard
-      if git diff HEAD@{1} --name-only 2>/dev/null | grep -q 'package-lock.json'; then
-        npm ci --no-audit --no-fund 2>&1 | tail -3
+    # Rebuild dashboard if ANY frontend file changed (auto-detect)
+    if [ -d dashboard ]; then
+      FRONTEND_CHANGED=$(git diff "$LOCAL"..HEAD --name-only 2>/dev/null | grep -c '^dashboard/' || echo "0")
+      if [ "$SKIP" = "true" ] && [ "$FRONTEND_CHANGED" -gt 0 ]; then
+        echo "  WARNING: --skip-build but $FRONTEND_CHANGED frontend files changed. Building anyway."
       fi
-      npm run build 2>&1 | tail -3
-      cd ..
+      if [ "$FRONTEND_CHANGED" -gt 0 ] || [ "$SKIP" != "true" ]; then
+        cd dashboard
+        if git diff "$LOCAL"..HEAD --name-only 2>/dev/null | grep -q 'package-lock.json'; then
+          npm ci --no-audit --no-fund 2>&1 | tail -3
+        fi
+        npm run build 2>&1 | tail -3
+        cd ..
+      else
+        echo "  No frontend changes, skipping build."
+      fi
     fi
 
     # Fix ownership again after build
