@@ -19,15 +19,25 @@ from odigos.personality.prompt_builder import build_system_prompt
 
 _context_filter = ContentFilter()
 
-_FALLBACK_TOOLS = {
+# Core tools included for EVERY classification — the agent should always
+# be able to search, create, and discover more tools.
+_CORE_TOOLS = ["search_web", "search_documents", "generate_image", "generate_music", "run_code"]
+
+# Additional tools per classification — merged with core set
+_EXTRA_TOOLS = {
     "simple": [],
-    "standard": ["search_web", "search_documents"],
-    "document_query": ["search_documents", "read_file"],
-    "complex": ["search_web", "search_documents", "run_code"],
+    "standard": [],
+    "document_query": ["read_file"],
+    "complex": ["create_file", "decompose_query"],
     "planning": ["decompose_query"],
-    "code": ["run_code", "create_file"],
-    "creative": ["generate_image", "generate_music"],
+    "code": ["create_file"],
+    "creative": [],
     "email": ["check_email", "send_email", "search_email"],
+}
+
+# Combined fallback: core + extras (used when query_log has no history)
+_FALLBACK_TOOLS = {
+    k: _CORE_TOOLS + v for k, v in _EXTRA_TOOLS.items()
 }
 
 _CLASS_CATEGORIES = {
