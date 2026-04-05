@@ -92,11 +92,14 @@ class APITool(BaseTool):
         """Build the callback URL for this task.
 
         Returns the public URL that external APIs should POST to when done.
-        Uses ODIGOS_DOMAIN env var or falls back to localhost.
+        Returns empty string if no public domain is configured — the tool
+        should fall back to polling when callback_url is empty.
         """
         import os
-        domain = os.environ.get("ODIGOS_DOMAIN", "localhost:8000")
-        scheme = "https" if domain != "localhost:8000" else "http"
+        domain = os.environ.get("ODIGOS_DOMAIN", "")
+        if not domain or domain == "localhost":
+            return ""  # No public URL — polling will be used instead
+        scheme = "https" if "localhost" not in domain else "http"
         return f"{scheme}://{domain}/api/callbacks/{task_id}"
 
     async def poll_once(
