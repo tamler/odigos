@@ -21,12 +21,11 @@ class FindToolsTool(BaseTool):
     name = "find_tools"
     category = "memory"
     description = (
-        "IMPORTANT: You have 40+ tools available but only see a few right now. "
-        "ALWAYS call this tool FIRST when the user asks you to DO something "
-        "(generate, create, send, search, manage, process, analyze). "
-        "Returns matching tools you can then call. Examples: 'generate music', "
-        "'create image', 'send email', 'manage kanban'. "
-        "NEVER say 'I can't do that' without calling find_tools first."
+        "Search for tools you don't currently see. You have 40+ tools but "
+        "only a few are loaded. Call this when you need to do something "
+        "and don't have the right tool — e.g., 'generate music', 'send email', "
+        "'create image', 'manage kanban'. Returns tool names and descriptions "
+        "so you can call the discovered tool."
     )
     parameters_schema = {
         "type": "object",
