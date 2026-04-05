@@ -179,7 +179,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     except Exception:
                         pass  # Client disconnected
 
+                streamed = False
+
                 async def send_chunk(text: str) -> None:
+                    nonlocal streamed
+                    streamed = True
                     try:
                         await websocket.send_json({
                             "type": "chat_chunk",
@@ -209,11 +213,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Extract UI actions from response (```json blocks with "action" key)
                     ui_actions = _extract_ui_actions(response)
 
+                    # When streaming was used, client already has the content.
+                    # Only send content when NOT streaming (e.g., tool-only responses).
                     response_msg = {
                         "type": "chat_response",
-                        "content": response,
                         "conversation_id": conversation_id,
                     }
+                    if not streamed:
+                        response_msg["content"] = response
                     if ui_actions:
                         response_msg["actions"] = ui_actions
                     await websocket.send_json(response_msg)

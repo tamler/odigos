@@ -63,19 +63,20 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           }
           chat.setThinking(false)
           chat.setStatus(null)
-          // Use streamed content if available (prevents flash from server
-          // sending a different/shorter final response than what was streamed)
+          // Streamed responses: content was already built up via chat_chunk.
+          // Non-streamed (tool-only): content comes in this message.
           const streamedContent = useChatStore.getState().streamingContent
-          const finalContent = streamedContent || (msg.content as string)
+          const finalContent = streamedContent || (msg.content as string) || ''
           chat.setStreamingContent('')
-          chat.setMessages((prev) => [...prev, {
-            role: 'assistant' as const,
-            content: finalContent,
-            timestamp: new Date().toISOString(),
-          }])
-          const ttsContent = msg.content as string
-          if (ui.focusMode && shouldPlayTTS(ttsContent)) {
-            playTTS(stripForTTS(ttsContent))
+          if (finalContent) {
+            chat.setMessages((prev) => [...prev, {
+              role: 'assistant' as const,
+              content: finalContent,
+              timestamp: new Date().toISOString(),
+            }])
+          }
+          if (ui.focusMode && finalContent && shouldPlayTTS(finalContent)) {
+            playTTS(stripForTTS(finalContent))
           }
           if (Array.isArray(msg.actions) && msg.actions.length > 0) {
             executeActions(msg.actions as UIAction[], navigateRef.current, {
