@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 
-async def poll_tasks(hb) -> bool:
-    """Poll pending background tasks. Returns True if any work was done.
+async def poll_pending_tasks(hb) -> bool:
+    """Poll pending tasks (type=background_poll). Returns True if any work was done.
 
     Called from heartbeat _tick() as Phase 3c. Not budget-gated
     because polling is HTTP, not LLM.

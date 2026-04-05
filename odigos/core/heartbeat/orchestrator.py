@@ -158,9 +158,9 @@ class Heartbeat:
         # Phase 3b: Run legacy cron jobs (old table, for backward compat)
         did_work |= await maintenance.run_cron_jobs(self)
 
-        # Phase 3c: Poll pending background tasks (HTTP only, no LLM)
+        # Phase 3c: Poll pending tasks — e.g. background_poll type (HTTP only, no LLM)
         from odigos.core.heartbeat import background
-        did_work |= await background.poll_background_tasks(self)
+        did_work |= await background.poll_pending_tasks(self)
 
         # Phase 4: Process inbound peer messages
         if self.agent_client:
