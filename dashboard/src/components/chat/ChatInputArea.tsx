@@ -226,7 +226,7 @@ export function ChatInputArea({
                   aria-label="Send message"
                   className="h-11 w-11 lg:h-8 lg:w-8 rounded-lg shadow-sm transition-all active:scale-95 flex items-center justify-center"
                   disabled={!canSend}
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                 >
                   <ArrowUp className="h-5 w-5 lg:h-4 lg:w-4" />
                 </Button>
