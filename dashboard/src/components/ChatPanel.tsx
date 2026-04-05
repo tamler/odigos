@@ -338,7 +338,7 @@ export const ChatPanel = memo(({
           stopTTS={stopTTS}
           isTTSPlaying={isTTSPlaying}
           onLoadMore={() => setMessageDisplayLimit(l => l + 100)}
-          onEdit={handleEdit}
+          handleEdit={handleEdit}
           onOpenArtifact={(id) => {
             setActiveArtifactId(id)
             setArtifactPanelOpen(true)
@@ -361,9 +361,9 @@ export const ChatPanel = memo(({
           inputValue={inputValue}
           setInputValue={setInputValue}
           pendingFiles={pendingFiles}
-          onSend={handleSend}
-          onRemoveFile={removeFile}
-          onKeyDown={handleKeyDown}
+          handleSend={handleSend}
+          removeFile={removeFile}
+          handleKeyDown={handleKeyDown}
           textareaRef={textareaRef}
           connected={connected}
           canSend={!!canSend}

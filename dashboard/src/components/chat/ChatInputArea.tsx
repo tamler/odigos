@@ -17,9 +17,9 @@ interface ChatInputAreaProps {
   inputValue: string
   setInputValue: (value: string) => void
   pendingFiles: PendingFile[]
-  onSend: () => void
-  onRemoveFile: (file: File) => void
-  onKeyDown: (e: React.KeyboardEvent) => void
+  handleSend: () => void
+  removeFile: (file: File) => void
+  handleKeyDown: (e: React.KeyboardEvent) => void
   textareaRef: React.RefObject<HTMLTextAreaElement | null>
   connected: boolean
   canSend: boolean
@@ -61,9 +61,9 @@ export function ChatInputArea({
   inputValue,
   setInputValue,
   pendingFiles,
-  onSend,
-  onRemoveFile,
-  onKeyDown,
+  handleSend,
+  removeFile,
+  handleKeyDown,
   textareaRef,
   connected,
   canSend,
@@ -109,7 +109,7 @@ export function ChatInputArea({
                   </div>
                 </div>
                 {!p.uploading && (
-                  <button onClick={() => onRemoveFile(p.file)} aria-label="Remove file" className="shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-sm hover:bg-background transition-colors absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100">
+                  <button onClick={() => removeFile(p.file)} aria-label="Remove file" className="shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-sm hover:bg-background transition-colors absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100">
                     <X className="h-3 w-3" />
                   </button>
                 )}
@@ -151,7 +151,7 @@ export function ChatInputArea({
             ref={textareaRef}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={onKeyDown}
+            onKeyDown={handleKeyDown}
             placeholder={`Message ${agentName}...`}
             disabled={!connected}
             rows={1}
@@ -226,7 +226,7 @@ export function ChatInputArea({
                   aria-label="Send message"
                   className="h-11 w-11 lg:h-8 lg:w-8 rounded-lg shadow-sm transition-all active:scale-95 flex items-center justify-center"
                   disabled={!canSend}
-                  onClick={onSend}
+                  onClick={handleSend}
                 >
                   <ArrowUp className="h-5 w-5 lg:h-4 lg:w-4" />
                 </Button>

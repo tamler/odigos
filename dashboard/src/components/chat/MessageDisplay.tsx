@@ -40,7 +40,7 @@ interface MessageDisplayProps {
   stopTTS: () => void
   isTTSPlaying: boolean
   onLoadMore: () => void
-  onEdit: (messageIndex: number, content: string) => void
+  handleEdit: (messageIndex: number, content: string) => void
   onOpenArtifact: (id: string) => void
   onSuggest: (text: string) => void
   getPreviousUserMessage: (assistantIndex: number) => string
@@ -93,7 +93,7 @@ export function MessageDisplay({
   stopTTS,
   isTTSPlaying,
   onLoadMore,
-  onEdit,
+  handleEdit,
   onOpenArtifact,
   onSuggest,
   getPreviousUserMessage,
@@ -171,7 +171,7 @@ export function MessageDisplay({
                                   isStreaming={isStreaming}
                                   ttsAvailable={ttsAvailable}
                                   socket={socket}
-                                  onEdit={onEdit}
+                                  onEdit={handleEdit}
                                   playTTS={playTTS}
                                   stopTTS={stopTTS}
                                   isTTSPlaying={isTTSPlaying}
