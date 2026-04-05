@@ -84,6 +84,9 @@ class FindToolsTool(BaseTool):
 
         lines = [f"Found {len(top)} tool(s):"]
         for _, tool in top:
-            lines.append(f"- {tool.name}: {tool.description[:80]}")
+            param_names = list(tool.parameters_schema.get("properties", {}).keys())
+            params_str = f" (params: {', '.join(param_names)})" if param_names else ""
+            cat_str = f" [{tool.category}]" if tool.category else ""
+            lines.append(f"- {tool.name}{cat_str}: {tool.description[:100]}{params_str}")
 
         return ToolResult(success=True, data="\n".join(lines))

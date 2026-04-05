@@ -1,8 +1,9 @@
-"""Smart tool registry with classification-aware filtering.
+"""Tool registry with deferred loading via find_tools.
 
-Tools are registered once at startup. The registry provides filtered
-tool definitions based on query classification and routing rules,
-so simple queries don't get 45 tool schemas in context.
+Tools are registered once at startup. Only a small always-loaded set
+is included in every LLM call. The LLM discovers additional tools
+via find_tools during execution, and the executor dynamically expands
+discovered tool schemas in the same turn.
 """
 from __future__ import annotations
 
@@ -14,6 +15,8 @@ from odigos.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
+# Always-loaded tools: included in every LLM call without needing find_tools
+_ALWAYS_LOADED = {"find_tools", "search_web", "search_documents", "run_code"}
 
 
 @dataclass
@@ -25,7 +28,7 @@ class ToolSpec:
 
 
 class ToolRegistry:
-    """Smart tool registry with classification-aware filtering."""
+    """Tool registry with deferred loading via find_tools."""
 
     def __init__(self) -> None:
         self._tools: dict[str, BaseTool] = {}
@@ -39,33 +42,13 @@ class ToolRegistry:
     def list(self) -> list[BaseTool]:
         return list(self._tools.values())
 
-    def tool_definitions(
-        self, inject_tools: list[str] | None = None, **_kwargs,
-    ) -> list[dict]:
-        """Return find_tools + JIT-injected tools based on classification.
-
-        Args:
-            inject_tools: Optional list of tool names to include alongside
-                find_tools. Resolved by the executor from query classification.
-        """
+    def tool_definitions(self, **_kwargs) -> list[dict]:
+        """Return always-loaded tools. Everything else is discovered via find_tools."""
         defs = []
-
-        # Always include find_tools as a discovery fallback
-        find = self._tools.get("find_tools")
-        if find:
-            defs.append(self._tool_to_def(find))
-
-        # JIT: inject likely tools for this query's classification
-        if inject_tools:
-            seen = {"find_tools"}
-            for name in inject_tools[:10]:
-                if name in seen:
-                    continue
-                tool = self._tools.get(name)
-                if tool:
-                    defs.append(self._tool_to_def(tool))
-                    seen.add(name)
-
+        for name in _ALWAYS_LOADED:
+            tool = self._tools.get(name)
+            if tool:
+                defs.append(self._tool_to_def(tool))
         return defs
 
     @staticmethod

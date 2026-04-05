@@ -276,20 +276,11 @@ class Executor:
                 context_metadata=context_metadata,
             )
 
-        # JIT tool injection: core tools ALWAYS + dynamic tools from history
+        # Tool selection: always include find_tools + core high-frequency tools.
+        # The LLM discovers additional tools via find_tools during execution.
         tools = None
         if self.tool_registry and self.tool_registry.list():
-            from odigos.core.context import _get_likely_tools, _CORE_TOOLS
-            classification = query_analysis.classification if query_analysis else None
-            # Start with core tools (always available regardless of classification)
-            inject_tools = list(_CORE_TOOLS)
-            # Add dynamic tools from query_log history
-            if classification and self.db:
-                dynamic = await _get_likely_tools(self.db, classification)
-                for t in dynamic:
-                    if t not in inject_tools:
-                        inject_tools.append(t)
-            tools = self.tool_registry.tool_definitions(inject_tools=inject_tools)
+            tools = self.tool_registry.tool_definitions()
 
         # Count context tokens for efficiency tracking
         context_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)

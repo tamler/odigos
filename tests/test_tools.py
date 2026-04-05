@@ -54,80 +54,51 @@ class TestToolRegistry:
         assert "key" in result.data
 
 
-class TestJITToolInjection:
-    def test_tool_definitions_without_injection(self):
-        """Without inject_tools, returns only find_tools."""
+class TestAlwaysLoadedTools:
+    def test_tool_definitions_returns_always_loaded(self):
+        """tool_definitions returns only the always-loaded set."""
+        registry = ToolRegistry()
+        for name in ["find_tools", "search_web", "search_documents", "run_code"]:
+            t = FakeTool()
+            t.name = name
+            t.description = f"{name} description"
+            registry.register(t)
+        # Also register a tool that should NOT be included
+        registry.register(FakeTool())  # fake_tool
+
+        defs = registry.tool_definitions()
+        names = {d["function"]["name"] for d in defs}
+        assert names == {"find_tools", "search_web", "search_documents", "run_code"}
+        assert "fake_tool" not in names
+
+    def test_tool_definitions_skips_missing_always_loaded(self):
+        """If an always-loaded tool is not registered, it is silently skipped."""
         registry = ToolRegistry()
         find = FakeTool()
         find.name = "find_tools"
         find.description = "Find tools"
         registry.register(find)
-        registry.register(FakeTool())  # fake_tool
 
         defs = registry.tool_definitions()
         assert len(defs) == 1
         assert defs[0]["function"]["name"] == "find_tools"
 
-    def test_tool_definitions_with_injection(self):
-        """With inject_tools, returns find_tools + injected tools."""
+    def test_tool_definitions_empty_registry(self):
+        """Empty registry returns no definitions."""
         registry = ToolRegistry()
-        find = FakeTool()
-        find.name = "find_tools"
-        find.description = "Find tools"
-        registry.register(find)
+        defs = registry.tool_definitions()
+        assert defs == []
 
-        search = FakeTool()
-        search.name = "search_web"
-        search.description = "Search the web"
-        registry.register(search)
-
-        code = FakeTool()
-        code.name = "run_code"
-        code.description = "Run code"
-        registry.register(code)
-
-        defs = registry.tool_definitions(inject_tools=["search_web", "run_code"])
-        names = [d["function"]["name"] for d in defs]
-        assert "find_tools" in names
-        assert "search_web" in names
-        assert "run_code" in names
-        assert len(defs) == 3
-
-    def test_injection_skips_unknown_tools(self):
-        """Injected tool names that don't exist are silently skipped."""
+    def test_non_always_loaded_tools_excluded(self):
+        """Tools not in the always-loaded set are not returned."""
         registry = ToolRegistry()
-        find = FakeTool()
-        find.name = "find_tools"
-        registry.register(find)
-
-        defs = registry.tool_definitions(inject_tools=["nonexistent_tool"])
-        assert len(defs) == 1  # only find_tools
-
-    def test_injection_capped_at_5(self):
-        """At most 5 tools injected to limit token cost."""
-        registry = ToolRegistry()
-        find = FakeTool()
-        find.name = "find_tools"
-        registry.register(find)
-
-        for i in range(10):
+        for name in ["generate_image", "send_email", "check_calendar"]:
             t = FakeTool()
-            t.name = f"tool_{i}"
+            t.name = name
             registry.register(t)
 
-        defs = registry.tool_definitions(inject_tools=[f"tool_{i}" for i in range(10)])
-        assert len(defs) == 6  # find_tools + 5 injected
-
-    def test_injection_deduplicates_find_tools(self):
-        """If inject_tools includes find_tools, don't duplicate it."""
-        registry = ToolRegistry()
-        find = FakeTool()
-        find.name = "find_tools"
-        registry.register(find)
-
-        defs = registry.tool_definitions(inject_tools=["find_tools"])
-        assert len(defs) == 1
-        assert defs[0]["function"]["name"] == "find_tools"
+        defs = registry.tool_definitions()
+        assert defs == []
 
 
 class TestFormatForContext:
