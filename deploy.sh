@@ -54,12 +54,12 @@ for entry in "${BARE_METAL[@]}"; do
     fi
     git reset --hard origin/main
 
-    # Fix ownership -- git reset as root can break permissions
-    chown -R "$SVC_USER:$SVC_USER" .venv/ data/ 2>/dev/null || true
-    chown -R "$SVC_USER:$SVC_USER" dashboard/dist/ 2>/dev/null || true
+    # Fix ownership IMMEDIATELY — git reset as root makes everything root-owned.
+    # Must happen before uv sync, npm build, or anything else touches the files.
+    chown -R "$SVC_USER:$SVC_USER" . 2>/dev/null || true
 
     # Sync dependencies (new packages from pyproject.toml)
-    uv sync --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
+    sudo -u "$SVC_USER" uv sync --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
 
 
     # Ensure TextBlob NLTK data is present
