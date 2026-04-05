@@ -276,17 +276,20 @@ class Executor:
                 context_metadata=context_metadata,
             )
 
-        # JIT tool injection: resolve likely tools from classification, inject schemas
+        # JIT tool injection: core tools ALWAYS + dynamic tools from history
         tools = None
         if self.tool_registry and self.tool_registry.list():
+            from odigos.core.context import _get_likely_tools, _CORE_TOOLS
             classification = query_analysis.classification if query_analysis else None
-            inject_tools = []
+            # Start with core tools (always available regardless of classification)
+            inject_tools = list(_CORE_TOOLS)
+            # Add dynamic tools from query_log history
             if classification and self.db:
-                from odigos.core.context import _get_likely_tools, _FALLBACK_TOOLS
-                inject_tools = await _get_likely_tools(self.db, classification)
-                if not inject_tools:
-                    inject_tools = _FALLBACK_TOOLS.get(classification, [])
-            tools = self.tool_registry.tool_definitions(inject_tools=inject_tools or None)
+                dynamic = await _get_likely_tools(self.db, classification)
+                for t in dynamic:
+                    if t not in inject_tools:
+                        inject_tools.append(t)
+            tools = self.tool_registry.tool_definitions(inject_tools=inject_tools)
 
         # Count context tokens for efficiency tracking
         context_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)

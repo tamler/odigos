@@ -58,7 +58,7 @@ class ToolRegistry:
         # JIT: inject likely tools for this query's classification
         if inject_tools:
             seen = {"find_tools"}
-            for name in inject_tools[:5]:
+            for name in inject_tools[:10]:
                 if name in seen:
                     continue
                 tool = self._tools.get(name)
