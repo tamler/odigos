@@ -467,28 +467,10 @@ class ContextAssembler:
             _mat_order = {
                 "mature": 0, "committed": 1, "progenitor": 2,
             }
-            skills = sorted(
-                self.skill_registry.list(),
-                key=lambda s: _mat_order.get(s.maturity, 2),
-            )
-            if skills:
-                lines = [
-                    "## Available skills",
-                    "Use activate_skill to load a skill's "
-                    "full instructions before starting "
-                    "the task.",
-                ]
-                for s in skills:
-                    tag = ""
-                    if s.maturity == "mature":
-                        tag = " [mature]"
-                    elif s.maturity == "committed":
-                        tag = " [committed]"
-                    lines.append(
-                        f"- **{s.name}**{tag}:"
-                        f" {s.description}"
-                    )
-                skill_catalog = "\n".join(lines)
+            # Skills are discovered via find_tools, not listed in system prompt.
+            # The old approach dumped all skill names here (~5K chars) which caused
+            # context rot and prevented the model from calling find_tools.
+            skill_catalog = ""
 
         # Add decomposition hints for complex queries
         if query_analysis and query_analysis.sub_questions:
@@ -583,16 +565,8 @@ class ContextAssembler:
                 elif page_lines:
                     notebook_context = notebook_context + "\n\n" + "\n".join(page_lines)
 
-        # Image generation prompt guide (when tool is enabled)
-        if self.settings and self.settings.service_key("kie_ai"):
-            img_guide = load_prompt(
-                "image_prompt_guide.md", ""
-            )
-            if img_guide:
-                if skill_catalog:
-                    skill_catalog += "\n\n" + img_guide
-                else:
-                    skill_catalog = img_guide
+        # Image prompt guide removed from system prompt — it's injected
+        # only when generate_image is actually called, via the tool's own context.
 
         concise_mode = self.settings.agent.concise_mode if self.settings else False
 
