@@ -44,7 +44,7 @@ class SectionRegistry:
         for path in sorted(self._dir.glob("*.md")):
             name = path.stem
             section = self._load_one(path)
-            if section is None or section.exclude_from_prompt:
+            if section is None or section.exclude_from_prompt or not section.always_include:
                 continue
             if overrides and name in overrides:
                 section = PromptSection(
