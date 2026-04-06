@@ -72,6 +72,13 @@ export const useChatStore = create<ChatState>((set) => ({
   suggestedActions: [],
   setSuggestedActions: (actions) => set({ suggestedActions: actions }),
   activeConversationId: null,
-  setActiveConversationId: (id) => set({ activeConversationId: id }),
+  setActiveConversationId: (id) => set({
+    activeConversationId: id,
+    messages: [],
+    isStreaming: false,
+    thinking: false,
+    status: null,
+    suggestedActions: [],
+  }),
   isStreaming: false,
 }))
