@@ -8,6 +8,7 @@ interface ChatState {
   updateLastMessage: (content: string) => void
   appendToLastMessage: (chunk: string) => void
   finalizeLastMessage: () => void
+  finalizeStreaming: (fullContent: string) => void
   startStreaming: () => void
   thinking: boolean
   setThinking: (thinking: boolean) => void
@@ -49,6 +50,14 @@ export const useChatStore = create<ChatState>((set) => ({
     }),
   finalizeLastMessage: () =>
     set({ isStreaming: false }),
+  finalizeStreaming: (fullContent: string) =>
+    set((state) => {
+      const msgs = [...state.messages]
+      if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
+        msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content: fullContent }
+      }
+      return { messages: msgs, isStreaming: false }
+    }),
   startStreaming: () => set({ isStreaming: true }),
   thinking: false,
   setThinking: (thinking) => set({ thinking, ...(thinking ? {} : { isStreaming: false }) }),

@@ -178,7 +178,11 @@ export function MessageDisplay({
                           ) : (
                             <div className="group/msg w-full overflow-hidden mb-4">
                               <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
-                                <Markdown>{msg.content}</Markdown>
+                                {isStreaming && actualIndex === messages.length - 1 ? (
+                                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                                ) : (
+                                  <Markdown>{msg.content}</Markdown>
+                                )}
                               </div>
                               <MessageActions
                                 role="assistant"

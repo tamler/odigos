@@ -222,14 +222,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Extract UI actions from response (```json blocks with "action" key)
                     ui_actions = _extract_ui_actions(response)
 
-                    # When streaming was used, client already has the content.
-                    # Only send content when NOT streaming (e.g., tool-only responses).
+                    # Always include the full content as source of truth.
+                    # Frontend uses this to correct any missed chunks.
                     response_msg = {
                         "type": "chat_response",
                         "conversation_id": conversation_id,
+                        "content": response,
                     }
-                    if not streamed:
-                        response_msg["content"] = response
                     if ui_actions:
                         response_msg["actions"] = ui_actions
                     await websocket.send_json(response_msg)
