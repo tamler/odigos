@@ -55,21 +55,20 @@ class TestToolRegistry:
 
 
 class TestAlwaysLoadedTools:
-    def test_tool_definitions_returns_always_loaded(self):
-        """tool_definitions returns only the always-loaded set."""
+    def test_tool_definitions_returns_only_find_tools(self):
+        """tool_definitions returns only find_tools."""
         registry = ToolRegistry()
-        for name in ["find_tools", "search_web", "search_documents", "run_code"]:
+        for name in ["find_tools", "search_web", "generate_music", "run_code"]:
             t = FakeTool()
             t.name = name
             t.description = f"{name} description"
             registry.register(t)
-        # Also register a tool that should NOT be included
-        registry.register(FakeTool())  # fake_tool
 
         defs = registry.tool_definitions()
         names = {d["function"]["name"] for d in defs}
-        assert names == {"find_tools", "search_web", "search_documents", "run_code"}
-        assert "fake_tool" not in names
+        assert names == {"find_tools"}
+        assert "search_web" not in names
+        assert "generate_music" not in names
 
     def test_tool_definitions_skips_missing_always_loaded(self):
         """If an always-loaded tool is not registered, it is silently skipped."""
