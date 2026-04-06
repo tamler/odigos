@@ -76,6 +76,63 @@ class QueryAnalysis:
     similarity_hint: str | None = None
 
 
+@dataclass
+class Needs:
+    """What context sections the assembler should load."""
+    rag: bool = False
+    user_profile: bool = False
+    user_facts: bool = False
+    history: bool = False
+    experiences: bool = False
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Needs:
+        return cls(
+            rag=d.get("rag", False),
+            user_profile=d.get("user_profile", False),
+            user_facts=d.get("user_facts", False),
+            history=d.get("history", False),
+            experiences=d.get("experiences", False),
+        )
+
+
+@dataclass
+class QueryPlan:
+    """Full assembly plan produced by the query planner."""
+    classification: str
+    confidence: float
+    intent: str = ""
+    tool_hint: str | None = None
+    needs: Needs = field(default_factory=Needs)
+    search_queries: list[str] = field(default_factory=list)
+    sub_questions: list[str] = field(default_factory=list)
+    response_style: str = "brief"
+    complexity: str = "conversation"
+    entities: list[str] = field(default_factory=list)
+    tier: int = 1
+    similarity_hint: str | None = None
+
+    @classmethod
+    def default(cls) -> QueryPlan:
+        return cls(classification="standard", confidence=0.5, response_style="brief")
+
+    @classmethod
+    def from_dict(cls, d: dict) -> QueryPlan:
+        needs_raw = d.get("needs", {})
+        return cls(
+            classification=d.get("classification", "standard"),
+            confidence=d.get("confidence", 0.5),
+            intent=d.get("intent", ""),
+            tool_hint=d.get("tool_hint"),
+            needs=Needs.from_dict(needs_raw) if isinstance(needs_raw, dict) else Needs(),
+            search_queries=d.get("search_queries", []),
+            sub_questions=d.get("sub_questions", []),
+            response_style=d.get("response_style", "brief"),
+            complexity=d.get("complexity", "conversation"),
+            entities=d.get("entities", []),
+        )
+
+
 class QueryClassifier:
     """Classifies user queries using heuristics first, then an LLM fallback."""
 
