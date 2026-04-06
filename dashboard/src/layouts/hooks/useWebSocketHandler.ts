@@ -66,7 +66,7 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
               content: msg.content as string,
               timestamp: new Date().toISOString(),
             }])
-            chat.setStreamingContent('_')  // flag: streaming is active
+            chat.startStreaming()
           }
         }
         if (msg.type === 'chat_response') {

@@ -46,7 +46,6 @@ export const ChatPanel = memo(({
 
   const messages = useChatStore(s => s.messages)
   const setMessages = useChatStore(s => s.setMessages)
-  const streamingContent = useChatStore(s => s.streamingContent)
   const thinking = useChatStore(s => s.thinking)
   const status = useChatStore(s => s.status)
 
@@ -334,7 +333,6 @@ export const ChatPanel = memo(({
 
         <MessageDisplay
           messages={messages}
-          streamingContent={streamingContent}
           thinking={thinking}
           status={status}
           artifacts={artifacts}

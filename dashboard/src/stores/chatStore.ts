@@ -8,8 +8,7 @@ interface ChatState {
   updateLastMessage: (content: string) => void
   appendToLastMessage: (chunk: string) => void
   finalizeLastMessage: () => void
-  streamingContent: string
-  setStreamingContent: (content: string | ((prev: string) => string)) => void
+  startStreaming: () => void
   thinking: boolean
   setThinking: (thinking: boolean) => void
   status: string | null
@@ -23,7 +22,7 @@ interface ChatState {
   isStreaming: boolean
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   setMessages: (messages) => {
     if (typeof messages === 'function') {
@@ -33,7 +32,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
-  // promoteStreaming removed — streaming now accumulates in messages[] directly
   updateLastMessage: (content) =>
     set((state) => {
       const msgs = [...state.messages]
@@ -50,15 +48,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { messages: msgs, isStreaming: true }
     }),
   finalizeLastMessage: () =>
-    set({ isStreaming: false, streamingContent: '' }),
-  streamingContent: '',
-  setStreamingContent: (content) => {
-    if (typeof content === 'function') {
-      set((state) => ({ streamingContent: content(state.streamingContent), isStreaming: true }))
-    } else {
-      set({ streamingContent: content, isStreaming: content !== '' })
-    }
-  },
+    set({ isStreaming: false }),
+  startStreaming: () => set({ isStreaming: true }),
   thinking: false,
   setThinking: (thinking) => set({ thinking, ...(thinking ? {} : { isStreaming: false }) }),
   status: null,
@@ -69,7 +60,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSuggestedActions: (actions) => set({ suggestedActions: actions }),
   activeConversationId: null,
   setActiveConversationId: (id) => set({ activeConversationId: id }),
-  get isStreaming() {
-    return get().streamingContent !== ''
-  },
+  isStreaming: false,
 }))

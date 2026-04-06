@@ -1,5 +1,4 @@
 import { Markdown } from '@/components/ui/markdown'
-import { StreamingText } from '@/components/ui/streaming-text'
 import { CheckCircle2, Music, Image as ImageIcon, Info } from 'lucide-react'
 import {
   ChatContainerRoot,
@@ -18,7 +17,6 @@ import type { ChatSocket } from '@/lib/ws'
 
 interface MessageDisplayProps {
   messages: ChatMessage[]
-  streamingContent: string
   thinking: boolean
   status: string | null
   artifacts: Artifact[]
@@ -75,7 +73,6 @@ function SystemMessage({ content }: { content: string }) {
 
 export function MessageDisplay({
   messages,
-  streamingContent,
   thinking,
   status,
   artifacts,
@@ -204,25 +201,7 @@ export function MessageDisplay({
                     })
                   })()}
 
-                  {streamingContent && thinking ? (
-                    <div className="group/msg w-full overflow-hidden">
-                      <StreamingText content={streamingContent} isStreaming={true} />
-                      <div className="flex items-center gap-2 mt-3 pb-1 opacity-50 hover:opacity-100 transition-opacity duration-500">
-                        <div className="size-1.5 bg-primary rounded-full animate-pulse" />
-                        <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground/80">
-                          {status || 'Generating'}
-                        </span>
-                      </div>
-                    </div>
-                  ) : streamingContent ? (
-                    <div className="group/msg w-full overflow-hidden">
-                      <div className="chat-text text-foreground break-words prose dark:prose-invert max-w-none prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2">
-                        <Markdown>{streamingContent}</Markdown>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {thinking && !streamingContent && (
+                  {thinking && (
                     <div className="flex items-center gap-2 py-3 animate-in fade-in duration-500">
                       <div className="flex gap-1">
                         <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }} />

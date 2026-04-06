@@ -23,7 +23,6 @@ export function useConversationActions() {
   const handleNewChat = useCallback(() => {
     useChatStore.getState().setActiveConversationId(null)
     useChatStore.getState().setMessages([])
-    useChatStore.getState().setStreamingContent('')
     useChatStore.getState().setThinking(false)
     useChatStore.getState().setStatus(null)
     useChatStore.getState().setSuggestedActions([])
