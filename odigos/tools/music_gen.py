@@ -223,7 +223,9 @@ class GenerateMusicTool(APITool):
             for art in artifacts:
                 duration = art.get("duration", 0)
                 dur_str = f" ({duration:.0f}s)" if duration else ""
-                summary_parts.append(f"{art['filename']}{dur_str}")
+                title = art.get("title", "")
+                title_str = f' "{title}"' if title else ""
+                summary_parts.append(f"{title_str}{dur_str}: {art['filename']}")
 
             return ToolResult(
                 success=True,
@@ -302,7 +304,9 @@ class GenerateMusicTool(APITool):
             for art in artifacts:
                 duration = art.get("duration", 0)
                 dur_str = f" ({duration:.0f}s)" if duration else ""
-                summary_parts.append(f"{art['filename']}{dur_str}")
+                title = art.get("title", "")
+                title_str = f' "{title}"' if title else ""
+                summary_parts.append(f"{title_str}{dur_str}: {art['filename']}")
 
             return ToolResult(
                 success=True,
