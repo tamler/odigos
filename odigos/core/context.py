@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import tiktoken
 
+from odigos.core.classifier import QueryPlan, Needs
 from odigos.core.content_filter import ContentFilter
 from odigos.core.profiler import UserProfile, format_profile_for_context
 from odigos.core.prompt_loader import load_prompt
@@ -18,6 +19,19 @@ from odigos.personality.section_registry import SectionRegistry
 from odigos.personality.prompt_builder import build_system_prompt
 
 _context_filter = ContentFilter()
+
+_TOOL_INSTRUCTION = (
+    "You can manage workspaces, generate media, execute code, and more. "
+    "Use find_tools to discover specific capabilities. "
+    "Call it when asked to do something. "
+    'Do not say "I can\'t" without checking find_tools first.'
+)
+
+_RESPONSE_STYLES = {
+    "brief": "Be concise. Lead with the answer.",
+    "detailed": "Provide thorough analysis with supporting details.",
+    "step_by_step": "Think step by step. Show your reasoning.",
+}
 
 # Core tools included for EVERY classification — the agent should always
 # be able to search, create, and discover more tools.
@@ -89,6 +103,11 @@ def estimate_tokens(text: str) -> int:
     return len(_tokenizer.encode(text, disallowed_special=()))
 
 
+def _estimate_section_tokens(text: str) -> int:
+    """Rough token estimate: ~4 chars per token."""
+    return len(text) // 4
+
+
 class ContextAssembler:
     """Builds the messages list for an LLM call from conversation history."""
 
@@ -104,6 +123,7 @@ class ContextAssembler:
         corrections_manager: CorrectionsManager | None = None,
         checkpoint_manager: CheckpointManager | None = None,
         settings=None,
+        tool_registry=None,
     ) -> None:
         self.db = db
         self.agent_name = agent_name
@@ -114,6 +134,7 @@ class ContextAssembler:
         self.corrections_manager = corrections_manager
         self.checkpoint_manager = checkpoint_manager
         self.settings = settings
+        self.tool_registry = tool_registry
         self.fallback_registry = SectionRegistry(sections_dir)
 
     async def build(
@@ -674,94 +695,244 @@ class ContextAssembler:
 
         return messages
 
+    async def build_planned(
+        self,
+        conversation_id: str,
+        message_content: str,
+        plan: QueryPlan,
+        recent_turns: list[dict] | None = None,
+        max_prompt_tokens: int = 2000,
+    ) -> tuple[list[dict], list[dict]]:
+        """Build context using the query planner output.
+
+        Returns (messages, tools) where messages is the conversation
+        list and tools is the tool definitions list.
+        """
+        parts: list[str] = []
+        budget = max_prompt_tokens
+
+        # Always: identity + tool instruction
+        identity = self._load_identity()
+        parts.append(identity)
+        parts.append(_TOOL_INSTRUCTION)
+        budget -= _estimate_section_tokens(identity + _TOOL_INSTRUCTION)
+
+        # Load only what the planner says we need
+        if plan.needs.experiences and budget > 0:
+            exp = await self._load_experiences_for_plan(plan.tool_hint)
+            if exp:
+                parts.append(exp)
+                budget -= _estimate_section_tokens(exp)
+
+        if plan.needs.user_facts and budget > 0:
+            facts = await self._load_user_facts_for_plan()
+            if facts:
+                parts.append(facts)
+                budget -= _estimate_section_tokens(facts)
+
+        if plan.needs.user_profile and budget > 0:
+            profile = await self._load_user_profile_for_plan()
+            if profile:
+                parts.append(profile)
+                budget -= _estimate_section_tokens(profile)
+
+        if plan.needs.rag and budget > 0:
+            queries = plan.search_queries or [message_content]
+            rag = await self._load_rag_for_plan(queries)
+            if rag:
+                parts.append(rag)
+                budget -= _estimate_section_tokens(rag)
+            # Implicit dependency: load last 2 turns for entity resolution
+            if recent_turns and len(recent_turns) >= 2:
+                turns_text = "\n".join(
+                    f"{t['role']}: {t['content'][:200]}" for t in recent_turns[-2:]
+                )
+                parts.append(f"## Recent context\n{turns_text}")
+
+        if plan.needs.history and budget > 0:
+            history = await self._load_history_for_plan(conversation_id)
+            if history:
+                parts.append(history)
+                budget -= _estimate_section_tokens(history)
+
+        # Response style as last instruction (highest attention position)
+        style_text = _RESPONSE_STYLES.get(plan.response_style, "")
+        if style_text:
+            parts.append(style_text)
+
+        # Build system prompt
+        system_prompt = "\n\n".join(p for p in parts if p.strip())
+
+        # Build messages
+        messages = [{"role": "system", "content": system_prompt}]
+
+        # Add conversation history as messages (not in system prompt)
+        if conversation_id and conversation_id != "headless":
+            history_messages = await self._load_message_history(conversation_id)
+            messages.extend(history_messages)
+
+        # User message
+        messages.append({"role": "user", "content": message_content})
+
+        # Build tool list: find_tools + hinted tool
+        tools: list[dict] = []
+        if self.tool_registry:
+            find = self.tool_registry.get("find_tools")
+            if find:
+                tools.append(self.tool_registry._tool_to_def(find))
+            if plan.tool_hint:
+                hinted = self.tool_registry.get(plan.tool_hint)
+                if hinted and hinted.name != "find_tools":
+                    tools.append(self.tool_registry._tool_to_def(hinted))
+
+        return messages, tools
+
+    # -- Helper methods for build_planned() --
+
+    def _load_identity(self) -> str:
+        """Load identity from data/agent/identity.md."""
+        if hasattr(self, '_cached_identity') and self._cached_identity:
+            return self._cached_identity
+        try:
+            sections = self.fallback_registry.load_all()
+            for s in sections:
+                if s.name == "identity":
+                    self._cached_identity = s.content.replace("{name}", self.agent_name)
+                    return self._cached_identity
+        except Exception:
+            pass
+        self._cached_identity = f"You are {self.agent_name}."
+        return self._cached_identity
+
+    async def _load_experiences_for_plan(self, tool_hint: str | None) -> str:
+        """Load XSkill experiences, filtered by tool_hint if available."""
+        if not self.db:
+            return ""
+        try:
+            if tool_hint:
+                rows = await self.db.fetch_all(
+                    "SELECT tool_name, lesson, success, confidence FROM agent_experiences "
+                    "WHERE tool_name = ? ORDER BY confidence DESC LIMIT 3",
+                    (tool_hint,),
+                )
+            else:
+                rows = await self.db.fetch_all(
+                    "SELECT tool_name, lesson, success, confidence FROM agent_experiences "
+                    "WHERE confidence >= 0.7 ORDER BY confidence DESC LIMIT 3"
+                )
+            if not rows:
+                return ""
+            lines = ["## Tactical experience"]
+            for row in rows:
+                prefix = "Warning" if not row["success"] else "Tip"
+                lines.append(f"- [{prefix}] {row['tool_name']}: {row['lesson']}")
+            return "\n".join(lines)
+        except Exception:
+            return ""
+
+    async def _load_user_facts_for_plan(self) -> str:
+        """Load user facts."""
+        if not self.db:
+            return ""
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT fact, category FROM user_facts ORDER BY updated_at DESC LIMIT 10"
+            )
+            if not rows:
+                return ""
+            lines = ["## Known facts about your user"]
+            for row in rows:
+                lines.append(f"- {row['fact']}")
+            return "\n".join(lines)
+        except Exception:
+            return ""
+
+    async def _load_user_profile_for_plan(self) -> str:
+        """Load user profile summary."""
+        if not self.db:
+            return ""
+        try:
+            profile = await self.db.fetch_one(
+                "SELECT summary, communication_style, expertise_areas "
+                "FROM user_profile WHERE id = 'owner'"
+            )
+            if not profile or not profile.get("summary"):
+                return ""
+            return f"## User Profile\n{profile['summary']}"
+        except Exception:
+            return ""
+
+    async def _load_rag_for_plan(self, queries: list[str]) -> str:
+        """Load RAG results for given queries."""
+        if not self.memory_manager:
+            return ""
+        try:
+            query = " ".join(queries)
+            result = await self.memory_manager.recall(query)
+            if result:
+                return f'<external_data source="memory">\n{result}\n</external_data>'
+            return ""
+        except Exception:
+            return ""
+
+    async def _load_history_for_plan(self, conversation_id: str) -> str:
+        """Load conversation history summary."""
+        if not self.db:
+            return ""
+        try:
+            rows = await self.db.fetch_all(
+                "SELECT role, content FROM messages WHERE conversation_id = ? "
+                "ORDER BY timestamp DESC LIMIT 10",
+                (conversation_id,),
+            )
+            if not rows:
+                return ""
+            lines = ["## Conversation history"]
+            for row in reversed(rows):
+                preview = (row["content"] or "")[:150]
+                lines.append(f"- {row['role']}: {preview}")
+            return "\n".join(lines)
+        except Exception:
+            return ""
+
+    async def _load_message_history(self, conversation_id: str) -> list[dict]:
+        """Load recent messages for the conversation as message dicts."""
+        if not self.db:
+            return []
+        try:
+            limit = 20
+            if self.settings:
+                limit = getattr(self.settings.agent, 'history_limit', 20)
+            rows = await self.db.fetch_all(
+                "SELECT role, content FROM messages WHERE conversation_id = ? "
+                "ORDER BY timestamp DESC LIMIT ?",
+                (conversation_id, limit),
+            )
+            return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]
+        except Exception:
+            return []
+
     async def build_headless(
         self,
         step_description: str,
         plan_context: str = "",
     ) -> list[dict]:
-        """Build a lightweight context for headless/background execution.
-
-        Skips conversation history, page context, recovery briefing, skill catalog,
-        and memory index. Includes RAG recall, experiences, and user profile.
-        """
-        async def _memory_context():
-            if not self.memory_manager:
-                return ""
-            try:
-                return await self.memory_manager.recall(step_description)
-            except Exception:
-                logger.debug("Headless memory recall failed", exc_info=True)
-                return ""
-
-        async def _experiences():
-            if not self.db:
-                return ""
-            try:
-                exp_rows = await self.db.fetch_all(
-                    "SELECT tool_name, lesson, success, confidence "
-                    "FROM agent_experiences "
-                    "WHERE confidence >= 0.7 OR success = 0 "
-                    "ORDER BY confidence DESC, updated_at DESC LIMIT 5"
-                )
-                if not exp_rows:
-                    return ""
-                lines = ["## Tactical experience (learned from past interactions)"]
-                for row in exp_rows:
-                    prefix = "Warning" if not row["success"] else "Tip"
-                    lines.append(f"- [{prefix}] {row['tool_name']}: {row['lesson']}")
-                return "\n".join(lines)
-            except Exception:
-                logger.debug("Headless experiences failed", exc_info=True)
-                return ""
-
-        async def _user_profile():
-            if not self.db:
-                return ""
-            parts = []
-            try:
-                profile_row = await get_user_profile(self.db)
-                if profile_row and profile_row.get("summary"):
-                    lines = ["## About your user"]
-                    if profile_row["summary"]:
-                        lines.append(profile_row["summary"])
-                    parts.append("\n".join(lines))
-            except Exception:
-                logger.debug("Headless profile failed", exc_info=True)
-            try:
-                v2_row = await self.db.fetch_one(
-                    "SELECT profile_json FROM user_profile_v2 WHERE id = 'owner'"
-                )
-                if v2_row and v2_row["profile_json"]:
-                    profile = UserProfile.from_json(v2_row["profile_json"])
-                    parts.append(format_profile_for_context(profile))
-            except Exception:
-                logger.debug("Headless structured profile failed", exc_info=True)
-            return "\n\n".join(parts)
-
-        async def _sections():
-            if self.checkpoint_manager:
-                return await self.checkpoint_manager.get_working_sections()
-            return self.fallback_registry.load_all()
-
-        # Run context queries in parallel
-        memory_context, experiences_section, user_profile, sections = await asyncio.gather(
-            _memory_context(), _experiences(), _user_profile(), _sections(),
+        """Build minimal context for headless heartbeat execution."""
+        plan = QueryPlan(
+            classification="standard",
+            confidence=1.0,
+            needs=Needs(rag=True, experiences=True),
+            response_style="brief",
         )
-
-        system_prompt = build_system_prompt(
-            sections=sections,
-            memory_context=memory_context,
-            agent_name=self.agent_name,
-            experiences=experiences_section,
-            user_profile=user_profile,
-            active_plan=f"## Current plan context\n{plan_context}" if plan_context else "",
-            concise_mode=True,
+        messages, _tools = await self.build_planned(
+            "headless", step_description, plan=plan,
         )
-
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": step_description},
-        ]
+        # Prepend plan context if provided
+        if plan_context and messages:
+            system = messages[0]
+            if system["role"] == "system":
+                system["content"] = plan_context + "\n\n" + system["content"]
+        return messages
 
     def _trim_to_budget(self, messages: list[dict], max_tokens: int) -> list[dict]:
         """Trim summary messages first, then history (oldest first) to fit within token budget."""

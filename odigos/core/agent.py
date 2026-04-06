@@ -77,6 +77,7 @@ class Agent:
             skill_registry=skill_registry,
             corrections_manager=corrections_manager,
             settings=settings,
+            tool_registry=tool_registry,
         )
         self.executor = Executor(
             provider,
