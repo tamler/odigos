@@ -1,28 +1,40 @@
 import pytest
 
-from odigos.core.classifier import QueryAnalysis, QueryClassifier, _parse_rules
+from odigos.core.classifier import QueryAnalysis, QueryClassifier, QueryPlan, _parse_rules
 
 
 class TestHeuristic:
     def test_heuristic_simple(self):
         c = QueryClassifier()
-        assert c._classify_heuristic("hi") == "simple"
+        result = c._classify_heuristic("hi")
+        assert result is not None
+        assert result.classification == "simple"
+        assert result.confidence == 1.0
+        assert result.tier == 1
 
     def test_heuristic_simple_thanks(self):
         c = QueryClassifier()
-        assert c._classify_heuristic("thanks") == "simple"
+        result = c._classify_heuristic("thanks")
+        assert result is not None
+        assert result.classification == "simple"
 
     def test_heuristic_document(self):
         c = QueryClassifier()
-        assert c._classify_heuristic("search the document for Holmes") == "document_query"
+        result = c._classify_heuristic("search the document for Holmes")
+        assert result is not None
+        assert result.classification == "document_query"
 
     def test_heuristic_complex(self):
         c = QueryClassifier()
-        assert c._classify_heuristic("compare chapter 1 and chapter 2 step by step") == "complex"
+        result = c._classify_heuristic("compare chapter 1 and chapter 2 step by step")
+        assert result is not None
+        assert result.classification == "complex"
 
     def test_heuristic_planning(self):
         c = QueryClassifier()
-        assert c._classify_heuristic("create a plan for the project") == "planning"
+        result = c._classify_heuristic("create a plan for the project")
+        assert result is not None
+        assert result.classification == "planning"
 
     def test_heuristic_uncertain(self):
         c = QueryClassifier()
@@ -30,7 +42,9 @@ class TestHeuristic:
 
     def test_heuristic_specificity(self):
         c = QueryClassifier()
-        assert c._classify_heuristic("hi, search the document") == "document_query"
+        result = c._classify_heuristic("hi, search the document")
+        assert result is not None
+        assert result.classification == "document_query"
 
 
 class TestClassify:

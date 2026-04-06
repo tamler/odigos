@@ -705,6 +705,7 @@ class Bootstrapper:
         classifier = QueryClassifier(
             provider=provider, db=db,
             vector_memory=self.container.vector_memory,
+            tool_registry=self.container.tool_registry,
         )
         logger.info("Query classifier initialized")
 

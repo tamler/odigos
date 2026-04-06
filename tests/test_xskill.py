@@ -59,9 +59,10 @@ class TestFallbackTools:
         assert "search_web" in _FALLBACK_TOOLS["standard"]
         assert "search_documents" in _FALLBACK_TOOLS["standard"]
 
-    def test_simple_has_no_tools(self):
+    def test_simple_has_core_tools(self):
         from odigos.core.context import _FALLBACK_TOOLS
-        assert _FALLBACK_TOOLS["simple"] == []
+        # Simple gets core tools for experience retrieval (not for injection)
+        assert "simple" in _FALLBACK_TOOLS
 
     def test_creative_has_gen_tools(self):
         from odigos.core.context import _FALLBACK_TOOLS
