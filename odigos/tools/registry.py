@@ -15,8 +15,11 @@ from odigos.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
-# Always-loaded tools: included in every LLM call without needing find_tools
-_ALWAYS_LOADED = {"find_tools", "search_web", "search_documents", "run_code"}
+# Always-loaded tools: included in every LLM call without needing find_tools.
+# find_tools is always included. Additional tools are selected by category
+# from whatever is actually registered — no hardcoded names that might not exist.
+_ALWAYS_LOADED_NAMES = {"find_tools"}
+_ALWAYS_LOADED_CATEGORIES = {"search", "create", "code"}
 
 
 @dataclass
@@ -43,12 +46,29 @@ class ToolRegistry:
         return list(self._tools.values())
 
     def tool_definitions(self, **_kwargs) -> list[dict]:
-        """Return always-loaded tools. Everything else is discovered via find_tools."""
+        """Return always-loaded tools. Everything else is discovered via find_tools.
+
+        Always includes find_tools + one tool per always-loaded category
+        (search, create, code). Uses actual registered tools, not hardcoded names.
+        """
         defs = []
-        for name in _ALWAYS_LOADED:
+        seen = set()
+
+        # Named tools first (find_tools)
+        for name in _ALWAYS_LOADED_NAMES:
             tool = self._tools.get(name)
-            if tool:
+            if tool and name not in seen:
                 defs.append(self._tool_to_def(tool))
+                seen.add(name)
+
+        # One representative tool per category
+        for cat in _ALWAYS_LOADED_CATEGORIES:
+            for tool in self._tools.values():
+                if tool.category == cat and tool.name not in seen:
+                    defs.append(self._tool_to_def(tool))
+                    seen.add(tool.name)
+                    break  # one per category
+
         return defs
 
     @staticmethod
