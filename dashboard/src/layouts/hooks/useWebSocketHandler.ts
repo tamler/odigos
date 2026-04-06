@@ -54,22 +54,34 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           chat.setThinking(false)
           chat.setStatus(null)
 
-          // If no streaming message exists yet, create an empty one.
-          // All chunks (including the first) go through the same buffer path.
+          // Accumulate content in a ref (no re-render per token).
+          // Flush to store every 80ms for smooth, throttled updates.
+          // Pattern from Vercel AI SDK: separate data mutation from render trigger.
+          chunkBufferRef.current += (msg.content as string)
+
           if (!useChatStore.getState().isStreaming) {
-            chat.addMessage({ role: 'assistant', content: '', timestamp: new Date().toISOString() })
+            // First chunk: add message with initial content and start streaming
+            chat.addMessage({
+              role: 'assistant',
+              content: chunkBufferRef.current,
+              timestamp: new Date().toISOString(),
+            })
+            chunkBufferRef.current = ''
             chat.startStreaming()
           }
 
-          // Buffer chunks, flush every 50ms. One path for all chunks.
-          chunkBufferRef.current += (msg.content as string)
           if (!chunkFlushTimerRef.current) {
             chunkFlushTimerRef.current = window.setTimeout(() => {
-              const buffered = chunkBufferRef.current
-              chunkBufferRef.current = ''
               chunkFlushTimerRef.current = null
-              if (buffered) chat.appendToLastMessage(buffered)
-            }, 50)
+              if (!chunkBufferRef.current) return
+              // Update the last message's content to the FULL accumulated text
+              const msgs = useChatStore.getState().messages
+              if (msgs.length > 0) {
+                const last = msgs[msgs.length - 1]
+                chat.updateLastMessage(last.content + chunkBufferRef.current)
+                chunkBufferRef.current = ''
+              }
+            }, 80)
           }
         }
         if (msg.type === 'chat_response') {
