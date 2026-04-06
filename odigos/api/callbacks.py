@@ -33,7 +33,7 @@ async def handle_callback(task_id: str, request: Request):
         logger.warning("Callback for unknown task: %s", task_id[:12])
         return JSONResponse({"error": "unknown task"}, status_code=404)
 
-    if task["status"] != "pending":
+    if task["status"] not in ("pending", "callback_received"):
         logger.info("Callback for already-completed task: %s", task_id[:12])
         return JSONResponse({"status": "already_processed"})
 
@@ -42,6 +42,17 @@ async def handle_callback(task_id: str, request: Request):
         body = await request.json()
     except Exception:
         body = {"raw": (await request.body()).decode(errors="replace")[:5000]}
+
+    # Kie.ai sends multiple callbacks: "text" (lyrics ready) then "complete" (audio ready).
+    # Only process "complete" callbacks. Store others but don't trigger completion.
+    callback_type = body.get("data", {}).get("callbackType", "")
+    if callback_type and callback_type != "complete":
+        logger.info("Callback type '%s' for task %s — waiting for 'complete'", callback_type, task_id[:12])
+        await db.execute(
+            "UPDATE tasks SET result_json = ? WHERE id = ?",
+            (json.dumps(body), task_id),
+        )
+        return JSONResponse({"status": "waiting_for_complete"})
 
     await db.execute(
         "UPDATE tasks SET result_json = ?, status = 'callback_received' WHERE id = ?",
