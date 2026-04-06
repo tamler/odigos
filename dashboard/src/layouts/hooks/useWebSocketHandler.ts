@@ -54,28 +54,29 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           chat.setThinking(false)
           chat.setStatus(null)
 
-          // Throttled in-place streaming: buffer chunks, flush every 50ms.
-          // Prevents dozens of re-renders per second and Markdown re-parsing on every token.
-          chunkBufferRef.current += (msg.content as string)
+          const chunk = msg.content as string
 
+          // First chunk: add message immediately (no delay).
+          // This ensures isStreaming is set before any buffered flush.
+          if (!useChatStore.getState().isStreaming) {
+            chat.setMessages((prev) => [...prev, {
+              role: 'assistant' as const,
+              content: chunk,
+              timestamp: new Date().toISOString(),
+            }])
+            chat.startStreaming()
+            return
+          }
+
+          // Subsequent chunks: buffer and flush every 50ms.
+          chunkBufferRef.current += chunk
           if (!chunkFlushTimerRef.current) {
             chunkFlushTimerRef.current = window.setTimeout(() => {
               const buffered = chunkBufferRef.current
               chunkBufferRef.current = ''
               chunkFlushTimerRef.current = null
-              if (!buffered) return
-
-              const state = useChatStore.getState()
-              const lastMsg = state.messages.length > 0 ? state.messages[state.messages.length - 1] : null
-              if (lastMsg && lastMsg.role === 'assistant' && state.isStreaming) {
+              if (buffered) {
                 chat.appendToLastMessage(buffered)
-              } else {
-                chat.setMessages((prev) => [...prev, {
-                  role: 'assistant' as const,
-                  content: buffered,
-                  timestamp: new Date().toISOString(),
-                }])
-                chat.startStreaming()
               }
             }, 50)
           }
