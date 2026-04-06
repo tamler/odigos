@@ -31,20 +31,29 @@ class GenerateMusicTool(APITool):
         max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1},
     )
     description = (
-        "Generate a music track from lyrics or a description. "
-        "Returns playable audio. For lyrics review before generating, "
-        "write them to a notebook first and let the user edit."
+        "Generate a music track with AI vocals. BEST RESULTS: Write the actual lyrics "
+        "first (collaborate with the user), set a style and title, then call this tool. "
+        "When style and title are provided, the prompt is used as LITERAL LYRICS that "
+        "will be sung. Without style/title, the prompt is a description and lyrics are "
+        "auto-generated. Always discuss the song concept with the user before generating."
     )
     parameters_schema = {
         "type": "object",
         "properties": {
             "prompt": {
                 "type": "string",
-                "description": "Lyrics or description of the music to generate (max 5000 chars)",
+                "description": (
+                    "The lyrics to sing (when style/title set) or a description for "
+                    "auto-generation. Max 5000 chars. For best results, write full "
+                    "verses with [Verse], [Chorus], [Bridge] markers."
+                ),
             },
             "style": {
                 "type": "string",
-                "description": "Musical style/genre (e.g., 'indie folk, acoustic'). Max 1000 chars.",
+                "description": (
+                    "Musical style/genre. Be specific: 'indie folk, acoustic guitar, "
+                    "warm male vocals' works better than just 'folk'. Max 1000 chars."
+                ),
             },
             "title": {
                 "type": "string",
@@ -57,7 +66,26 @@ class GenerateMusicTool(APITool):
             "vocal_gender": {
                 "type": "string",
                 "enum": ["", "m", "f"],
-                "description": "Preferred vocal gender",
+                "description": "Preferred vocal gender: m=male, f=female, empty=auto",
+            },
+            "negative_tags": {
+                "type": "string",
+                "description": (
+                    "Styles to AVOID, comma-separated. E.g., 'autotune, electronic, "
+                    "heavy metal'. Helps refine the sound."
+                ),
+            },
+            "style_weight": {
+                "type": "number",
+                "description": "How strictly to follow the style tag (0.0-1.0, default ~0.5). Higher = more adherence to style.",
+            },
+            "weirdness": {
+                "type": "number",
+                "description": "Creative unpredictability (0.0-1.0, default ~0.3). Higher = more experimental/unusual output.",
+            },
+            "audio_weight": {
+                "type": "number",
+                "description": "Balance between vocals and instrumentation (0.0-1.0). Lower = more vocal focus, higher = more instrumental.",
             },
         },
         "required": ["prompt"],
@@ -89,13 +117,16 @@ class GenerateMusicTool(APITool):
 
         style = (params.get("style") or "").strip()[:1000]
         title = (params.get("title") or "").strip()[:80]
-        # instrumental is now a bool (coerced by executor)
         instrumental = params.get("instrumental", False)
         if isinstance(instrumental, str):
             instrumental = instrumental.lower() == "true"
         vocal_gender = params.get("vocal_gender", "")
         if vocal_gender not in ("m", "f"):
             vocal_gender = ""
+        negative_tags = (params.get("negative_tags") or "").strip()
+        style_weight = params.get("style_weight")
+        weirdness = params.get("weirdness")
+        audio_weight = params.get("audio_weight")
 
         try:
             internal_task_id = uuid.uuid4().hex
@@ -105,6 +136,10 @@ class GenerateMusicTool(APITool):
                 prompt=prompt, style=style, title=title,
                 instrumental=instrumental, vocal_gender=vocal_gender,
                 callback_url=cb_url,
+                negative_tags=negative_tags,
+                style_weight=style_weight,
+                weirdness=weirdness,
+                audio_weight=audio_weight,
             )
             return ToolResult(
                 success=True,
@@ -325,6 +360,10 @@ class GenerateMusicTool(APITool):
         instrumental: bool = False,
         vocal_gender: str = "",
         callback_url: str = "",
+        negative_tags: str = "",
+        style_weight: float | None = None,
+        weirdness: float | None = None,
+        audio_weight: float | None = None,
     ) -> str:
         """Submit music generation task. Returns taskId."""
         custom_mode = bool(style or title)
@@ -342,6 +381,14 @@ class GenerateMusicTool(APITool):
                 payload["title"] = title
         if vocal_gender:
             payload["vocalGender"] = vocal_gender
+        if negative_tags:
+            payload["negativeTags"] = negative_tags
+        if style_weight is not None:
+            payload["styleWeight"] = max(0.0, min(1.0, float(style_weight)))
+        if weirdness is not None:
+            payload["weirdnessConstraint"] = max(0.0, min(1.0, float(weirdness)))
+        if audio_weight is not None:
+            payload["audioWeight"] = max(0.0, min(1.0, float(audio_weight)))
 
         data = await self.api_post(
             f"{KIE_BASE}/generate",
