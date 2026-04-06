@@ -9,18 +9,18 @@ dist/
 .env
 config.yaml
 
-# Data
-data/
-!data/.gitkeep
-!data/personality.yaml
-!data/plugins/
-!data/plugins/**
-!data/prompts/
-!data/prompts/**
-!data/agent/
-!data/agent/**
-!data/notebooks/
-!data/notebooks/.gitkeep
+# Data — ignore user data, track system files
+data/*.db
+data/*.db-*
+data/*.json
+data/files/
+data/uploads/
+data/notebooks/
+data/kanban/
+data/conversations/
+data/chroma/
+# Tracked system files (prompts, agent config, plugins) are NOT ignored
+# data/agent/, data/prompts/, data/plugins/ are committed to git
 
 # IDE
 .idea/
