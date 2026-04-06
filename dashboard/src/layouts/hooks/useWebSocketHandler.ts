@@ -14,7 +14,8 @@ import { useConversationStore } from '@/stores/conversationStore'
 
 export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record<string, string>>) {
   const socketRef = useRef<ChatSocket | null>(null)
-  // streamPromotedRef removed — chat_response now uses streamed content directly
+  const chunkBufferRef = useRef('')
+  const chunkFlushTimerRef = useRef<number | null>(null)
   const navigate = useNavigate()
   const navigateRef = useRef(navigate)
   navigateRef.current = navigate
@@ -52,21 +53,31 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
           chat.setThinking(false)
           chat.setStatus(null)
-          // In-place streaming: first chunk adds a message, subsequent chunks append.
-          // No separate streamingContent — the message grows in the messages array.
-          // This is how Vercel AI SDK does it: no transition, no flash.
-          const msgs = useChatStore.getState().messages
-          const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null
-          if (lastMsg && lastMsg.role === 'assistant' && useChatStore.getState().isStreaming) {
-            chat.appendToLastMessage(msg.content as string)
-          } else {
-            // First chunk: add new assistant message and mark streaming
-            chat.setMessages((prev) => [...prev, {
-              role: 'assistant' as const,
-              content: msg.content as string,
-              timestamp: new Date().toISOString(),
-            }])
-            chat.startStreaming()
+
+          // Throttled in-place streaming: buffer chunks, flush every 50ms.
+          // Prevents dozens of re-renders per second and Markdown re-parsing on every token.
+          chunkBufferRef.current += (msg.content as string)
+
+          if (!chunkFlushTimerRef.current) {
+            chunkFlushTimerRef.current = window.setTimeout(() => {
+              const buffered = chunkBufferRef.current
+              chunkBufferRef.current = ''
+              chunkFlushTimerRef.current = null
+              if (!buffered) return
+
+              const state = useChatStore.getState()
+              const lastMsg = state.messages.length > 0 ? state.messages[state.messages.length - 1] : null
+              if (lastMsg && lastMsg.role === 'assistant' && state.isStreaming) {
+                chat.appendToLastMessage(buffered)
+              } else {
+                chat.setMessages((prev) => [...prev, {
+                  role: 'assistant' as const,
+                  content: buffered,
+                  timestamp: new Date().toISOString(),
+                }])
+                chat.startStreaming()
+              }
+            }, 50)
           }
         }
         if (msg.type === 'chat_response') {
@@ -76,10 +87,17 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
             const chatId = newId.includes(':') ? newId.split(':')[1] : newId
             chat.setActiveConversationId(chatId)
           }
+          // Flush any buffered chunks before finalizing
+          if (chunkFlushTimerRef.current) {
+            clearTimeout(chunkFlushTimerRef.current)
+            chunkFlushTimerRef.current = null
+          }
+          if (chunkBufferRef.current) {
+            chat.appendToLastMessage(chunkBufferRef.current)
+            chunkBufferRef.current = ''
+          }
           chat.setThinking(false)
           chat.setStatus(null)
-          // If streaming was used, message is already in the array — just finalize.
-          // If not streamed (tool-only response), add the message now.
           if (useChatStore.getState().isStreaming) {
             chat.finalizeLastMessage()
           } else if (msg.content) {
@@ -105,6 +123,15 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           }
         }
         if (msg.type === 'stream_end') {
+          // Flush remaining buffer
+          if (chunkFlushTimerRef.current) {
+            clearTimeout(chunkFlushTimerRef.current)
+            chunkFlushTimerRef.current = null
+          }
+          if (chunkBufferRef.current) {
+            chat.appendToLastMessage(chunkBufferRef.current)
+            chunkBufferRef.current = ''
+          }
           chat.finalizeLastMessage()
         }
         if (msg.type === 'queue_update') {
