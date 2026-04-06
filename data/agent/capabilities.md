@@ -1,6 +1,7 @@
 ---
 priority: 50
 always_include: true
+exclude_from_prompt: true
 ---
 ## How to use tools
 
