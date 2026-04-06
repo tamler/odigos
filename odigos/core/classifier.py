@@ -24,17 +24,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _FALLBACK_PROMPT = (
-    'Classify this user message. Respond ONLY with valid JSON.\n\n'
-    'Message: "{message}"\n\n'
-    '{{"classification": "simple|standard|document_query|complex|planning", "confidence": 0.85}}\n\n'
-    '- simple: greetings, acknowledgments, very short messages\n'
-    '- standard: normal questions and requests\n'
-    '- document_query: questions about uploaded documents or files\n'
-    '- complex: multi-part questions, comparisons, analysis\n'
-    '- planning: goal-setting, scheduling, strategy'
+    'Classify this user message and create an execution plan. '
+    'Respond ONLY with valid JSON.\n\n'
+    'Recent conversation:\n{recent_turns}\n\n'
+    'Current message: "{message}"\n\n'
+    'Available tools:\n{tool_catalog}\n\n'
+    'Respond with:\n'
+    '{{"classification": "simple|standard|document_query|complex|planning|creative", '
+    '"confidence": 0.85, "intent": "what the user wants done", '
+    '"tool_hint": "tool_name_or_null", '
+    '"needs": {{"rag": false, "user_profile": false, "user_facts": false, '
+    '"history": false, "experiences": false}}, '
+    '"search_queries": [], '
+    '"response_style": "brief|detailed|step_by_step", '
+    '"complexity": "single_tool|multi_step|conversation"}}\n\n'
+    'Rules:\n'
+    '- tool_hint: pick the single most likely tool from the list above, or null\n'
+    '- needs.rag: true only if the answer requires searching documents\n'
+    '- needs.user_profile: true only if the answer depends on knowing the user\n'
+    '- needs.history: true only if this references earlier messages\n'
+    '- classification "creative" for any generation request'
 )
 
-_VALID_CLASSIFICATIONS = {"simple", "standard", "document_query", "complex", "planning"}
+_VALID_CLASSIFICATIONS = {"simple", "standard", "document_query", "complex", "planning", "creative"}
 
 # Hardcoded fallback rules used when classification_rules.md is missing or unparseable
 _FALLBACK_RULES: dict[str, list[str]] = {
@@ -141,10 +153,24 @@ class QueryClassifier:
         provider: LLMProvider | None = None,
         db: Database | None = None,
         vector_memory: VectorMemory | None = None,
+        tool_registry=None,
     ) -> None:
         self.provider = provider
         self.db = db
         self.vector_memory = vector_memory
+        self.tool_registry = tool_registry
+
+    def _build_tool_catalog(self) -> str:
+        """Build lightweight tool index for the classifier prompt."""
+        if not self.tool_registry:
+            return ""
+        lines = []
+        for tool in self.tool_registry.list():
+            if tool.name == "find_tools":
+                continue
+            desc = tool.description.split(".")[0]  # first sentence only
+            lines.append(f"{tool.name}: {desc}")
+        return "\n".join(lines)
 
     @staticmethod
     def _load_rules() -> dict[str, list[str]]:
@@ -175,22 +201,28 @@ class QueryClassifier:
             logger.warning("Failed to parse classification_rules.md, using fallback rules", exc_info=True)
             return _FALLBACK_RULES
 
-    async def classify(self, message: str) -> QueryAnalysis:
+    async def classify(
+        self, message: str, recent_turns: list[dict] | None = None,
+    ) -> QueryPlan:
         # Check for similar past queries before heuristic classification
         hint = await self._find_similar(message)
 
         heuristic = self._classify_heuristic(message)
         if heuristic is not None:
-            return QueryAnalysis(classification=heuristic, confidence=1.0, tier=1, similarity_hint=hint)
+            heuristic.similarity_hint = hint
+            return heuristic
 
         if self.provider is None:
-            return QueryAnalysis(classification="standard", confidence=0.5, tier=2, similarity_hint=hint)
+            plan = QueryPlan.default()
+            plan.tier = 2
+            plan.similarity_hint = hint
+            return plan
 
-        result = await self._classify_llm(message)
+        result = await self._classify_llm(message, recent_turns)
         result.similarity_hint = hint
         return result
 
-    def _classify_heuristic(self, message: str) -> str | None:
+    def _classify_heuristic(self, message: str) -> QueryPlan | None:
         lower = message.lower().strip()
         rules = self._load_rules()
 
@@ -207,18 +239,36 @@ class QueryClassifier:
                 if len(words) <= 3 and "?" not in message:
                     simple_words = set(phrases)
                     if any(w in simple_words for w in words):
-                        return "simple"
+                        return QueryPlan(
+                            classification="simple", confidence=1.0, tier=1,
+                        )
             else:
                 for pattern in phrases:
                     if pattern in lower:
-                        return category
+                        return QueryPlan(
+                            classification=category, confidence=1.0, tier=1,
+                        )
 
         return None
 
-    async def _classify_llm(self, message: str) -> QueryAnalysis:
+    async def _classify_llm(
+        self, message: str, recent_turns: list[dict] | None = None,
+    ) -> QueryPlan:
         try:
             prompt_template = load_prompt("classifier.md", fallback=_FALLBACK_PROMPT)
-            prompt = prompt_template.replace("{message}", message)
+
+            turns_text = ""
+            if recent_turns:
+                turns_text = "\n".join(
+                    f"{t['role']}: {t['content'][:200]}" for t in recent_turns[-6:]
+                )
+
+            prompt = (
+                prompt_template
+                .replace("{message}", message)
+                .replace("{recent_turns}", turns_text)
+                .replace("{tool_catalog}", self._build_tool_catalog())
+            )
 
             from odigos.core.llm_prompt import call_llm
             response = await call_llm(
@@ -227,26 +277,29 @@ class QueryClassifier:
                 temperature=0.0, max_tokens=512, log_name="classifier",
             )
             if not response:
-                return QueryAnalysis(classification="standard", confidence=0.5, tier=2)
+                plan = QueryPlan.default()
+                plan.tier = 2
+                return plan
 
             data = parse_json_response(response.content)
             if data is None:
-                return QueryAnalysis(classification="standard", confidence=0.5, tier=2)
+                plan = QueryPlan.default()
+                plan.tier = 2
+                return plan
+
             classification = data.get("classification", "standard")
             if classification not in _VALID_CLASSIFICATIONS:
                 classification = "standard"
+            data["classification"] = classification
 
-            return QueryAnalysis(
-                classification=classification,
-                confidence=float(data.get("confidence", 0.7)),
-                entities=data.get("entities", []),
-                search_queries=data.get("search_queries", []),
-                sub_questions=data.get("sub_questions", []),
-                tier=2,
-            )
+            plan = QueryPlan.from_dict(data)
+            plan.tier = 2
+            return plan
         except Exception:
             logger.warning("Tier 2 classification failed, falling back to standard", exc_info=True)
-            return QueryAnalysis(classification="standard", confidence=0.5, tier=2)
+            plan = QueryPlan.default()
+            plan.tier = 2
+            return plan
 
     async def store_query_embedding(self, message: str, rowid: int) -> None:
         """Store an embedding for a query_log row. Called by the executor after logging."""
