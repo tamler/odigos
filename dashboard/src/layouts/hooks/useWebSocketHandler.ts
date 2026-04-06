@@ -52,7 +52,22 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
           chat.setThinking(false)
           chat.setStatus(null)
-          chat.setStreamingContent((prev) => prev + (msg.content as string))
+          // In-place streaming: first chunk adds a message, subsequent chunks append.
+          // No separate streamingContent — the message grows in the messages array.
+          // This is how Vercel AI SDK does it: no transition, no flash.
+          const msgs = useChatStore.getState().messages
+          const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null
+          if (lastMsg && lastMsg.role === 'assistant' && useChatStore.getState().isStreaming) {
+            chat.appendToLastMessage(msg.content as string)
+          } else {
+            // First chunk: add new assistant message and mark streaming
+            chat.setMessages((prev) => [...prev, {
+              role: 'assistant' as const,
+              content: msg.content as string,
+              timestamp: new Date().toISOString(),
+            }])
+            chat.setStreamingContent('_')  // flag: streaming is active
+          }
         }
         if (msg.type === 'chat_response') {
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
@@ -63,9 +78,17 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           }
           chat.setThinking(false)
           chat.setStatus(null)
-          // Atomic promotion: streaming content → message in one state update.
-          // No flash — no frame where streaming is cleared but message isn't added yet.
-          chat.promoteStreaming(msg.content as string)
+          // If streaming was used, message is already in the array — just finalize.
+          // If not streamed (tool-only response), add the message now.
+          if (useChatStore.getState().isStreaming) {
+            chat.finalizeLastMessage()
+          } else if (msg.content) {
+            chat.addMessage({
+              role: 'assistant',
+              content: msg.content as string,
+              timestamp: new Date().toISOString(),
+            })
+          }
           const msgs = useChatStore.getState().messages
           const finalContent = msgs.length > 0 ? msgs[msgs.length - 1].content : ''
           if (ui.focusMode && finalContent && shouldPlayTTS(finalContent)) {
@@ -82,17 +105,7 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           }
         }
         if (msg.type === 'stream_end') {
-          const currentStreaming = useChatStore.getState().streamingContent
-          if (currentStreaming) {
-            chat.setMessages((prev) => [...prev, {
-              role: 'assistant' as const,
-              content: currentStreaming,
-              timestamp: new Date().toISOString(),
-            }])
-            chat.setStreamingContent('')
-          }
-          chat.setThinking(false)
-          chat.setStatus(null)
+          chat.finalizeLastMessage()
         }
         if (msg.type === 'queue_update') {
           const queued = msg.queued as number
