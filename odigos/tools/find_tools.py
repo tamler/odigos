@@ -50,6 +50,11 @@ class FindToolsTool(BaseTool):
         if not query:
             return ToolResult(success=False, data="", error="No search query provided")
 
+        # Broad queries: list all tools grouped by category
+        _BROAD_QUERIES = {"all", "everything", "list", "capabilities", "what can you do", "help"}
+        if query in _BROAD_QUERIES or any(bq in query for bq in _BROAD_QUERIES):
+            return self._list_all_by_category()
+
         query_words = set(query.split())
         matches = []
 
@@ -88,5 +93,22 @@ class FindToolsTool(BaseTool):
             params_str = f" (params: {', '.join(param_names)})" if param_names else ""
             cat_str = f" [{tool.category}]" if tool.category else ""
             lines.append(f"- {tool.name}{cat_str}: {tool.description[:100]}{params_str}")
+
+        return ToolResult(success=True, data="\n".join(lines))
+
+    def _list_all_by_category(self) -> ToolResult:
+        """List all tools grouped by category."""
+        categories: dict[str, list] = {}
+        for tool in self._registry.list():
+            if tool.name == self.name:
+                continue
+            cat = tool.category or "other"
+            categories.setdefault(cat, []).append(tool)
+
+        lines = [f"All capabilities ({sum(len(v) for v in categories.values())} tools):"]
+        for cat in sorted(categories):
+            tools = categories[cat]
+            tool_names = ", ".join(t.name for t in tools)
+            lines.append(f"\n**{cat}**: {tool_names}")
 
         return ToolResult(success=True, data="\n".join(lines))

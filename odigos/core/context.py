@@ -21,10 +21,12 @@ from odigos.personality.prompt_builder import build_system_prompt
 _context_filter = ContentFilter()
 
 _TOOL_INSTRUCTION = (
-    "You can manage workspaces, generate media, execute code, and more. "
-    "Use find_tools to discover specific capabilities. "
-    "Call it when asked to do something. "
-    'Do not say "I can\'t" without checking find_tools first.'
+    "You have access to tools for: web search, document processing, "
+    "image generation, music creation, code execution, email, calendar, "
+    "file management, kanban boards, notebooks, data tables, and more. "
+    "Use find_tools to discover the specific tool for any task. "
+    "When asked what you can do, call find_tools with a broad query "
+    'to show the full list. Do not say "I can\'t" without checking first.'
 )
 
 _RESPONSE_STYLES = {
