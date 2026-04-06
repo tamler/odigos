@@ -32,7 +32,11 @@ export const useChatStore = create<ChatState>((set) => ({
       set({ messages })
     }
   },
-  addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
+  addMessage: (message) => set((state) => ({
+    messages: [...state.messages, message],
+    // If this is an assistant message, mark streaming active atomically
+    ...(message.role === 'assistant' ? { isStreaming: true } : {}),
+  })),
   updateLastMessage: (content) =>
     set((state) => {
       const msgs = [...state.messages]

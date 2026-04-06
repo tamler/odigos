@@ -54,9 +54,8 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           const chunk = msg.content as string
 
           if (!useChatStore.getState().isStreaming) {
-            // First chunk: create the assistant message
+            // First chunk: create assistant message (addMessage sets isStreaming atomically)
             chat.addMessage({ role: 'assistant', content: chunk, timestamp: new Date().toISOString() })
-            chat.startStreaming()
           } else {
             // Subsequent chunks: append to the existing message
             chat.appendToLastMessage(chunk)
