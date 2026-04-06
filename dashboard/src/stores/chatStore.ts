@@ -64,7 +64,7 @@ export const useChatStore = create<ChatState>((set) => ({
     }),
   startStreaming: () => set({ isStreaming: true }),
   thinking: false,
-  setThinking: (thinking) => set({ thinking, ...(thinking ? {} : { isStreaming: false }) }),
+  setThinking: (thinking) => set({ thinking }),
   status: null,
   setStatus: (status) => set({ status }),
   queuedCount: 0,
