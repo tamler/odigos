@@ -54,30 +54,21 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           chat.setThinking(false)
           chat.setStatus(null)
 
-          const chunk = msg.content as string
-
-          // First chunk: add message immediately (no delay).
-          // This ensures isStreaming is set before any buffered flush.
+          // If no streaming message exists yet, create an empty one.
+          // All chunks (including the first) go through the same buffer path.
           if (!useChatStore.getState().isStreaming) {
-            chat.setMessages((prev) => [...prev, {
-              role: 'assistant' as const,
-              content: chunk,
-              timestamp: new Date().toISOString(),
-            }])
+            chat.addMessage({ role: 'assistant', content: '', timestamp: new Date().toISOString() })
             chat.startStreaming()
-            return
           }
 
-          // Subsequent chunks: buffer and flush every 50ms.
-          chunkBufferRef.current += chunk
+          // Buffer chunks, flush every 50ms. One path for all chunks.
+          chunkBufferRef.current += (msg.content as string)
           if (!chunkFlushTimerRef.current) {
             chunkFlushTimerRef.current = window.setTimeout(() => {
               const buffered = chunkBufferRef.current
               chunkBufferRef.current = ''
               chunkFlushTimerRef.current = null
-              if (buffered) {
-                chat.appendToLastMessage(buffered)
-              }
+              if (buffered) chat.appendToLastMessage(buffered)
             }, 50)
           }
         }
