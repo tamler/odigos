@@ -145,10 +145,11 @@ async def websocket_endpoint(websocket: WebSocket):
     processor_task: asyncio.Task | None = None
     cancel_event: asyncio.Event | None = None
     background_tasks: set[asyncio.Task] = set()
+    recent_turns: list[dict] = []
 
     async def _process_chat_queue():
         """Process queued chat messages one at a time."""
-        nonlocal conversation_id, first_message, cancel_event
+        nonlocal conversation_id, first_message, cancel_event, recent_turns
         while True:
             data = await chat_queue.get()
             try:
@@ -195,11 +196,19 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 agent_service = websocket.app.state.container.agent_service
                 cancel_event = asyncio.Event()
+                user_content = data.get("content", "")
+                recent_turns.append({"role": "user", "content": user_content[:500]})
                 response = await agent_service.handle_message(
                     msg, status_callback=send_status, stream_callback=send_chunk,
                     abort_event=cancel_event,
+                    recent_turns=recent_turns,
                 )
                 cancel_event = None
+
+                # Track assistant turn and keep last 6 messages (3 turns)
+                recent_turns.append({"role": "assistant", "content": (response or "")[:500]})
+                if len(recent_turns) > 6:
+                    recent_turns = recent_turns[-6:]
 
                 # Notify frontend of new conversation so sidebar updates
                 try:

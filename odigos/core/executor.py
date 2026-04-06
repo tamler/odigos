@@ -27,7 +27,7 @@ _PRUNED_MAX_CHARS = 200
 if TYPE_CHECKING:
     from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetStatus, BudgetTracker
-    from odigos.core.classifier import QueryAnalysis
+    from odigos.core.classifier import QueryAnalysis, QueryPlan
     from odigos.core.evaluator import Evaluator
     from odigos.core.trace import Tracer
     from odigos.skills.registry import SkillRegistry
@@ -250,6 +250,8 @@ class Executor:
         abort_event: asyncio.Event | None = None,
         *,
         query_analysis: QueryAnalysis | None = None,
+        query_plan: QueryPlan | None = None,
+        recent_turns: list[dict] | None = None,
         status_callback: Callable[[str], Awaitable[None]] | None = None,
         context_metadata: dict | None = None,
         stream_callback: Callable[[str], Awaitable[None]] | None = None,
@@ -269,18 +271,26 @@ class Executor:
         # Build initial context -- use pre-built headless messages if provided
         if headless_messages is not None:
             messages = list(headless_messages)
+            tools = None
+            if self.tool_registry and self.tool_registry.list():
+                tools = self.tool_registry.tool_definitions()
+        elif query_plan:
+            # New planner-driven path: context + tool selection in one call
+            messages, tools = await self.context_assembler.build_planned(
+                conversation_id, message_content,
+                plan=query_plan,
+                recent_turns=recent_turns,
+            )
         else:
+            # Legacy path (backward compat)
             messages = await self.context_assembler.build(
                 conversation_id, message_content,
                 query_analysis=query_analysis,
                 context_metadata=context_metadata,
             )
-
-        # Tool selection: always include find_tools + core high-frequency tools.
-        # The LLM discovers additional tools via find_tools during execution.
-        tools = None
-        if self.tool_registry and self.tool_registry.list():
-            tools = self.tool_registry.tool_definitions()
+            tools = None
+            if self.tool_registry and self.tool_registry.list():
+                tools = self.tool_registry.tool_definitions()
 
         # Count context tokens for efficiency tracking
         context_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)

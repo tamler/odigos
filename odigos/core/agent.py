@@ -109,6 +109,7 @@ class Agent:
         headless: bool = False,
         plan_context: str = "",
         background_model: str = "",
+        recent_turns: list[dict] | None = None,
     ) -> str:
         """Process an incoming message through the ReAct loop."""
         conversation_id = await self._get_or_create_conversation(message)
@@ -128,6 +129,7 @@ class Agent:
                 headless=headless,
                 plan_context=plan_context,
                 background_model=background_model,
+                recent_turns=recent_turns,
             )
 
     async def _run(
@@ -142,6 +144,7 @@ class Agent:
         headless: bool = False,
         plan_context: str = "",
         background_model: str = "",
+        recent_turns: list[dict] | None = None,
     ) -> str:
         """Execute the agent loop with timeout."""
         await self.db.execute(
@@ -175,7 +178,9 @@ class Agent:
         analysis = None
         if self.classifier:
             try:
-                analysis = await self.classifier.classify(message.content)
+                analysis = await self.classifier.classify(
+                    message.content, recent_turns=recent_turns,
+                )
                 logger.info("Query classified as '%s' (tier %d, confidence %.2f)",
                             analysis.classification, analysis.tier, analysis.confidence)
             except Exception:
@@ -201,6 +206,8 @@ class Agent:
                     conversation_id, message.content,
                     abort_event=abort_event,
                     query_analysis=analysis,
+                    query_plan=analysis,
+                    recent_turns=recent_turns,
                     status_callback=status_callback,
                     context_metadata=context_metadata,
                     stream_callback=stream_callback,
