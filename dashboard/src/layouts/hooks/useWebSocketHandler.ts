@@ -63,18 +63,11 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           }
           chat.setThinking(false)
           chat.setStatus(null)
-          // Streamed responses: content was already built up via chat_chunk.
-          // Non-streamed (tool-only): content comes in this message.
-          const streamedContent = useChatStore.getState().streamingContent
-          const finalContent = streamedContent || (msg.content as string) || ''
-          chat.setStreamingContent('')
-          if (finalContent) {
-            chat.setMessages((prev) => [...prev, {
-              role: 'assistant' as const,
-              content: finalContent,
-              timestamp: new Date().toISOString(),
-            }])
-          }
+          // Atomic promotion: streaming content → message in one state update.
+          // No flash — no frame where streaming is cleared but message isn't added yet.
+          chat.promoteStreaming(msg.content as string)
+          const msgs = useChatStore.getState().messages
+          const finalContent = msgs.length > 0 ? msgs[msgs.length - 1].content : ''
           if (ui.focusMode && finalContent && shouldPlayTTS(finalContent)) {
             playTTS(stripForTTS(finalContent))
           }

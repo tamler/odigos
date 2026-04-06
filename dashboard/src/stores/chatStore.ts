@@ -6,6 +6,7 @@ interface ChatState {
   setMessages: (messages: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void
   addMessage: (message: ChatMessage) => void
   updateLastMessage: (content: string) => void
+  promoteStreaming: (fallbackContent?: string) => void
   streamingContent: string
   setStreamingContent: (content: string | ((prev: string) => string)) => void
   thinking: boolean
@@ -31,6 +32,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
+  promoteStreaming: (fallbackContent) => set((state) => {
+    const content = state.streamingContent || fallbackContent || ''
+    if (!content) return { streamingContent: '', isStreaming: false }
+    return {
+      messages: [...state.messages, {
+        role: 'assistant' as const,
+        content,
+        timestamp: new Date().toISOString(),
+      }],
+      streamingContent: '',
+      isStreaming: false,
+    }
+  }),
   updateLastMessage: (content) =>
     set((state) => {
       const msgs = [...state.messages]
