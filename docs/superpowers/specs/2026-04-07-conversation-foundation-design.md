@@ -62,6 +62,23 @@ CREATE TABLE message_deliveries (
 );
 
 CREATE INDEX idx_deliveries_message ON message_deliveries(message_id);
+
+CREATE TABLE message_artifacts (
+    message_id      TEXT NOT NULL REFERENCES messages(id),
+    artifact_id     TEXT NOT NULL REFERENCES artifacts(id),
+    PRIMARY KEY (message_id, artifact_id)
+);
+
+CREATE TABLE channel_mappings (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id),
+    channel         TEXT NOT NULL,
+    external_id     TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    UNIQUE(channel, external_id)
+);
+
+CREATE INDEX idx_channel_mappings_external ON channel_mappings(channel, external_id);
 ```
 
 **conversations.id:** Plain UUID. No `web:` prefix. Channel is a field, not part of the identity.
@@ -109,9 +126,21 @@ class MessageBus:
         tokens_out: int = None,
         cost_usd: float = None,
         metadata: dict = None,
+        idempotency_key: str = None,
     ) -> str:
         """Publish a message. Writes to DB + pushes to all reachable channels.
-        Returns the message ID."""
+        Returns the message ID. If idempotency_key is provided and a message
+        with that key already exists, returns the existing message ID (no duplicate)."""
+
+        # 0. Idempotency check (callbacks may fire twice)
+        if idempotency_key:
+            existing = await self.db.fetch_one(
+                "SELECT id FROM messages WHERE json_extract(metadata_json, '$.idempotency_key') = ?",
+                (idempotency_key,),
+            )
+            if existing:
+                return existing["id"]
+            metadata = {**(metadata or {}), "idempotency_key": idempotency_key}
 
         # 1. Write to DB (source of truth)
         msg_id = uuid.uuid4().hex
@@ -219,7 +248,7 @@ class ChannelAdapter:
 4. **Frontend subscribes to WebSocket for live updates.** New messages added to UI via WebSocket.
 5. **Streaming is ephemeral.** Chunks flow over WebSocket. Final message through the bus.
 6. **Background results go through the bus.** Callbacks, heartbeat, proactive messages — all use publish().
-7. **On reconnect, re-fetch from DB.** Catches any missed messages.
+7. **On reconnect, re-fetch from DB.** Frontend sends `last_seen_at` timestamp on reconnect. API returns only messages newer than that timestamp. No full re-fetch, no sequence gaps.
 
 ### 8. Frontend Changes
 
@@ -233,16 +262,20 @@ class ChannelAdapter:
 - Handle unified `message` event type from bus
 - Remove old type-specific message storage (chat_response adding messages)
 - Keep `chat_chunk` for streaming display
-- On reconnect: trigger message re-fetch
+- On reconnect: send `last_seen_at` timestamp, fetch only missed messages via `GET /api/conversations/{id}/messages?after={timestamp}`
+- Track `last_seen_at` from the most recent message's `created_at`
 
 **ChatPanel.tsx:**
 - Load messages via `GET /api/conversations/{id}/messages` on conversation open
+- Supports `?after={timestamp}` for catch-up on reconnect
 - Subscribe to WebSocket for live updates
 - Plain UUID in all conversation references
 
 **AppSidebar.tsx:**
 - Read conversations from store (already does)
 - conversation_started event from bus uses plain UUID
+- `GET /api/conversations` supports `?category=` filter (prep for Spec C focus areas)
+- `conversations.category` field exists but unused until Spec C
 
 ### 9. What This Replaces
 
