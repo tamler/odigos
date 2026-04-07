@@ -79,6 +79,7 @@ CREATE TABLE channel_mappings (
 );
 
 CREATE INDEX idx_channel_mappings_external ON channel_mappings(channel, external_id);
+CREATE INDEX idx_messages_idempotency ON messages(json_extract(metadata_json, '$.idempotency_key'));
 ```
 
 **conversations.id:** Plain UUID. No `web:` prefix. Channel is a field, not part of the identity.
@@ -91,7 +92,7 @@ CREATE INDEX idx_channel_mappings_external ON channel_mappings(channel, external
 
 **Queryable fields stay as columns:** model_used, tokens_in, tokens_out, cost_usd. These are needed for analytics and budget tracking.
 
-**message_deliveries:** One row per message per channel. Tracks when pushed and when seen. Created by the bus on delivery. `seen_at` populated by channel adapters when the user views the message.
+**message_deliveries:** One row per message per registered channel. Created by the bus for ALL channels on publish, not just reachable ones. `delivered_at` populated when successfully pushed; NULL means pending delivery. `seen_at` populated by channel adapters when the user views the message. Query `delivered_at IS NULL` to find undelivered messages for a channel.
 
 All other tables in schema.sql get the same naming audit: `timestamp` → `created_at`, consistent foreign key names, same conventions.
 
@@ -127,9 +128,11 @@ class MessageBus:
         cost_usd: float = None,
         metadata: dict = None,
         idempotency_key: str = None,
+        message_id: str = None,
     ) -> str:
         """Publish a message. Writes to DB + pushes to all reachable channels.
-        Returns the message ID. If idempotency_key is provided and a message
+        Returns the message ID. Pass message_id to use a pre-allocated ID
+        (for streaming correlation). If idempotency_key is provided and a message
         with that key already exists, returns the existing message ID (no duplicate)."""
 
         # 0. Idempotency check (callbacks may fire twice)
@@ -143,7 +146,7 @@ class MessageBus:
             metadata = {**(metadata or {}), "idempotency_key": idempotency_key}
 
         # 1. Write to DB (source of truth)
-        msg_id = uuid.uuid4().hex
+        msg_id = message_id or uuid.uuid4().hex
         await self.db.execute(
             "INSERT INTO messages (id, conversation_id, role, content, channel, "
             "message_type, model_used, tokens_in, tokens_out, cost_usd, metadata_json) "
@@ -161,7 +164,7 @@ class MessageBus:
             (conversation_id,),
         )
 
-        # 3. Push to all reachable channels for this user
+        # 3. Create delivery rows for ALL registered channels, push to reachable ones
         msg_data = {
             "type": "message",
             "id": msg_id,
@@ -174,21 +177,26 @@ class MessageBus:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         for ch in self.channel_registry.all():
+            delivery_id = uuid.uuid4().hex
+            delivered_at = None
             try:
                 if ch.is_reachable():
                     await ch.deliver(msg_data)
-                    await self.db.execute(
-                        "INSERT INTO message_deliveries (id, message_id, channel, delivered_at) "
-                        "VALUES (?, ?, ?, datetime('now'))",
-                        (uuid.uuid4().hex, msg_id, ch.channel_name),
-                    )
+                    delivered_at = datetime.now(timezone.utc).isoformat()
             except Exception:
-                pass  # Channel not connected, delivery skipped
+                pass  # Channel error, delivery stays pending
+            await self.db.execute(
+                "INSERT INTO message_deliveries (id, message_id, channel, delivered_at) "
+                "VALUES (?, ?, ?, ?)",
+                (delivery_id, msg_id, ch.channel_name, delivered_at),
+            )
 
         return msg_id
 ```
 
-**Streaming exception:** Streaming chunks are ephemeral — pushed directly over WebSocket for real-time display, not through the bus. The bus handles the FINAL message after streaming completes. This matches Vercel AI SDK's approach.
+**Streaming protocol:** Streaming chunks are ephemeral — pushed directly over WebSocket for real-time display, not through the bus. The bus handles the FINAL message after streaming completes. This matches Vercel AI SDK's approach.
+
+**Chunk-to-message correlation:** The WebSocket handler allocates the `message_id` (UUID) before streaming starts. Every `chat_chunk` carries this `message_id`. The final `bus.publish()` call uses the same `message_id` (passed as a parameter, not generated inside publish). The frontend tracks which `message_id` is currently streaming. On receiving a bus `message` event, if the ID matches the streaming message, it finalizes (replaces accumulated chunks with the bus content). Any `chat_chunk` arriving after finalization for that ID is silently dropped.
 
 ### 4. Who Calls the Bus
 
