@@ -162,7 +162,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     bus = websocket.app.state.container.message_bus
                     conversation_id = await bus.create_conversation(channel="web")
 
-                # Register WebSocket under the conversation_id for push delivery
+                # Move WebSocket registration from session_id to conversation_id.
+                # One key per WebSocket — prevents deliver() echoing back via session_id.
+                web_channel.unregister_connection(session_id, websocket)
                 web_channel.register_connection(conversation_id, websocket)
 
                 msg_metadata = {"conversation_id": conversation_id}
@@ -480,6 +482,8 @@ async def websocket_endpoint(websocket: WebSocket):
         for task in background_tasks:
             task.cancel()
         background_tasks.clear()
-        web_channel.unregister_connection(session_id, websocket)
+        # Unregister from whichever key the WS is currently under
         if conversation_id:
             web_channel.unregister_connection(conversation_id, websocket)
+        else:
+            web_channel.unregister_connection(session_id, websocket)

@@ -17,8 +17,8 @@ async def generate_title(provider: LLMProvider, user_message: str, assistant_res
     response = await call_llm(
         provider,
         [{"role": "user", "content": (
-            "Write exactly one short title (3-6 words) for this conversation. "
-            "No quotes, no options, no explanation. Just the title.\n\n"
+            "Generate a short title (3-6 words, no quotes) for a conversation "
+            "that starts with this exchange:\n\n"
             f"User: {user_message[:200]}\n"
             f"Assistant: {assistant_response[:200]}\n\n"
             "Title:"
@@ -26,7 +26,8 @@ async def generate_title(provider: LLMProvider, user_message: str, assistant_res
         max_tokens=20, temperature=0.3, log_name="auto_title",
     )
     if response:
-        title = response.content.strip().strip('"').strip("'")
+        # Take first line only — some models return multiple options
+        title = response.content.strip().split("\n")[0].strip().strip('"').strip("'")
     else:
         title = _heuristic_title(user_message)
     if len(title) > 60:
