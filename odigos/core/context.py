@@ -771,10 +771,20 @@ class ContextAssembler:
         # Build messages
         messages = [{"role": "system", "content": system_prompt}]
 
-        # Add conversation history as messages (not in system prompt)
+        # Add conversation history from DB
         if conversation_id and conversation_id != "headless":
             history_messages = await self._load_message_history(conversation_id)
             messages.extend(history_messages)
+
+        # Add recent turns from WebSocket session that may not be in DB yet.
+        # Deduplicate: skip turns whose content is already in history_messages.
+        if recent_turns:
+            existing = {m.get("content", "")[:100] for m in messages}
+            for turn in recent_turns:
+                preview = (turn.get("content") or "")[:100]
+                if preview and preview not in existing:
+                    messages.append({"role": turn["role"], "content": turn["content"]})
+                    existing.add(preview)
 
         # User message
         messages.append({"role": "user", "content": message_content})
