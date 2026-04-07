@@ -52,7 +52,7 @@ class TestBeliefTrackingCritique:
             ("conv-bt", "web"),
         )
         await db.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
+            "INSERT INTO messages (id, conversation_id, role, content, created_at) "
             "VALUES (?, ?, 'tool', ?, datetime('now'))",
             ("tool-1", "conv-bt",
              "The document says the quarterly revenue was $4.2 million with expenses of $3.1 million"),
@@ -69,7 +69,7 @@ class TestBeliefTrackingCritique:
             ("conv-bt2", "web"),
         )
         await db.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
+            "INSERT INTO messages (id, conversation_id, role, content, created_at) "
             "VALUES (?, ?, 'tool', ?, datetime('now'))",
             ("tool-2", "conv-bt2",
              "The Springfield facility reported production output of 15,000 units with a defect rate of 2.3%"),

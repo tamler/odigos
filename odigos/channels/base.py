@@ -76,9 +76,15 @@ class ChannelRegistry:
         return self._channels.get(name)
 
     def for_conversation(self, conversation_id: str) -> Channel | None:
-        """Look up channel from conversation_id like 'telegram:123'."""
-        prefix = conversation_id.split(":", 1)[0] if ":" in conversation_id else ""
-        return self._channels.get(prefix)
+        """Look up channel from conversation_id.
+
+        Prefixed IDs like 'telegram:123' or 'peer:name' use the prefix.
+        Plain UUIDs (no colon) default to the 'web' channel.
+        """
+        if ":" in conversation_id:
+            prefix = conversation_id.split(":", 1)[0]
+            return self._channels.get(prefix)
+        return self._channels.get("web")
 
     def all(self) -> list[Channel]:
         return list(self._channels.values())

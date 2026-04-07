@@ -228,12 +228,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     # Extract UI actions from response (```json blocks with "action" key)
                     ui_actions = _extract_ui_actions(response)
 
-                    # Always include the full content as source of truth.
-                    # Frontend uses this to correct any missed chunks.
+                    # Send chat_response as a signal only (no content).
+                    # The bus 'message' event delivers the full content via
+                    # WebChannel.deliver(), so including content here would
+                    # cause the assistant response to arrive twice.
                     response_msg = {
                         "type": "chat_response",
                         "conversation_id": conversation_id,
-                        "content": response,
                     }
                     if ui_actions:
                         response_msg["actions"] = ui_actions
@@ -372,7 +373,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     try:
                         db = websocket.app.state.container.agent_service.agent.db
                         rows = await db.fetch_all(
-                            "SELECT id FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+                            "SELECT id FROM messages WHERE conversation_id = ? ORDER BY created_at",
                             (conversation_id,),
                         )
                         if edit_index < len(rows):
@@ -395,7 +396,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     db = websocket.app.state.container.agent_service.agent.db
                     last_two = await db.fetch_all(
                         "SELECT id, role FROM messages WHERE conversation_id = ? "
-                        "ORDER BY timestamp DESC LIMIT 2",
+                        "ORDER BY created_at DESC LIMIT 2",
                         (conversation_id,),
                     )
                     if last_two:
@@ -418,14 +419,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     db = websocket.app.state.container.agent_service.agent.db
                     last_asst = await db.fetch_one(
                         "SELECT id FROM messages WHERE conversation_id = ? AND role = 'assistant' "
-                        "ORDER BY timestamp DESC LIMIT 1",
+                        "ORDER BY created_at DESC LIMIT 1",
                         (conversation_id,),
                     )
                     if last_asst:
                         await db.execute("DELETE FROM messages WHERE id = ?", (last_asst["id"],))
                     last_user = await db.fetch_one(
                         "SELECT content FROM messages WHERE conversation_id = ? AND role = 'user' "
-                        "ORDER BY timestamp DESC LIMIT 1",
+                        "ORDER BY created_at DESC LIMIT 1",
                         (conversation_id,),
                     )
                     if last_user and not chat_queue.full():

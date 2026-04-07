@@ -31,7 +31,7 @@ def _insert_message(db, conv_id, role, content, ts_offset_minutes=0):
     msg_id = str(uuid.uuid4())
     ts = (datetime.now(timezone.utc) + timedelta(minutes=ts_offset_minutes)).isoformat()
     return msg_id, db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
+        "INSERT INTO messages (id, conversation_id, role, content, created_at) "
         "VALUES (?, ?, ?, ?, ?)",
         (msg_id, conv_id, role, content, ts),
     )

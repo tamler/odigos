@@ -126,7 +126,9 @@ class TestChatMessage:
 
             response = ws.receive_json()
             assert response["type"] == "chat_response"
-            assert response["content"] == "Hello from agent"
+            # chat_response is now a signal-only event (no content);
+            # full content is delivered via the bus 'message' event.
+            assert "content" not in response
             assert response["conversation_id"] == chat_conv_id
 
             agent.handle_message.assert_awaited_once()

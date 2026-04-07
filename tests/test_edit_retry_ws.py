@@ -26,7 +26,7 @@ class TestEditTruncation:
 
         # Truncate from index 2 (delete messages 2, 3, 4)
         rows = await db.fetch_all(
-            "SELECT id FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+            "SELECT id FROM messages WHERE conversation_id = ? ORDER BY created_at",
             (conv_id,),
         )
         ids_to_delete = [r["id"] for r in rows[2:]]
@@ -37,7 +37,7 @@ class TestEditTruncation:
         )
 
         remaining = await db.fetch_all(
-            "SELECT id FROM messages WHERE conversation_id = ? ORDER BY timestamp",
+            "SELECT id FROM messages WHERE conversation_id = ? ORDER BY created_at",
             (conv_id,),
         )
         assert len(remaining) == 2

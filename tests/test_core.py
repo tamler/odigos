@@ -413,7 +413,7 @@ class TestAgent:
         assert conv is not None
         assert conv["channel"] == "telegram"
 
-        msgs = await db.fetch_all("SELECT role FROM messages ORDER BY timestamp")
+        msgs = await db.fetch_all("SELECT role FROM messages ORDER BY created_at")
         roles = [m["role"] for m in msgs]
         assert "user" in roles
         assert "assistant" in roles

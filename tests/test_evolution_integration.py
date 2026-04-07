@@ -77,18 +77,18 @@ async def test_full_cycle_promote(db, sections_dir, mock_provider):
     await db.execute("INSERT INTO conversations (id, channel) VALUES (?, ?)", (conv_id, "test"))
     user_id = str(uuid.uuid4())
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
         (user_id, conv_id, "user", "Help me write Python", datetime.now(timezone.utc).isoformat()),
     )
     asst_id = str(uuid.uuid4())
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
         (asst_id, conv_id, "assistant", "Here is the code...",
          (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()),
     )
     # Add positive follow-up for implicit feedback
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
         (str(uuid.uuid4()), conv_id, "user", "Thanks, perfect!",
          (datetime.now(timezone.utc) + timedelta(seconds=2)).isoformat()),
     )
