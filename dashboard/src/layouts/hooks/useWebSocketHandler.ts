@@ -71,19 +71,15 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
         if (msg.type === 'message') {
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
           const msgId = msg.id as string
-          const role = msg.role as string
 
           // If this matches the streaming message, finalize it
           if (msgId && useChatStore.getState().streamingMessageId === msgId) {
             chat.finalizeStreaming(msg.content as string)
-          } else if (role === 'user' || role === 'assistant') {
-            // Skip — user messages are added locally by ChatPanel,
-            // assistant messages arrive via chat_chunk streaming.
-            // The bus deliver is for other channels, not the originating web session.
           } else {
-            // System, notification, artifact — from bus (background tasks, callbacks)
+            // Message from bus — system notifications, background task results,
+            // or messages from other conversations/channels
             chat.addMessage({
-              role: role as 'system',
+              role: msg.role as 'user' | 'assistant' | 'system',
               content: msg.content as string,
               timestamp: (msg.created_at as string) || new Date().toISOString(),
             })

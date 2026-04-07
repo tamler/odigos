@@ -85,9 +85,16 @@ class WebChannel(Channel):
         await self._send_to_connections(conversation_id, payload)
 
     async def deliver(self, msg_data: dict) -> None:
-        """Push a message to ALL connected WebSocket clients.
-        The bus calls this for every published message — delivery is per-user, not per-conversation."""
+        """Push a message to connected WebSocket clients.
+
+        Skips the originating conversation's connections — those already have
+        the message via direct WebSocket events (streaming chunks, local add).
+        Delivers to all other connections (other conversations, other tabs).
+        """
+        origin = msg_data.get("conversation_id")
         for cid in list(self._connections.keys()):
+            if cid == origin:
+                continue
             await self._send_to_connections(cid, msg_data)
 
     def is_reachable(self) -> bool:
