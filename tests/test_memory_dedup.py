@@ -78,7 +78,7 @@ class TestDeduplication:
             conversation_id="conv-1",
             user_message="I prefer Python over JavaScript for backend work",
             assistant_response="Noted!",
-            extracted_entities=[],
+            extracted=None,
         )
         count_after_first = await vector_memory.count()
 
@@ -86,7 +86,7 @@ class TestDeduplication:
             conversation_id="conv-2",
             user_message="I prefer Python over JavaScript for backend work",
             assistant_response="Got it!",
-            extracted_entities=[],
+            extracted=None,
         )
         count_after_second = await vector_memory.count()
 
@@ -98,7 +98,7 @@ class TestDeduplication:
             conversation_id="conv-1",
             user_message="I prefer Python for backend work",
             assistant_response="Noted!",
-            extracted_entities=[],
+            extracted=None,
         )
         count_first = await vector_memory.count()
 
@@ -106,7 +106,7 @@ class TestDeduplication:
             conversation_id="conv-2",
             user_message="My favorite food is sushi and I eat it every Friday",
             assistant_response="Yum!",
-            extracted_entities=[],
+            extracted=None,
         )
         count_second = await vector_memory.count()
 

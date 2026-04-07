@@ -74,7 +74,7 @@ class TestWhenToUseGeneration:
             conversation_id="conv-1",
             user_message="I prefer dark mode in all applications",
             assistant_response="Noted!",
-            extracted_entities=[],
+            extracted=None,
         )
         embed_calls = mock_embedder.embed.call_args_list
         any_preference = any("preferences" in str(c).lower() for c in embed_calls)
@@ -86,7 +86,7 @@ class TestWhenToUseGeneration:
             conversation_id="conv-2",
             user_message="Alice is a software engineer at Google",
             assistant_response="Got it!",
-            extracted_entities=[],
+            extracted=None,
         )
         embed_calls = mock_embedder.embed.call_args_list
         any_facts = any("facts" in str(c).lower() or "people" in str(c).lower() for c in embed_calls)
@@ -121,14 +121,16 @@ class TestMemoryManager:
 
     async def test_store_entities(self, manager, graph):
         """Store extracts entities into the graph."""
-        entities = [
-            {"name": "Alice", "type": "person", "relationship": "friend", "detail": "engineer"},
-        ]
+        extracted = {
+            "entities": [{"name": "Alice", "type": "person"}],
+            "facts": [],
+            "relationships": [],
+        }
         await manager.store(
             conversation_id="conv-1",
             user_message="Talked to Alice today",
             assistant_response="That's nice!",
-            extracted_entities=entities,
+            extracted=extracted,
         )
 
         # Entity should exist in graph
@@ -141,7 +143,7 @@ class TestMemoryManager:
             conversation_id="conv-1",
             user_message="I prefer Python over JavaScript",
             assistant_response="Noted!",
-            extracted_entities=[],
+            extracted=None,
         )
 
         # The embedder should have been called to embed the user message
@@ -155,14 +157,13 @@ class TestMemoryManager:
             conversation_id="conv-1",
             user_message="Alice works on the Odigos project",
             assistant_response="Got it!",
-            extracted_entities=[
-                {
-                    "name": "Alice",
-                    "type": "person",
-                    "relationship": "works_on",
-                    "detail": "Odigos project",
-                },
-            ],
+            extracted={
+                "entities": [{"name": "Alice", "type": "person"}],
+                "facts": [],
+                "relationships": [
+                    {"from": "Alice", "relationship": "works_on", "to": "Odigos project"},
+                ],
+            },
         )
 
         context = await manager.recall("Alice")

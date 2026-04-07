@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from sentence_transformers import CrossEncoder
+
+if TYPE_CHECKING:
+    from odigos.db import Database
 
 from odigos.core.content_filter import ContentFilter
 from odigos.memory.chunking import ChunkingService
@@ -36,6 +40,7 @@ class MemoryManager:
         summarizer: ConversationSummarizer,
         chunking_service: ChunkingService | None = None,
         cite_sources: bool = True,
+        db: Database | None = None,
     ) -> None:
         self.vector_memory = vector_memory
         self.graph = graph
@@ -43,6 +48,7 @@ class MemoryManager:
         self.summarizer = summarizer
         self._cite_sources = cite_sources
         self.chunking = chunking_service or ChunkingService()
+        self.db = db
 
     async def _hybrid_search(
         self, query: str, limit: int = 5, k: int = 60,
@@ -180,14 +186,14 @@ class MemoryManager:
         conversation_id: str,
         user_message: str,
         assistant_response: str,
-        extracted_entities: list[dict],
+        extracted: dict | None = None,
     ) -> None:
         """Process and store memories from a conversation turn.
 
         Best-effort: failures are logged but don't crash the agent.
         """
         try:
-            await self._store_impl(conversation_id, user_message, assistant_response, extracted_entities)
+            await self._store_impl(conversation_id, user_message, assistant_response, extracted)
         except Exception:
             logger.warning("Memory storage failed, skipping this turn", exc_info=True)
 
@@ -218,31 +224,71 @@ class MemoryManager:
         conversation_id: str,
         user_message: str,
         assistant_response: str,
-        extracted_entities: list[dict],
+        extracted: dict | None = None,
     ) -> None:
-        # 1. Resolve and store entities
-        for entity_data in extracted_entities:
-            result = await self.resolver.resolve(
-                name=entity_data["name"],
-                entity_type=entity_data.get("type", "concept"),
-                context=user_message,
-            )
+        extracted = extracted or {"entities": [], "facts": [], "relationships": []}
 
-            # If entity has a relationship, create an edge
-            if entity_data.get("relationship") and entity_data.get("detail"):
-                detail = entity_data["detail"]
-                target_result = await self.resolver.resolve(
-                    name=detail,
-                    entity_type="concept",
+        # 1. Store entities with provenance
+        for entity_data in extracted["entities"]:
+            try:
+                entity_id = await self.resolver.resolve(
+                    entity_data["name"],
+                    entity_data.get("type", "concept"),
                     context=user_message,
+                    source_type="conversation",
+                    source_id=conversation_id,
                 )
-                await self.graph.create_edge(
-                    source_id=result.entity_id,
-                    relationship=entity_data["relationship"],
-                    target_id=target_result.entity_id,
+                entity_data["_stored_id"] = entity_id
+            except Exception:
+                logger.debug("Entity storage failed for %s", entity_data.get("name"))
+
+        # 2. Store relationships
+        for rel in extracted["relationships"]:
+            try:
+                from_entities = await self.graph.find_entity(rel["from"])
+                to_entities = await self.graph.find_entity(rel["to"])
+                if from_entities and to_entities:
+                    await self.graph.create_edge(
+                        from_entities[0]["id"], rel["relationship"], to_entities[0]["id"],
+                        source_type="conversation", edge_source_id=conversation_id,
+                    )
+            except Exception:
+                logger.debug(
+                    "Relationship storage failed: %s -> %s",
+                    rel.get("from"), rel.get("to"),
                 )
 
-        # 2. Chunk and embed the user message (with dedup)
+        # 3. Store facts with SHA-256 dedup
+        import hashlib
+        for fact_data in extracted["facts"]:
+            try:
+                fact_text = fact_data["text"]
+                fact_hash = hashlib.sha256(
+                    fact_text.strip().lower().encode(),
+                ).hexdigest()[:16]
+                if self.db:
+                    existing = await self.db.fetch_one(
+                        "SELECT id FROM user_facts WHERE content_hash = ?",
+                        (fact_hash,),
+                    )
+                    if existing:
+                        continue  # Exact duplicate, skip
+                    import uuid
+                    fact_id = uuid.uuid4().hex
+                    await self.db.execute(
+                        "INSERT INTO user_facts (id, fact, category, source, source_type,"
+                        " source_id, content_hash, confidence, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
+                        (
+                            fact_id, fact_text, fact_data.get("category", "general"),
+                            "extracted", "conversation", conversation_id, fact_hash, 0.8,
+                        ),
+                    )
+                    fact_data["_stored_id"] = fact_id
+            except Exception:
+                logger.debug("Fact storage failed: %s", fact_data.get("text", "")[:50])
+
+        # 4. Chunk and embed the user message (with dedup)
         chunks = self.chunking.chunk(user_message, content_type="message")
         for chunk in chunks:
             when_to_use = self._generate_when_to_use(chunk, "user_message")

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 
@@ -30,7 +32,10 @@ class EntityResolver:
         self.vector_memory = vector_memory
         self.llm_provider = llm_provider
 
-    async def resolve(self, name: str, entity_type: str, context: str) -> ResolutionResult:
+    async def resolve(
+        self, name: str, entity_type: str, context: str,
+        source_type: str | None = None, source_id: str | None = None,
+    ) -> ResolutionResult:
         """Resolve a candidate entity against the existing graph."""
 
         # Stage 1: Exact match
@@ -69,7 +74,8 @@ class EntityResolver:
 
         # Stage 4: No match -- create new entity
         entity_id = await self.graph.create_entity(
-            entity_type=entity_type, name=name, source="extraction"
+            entity_type=entity_type, name=name, source="extraction",
+            source_type=source_type, source_id=source_id,
         )
 
         # Embed the entity name for future vector matching
