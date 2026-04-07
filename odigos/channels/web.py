@@ -87,15 +87,30 @@ class WebChannel(Channel):
     async def deliver(self, msg_data: dict) -> None:
         """Push a message to connected WebSocket clients.
 
-        Skips the originating conversation's connections — those already have
-        the message via direct WebSocket events (streaming chunks, local add).
+        Skips WebSocket connections that belong to the originating conversation —
+        those already have the message via direct events (streaming chunks, local add).
         Delivers to all other connections (other conversations, other tabs).
         """
         origin = msg_data.get("conversation_id")
+        # Collect the actual WebSocket objects for the originating conversation
+        # so we skip them even if registered under multiple keys (session_id, conversation_id)
+        skip_ws: set = set()
+        if origin:
+            skip_ws = set(self._connections.get(origin, set()))
+
         for cid in list(self._connections.keys()):
-            if cid == origin:
-                continue
-            await self._send_to_connections(cid, msg_data)
+            if not skip_ws:
+                await self._send_to_connections(cid, msg_data)
+            else:
+                # Send only to connections NOT in the skip set
+                connections = list(self._connections.get(cid, set()))
+                for ws in connections:
+                    if ws in skip_ws:
+                        continue
+                    try:
+                        await ws.send_json(msg_data)
+                    except Exception:
+                        self._connections[cid].discard(ws)
 
     def is_reachable(self) -> bool:
         """Is at least one WebSocket client connected?"""

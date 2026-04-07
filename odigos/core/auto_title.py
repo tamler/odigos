@@ -17,8 +17,8 @@ async def generate_title(provider: LLMProvider, user_message: str, assistant_res
     response = await call_llm(
         provider,
         [{"role": "user", "content": (
-            "Generate a short title (3-6 words, no quotes) for a conversation "
-            "that starts with this exchange:\n\n"
+            "Write exactly one short title (3-6 words) for this conversation. "
+            "No quotes, no options, no explanation. Just the title.\n\n"
             f"User: {user_message[:200]}\n"
             f"Assistant: {assistant_response[:200]}\n\n"
             "Title:"
