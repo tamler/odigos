@@ -73,6 +73,38 @@ class Database:
         await self._ensure_schema()
         await self.run_migrations()
 
+        # Check if DB is empty but wiki files exist — trigger rebuild
+        await self._maybe_rebuild_from_wiki()
+
+    async def _maybe_rebuild_from_wiki(self) -> None:
+        """If DB has no entities but data/wiki/ has files, rebuild from wiki."""
+        from pathlib import Path
+        wiki_dir = Path("data/wiki")
+        if not wiki_dir.exists():
+            return
+
+        # Check if DB already has data
+        try:
+            row = await self.fetch_one("SELECT COUNT(*) as cnt FROM entities")
+            if row and row["cnt"] > 0:
+                return
+        except Exception:
+            return  # Table might not exist yet
+
+        # Check if wiki has content
+        entity_files = list(wiki_dir.glob("entities/*.md"))
+        topic_files = list(wiki_dir.glob("topics/*.md"))
+        if not entity_files and not topic_files:
+            return
+
+        logger.info("Empty DB with existing wiki files — rebuilding from wiki...")
+        try:
+            from odigos.memory.wiki_reader import rebuild_from_wiki
+            stats = await rebuild_from_wiki(self, wiki_dir)
+            logger.info("Wiki rebuild complete: %s", stats)
+        except Exception:
+            logger.exception("Wiki rebuild failed")
+
     async def close(self) -> None:
         """Close the database connection."""
         if self._conn:
