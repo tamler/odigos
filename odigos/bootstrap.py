@@ -37,6 +37,14 @@ class Bootstrapper:
         from odigos.storage import FILES_DIR, ensure_dirs
 
         ensure_dirs()
+
+        # Create wiki and source directories for memory redesign
+        Path("data/sources").mkdir(parents=True, exist_ok=True)
+        Path("data/wiki/entities").mkdir(parents=True, exist_ok=True)
+        Path("data/wiki/topics").mkdir(parents=True, exist_ok=True)
+        Path("data/wiki/conversations").mkdir(parents=True, exist_ok=True)
+        Path("data/wiki/synthesis").mkdir(parents=True, exist_ok=True)
+
         self.container.env_path = ".env"
         self.container.upload_dir = str(FILES_DIR)
 
@@ -225,6 +233,7 @@ class Bootstrapper:
             summarizer=summarizer,
             chunking_service=chunking_service,
             cite_sources=self.settings.agent.cite_sources,
+            db=db,
         )
         logger.info("Memory system initialized")
 
@@ -773,6 +782,10 @@ class Bootstrapper:
         logger.info("MessageBus initialized")
         self.container.agent.message_bus = self.container.message_bus
         self.container.agent.reflector.message_bus = self.container.message_bus
+        self.container.agent.reflector._extraction_provider = self.container.llm_provider
+        self.container.agent.reflector._extraction_model = (
+            getattr(self.settings.llm, 'background_model', '') or ''
+        )
 
         # Wire subagent manager tracer
         if hasattr(self, "_subagent_manager"):
