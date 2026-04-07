@@ -71,6 +71,8 @@ class Database:
 
         # Ensure base schema exists (creates all tables on fresh databases)
         await self._ensure_schema()
+        # Evolve existing tables — add missing columns from schema.sql
+        await self._evolve_schema()
         await self.run_migrations()
 
         # Check if DB is empty but wiki files exist — trigger rebuild
@@ -154,6 +156,62 @@ class Database:
                 except Exception:
                     pass  # Already exists or unsupported — skip
             await self.conn.commit()
+
+    async def _evolve_schema(self) -> None:
+        """Add missing columns to existing tables by comparing schema.sql to live DB.
+
+        schema.sql defines the canonical schema. On existing databases, CREATE TABLE
+        IF NOT EXISTS won't add new columns. This method diffs schema.sql against
+        PRAGMA table_info() and runs ALTER TABLE ADD COLUMN for any missing columns.
+        """
+        import re
+        schema_path = Path(__file__).parent.parent / "schema.sql"
+        if not schema_path.exists():
+            return
+        sql = schema_path.read_text()
+
+        # Parse CREATE TABLE statements from schema.sql
+        table_pattern = re.compile(
+            r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\((.*?)\);",
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in table_pattern.finditer(sql):
+            table_name = match.group(1)
+            body = match.group(2)
+
+            # Skip virtual tables, internal tables
+            if table_name.startswith("_"):
+                continue
+
+            # Get existing columns from live DB
+            try:
+                rows = await self.conn.execute_fetchall(f"PRAGMA table_info({table_name})")
+            except Exception:
+                continue  # Table doesn't exist yet — _ensure_schema will create it
+            existing_cols = {row[1] for row in rows}  # row[1] is column name
+
+            # Parse columns from schema.sql body
+            for line in body.split(","):
+                line = line.strip()
+                if not line or line.upper().startswith(("PRIMARY KEY", "FOREIGN KEY", "UNIQUE", "CHECK")):
+                    continue
+                parts = line.split()
+                if not parts:
+                    continue
+                col_name = parts[0].strip('"')
+                if col_name.upper() in ("PRIMARY", "FOREIGN", "UNIQUE", "CHECK", "CONSTRAINT"):
+                    continue
+
+                if col_name not in existing_cols:
+                    # Build ALTER TABLE statement
+                    col_def = line.rstrip(",").strip()
+                    try:
+                        await self.conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_def}")
+                        logger.info("Schema evolution: added %s.%s", table_name, col_name)
+                    except Exception as e:
+                        logger.debug("Schema evolution skip %s.%s: %s", table_name, col_name, e)
+
+        await self.conn.commit()
 
     async def run_migrations(self) -> None:
         """Apply SQL migration files in order, tracking which have been applied."""
