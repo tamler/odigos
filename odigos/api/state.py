@@ -61,7 +61,7 @@ async def get_state(
     # -- Agent info --
     active_convs = await db.fetch_one(
         "SELECT COUNT(DISTINCT conversation_id) AS cnt FROM messages "
-        "WHERE timestamp > datetime('now', '-1 hour')"
+        "WHERE created_at > datetime('now', '-1 hour')"
     )
     total_convs = await db.fetch_one(
         "SELECT COUNT(*) AS cnt FROM conversations"
@@ -97,7 +97,7 @@ async def get_state(
 
     # -- Conversations --
     recent_activity = await db.fetch_one(
-        "SELECT COUNT(*) AS cnt FROM messages WHERE timestamp > datetime('now', '-1 hour')"
+        "SELECT COUNT(*) AS cnt FROM messages WHERE created_at > datetime('now', '-1 hour')"
     )
     conversations_info = {
         "active": active_convs["cnt"] if active_convs else 0,

@@ -63,7 +63,7 @@ class ConversationSummarizer:
         # Fetch the unsummarized messages that need to be summarized
         messages = await self.db.fetch_all(
             "SELECT role, content FROM messages WHERE conversation_id = ? "
-            "ORDER BY timestamp ASC LIMIT ? OFFSET ?",
+            "ORDER BY created_at ASC LIMIT ? OFFSET ?",
             (conversation_id, cutoff - already_summarized, already_summarized),
         )
 

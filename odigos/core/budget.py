@@ -36,14 +36,14 @@ class BudgetTracker:
     async def get_daily_spend(self) -> float:
         row = await self.db.fetch_one(
             "SELECT COALESCE(SUM(cost_usd), 0.0) AS total "
-            "FROM messages WHERE date(timestamp) = date('now')"
+            "FROM messages WHERE date(created_at) = date('now')"
         )
         return row["total"] if row else 0.0
 
     async def get_monthly_spend(self) -> float:
         row = await self.db.fetch_one(
             "SELECT COALESCE(SUM(cost_usd), 0.0) AS total "
-            "FROM messages WHERE strftime('%Y-%m', timestamp) = strftime('%Y-%m', 'now')"
+            "FROM messages WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')"
         )
         return row["total"] if row else 0.0
 

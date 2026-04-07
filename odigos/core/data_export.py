@@ -20,15 +20,15 @@ async def export_conversation(db: Database, conversation_id: str) -> None:
     """Export a conversation to data/conversations/{id}.md"""
     try:
         conv = await db.fetch_one(
-            "SELECT id, channel, title, started_at FROM conversations WHERE id = ?",
+            "SELECT id, channel, title, created_at FROM conversations WHERE id = ?",
             (conversation_id,),
         )
         if not conv:
             return
 
         messages = await db.fetch_all(
-            "SELECT role, content, timestamp FROM messages "
-            "WHERE conversation_id = ? ORDER BY timestamp ASC",
+            "SELECT role, content, created_at FROM messages "
+            "WHERE conversation_id = ? ORDER BY created_at ASC",
             (conversation_id,),
         )
         if not messages:
@@ -39,13 +39,13 @@ async def export_conversation(db: Database, conversation_id: str) -> None:
 
         lines = [
             f"# {title}",
-            f"Channel: {conv['channel']} | Started: {conv['started_at']}",
+            f"Channel: {conv['channel']} | Started: {conv['created_at']}",
             "",
         ]
 
         for msg in messages:
             role = msg["role"].capitalize()
-            timestamp = msg["timestamp"] or ""
+            timestamp = msg["created_at"] or ""
             lines.append(f"## {role} ({timestamp})")
             lines.append("")
             lines.append(msg["content"])

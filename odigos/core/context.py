@@ -431,9 +431,9 @@ class ContextAssembler:
                 row = await self.db.fetch_one(
                     "SELECT c.id, c.channel, c.title, c.last_message_at, "
                     "  (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'user' "
-                    "   ORDER BY timestamp DESC LIMIT 1) as last_user_msg, "
+                    "   ORDER BY created_at DESC LIMIT 1) as last_user_msg, "
                     "  (SELECT content FROM messages WHERE conversation_id = c.id AND role = 'assistant' "
-                    "   ORDER BY timestamp DESC LIMIT 1) as last_assistant_msg "
+                    "   ORDER BY created_at DESC LIMIT 1) as last_assistant_msg "
                     "FROM conversations c "
                     "WHERE c.id != ? AND c.last_message_at IS NOT NULL "
                     "ORDER BY c.last_message_at DESC LIMIT 1",
@@ -678,7 +678,7 @@ class ContextAssembler:
         history = await self.db.fetch_all(
             "SELECT role, content FROM messages "
             "WHERE conversation_id = ? "
-            "ORDER BY timestamp ASC "
+            "ORDER BY created_at ASC "
             "LIMIT ?",
             (conversation_id, self.history_limit),
         )
@@ -907,7 +907,7 @@ class ContextAssembler:
         try:
             rows = await self.db.fetch_all(
                 "SELECT role, content FROM messages WHERE conversation_id = ? "
-                "ORDER BY timestamp DESC LIMIT 10",
+                "ORDER BY created_at DESC LIMIT 10",
                 (conversation_id,),
             )
             if not rows:
@@ -930,7 +930,7 @@ class ContextAssembler:
                 limit = getattr(self.settings.agent, 'history_limit', 20)
             rows = await self.db.fetch_all(
                 "SELECT role, content FROM messages WHERE conversation_id = ? "
-                "ORDER BY timestamp DESC LIMIT ?",
+                "ORDER BY created_at DESC LIMIT ?",
                 (conversation_id, limit),
             )
             return [{"role": row["role"], "content": row["content"]} for row in reversed(rows)]

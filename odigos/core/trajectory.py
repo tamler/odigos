@@ -26,12 +26,12 @@ async def extract_trajectories(db: Database, days: int = 7, min_count: int = 3) 
     """
     try:
         rows = await db.fetch_all(
-            "SELECT m.conversation_id, m.content, m.role, m.timestamp, "
+            "SELECT m.conversation_id, m.content, m.role, m.created_at, "
             "  e.overall_score "
             "FROM messages m "
             "LEFT JOIN evaluations e ON e.conversation_id = m.conversation_id "
-            "WHERE m.timestamp > datetime('now', ?) "
-            "ORDER BY m.conversation_id, m.timestamp",
+            "WHERE m.created_at > datetime('now', ?) "
+            "ORDER BY m.conversation_id, m.created_at",
             (f"-{days} days",),
         )
     except Exception:

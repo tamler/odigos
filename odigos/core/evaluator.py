@@ -97,16 +97,16 @@ async def infer_implicit_feedback(
     Returns -1.0 to 1.0. Negative = dissatisfied, positive = satisfied.
     """
     asst_msg = await db.fetch_one(
-        "SELECT timestamp FROM messages WHERE id = ?", (assistant_message_id,)
+        "SELECT created_at FROM messages WHERE id = ?", (assistant_message_id,)
     )
     if not asst_msg:
         return 0.0
 
     next_user = await db.fetch_one(
-        "SELECT content, timestamp FROM messages "
-        "WHERE conversation_id = ? AND role = 'user' AND timestamp > ? "
-        "ORDER BY timestamp ASC LIMIT 1",
-        (conversation_id, asst_msg["timestamp"]),
+        "SELECT content, created_at FROM messages "
+        "WHERE conversation_id = ? AND role = 'user' AND created_at > ? "
+        "ORDER BY created_at ASC LIMIT 1",
+        (conversation_id, asst_msg["created_at"]),
     )
 
     if next_user is None:
@@ -175,7 +175,7 @@ async def compute_bt_critique(
     # Check if any tool results exist in this conversation's recent messages
     tool_results = await db.fetch_all(
         "SELECT content FROM messages WHERE conversation_id = ? AND role = 'tool' "
-        "ORDER BY timestamp DESC LIMIT 5",
+        "ORDER BY created_at DESC LIMIT 5",
         (conversation_id,),
     )
 
@@ -229,11 +229,11 @@ class Evaluator:
     async def get_unscored_messages(self, limit: int = 5) -> list[dict]:
         """Find assistant messages that haven't been evaluated yet."""
         rows = await self.db.fetch_all(
-            "SELECT m.id, m.conversation_id, m.content, m.timestamp "
+            "SELECT m.id, m.conversation_id, m.content, m.created_at "
             "FROM messages m "
             "LEFT JOIN evaluations e ON m.id = e.message_id "
             "WHERE m.role = 'assistant' AND e.id IS NULL "
-            "ORDER BY m.timestamp DESC LIMIT ?",
+            "ORDER BY m.created_at DESC LIMIT ?",
             (limit,),
         )
         return [dict(r) for r in rows]
@@ -246,16 +246,16 @@ class Evaluator:
     ) -> dict | None:
         """Run C.1 (rubric) + C.2 (score) on a past action. Returns evaluation dict."""
         asst_msg = await self.db.fetch_one(
-            "SELECT content, timestamp FROM messages WHERE id = ?", (message_id,)
+            "SELECT content, created_at FROM messages WHERE id = ?", (message_id,)
         )
         if not asst_msg:
             return None
 
         user_msg = await self.db.fetch_one(
             "SELECT content FROM messages "
-            "WHERE conversation_id = ? AND role = 'user' AND timestamp < ? "
-            "ORDER BY timestamp DESC LIMIT 1",
-            (conversation_id, asst_msg["timestamp"]),
+            "WHERE conversation_id = ? AND role = 'user' AND created_at < ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (conversation_id, asst_msg["created_at"]),
         )
         user_content = user_msg["content"] if user_msg else "(no user message)"
 

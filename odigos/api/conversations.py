@@ -36,10 +36,19 @@ async def get_conversation_messages(
     conversation_id: str,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    after: str = Query(default=None),
     db: Database = Depends(get_db),
 ):
     """Get messages for a conversation with pagination (newest last)."""
     conversation_id = await _resolve_conversation_id(db, conversation_id)
+
+    if after is not None:
+        messages = await db.fetch_all(
+            "SELECT * FROM messages WHERE conversation_id = ? AND created_at > ? "
+            "ORDER BY created_at ASC LIMIT ?",
+            (conversation_id, after, limit),
+        )
+        return {"messages": messages, "total": len(messages)}
 
     total = await db.fetch_one(
         "SELECT COUNT(*) as cnt FROM messages WHERE conversation_id = ?",
@@ -51,7 +60,7 @@ async def get_conversation_messages(
     # offset=0 means the most recent batch.
     skip = max(0, total_count - limit - offset)
     messages = await db.fetch_all(
-        "SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC LIMIT ? OFFSET ?",
+        "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?",
         (conversation_id, limit, skip),
     )
     return {"messages": messages, "total": total_count}
@@ -82,7 +91,7 @@ async def search_conversations(
     """Search conversations by title using SQL LIKE."""
     pattern = f"%{q}%"
     conversations = await db.fetch_all(
-        "SELECT * FROM conversations WHERE (archived = 0 OR archived IS NULL) "
+        "SELECT * FROM conversations WHERE (status = 'active' OR status IS NULL) "
         "AND (title LIKE ? OR id LIKE ?) "
         "ORDER BY last_message_at DESC LIMIT ?",
         (pattern, pattern, limit),
@@ -94,19 +103,32 @@ async def search_conversations(
 async def list_conversations(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    category: str = Query(default=None),
     db: Database = Depends(get_db),
 ):
     """List conversations with pagination, ordered by last_message_at descending."""
-    total_row = await db.fetch_one(
-        "SELECT COUNT(*) AS total FROM conversations WHERE archived = 0 OR archived IS NULL"
-    )
-    total = total_row["total"] if total_row else 0
-
-    conversations = await db.fetch_all(
-        "SELECT * FROM conversations WHERE archived = 0 OR archived IS NULL "
-        "ORDER BY last_message_at DESC LIMIT ? OFFSET ?",
-        (limit, offset),
-    )
+    if category is not None:
+        total_row = await db.fetch_one(
+            "SELECT COUNT(*) AS total FROM conversations "
+            "WHERE (status = 'active' OR status IS NULL) AND category = ?",
+            (category,),
+        )
+        total = total_row["total"] if total_row else 0
+        conversations = await db.fetch_all(
+            "SELECT * FROM conversations WHERE (status = 'active' OR status IS NULL) "
+            "AND category = ? ORDER BY last_message_at DESC LIMIT ? OFFSET ?",
+            (category, limit, offset),
+        )
+    else:
+        total_row = await db.fetch_one(
+            "SELECT COUNT(*) AS total FROM conversations WHERE (status = 'active' OR status IS NULL)"
+        )
+        total = total_row["total"] if total_row else 0
+        conversations = await db.fetch_all(
+            "SELECT * FROM conversations WHERE (status = 'active' OR status IS NULL) "
+            "ORDER BY last_message_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
     return {"conversations": conversations, "total": total}
 
 
@@ -136,7 +158,7 @@ async def delete_conversation(
     conversation_id = await _resolve_conversation_id(db, conversation_id)
 
     await db.execute(
-        "UPDATE conversations SET archived = 1 WHERE id = ?",
+        "UPDATE conversations SET status = 'archived' WHERE id = ?",
         (conversation_id,),
     )
     return {"status": "ok"}
@@ -152,13 +174,13 @@ async def _export_markdown(db: Database, conversation_id: str) -> str | None:
 
     title = conv.get("title") or conv["id"]
     messages = await db.fetch_all(
-        "SELECT role, content, timestamp FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+        "SELECT role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
         (conversation_id,),
     )
 
     lines = [f"# {title}\n"]
     for msg in messages:
-        ts = msg.get("timestamp", "")
+        ts = msg.get("created_at", "")
         role = msg["role"].capitalize()
         lines.append(f"**{role}** ({ts}):\n{msg['content']}\n")
 
@@ -174,7 +196,7 @@ async def _export_json(db: Database, conversation_id: str) -> str | None:
         return None
 
     messages = await db.fetch_all(
-        "SELECT id, role, content, timestamp FROM messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+        "SELECT id, role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC",
         (conversation_id,),
     )
 

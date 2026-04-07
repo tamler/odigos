@@ -74,7 +74,7 @@ async def dream_analyze_user(hb: "Heartbeat") -> None:
         all_msgs = await hb.db.fetch_all(
             f"SELECT conversation_id, role, content FROM messages "
             f"WHERE conversation_id IN ({placeholders}) "
-            f"ORDER BY timestamp ASC",
+            f"ORDER BY created_at ASC",
             tuple(conv_ids),
         )
 
@@ -346,7 +346,7 @@ async def evaluate_plan_outcomes(hb: "Heartbeat") -> None:
 
             msgs = await hb.db.fetch_all(
                 "SELECT role, content FROM messages "
-                "WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 10",
+                "WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 10",
                 (conversation_id,),
             )
             conversation_text = "\n".join(

@@ -130,7 +130,7 @@ class CheckpointManager:
         now = datetime.now(timezone.utc).isoformat()
         return await self.db.fetch_one(
             "SELECT * FROM trials WHERE status = 'active' AND expires_at > ? "
-            "ORDER BY started_at DESC LIMIT 1",
+            "ORDER BY created_at DESC LIMIT 1",
             (now,),
         )
 
