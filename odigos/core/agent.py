@@ -248,6 +248,7 @@ class Agent:
             conversation_id,
             result.response,
             user_message=message.content,
+            channel=message.channel,
         )
 
         if self.tracer:

@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -16,6 +16,15 @@ async def db(tmp_db_path: str):
     await database.close()
 
 
+def _make_message_bus(db: Database):
+    """Create a real-enough MessageBus stub that writes to the DB."""
+    from odigos.channels.base import ChannelRegistry
+    from odigos.core.message_bus import MessageBus
+
+    registry = ChannelRegistry()
+    return MessageBus(db=db, channel_registry=registry)
+
+
 async def _seed_conversation(db: Database, conversation_id: str) -> None:
     """Insert a conversation row so the FK on messages is satisfied."""
     await db.execute(
@@ -28,7 +37,8 @@ class TestAsyncCostBackfill:
     async def test_spawns_cost_task_when_generation_id_present(self, db):
         await _seed_conversation(db, "conv-1")
         mock_fetch = AsyncMock(return_value=0.00042)
-        reflector = Reflector(db, cost_fetcher=mock_fetch)
+        message_bus = _make_message_bus(db)
+        reflector = Reflector(db, cost_fetcher=mock_fetch, message_bus=message_bus)
         response = LLMResponse(
             content="Hello",
             model="test/model",
@@ -49,7 +59,8 @@ class TestAsyncCostBackfill:
     async def test_no_task_spawned_when_no_generation_id(self, db):
         await _seed_conversation(db, "conv-1")
         mock_fetch = AsyncMock()
-        reflector = Reflector(db, cost_fetcher=mock_fetch)
+        message_bus = _make_message_bus(db)
+        reflector = Reflector(db, cost_fetcher=mock_fetch, message_bus=message_bus)
         response = LLMResponse(
             content="Hello",
             model="test/model",
@@ -65,7 +76,8 @@ class TestAsyncCostBackfill:
     async def test_cost_fetch_failure_leaves_original_cost(self, db):
         await _seed_conversation(db, "conv-1")
         mock_fetch = AsyncMock(return_value=None)
-        reflector = Reflector(db, cost_fetcher=mock_fetch)
+        message_bus = _make_message_bus(db)
+        reflector = Reflector(db, cost_fetcher=mock_fetch, message_bus=message_bus)
         response = LLMResponse(
             content="Hello",
             model="test/model",

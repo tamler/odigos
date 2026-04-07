@@ -12,6 +12,7 @@ from odigos.db import Database
 from odigos.providers.base import LLMResponse
 
 if TYPE_CHECKING:
+    from odigos.core.message_bus import MessageBus
     from odigos.core.trace import Tracer
     from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
@@ -38,12 +39,14 @@ class Reflector:
         cost_fetcher: Callable | None = None,
         corrections_manager: CorrectionsManager | None = None,
         tracer: Tracer | None = None,
+        message_bus: MessageBus | None = None,
     ) -> None:
         self.db = db
         self.memory_manager = memory_manager
         self._cost_fetcher = cost_fetcher
         self.corrections_manager = corrections_manager
         self.tracer = tracer
+        self.message_bus: MessageBus | None = message_bus
 
     async def reflect(
         self,
@@ -51,6 +54,8 @@ class Reflector:
         response: LLMResponse,
         user_message: str | None = None,
         scrape_metadata: dict | None = None,
+        message_id: str | None = None,
+        channel: str = "web",
     ) -> str:
         # Parse and strip entity block
         content = response.content
@@ -90,20 +95,17 @@ class Reflector:
             content = content[:correction_match.start()].rstrip()
 
         # Store the clean assistant message
-        msg_id = str(uuid.uuid4())
-        await self.db.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, model_used, "
-            "tokens_in, tokens_out, cost_usd) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                msg_id,
-                conversation_id,
-                "assistant",
-                content,
-                response.model,
-                response.tokens_in,
-                response.tokens_out,
-                response.cost_usd,
-            ),
+        msg_id = message_id or uuid.uuid4().hex
+        await self.message_bus.publish(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=content,
+            channel=channel,
+            model_used=response.model,
+            tokens_in=response.tokens_in,
+            tokens_out=response.tokens_out,
+            cost_usd=response.cost_usd,
+            message_id=msg_id,
         )
 
         # Spawn async cost backfill if applicable
