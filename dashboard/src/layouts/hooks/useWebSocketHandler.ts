@@ -71,14 +71,10 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           chat.setThinking(false)
           chat.setStatus(null)
 
-          // Finalize with the full content from the server (source of truth).
-          // This corrects any chunks that were missed during streaming.
-          const fullContent = msg.content as string
-          if (fullContent) {
-            chat.finalizeStreaming(fullContent)
-          } else {
-            chat.finalizeLastMessage()
-          }
+          // Just mark streaming as done. The streamed content IS the content.
+          // Don't replace with server's fullContent — in multi-turn tool calling,
+          // the server sends only the final turn's output, not the earlier streams.
+          chat.finalizeLastMessage()
           const msgs = useChatStore.getState().messages
           const finalContent = msgs.length > 0 ? msgs[msgs.length - 1].content : ''
           if (ui.focusMode && finalContent && shouldPlayTTS(finalContent)) {
