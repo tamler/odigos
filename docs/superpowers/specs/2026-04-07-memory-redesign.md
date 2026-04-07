@@ -79,7 +79,9 @@ The extraction is a single cheap LLM call with structured JSON output:
 }
 ```
 
-Uses the background/cheap model to keep cost low. Runs on every turn, guaranteed.
+Uses the background/cheap model to keep cost low.
+
+**Relevance gate:** Skip extraction if the user message is under 20 characters or matches small-talk patterns ("ok", "thanks", "cool", "yes", "no", "got it"). No point burning tokens on empty turns.
 
 **Exact dedup at write time:** SHA-256 hash of fact text checked before INSERT. Semantic dedup handled by the lint pass.
 
@@ -202,9 +204,12 @@ The `source_id` is stored on the DB row (entities, user_facts) and rendered as i
 - Embed in memory_vec for vector search
 - Available to the very next turn
 
+**Write-ahead queue:** The reflector also inserts a row into `pending_wiki_writes` (entity_id, fact_id, operation type). This ensures that if the process crashes after the DB write but before the heartbeat runs, the wiki catches up on next startup. The heartbeat drains this queue.
+
 **Async (heartbeat phase 3d, every 30s):**
+- Drain `pending_wiki_writes` queue
 - Write/update wiki markdown files for changed entities
-- Build cross-references between entity pages
+- Build cross-references between entity pages (bidirectional — if A→B exists, B's page shows the backlink)
 - Graduate entities from topic index to full page
 - Rebuild `data/wiki/index.md`
 - Write conversation summaries
@@ -216,9 +221,21 @@ The `source_id` is stored on the DB row (entities, user_facts) and rendered as i
 - Contradictions — conflicting facts about the same entity (cheap LLM call per batch)
 - Missing pages — entities referenced in relationships but lacking a wiki page
 - Source validation — referenced source files still exist
-- Semantic dedup — near-duplicate facts consolidated
+- Semantic dedup — generate merge proposals, not destructive merges
 
-Lint findings are written to `data/wiki/log.md` and flagged for idle_think to address.
+Lint findings are written to `data/wiki/log.md`. Semantic dedup produces merge proposals (e.g., "Entity 'Python Script' and 'script.py' may be the same") logged for the agent to present to the user or resolve during idle time. No automatic destructive merges.
+
+### 8. User-Initiated Deletion ("Forget")
+
+When the user says "forget that I like coffee" or similar:
+
+1. Agent identifies the fact/entity to delete
+2. Delete from DB (user_facts, entities, edges)
+3. Remove from wiki file (edit the markdown, remove the line)
+4. Append a `[FORGET]` entry to `data/wiki/log.md` with the deleted content
+5. The log entry prevents the lint pass from re-extracting the fact from old conversation summaries
+
+The forget log acts as a suppression list. During extraction, facts matching a forget entry are skipped.
 
 ### 6. Source Archival
 
@@ -267,7 +284,7 @@ When the DB is empty on startup and `data/wiki/` has content:
 | `odigos/db.py` | Add rebuild-from-wiki detection on empty DB startup |
 | `odigos/tools/scrape.py` | Call source_archiver after scraping |
 | `odigos/memory/ingester.py` | Call source_archiver for document ingestion |
-| `schema.sql` | Add source_type, source_id, content_hash to entities and user_facts |
+| `schema.sql` | Add source_type, source_id, content_hash to entities and user_facts; add pending_wiki_writes table |
 
 ## What Doesn't Change
 
