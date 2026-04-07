@@ -1,2 +1,2 @@
--- Index on conversations.last_message_at for ORDER BY queries in context assembly
-CREATE INDEX IF NOT EXISTS idx_conversations_last_message_at ON conversations (last_message_at);
+-- Migration 055_conversation_index.sql: schema.sql is source of truth. This is a recorded no-op.
+SELECT 1;

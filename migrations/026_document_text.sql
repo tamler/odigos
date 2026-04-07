@@ -1,4 +1,2 @@
-CREATE TABLE IF NOT EXISTS document_text (
-    document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
-    full_text TEXT NOT NULL
-);
+-- Migration 026_document_text.sql: schema.sql is source of truth. This is a recorded no-op.
+SELECT 1;

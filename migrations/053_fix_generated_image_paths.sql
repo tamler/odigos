@@ -1,3 +1,2 @@
--- Fix generated images that were incorrectly placed in data/artifacts/ by migration 052
-UPDATE artifacts SET file_path = 'data/files/' || filename
-WHERE filename LIKE 'generated_%' AND file_path LIKE 'data/artifacts/%';
+-- Migration 053_fix_generated_image_paths.sql: schema.sql is source of truth. This is a recorded no-op.
+SELECT 1;

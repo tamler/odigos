@@ -1,3 +1,2 @@
--- title and status are now defined in the initial schema
--- archived column replaced by status TEXT DEFAULT 'active'
-SELECT 1; -- no-op placeholder so migration is recorded
+-- Migration 014_conversation_title.sql: schema.sql is source of truth. This is a recorded no-op.
+SELECT 1;

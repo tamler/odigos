@@ -1,2 +1,2 @@
-ALTER TABLE users ADD COLUMN email TEXT DEFAULT '';
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email != '';
+-- Migration 056_users_email.sql: schema.sql is source of truth. This is a recorded no-op.
+SELECT 1;

@@ -1,12 +1,2 @@
-CREATE TABLE IF NOT EXISTS corrections (
-    id TEXT PRIMARY KEY,
-    timestamp TEXT DEFAULT (datetime('now')),
-    conversation_id TEXT REFERENCES conversations(id),
-    original_response TEXT,
-    correction TEXT,
-    context TEXT,
-    category TEXT,
-    applied_count INTEGER DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_corrections_conversation ON corrections(conversation_id);
+-- Migration 007_corrections.sql: schema.sql is source of truth. This is a recorded no-op.
+SELECT 1;

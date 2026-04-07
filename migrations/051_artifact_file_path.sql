@@ -1,2 +1,2 @@
--- Store the actual file path on artifacts so we stop guessing
-ALTER TABLE artifacts ADD COLUMN file_path TEXT;
+-- Migration 051_artifact_file_path.sql: schema.sql is source of truth. This is a recorded no-op.
+SELECT 1;

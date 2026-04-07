@@ -1,3 +1,2 @@
--- traces table is now defined in schema.sql with created_at instead of timestamp
--- action_log was dropped; both are handled by schema.sql
-DROP TABLE IF EXISTS action_log;
+-- Migration 008_traces.sql: schema.sql is source of truth. This is a recorded no-op.
+SELECT 1;
