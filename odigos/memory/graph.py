@@ -19,12 +19,14 @@ class EntityGraph:
         properties: dict | None = None,
         confidence: float = 1.0,
         source: str | None = None,
+        source_type: str | None = None,
+        source_id: str | None = None,
     ) -> str:
         """Create a new entity. Returns the entity ID."""
         entity_id = str(uuid.uuid4())
         await self.db.execute(
-            "INSERT INTO entities (id, type, name, properties_json, confidence, source) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO entities (id, type, name, properties_json, confidence, source, source_type, source_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 entity_id,
                 entity_type,
@@ -32,6 +34,8 @@ class EntityGraph:
                 json.dumps(properties) if properties else None,
                 confidence,
                 source,
+                source_type,
+                source_id,
             ),
         )
         return entity_id
@@ -103,8 +107,15 @@ class EntityGraph:
         target_id: str,
         metadata: dict | None = None,
         strength: float = 1.0,
+        source_type: str | None = None,
+        edge_source_id: str | None = None,
     ) -> int:
         """Create an edge between two entities. Returns the edge ID."""
+        meta = dict(metadata or {})
+        if source_type:
+            meta["source_type"] = source_type
+        if edge_source_id:
+            meta["source_id"] = edge_source_id
         return await self.db.execute_returning_lastrowid(
             "INSERT INTO edges (source_id, relationship, target_id, strength, "
             "metadata_json, last_confirmed) VALUES (?, ?, ?, ?, ?, datetime('now'))",
@@ -113,7 +124,7 @@ class EntityGraph:
                 relationship,
                 target_id,
                 strength,
-                json.dumps(metadata) if metadata else None,
+                json.dumps(meta) if meta else None,
             ),
         )
 
