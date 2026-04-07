@@ -1,6 +1,6 @@
 """WebSocket endpoint for agent-to-agent communication.
 
-Peer agents connect to /ws/agent to exchange PeerEnvelope messages in real-time.
+Peer agents connect to /api/agent to exchange PeerEnvelope messages in real-time.
 Authenticated via first message (preferred) or query parameter (deprecated).
 After auth, server sends auth_ok with its identity. Peer identification
 happens via registry_announce or from_agent field on first message.
@@ -74,7 +74,7 @@ async def _authenticate_agent_ws(websocket: WebSocket) -> tuple[bool, bool]:
     return authorized, True
 
 
-@router.websocket("/ws/agent")
+@router.websocket("/api/agent")
 async def agent_websocket(websocket: WebSocket):
     authenticated, was_accepted = await _authenticate_agent_ws(websocket)
     if not authenticated:

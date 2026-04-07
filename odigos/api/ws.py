@@ -118,7 +118,7 @@ async def _authenticate_ws(websocket: WebSocket) -> tuple[bool, bool]:
     return True, True
 
 
-@router.websocket("/api/ws")
+@router.websocket("/api/chat")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint with auth, chat, and subscribe support.
 

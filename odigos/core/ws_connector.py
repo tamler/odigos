@@ -82,7 +82,7 @@ class WSConnector:
         import websockets
 
         port = peer.ws_port or 8001
-        uri = f"ws://{peer.netbird_ip}:{port}/ws/agent"
+        uri = f"ws://{peer.netbird_ip}:{port}/api/agent"
 
         async with websockets.connect(uri, open_timeout=10, close_timeout=5) as ws:
             # Step 1: Authenticate with the peer's API key

@@ -51,7 +51,7 @@ export class ChatSocket {
     }
 
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    this.ws = new WebSocket(`${proto}//${window.location.host}/api/ws`)
+    this.ws = new WebSocket(`${proto}//${window.location.host}/api/chat`)
 
     this.ws.onopen = () => {
       this.reconnectAttempt = 0
