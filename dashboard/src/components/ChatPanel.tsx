@@ -129,6 +129,12 @@ export const ChatPanel = memo(({
       return
     }
     if (cid === loadedConvRef.current) return
+    // If we already have messages (e.g., just sent one in a new conversation),
+    // don't re-fetch from API — just mark as loaded
+    if (useChatStore.getState().messages.length > 0 && !loadedConvRef.current) {
+      loadedConvRef.current = cid
+      return
+    }
     loadedConvRef.current = cid
     setSwitchingConversation(true)
 

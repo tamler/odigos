@@ -88,7 +88,6 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
         if (msg.type === 'chat_response') {
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
           if (!activeIdRef.current && !useChatStore.getState().messages.length && msg.conversation_id) {
-            // Use the FULL conversation ID including prefix — don't strip web:
             chat.setActiveConversationId(msg.conversation_id as string)
           }
           chat.setThinking(false)
