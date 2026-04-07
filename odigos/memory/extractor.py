@@ -72,6 +72,7 @@ async def extract_knowledge(
             max_tokens=500,
             temperature=0.1,
             model=model or None,
+            response_format={"type": "json_object"},
         )
         raw = response.content.strip()
         # Strip markdown code fences if present

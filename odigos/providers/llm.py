@@ -75,6 +75,9 @@ class LLMClient(LLMProvider):
         tool_choice = kwargs.get("tool_choice")
         if tool_choice and tools:
             payload["tool_choice"] = tool_choice
+        response_format = kwargs.get("response_format")
+        if response_format:
+            payload["response_format"] = response_format
 
         logger.info(
             "LLM request: model=%s, tools=%d, messages=%d, tool_choice=%s",
