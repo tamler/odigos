@@ -19,8 +19,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-ENTITY_PATTERN = re.compile(r"<!--entities\s*\n?(.*?)\n?-->\s*\Z", re.DOTALL)
-ENTITY_FALLBACK = re.compile(r"<!--entities\s*(\[.*?\])\s*\Z", re.DOTALL)
 CORRECTION_PATTERN = re.compile(r"<!--correction\s*\n?(.*?)\n?-->\s*\Z", re.DOTALL)
 CORRECTION_FALLBACK = re.compile(r"<!--correction\s*(\{.*?\})\s*\Z", re.DOTALL)
 
@@ -47,6 +45,8 @@ class Reflector:
         self.corrections_manager = corrections_manager
         self.tracer = tracer
         self.message_bus: MessageBus | None = message_bus
+        self._extraction_provider = None  # Set by bootstrap
+        self._extraction_model = ""       # Set by bootstrap
 
     async def reflect(
         self,
@@ -57,21 +57,7 @@ class Reflector:
         message_id: str | None = None,
         channel: str = "web",
     ) -> str:
-        # Parse and strip entity block
         content = response.content
-        entities = []
-        match = ENTITY_PATTERN.search(content) or ENTITY_FALLBACK.search(content)
-        if match:
-            try:
-                entities = json.loads(match.group(1))
-            except (json.JSONDecodeError, IndexError):
-                logger.warning("Failed to parse entity block from response")
-            content = content[:match.start()].rstrip()
-
-            if entities and self.tracer:
-                await self.tracer.emit("entity_extracted", conversation_id, {
-                    "count": len(entities),
-                })
 
         # Parse and strip correction block
         correction_match = CORRECTION_PATTERN.search(content) or CORRECTION_FALLBACK.search(content)
@@ -112,6 +98,20 @@ class Reflector:
         if response.generation_id and self._cost_fetcher:
             asyncio.create_task(self._backfill_cost(msg_id, response.generation_id))
 
+        # Extract entities/facts via dedicated LLM call
+        extracted = {"entities": [], "facts": [], "relationships": []}
+        if user_message and self._extraction_provider:
+            try:
+                from odigos.memory.extractor import extract_knowledge
+                extracted = await extract_knowledge(
+                    provider=self._extraction_provider,
+                    user_message=user_message,
+                    assistant_response=content,
+                    model=self._extraction_model,
+                )
+            except Exception:
+                logger.warning("Knowledge extraction failed", exc_info=True)
+
         # Pass to memory manager if available (best-effort)
         if self.memory_manager and user_message is not None:
             try:
@@ -119,10 +119,28 @@ class Reflector:
                     conversation_id=conversation_id,
                     user_message=user_message,
                     assistant_response=content,
-                    extracted_entities=entities,
+                    extracted=extracted,
                 )
             except Exception:
                 logger.warning("Memory storage failed during reflection", exc_info=True)
+
+        # Queue wiki writes for the heartbeat to process
+        if self.db and any(extracted.values()):
+            import uuid as _uuid
+            for entity in extracted.get("entities", []):
+                stored_id = entity.get("_stored_id")
+                if stored_id:
+                    await self.db.execute(
+                        "INSERT INTO pending_wiki_writes (id, entity_id, operation) VALUES (?, ?, ?)",
+                        (_uuid.uuid4().hex, stored_id, "entity_created"),
+                    )
+            for fact in extracted.get("facts", []):
+                stored_id = fact.get("_stored_id")
+                if stored_id:
+                    await self.db.execute(
+                        "INSERT INTO pending_wiki_writes (id, fact_id, operation) VALUES (?, ?, ?)",
+                        (_uuid.uuid4().hex, stored_id, "fact_created"),
+                    )
 
         # Log scrape if metadata provided (best-effort)
         if scrape_metadata:
