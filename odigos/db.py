@@ -108,7 +108,20 @@ class Database:
         try:
             await self.conn.executescript(sql)
         except Exception as e:
-            logger.warning("Schema initialization: %s", e)
+            # executescript stops at the first error — re-run individual CREATE TABLE
+            # statements so one failure (e.g., vec0) doesn't skip critical tables.
+            logger.warning("Schema executescript partial failure: %s — retrying individual statements", e)
+            for statement in sql.split(";"):
+                s = statement.strip()
+                if not s or s.startswith("--"):
+                    continue
+                if not s.upper().startswith(("CREATE ", "INSERT ")):
+                    continue
+                try:
+                    await self.conn.execute(s)
+                except Exception:
+                    pass  # Already exists or unsupported — skip
+            await self.conn.commit()
 
     async def run_migrations(self) -> None:
         """Apply SQL migration files in order, tracking which have been applied."""
