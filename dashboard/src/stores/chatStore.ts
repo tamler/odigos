@@ -4,7 +4,7 @@ import type { ChatMessage } from '@/layouts/AppLayout'
 interface ChatState {
   messages: ChatMessage[]
   setMessages: (messages: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void
-  addMessage: (message: ChatMessage) => void
+  addMessage: (message: ChatMessage, messageId?: string) => void
   updateLastMessage: (content: string) => void
   appendToLastMessage: (chunk: string) => void
   finalizeLastMessage: () => void
@@ -21,6 +21,8 @@ interface ChatState {
   activeConversationId: string | null
   setActiveConversationId: (id: string | null) => void
   isStreaming: boolean
+  streamingMessageId: string | null
+  setStreamingMessageId: (id: string | null) => void
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -32,10 +34,10 @@ export const useChatStore = create<ChatState>((set) => ({
       set({ messages })
     }
   },
-  addMessage: (message) => set((state) => ({
+  addMessage: (message, messageId?: string) => set((state) => ({
     messages: [...state.messages, message],
     // If this is an assistant message, mark streaming active atomically
-    ...(message.role === 'assistant' ? { isStreaming: true } : {}),
+    ...(message.role === 'assistant' ? { isStreaming: true, streamingMessageId: messageId || null } : {}),
   })),
   updateLastMessage: (content) =>
     set((state) => {
@@ -53,14 +55,14 @@ export const useChatStore = create<ChatState>((set) => ({
       return { messages: msgs, isStreaming: true }
     }),
   finalizeLastMessage: () =>
-    set({ isStreaming: false }),
+    set({ isStreaming: false, streamingMessageId: null }),
   finalizeStreaming: (fullContent: string) =>
     set((state) => {
       const msgs = [...state.messages]
       if (msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant') {
         msgs[msgs.length - 1] = { ...msgs[msgs.length - 1], content: fullContent }
       }
-      return { messages: msgs, isStreaming: false }
+      return { messages: msgs, isStreaming: false, streamingMessageId: null }
     }),
   startStreaming: () => set({ isStreaming: true }),
   thinking: false,
@@ -81,6 +83,7 @@ export const useChatStore = create<ChatState>((set) => ({
       ...(switching ? {
         messages: [],
         isStreaming: false,
+        streamingMessageId: null,
         thinking: false,
         status: null,
         suggestedActions: [],
@@ -88,4 +91,6 @@ export const useChatStore = create<ChatState>((set) => ({
     }
   }),
   isStreaming: false,
+  streamingMessageId: null,
+  setStreamingMessageId: (id) => set({ streamingMessageId: id }),
 }))
