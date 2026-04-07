@@ -18,30 +18,45 @@ PRAGMA cache_size = -65536;
 -- ════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS conversations (
-    id TEXT PRIMARY KEY,
-    channel TEXT NOT NULL,
-    started_at TEXT DEFAULT (datetime('now')),
+    id              TEXT PRIMARY KEY,
+    title           TEXT,
+    channel         TEXT NOT NULL,
+    status          TEXT DEFAULT 'active',
+    message_count   INTEGER DEFAULT 0,
     last_message_at TEXT,
-    message_count INTEGER DEFAULT 0,
-    title TEXT,
-    archived INTEGER DEFAULT 0
+    category        TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY,
-    conversation_id TEXT REFERENCES conversations(id),
-    role TEXT NOT NULL,
-    content TEXT,
-    model_used TEXT,
-    tokens_in INTEGER,
-    tokens_out INTEGER,
-    cost_usd REAL,
-    timestamp TEXT DEFAULT (datetime('now'))
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id),
+    role            TEXT NOT NULL,
+    content         TEXT,
+    channel         TEXT,
+    message_type    TEXT DEFAULT 'chat',
+    model_used      TEXT,
+    tokens_in       INTEGER,
+    tokens_out      INTEGER,
+    cost_usd        REAL,
+    metadata_json   TEXT,
+    created_at      TEXT DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
-CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations(archived);
+CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
+
+CREATE TABLE IF NOT EXISTS message_deliveries (
+    id              TEXT PRIMARY KEY,
+    message_id      TEXT NOT NULL REFERENCES messages(id),
+    channel         TEXT NOT NULL,
+    delivered_at    TEXT,
+    seen_at         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_deliveries_message ON message_deliveries(message_id);
 
 -- ════════════════════════════════════════════════════════════════════
 -- ENTITY GRAPH & MEMORY
@@ -314,6 +329,24 @@ CREATE TABLE IF NOT EXISTS artifacts (
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_conversation ON artifacts(conversation_id);
 
+CREATE TABLE IF NOT EXISTS message_artifacts (
+    message_id      TEXT NOT NULL REFERENCES messages(id),
+    artifact_id     TEXT NOT NULL REFERENCES artifacts(id),
+    PRIMARY KEY (message_id, artifact_id)
+);
+
+CREATE TABLE IF NOT EXISTS channel_mappings (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id),
+    channel         TEXT NOT NULL,
+    external_id     TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now')),
+    UNIQUE(channel, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_channel_mappings_external ON channel_mappings(channel, external_id);
+CREATE INDEX IF NOT EXISTS idx_messages_idempotency ON messages(json_extract(metadata_json, '$.idempotency_key'));
+
 -- ════════════════════════════════════════════════════════════════════
 -- ANALYTICS & TOOL TRACKING
 -- ════════════════════════════════════════════════════════════════════
@@ -416,7 +449,7 @@ CREATE INDEX IF NOT EXISTS idx_experiences_tool ON agent_experiences(tool_name);
 
 CREATE TABLE IF NOT EXISTS corrections (
     id TEXT PRIMARY KEY,
-    timestamp TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (datetime('now')),
     conversation_id TEXT REFERENCES conversations(id),
     original_response TEXT,
     correction TEXT,
@@ -553,7 +586,7 @@ CREATE INDEX IF NOT EXISTS idx_trial_patterns_type ON trial_patterns(pattern_typ
 
 CREATE TABLE IF NOT EXISTS traces (
     id TEXT PRIMARY KEY,
-    timestamp TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (datetime('now')),
     conversation_id TEXT REFERENCES conversations(id),
     event_type TEXT NOT NULL,
     data_json TEXT
@@ -561,7 +594,7 @@ CREATE TABLE IF NOT EXISTS traces (
 
 CREATE INDEX IF NOT EXISTS idx_traces_conversation ON traces(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_traces_event_type ON traces(event_type);
-CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(timestamp);
+CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(created_at);
 
 CREATE TABLE IF NOT EXISTS approvals (
     id TEXT PRIMARY KEY,
