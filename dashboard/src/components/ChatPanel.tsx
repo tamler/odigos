@@ -136,7 +136,7 @@ export const ChatPanel = memo(({
     useChatStore.getState().setStatus(null)
 
     Promise.allSettled([
-      get<{ messages: { role: string; content: string; timestamp: string }[] }>(`/api/conversations/${cid}/messages?limit=50&offset=0`),
+      get<{ messages: { role: string; content: string; created_at: string }[] }>(`/api/conversations/${cid}/messages?limit=50&offset=0`),
       get<{ artifacts: Artifact[] }>(`/api/artifacts?conversation_id=${cid}`)
     ]).then(([msgRes, artRes]) => {
       // Guard: user may have switched conversations while fetch was in-flight
