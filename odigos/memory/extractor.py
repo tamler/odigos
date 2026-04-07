@@ -84,6 +84,9 @@ async def extract_knowledge(
             "facts": parsed.get("facts", []),
             "relationships": parsed.get("relationships", []),
         }
-    except (json.JSONDecodeError, Exception) as e:
-        logger.debug("Knowledge extraction failed: %s", e)
+    except json.JSONDecodeError as e:
+        logger.warning("Knowledge extraction JSON parse failed: %s — raw[:200]: %s", e, raw[:200])
+        return _EMPTY
+    except Exception as e:
+        logger.warning("Knowledge extraction failed: %s", e)
         return _EMPTY
