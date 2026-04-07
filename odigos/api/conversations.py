@@ -21,14 +21,10 @@ router = APIRouter(
 
 
 async def _resolve_conversation_id(db: Database, conversation_id: str) -> str:
-    """Resolve a conversation ID, handling web: prefix mismatch.
-
-    The frontend strips the 'web:' prefix from URLs but the DB stores it.
-    This tries both formats and returns the actual DB ID.
-    """
+    """Look up a conversation ID in the database."""
     row = await db.fetch_one(
-        "SELECT id FROM conversations WHERE id = ? OR id = ?",
-        (conversation_id, f"web:{conversation_id}"),
+        "SELECT id FROM conversations WHERE id = ?",
+        (conversation_id,),
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
