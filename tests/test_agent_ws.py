@@ -33,7 +33,7 @@ async def app():
 
 def test_agent_ws_rejects_without_auth(app):
     client = TestClient(app)
-    with client.websocket_connect("/ws/agent") as ws:
+    with client.websocket_connect("/api/agent") as ws:
         # Send an auth message with an invalid token
         ws.send_json({"type": "auth", "token": "bad-token"})
         # Server should respond with an error and close the connection
@@ -44,7 +44,7 @@ def test_agent_ws_rejects_without_auth(app):
 
 def test_agent_ws_accepts_with_auth(app):
     client = TestClient(app)
-    with client.websocket_connect("/ws/agent?token=test-key") as ws:
+    with client.websocket_connect("/api/agent?token=test-key") as ws:
         # Server sends auth_ok with its identity after accepting
         auth_ok = ws.receive_json()
         assert auth_ok["type"] == "auth_ok"

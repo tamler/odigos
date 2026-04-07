@@ -1,4 +1,4 @@
-"""Tests for the WebSocket endpoint at /api/ws."""
+"""Tests for the WebSocket endpoint at /api/chat."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class TestAuthNoToken:
     def test_no_token_when_required(self):
         app = _make_app(api_key="secret-key")
         client = TestClient(app)
-        with client.websocket_connect("/api/ws") as ws:
+        with client.websocket_connect("/api/chat") as ws:
             # Server accepted, waiting for first-message auth
             ws.send_json({"type": "auth", "token": "wrong-key"})
             error = ws.receive_json()
@@ -68,7 +68,7 @@ class TestAuthWrongToken:
         app = _make_app(api_key="secret-key")
         client = TestClient(app)
         with pytest.raises(Exception):
-            with client.websocket_connect("/api/ws?token=wrong-key"):
+            with client.websocket_connect("/api/chat?token=wrong-key"):
                 pass
 
 
@@ -78,7 +78,7 @@ class TestAuthValidToken:
     def test_valid_token(self):
         app = _make_app(api_key="secret-key")
         client = TestClient(app)
-        with client.websocket_connect("/api/ws?token=secret-key") as ws:
+        with client.websocket_connect("/api/chat?token=secret-key") as ws:
             data = ws.receive_json()
             assert data["type"] == "connected"
             assert "session_id" in data
@@ -93,7 +93,7 @@ class TestAuthNoKeyConfigured:
         app = _make_app(api_key="")
         client = TestClient(app)
         with pytest.raises(Exception):
-            with client.websocket_connect("/api/ws"):
+            with client.websocket_connect("/api/chat"):
                 pass  # should not reach here
 
 
@@ -108,7 +108,7 @@ class TestChatMessage:
         agent.executor.provider = MagicMock()
         app = _make_app(api_key="test-key", agent=agent)
         client = TestClient(app)
-        with client.websocket_connect("/api/ws?token=test-key") as ws:
+        with client.websocket_connect("/api/chat?token=test-key") as ws:
             connected = ws.receive_json()
             session_id = connected["session_id"]
             conversation_id = connected["conversation_id"]
@@ -140,7 +140,7 @@ class TestChatConversationId:
     def test_chat_auto_generates_conversation_id(self):
         app = _make_app(api_key="test-key")
         client = TestClient(app)
-        with client.websocket_connect("/api/ws?token=test-key") as ws:
+        with client.websocket_connect("/api/chat?token=test-key") as ws:
             data = ws.receive_json()
             conversation_id = data["conversation_id"]
             assert conversation_id.startswith("web:")
@@ -155,7 +155,7 @@ class TestSubscribe:
     def test_subscribe_command(self):
         app = _make_app(api_key="test-key")
         client = TestClient(app)
-        with client.websocket_connect("/api/ws?token=test-key") as ws:
+        with client.websocket_connect("/api/chat?token=test-key") as ws:
             connected = ws.receive_json()
             conversation_id = connected["conversation_id"]
 

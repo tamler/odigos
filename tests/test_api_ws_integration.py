@@ -35,7 +35,7 @@ class TestWebSocketMounted:
         )
 
         client = TestClient(app)
-        with client.websocket_connect("/api/ws?token=test-key") as ws:
+        with client.websocket_connect("/api/chat?token=test-key") as ws:
             data = ws.receive_json()
             assert data["type"] == "connected"
             assert "session_id" in data

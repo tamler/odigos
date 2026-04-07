@@ -37,11 +37,19 @@ async def handle_callback(task_id: str, request: Request):
         logger.info("Callback for already-completed task: %s", task_id[:12])
         return JSONResponse({"status": "already_processed"})
 
+    # Limit payload size (prevent abuse on unauthenticated endpoint)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > 500_000:  # 500KB max
+        return JSONResponse({"error": "payload too large"}, status_code=413)
+
     # Store the callback payload
     try:
         body = await request.json()
     except Exception:
-        body = {"raw": (await request.body()).decode(errors="replace")[:5000]}
+        raw = await request.body()
+        if len(raw) > 500_000:
+            return JSONResponse({"error": "payload too large"}, status_code=413)
+        body = {"raw": raw.decode(errors="replace")[:5000]}
 
     # Kie.ai sends multiple callbacks: "text" (lyrics ready) then "complete" (audio ready).
     # Only process "complete" callbacks. Store others but don't trigger completion.
