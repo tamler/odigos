@@ -5,14 +5,15 @@ Recent conversation:
 
 Current message: "{message}"
 
-Available tools:
-{tool_catalog}
+Available capabilities:
+{capability_catalog}
 
 Respond with:
-{{"classification": "simple|standard|document_query|complex|planning|creative", "confidence": 0.85, "intent": "what the user wants done", "tool_hint": "tool_name_or_null", "needs": {{"rag": false, "user_profile": false, "user_facts": false, "history": false, "experiences": false}}, "search_queries": [], "response_style": "brief|detailed|step_by_step", "complexity": "single_tool|multi_step|conversation"}}
+{{"classification": "simple|standard|document_query|complex|planning|creative", "confidence": 0.85, "intent": "what the user wants done", "skill_hint": "skill_name_or_null", "tool_hint": "tool_name_or_null", "needs": {{"rag": false, "user_profile": false, "user_facts": false, "history": false, "experiences": false}}, "search_queries": [], "response_style": "brief|detailed|step_by_step", "complexity": "single_tool|multi_step|conversation"}}
 
 Rules:
-- tool_hint: pick the single most likely tool from the list above, or null if no tool needed
+- skill_hint: if a [skill] from the catalog matches the task, return its name. Skills provide guided workflows and should be preferred over raw tools for complex creative or multi-step tasks. null if no skill matches.
+- tool_hint: pick the most likely [tool] from the catalog, or null if no tool needed. If you returned a skill_hint, also return the primary tool the skill uses as tool_hint.
 - needs.rag: true only if the answer requires searching documents or past conversations
 - needs.user_profile: true only if the answer depends on knowing the user personally
 - needs.user_facts: true only if the user references something they told the agent before

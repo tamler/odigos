@@ -12,20 +12,21 @@ from typing import TYPE_CHECKING
 from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
+    from odigos.skills.registry import SkillRegistry
     from odigos.tools.registry import ToolRegistry
 
 
 class FindToolsTool(BaseTool):
-    """Search for available tools by description or capability."""
+    """Search for available tools and skills by description or capability."""
 
     name = "find_tools"
     category = "memory"
     description = (
-        "Search for tools you don't currently see. You have 40+ tools but "
-        "only a few are loaded. Call this when you need to do something "
-        "and don't have the right tool — e.g., 'generate music', 'send email', "
-        "'create image', 'manage kanban'. Returns tool names and descriptions "
-        "so you can call the discovered tool."
+        "Search for tools and skills you don't currently see. You have 40+ tools "
+        "and multiple skills but only a few are loaded. Call this when you need "
+        "to do something and don't have the right tool — e.g., 'generate music', "
+        "'send email', 'create image', 'manage kanban', 'write a song'. "
+        "Returns tool/skill names and descriptions so you can call or activate them."
     )
     parameters_schema = {
         "type": "object",
@@ -35,15 +36,16 @@ class FindToolsTool(BaseTool):
                 "description": (
                     "Natural language description of what you need to do. "
                     "E.g., 'send email', 'manage kanban board', 'generate image', "
-                    "'create a quiz', 'translate text'."
+                    "'create a quiz', 'translate text', 'write a song'."
                 ),
             },
         },
         "required": ["query"],
     }
 
-    def __init__(self, registry: ToolRegistry) -> None:
+    def __init__(self, registry: ToolRegistry, skill_registry: SkillRegistry | None = None) -> None:
         self._registry = registry
+        self._skill_registry = skill_registry
 
     async def execute(self, params: dict) -> ToolResult:
         query = (params.get("query") or "").lower().strip()
@@ -56,8 +58,24 @@ class FindToolsTool(BaseTool):
             return self._list_all_by_category()
 
         query_words = set(query.split())
-        matches = []
+        matches: list[tuple[int, object | None, object | None]] = []
 
+        # Search skills first (higher priority)
+        if self._skill_registry:
+            for skill in self._skill_registry.list():
+                text = f"{skill.name} {skill.description}".lower()
+                text_words = set(text.split())
+                overlap = len(query_words & text_words)
+                if query in skill.name:
+                    overlap += 5
+                for qw in query_words:
+                    if any(qw in tw for tw in text_words):
+                        overlap += 1
+                if overlap > 0:
+                    # Skills get +10 boost over tools
+                    matches.append((overlap + 10, None, skill))
+
+        # Then search tools
         for tool in self._registry.list():
             if tool.name == self.name:
                 continue
@@ -76,7 +94,7 @@ class FindToolsTool(BaseTool):
                     overlap += 1
 
             if overlap > 0:
-                matches.append((overlap, tool))
+                matches.append((overlap, tool, None))
 
         matches.sort(key=lambda x: x[0], reverse=True)
         top = matches[:5]
@@ -84,20 +102,38 @@ class FindToolsTool(BaseTool):
         if not top:
             return ToolResult(
                 success=True,
-                data="No matching tools found. Try different search terms.",
+                data="No matching tools or skills found. Try different search terms.",
             )
 
-        lines = [f"Found {len(top)} tool(s):"]
-        for _, tool in top:
-            param_names = list(tool.parameters_schema.get("properties", {}).keys())
-            params_str = f" (params: {', '.join(param_names)})" if param_names else ""
-            cat_str = f" [{tool.category}]" if tool.category else ""
-            lines.append(f"- {tool.name}{cat_str}: {tool.description[:100]}{params_str}")
+        lines = [f"Found {len(top)} capability(ies):"]
+        for _, tool, skill in top:
+            if skill:
+                tools_str = f" (tools: {', '.join(skill.tools)})" if skill.tools else ""
+                lines.append(
+                    f"- [SKILL] {skill.name}: {skill.description[:100]}{tools_str}. "
+                    f'Use: activate_skill(name="{skill.name}")'
+                )
+            elif tool:
+                param_names = list(tool.parameters_schema.get("properties", {}).keys())
+                params_str = f" (params: {', '.join(param_names)})" if param_names else ""
+                cat_str = f" [{tool.category}]" if tool.category else ""
+                lines.append(f"- [TOOL] {tool.name}{cat_str}: {tool.description[:100]}{params_str}")
 
         return ToolResult(success=True, data="\n".join(lines))
 
     def _list_all_by_category(self) -> ToolResult:
-        """List all tools grouped by category."""
+        """List all tools and skills grouped by category."""
+        lines: list[str] = []
+
+        # Skills section
+        if self._skill_registry:
+            skills = self._skill_registry.list()
+            if skills:
+                skill_names = ", ".join(s.name for s in skills)
+                lines.append(f"**Skills** (guided workflows): {skill_names}")
+                lines.append("  Use: activate_skill(name=\"skill_name\") to start a skill.\n")
+
+        # Tools by category
         categories: dict[str, list] = {}
         for tool in self._registry.list():
             if tool.name == self.name:
@@ -105,7 +141,14 @@ class FindToolsTool(BaseTool):
             cat = tool.category or "other"
             categories.setdefault(cat, []).append(tool)
 
-        lines = [f"All capabilities ({sum(len(v) for v in categories.values())} tools):"]
+        total = sum(len(v) for v in categories.values())
+        skill_count = len(self._skill_registry.list()) if self._skill_registry else 0
+        header = f"All capabilities ({total} tools"
+        if skill_count:
+            header += f", {skill_count} skills"
+        header += "):"
+        lines.insert(0, header)
+
         for cat in sorted(categories):
             tools = categories[cat]
             tool_names = ", ".join(t.name for t in tools)

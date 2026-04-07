@@ -425,7 +425,7 @@ class Bootstrapper:
 
         # Tool discovery
         from odigos.tools.find_tools import FindToolsTool
-        registry.register(FindToolsTool(registry=registry))
+        registry.register(FindToolsTool(registry=registry, skill_registry=self.container.skill_registry))
         logger.info("Tool discovery registered (find_tools)")
 
         # Web platform tool (opencli-rs)
@@ -706,6 +706,7 @@ class Bootstrapper:
             provider=provider, db=db,
             vector_memory=self.container.vector_memory,
             tool_registry=self.container.tool_registry,
+            skill_registry=self.container.skill_registry,
         )
         logger.info("Query classifier initialized")
 

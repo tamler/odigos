@@ -28,10 +28,11 @@ _FALLBACK_PROMPT = (
     'Respond ONLY with valid JSON.\n\n'
     'Recent conversation:\n{recent_turns}\n\n'
     'Current message: "{message}"\n\n'
-    'Available tools:\n{tool_catalog}\n\n'
+    'Available capabilities:\n{capability_catalog}\n\n'
     'Respond with:\n'
     '{{"classification": "simple|standard|document_query|complex|planning|creative", '
     '"confidence": 0.85, "intent": "what the user wants done", '
+    '"skill_hint": "skill_name_or_null", '
     '"tool_hint": "tool_name_or_null", '
     '"needs": {{"rag": false, "user_profile": false, "user_facts": false, '
     '"history": false, "experiences": false}}, '
@@ -39,7 +40,11 @@ _FALLBACK_PROMPT = (
     '"response_style": "brief|detailed|step_by_step", '
     '"complexity": "single_tool|multi_step|conversation"}}\n\n'
     'Rules:\n'
-    '- tool_hint: pick the single most likely tool from the list above, or null\n'
+    '- skill_hint: if a [skill] from the catalog matches the task, return its name. '
+    'Skills provide guided workflows and should be preferred over raw tools for '
+    'complex creative or multi-step tasks. null if no skill matches.\n'
+    '- tool_hint: pick the most likely [tool] from the list above, or null if no tool needed. '
+    'If you returned a skill_hint, also return the primary tool the skill uses as tool_hint.\n'
     '- needs.rag: true only if the answer requires searching documents\n'
     '- needs.user_profile: true only if the answer depends on knowing the user\n'
     '- needs.history: true only if this references earlier messages\n'
@@ -114,6 +119,7 @@ class QueryPlan:
     classification: str
     confidence: float
     intent: str = ""
+    skill_hint: str | None = None
     tool_hint: str | None = None
     needs: Needs = field(default_factory=Needs)
     search_queries: list[str] = field(default_factory=list)
@@ -135,6 +141,7 @@ class QueryPlan:
             classification=d.get("classification", "standard"),
             confidence=d.get("confidence", 0.5),
             intent=d.get("intent", ""),
+            skill_hint=d.get("skill_hint"),
             tool_hint=d.get("tool_hint"),
             needs=Needs.from_dict(needs_raw) if isinstance(needs_raw, dict) else Needs(),
             search_queries=d.get("search_queries", []),
@@ -154,22 +161,28 @@ class QueryClassifier:
         db: Database | None = None,
         vector_memory: VectorMemory | None = None,
         tool_registry=None,
+        skill_registry=None,
     ) -> None:
         self.provider = provider
         self.db = db
         self.vector_memory = vector_memory
         self.tool_registry = tool_registry
+        self.skill_registry = skill_registry
 
-    def _build_tool_catalog(self) -> str:
-        """Build lightweight tool index for the classifier prompt."""
-        if not self.tool_registry:
-            return ""
+    def _build_capability_catalog(self) -> str:
+        """Build unified catalog of tools + skills for the classifier."""
         lines = []
-        for tool in self.tool_registry.list():
-            if tool.name == "find_tools":
-                continue
-            desc = tool.description.split(".")[0]  # first sentence only
-            lines.append(f"{tool.name}: {desc}")
+        # Skills first (higher priority — they provide workflows)
+        if self.skill_registry:
+            for skill in self.skill_registry.list():
+                lines.append(f"[skill] {skill.name}: {skill.description}")
+        # Then tools
+        if self.tool_registry:
+            for tool in self.tool_registry.list():
+                if tool.name == "find_tools":
+                    continue
+                desc = tool.description.split(".")[0]  # first sentence only
+                lines.append(f"[tool] {tool.name}: {desc}")
         return "\n".join(lines)
 
     @staticmethod
@@ -267,7 +280,8 @@ class QueryClassifier:
                 prompt_template
                 .replace("{message}", message)
                 .replace("{recent_turns}", turns_text)
-                .replace("{tool_catalog}", self._build_tool_catalog())
+                .replace("{capability_catalog}", self._build_capability_catalog())
+                .replace("{tool_catalog}", self._build_capability_catalog())
             )
 
             from odigos.core.llm_prompt import call_llm

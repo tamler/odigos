@@ -753,6 +753,13 @@ class ContextAssembler:
                 parts.append(history)
                 budget -= _estimate_section_tokens(history)
 
+        # Auto-activate skill if classifier recommended one
+        if plan.skill_hint and self.skill_registry:
+            skill = self.skill_registry.get(plan.skill_hint)
+            if skill and skill.system_prompt:
+                parts.append(f"## Active Skill: {skill.name}\n\n{skill.system_prompt}")
+                budget -= _estimate_section_tokens(skill.system_prompt)
+
         # Response style as last instruction (highest attention position)
         style_text = _RESPONSE_STYLES.get(plan.response_style, "")
         if style_text:
@@ -772,7 +779,7 @@ class ContextAssembler:
         # User message
         messages.append({"role": "user", "content": message_content})
 
-        # Build tool list: find_tools + hinted tool
+        # Build tool list: find_tools + hinted tool + skill tools
         tools: list[dict] = []
         if self.tool_registry:
             find = self.tool_registry.get("find_tools")
@@ -782,6 +789,16 @@ class ContextAssembler:
                 hinted = self.tool_registry.get(plan.tool_hint)
                 if hinted and hinted.name != "find_tools":
                     tools.append(self.tool_registry._tool_to_def(hinted))
+            # Add skill's tools to the tool list
+            if plan.skill_hint and self.skill_registry:
+                skill = self.skill_registry.get(plan.skill_hint)
+                if skill:
+                    for tool_name in (skill.tools or []):
+                        tool = self.tool_registry.get(tool_name)
+                        if tool and not any(
+                            t.get("function", {}).get("name") == tool_name for t in tools
+                        ):
+                            tools.append(self.tool_registry._tool_to_def(tool))
 
         return messages, tools
 
