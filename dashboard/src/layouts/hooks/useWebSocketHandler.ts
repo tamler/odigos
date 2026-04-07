@@ -105,6 +105,20 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
         if (msg.type === 'message_queued') chat.setStatus(`Queued (${msg.queued as number} pending)`)
         if (msg.type === 'queue_full') toast.warning('Message queue is full. Please wait.')
         if (msg.type === 'suggested_actions' && msg.actions) chat.setSuggestedActions(msg.actions as string[])
+        if (msg.type === 'conversation_started' && msg.conversation_id) {
+          const convId = msg.conversation_id as string
+          // Add new conversation to sidebar immediately with placeholder title
+          useConversationStore.getState().setConversations((prev) => {
+            if (prev.find(c => c.id === convId)) return prev
+            return [{
+              id: convId,
+              started_at: new Date().toISOString(),
+              last_message_at: new Date().toISOString(),
+              title: null,
+              message_count: 1,
+            } as any, ...prev]
+          })
+        }
         if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
           const cid = msg.conversation_id as string
           const title = msg.title as string
