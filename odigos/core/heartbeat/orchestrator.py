@@ -99,6 +99,7 @@ class Heartbeat:
         self._followup_interval_ticks: int = 30
         self._quota_tick_counter: int = 0
         self._plan_fail_count: int = 0
+        self._wiki_lint_counter: int = 0
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -163,6 +164,16 @@ class Heartbeat:
         # Phase 3c: Poll pending tasks — e.g. background_poll type (HTTP only, no LLM)
         from odigos.core.heartbeat import background
         did_work |= await background.poll_pending_tasks(self)
+
+        # Phase 3d: Wiki maintenance (drain pending writes, project entity pages)
+        from odigos.core.heartbeat import wiki_maintenance
+        did_work |= await wiki_maintenance.run_wiki_maintenance(self)
+
+        # Wiki lint (every 10 ticks)
+        self._wiki_lint_counter += 1
+        if self._wiki_lint_counter >= 10:
+            self._wiki_lint_counter = 0
+            await wiki_maintenance.run_wiki_lint(self)
 
         # Phase 4: Process inbound peer messages
         if self.agent_client:
