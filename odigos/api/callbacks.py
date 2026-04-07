@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -87,36 +86,22 @@ async def handle_callback(task_id: str, request: Request):
                     (json.dumps(result.side_effect or {}), task_id),
                 )
 
-                # Inject system message
                 conversation_id = task["conversation_id"] or ""
                 if conversation_id:
-                    import uuid
-                    await db.execute(
-                        "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
-                        "VALUES (?, ?, 'system', ?, datetime('now'))",
-                        (str(uuid.uuid4()), conversation_id,
-                         f"[Background task completed] {result.data}"),
-                    )
-
-                # Send WebSocket notification
-                container = request.app.state.container
-                if container.notifier:
-                    await container.notifier.notify(
-                        title=f"{task['tool_name']} complete",
-                        body=result.data,
+                    container = request.app.state.container
+                    await container.message_bus.publish(
                         conversation_id=conversation_id,
+                        role="system",
+                        content=f"[Background task completed] {result.data}",
+                        channel="callback",
+                        message_type="artifact" if result.side_effect else "notification",
+                        metadata={
+                            "tool_name": task["tool_name"],
+                            "task_id": task_id,
+                            "artifact": result.side_effect.get("artifact") if result.side_effect else None,
+                        },
+                        idempotency_key=f"callback-{task_id}",
                     )
-
-                web_channel = container.channel_registry.get("web") if container.channel_registry else None
-                if web_channel and hasattr(web_channel, "broadcast"):
-                    await web_channel.broadcast({
-                        "type": "task_completed",
-                        "task_id": task_id,
-                        "tool_name": task["tool_name"],
-                        "conversation_id": conversation_id,
-                        "result": result.data,
-                        "artifact": result.side_effect.get("artifact") if result.side_effect else None,
-                    })
 
                 logger.info("Task %s completed via callback", task_id[:12])
             else:

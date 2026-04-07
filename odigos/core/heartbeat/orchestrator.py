@@ -53,6 +53,7 @@ class Heartbeat:
         settings=None,
         budget_tracker=None,
         tool_registry=None,
+        message_bus=None,
     ) -> None:
         self.db = db
         self.settings = settings
@@ -81,6 +82,7 @@ class Heartbeat:
         self.cron_manager = cron_manager
         self.notifier = notifier
         self.scheduler = scheduler
+        self.message_bus = message_bus
         self._ws_port = ws_port
         self._dream_tick_counter: int = 0
         self._dream_interval_ticks: int = 10

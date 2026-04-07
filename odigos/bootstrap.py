@@ -910,6 +910,7 @@ class Bootstrapper:
             settings=s,
             budget_tracker=self.container.budget_tracker,
             tool_registry=self.container.tool_registry,
+            message_bus=self.container.message_bus,
         )
         self.container.agent.heartbeat = heartbeat
         self.container.heartbeat = heartbeat

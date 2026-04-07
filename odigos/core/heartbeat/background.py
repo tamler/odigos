@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
-from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -54,34 +52,20 @@ async def poll_pending_tasks(hb) -> bool:
                     (json.dumps(result.side_effect or {}), task["id"]),
                 )
 
-                # Inject system message into conversation
                 if conversation_id:
-                    await hb.db.execute(
-                        "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
-                        "VALUES (?, ?, 'system', ?, datetime('now'))",
-                        (str(uuid.uuid4()), conversation_id,
-                         f"[Background task completed] {result.data}"),
-                    )
-
-                # Notify user
-                if hb.notifier:
-                    await hb.notifier.notify(
-                        title=f"{tool_name} complete",
-                        body=result.data,
+                    await hb.message_bus.publish(
                         conversation_id=conversation_id,
+                        role="system",
+                        content=f"[Background task completed] {result.data}",
+                        channel="heartbeat",
+                        message_type="artifact" if result.side_effect else "notification",
+                        metadata={
+                            "tool_name": tool_name,
+                            "task_id": task["id"],
+                            "artifact": result.side_effect.get("artifact") if result.side_effect else None,
+                        },
+                        idempotency_key=f"bg-{task['id']}",
                     )
-
-                # Send task_completed WebSocket event
-                web_channel = hb.channel_registry.get("web") if hb.channel_registry else None
-                if web_channel and hasattr(web_channel, "broadcast"):
-                    await web_channel.broadcast({
-                        "type": "task_completed",
-                        "task_id": task["id"],
-                        "tool_name": tool_name,
-                        "conversation_id": conversation_id,
-                        "result": result.data,
-                        "artifact": result.side_effect.get("artifact") if result.side_effect else None,
-                    })
             else:
                 await hb.db.execute(
                     "UPDATE tasks SET status = 'failed', error = ? WHERE id = ?",
