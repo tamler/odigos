@@ -109,8 +109,14 @@ class Reflector:
                     assistant_response=content,
                     model=self._extraction_model,
                 )
+                logger.info("Knowledge extraction: %d entities, %d facts, %d relationships",
+                            len(extracted.get("entities", [])),
+                            len(extracted.get("facts", [])),
+                            len(extracted.get("relationships", [])))
             except Exception:
                 logger.warning("Knowledge extraction failed", exc_info=True)
+        elif not self._extraction_provider:
+            logger.debug("Knowledge extraction skipped: no extraction provider configured")
 
         # Pass to memory manager if available (best-effort)
         if self.memory_manager and user_message is not None:
