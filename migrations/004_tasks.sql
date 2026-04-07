@@ -1,22 +1,4 @@
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    type TEXT NOT NULL,
-    status TEXT DEFAULT 'pending',
-    description TEXT,
-    payload_json TEXT,
-    scheduled_at TEXT,
-    started_at TEXT,
-    completed_at TEXT,
-    result_json TEXT,
-    error TEXT,
-    retry_count INTEGER DEFAULT 0,
-    max_retries INTEGER DEFAULT 3,
-    priority INTEGER DEFAULT 1,
-    recurrence_json TEXT,
-    conversation_id TEXT,
-    created_by TEXT DEFAULT 'user'
-);
-
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_scheduled ON tasks(scheduled_at);
-CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
+-- tasks table is now defined in the initial schema (001_initial.sql / schema.sql)
+-- scheduled_at, priority, payload_json, started_at, recurrence_json, created_by columns
+-- were removed in the schema rewrite; schema.sql defines the canonical task columns.
+SELECT 1; -- no-op placeholder so migration is recorded

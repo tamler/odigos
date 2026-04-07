@@ -56,12 +56,12 @@ async def test_list_conversations_empty(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_list_conversations_with_data(client: AsyncClient, db: Database):
     await db.execute(
-        "INSERT INTO conversations (id, channel, started_at, last_message_at, message_count) "
+        "INSERT INTO conversations (id, channel, created_at, last_message_at, message_count) "
         "VALUES (?, ?, ?, ?, ?)",
         ("telegram:1", "telegram", "2026-01-01 00:00:00", "2026-01-01 01:00:00", 3),
     )
     await db.execute(
-        "INSERT INTO conversations (id, channel, started_at, last_message_at, message_count) "
+        "INSERT INTO conversations (id, channel, created_at, last_message_at, message_count) "
         "VALUES (?, ?, ?, ?, ?)",
         ("telegram:2", "telegram", "2026-01-02 00:00:00", "2026-01-02 02:00:00", 5),
     )
@@ -80,7 +80,7 @@ async def test_list_conversations_with_data(client: AsyncClient, db: Database):
 async def test_list_conversations_pagination(client: AsyncClient, db: Database):
     for i in range(5):
         await db.execute(
-            "INSERT INTO conversations (id, channel, started_at, last_message_at, message_count) "
+            "INSERT INTO conversations (id, channel, created_at, last_message_at, message_count) "
             "VALUES (?, ?, ?, ?, ?)",
             (f"telegram:{i}", "telegram", "2026-01-01 00:00:00", f"2026-01-01 0{i}:00:00", i),
         )
@@ -105,7 +105,7 @@ async def test_list_conversations_pagination(client: AsyncClient, db: Database):
 @pytest.mark.asyncio
 async def test_get_conversation_by_id(client: AsyncClient, db: Database):
     await db.execute(
-        "INSERT INTO conversations (id, channel, started_at, last_message_at, message_count) "
+        "INSERT INTO conversations (id, channel, created_at, last_message_at, message_count) "
         "VALUES (?, ?, ?, ?, ?)",
         ("telegram:42", "telegram", "2026-01-01 00:00:00", "2026-01-01 01:00:00", 3),
     )
@@ -127,17 +127,17 @@ async def test_get_conversation_not_found(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_get_messages(client: AsyncClient, db: Database):
     await db.execute(
-        "INSERT INTO conversations (id, channel, started_at, last_message_at, message_count) "
+        "INSERT INTO conversations (id, channel, created_at, last_message_at, message_count) "
         "VALUES (?, ?, ?, ?, ?)",
         ("telegram:42", "telegram", "2026-01-01 00:00:00", "2026-01-01 01:00:00", 2),
     )
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
+        "INSERT INTO messages (id, conversation_id, role, content, created_at) "
         "VALUES (?, ?, ?, ?, ?)",
         ("msg-2", "telegram:42", "assistant", "Hello!", "2026-01-01 00:01:00"),
     )
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
+        "INSERT INTO messages (id, conversation_id, role, content, created_at) "
         "VALUES (?, ?, ?, ?, ?)",
         ("msg-1", "telegram:42", "user", "Hi", "2026-01-01 00:00:00"),
     )
@@ -146,7 +146,7 @@ async def test_get_messages(client: AsyncClient, db: Database):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["messages"]) == 2
-    # Ordered by timestamp ASC
+    # Ordered by created_at ASC
     assert data["messages"][0]["id"] == "msg-1"
     assert data["messages"][0]["role"] == "user"
     assert data["messages"][1]["id"] == "msg-2"

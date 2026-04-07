@@ -1,3 +1,3 @@
-ALTER TABLE conversations ADD COLUMN title TEXT;
-ALTER TABLE conversations ADD COLUMN archived INTEGER DEFAULT 0;
-CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations(archived);
+-- title and status are now defined in the initial schema
+-- archived column replaced by status TEXT DEFAULT 'active'
+SELECT 1; -- no-op placeholder so migration is recorded

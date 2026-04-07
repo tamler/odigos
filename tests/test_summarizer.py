@@ -112,13 +112,13 @@ class TestStructuredCompaction:
         """Summarizer uses the structured compaction prompt."""
         conv_id = "conv-structured"
         await db.execute(
-            "INSERT INTO conversations (id, channel, started_at) VALUES (?, ?, datetime('now'))",
+            "INSERT INTO conversations (id, channel, created_at) VALUES (?, ?, datetime('now'))",
             (conv_id, "test"),
         )
         for i in range(10):
             role = "user" if i % 2 == 0 else "assistant"
             await db.execute(
-                "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
+                "INSERT INTO messages (id, conversation_id, role, content, created_at) "
                 "VALUES (?, ?, ?, ?, datetime('now'))",
                 (f"msg-{i}", conv_id, role, f"Message {i}"),
             )
@@ -145,13 +145,13 @@ class TestStructuredCompaction:
         """Summary is stored with memory_type='summary' and when_to_use."""
         conv_id = "conv-typed"
         await db.execute(
-            "INSERT INTO conversations (id, channel, started_at) VALUES (?, ?, datetime('now'))",
+            "INSERT INTO conversations (id, channel, created_at) VALUES (?, ?, datetime('now'))",
             (conv_id, "test"),
         )
         for i in range(10):
             role = "user" if i % 2 == 0 else "assistant"
             await db.execute(
-                "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
+                "INSERT INTO messages (id, conversation_id, role, content, created_at) "
                 "VALUES (?, ?, ?, ?, datetime('now'))",
                 (f"msg-t-{i}", conv_id, role, f"Message {i}"),
             )

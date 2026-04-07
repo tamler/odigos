@@ -140,12 +140,12 @@ async def test_state_conversations_and_memory(client, db):
     import uuid
     conv_id = str(uuid.uuid4())
     await db.execute(
-        "INSERT INTO conversations (id, channel, started_at, last_message_at) "
+        "INSERT INTO conversations (id, channel, created_at, last_message_at) "
         "VALUES (?, 'test', datetime('now'), datetime('now'))",
         (conv_id,),
     )
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
+        "INSERT INTO messages (id, conversation_id, role, content, created_at) "
         "VALUES (?, ?, 'user', 'hello', datetime('now'))",
         (str(uuid.uuid4()), conv_id),
     )

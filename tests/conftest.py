@@ -110,6 +110,44 @@ async def fake_db():
                 completed_at TEXT
             )
         """)
+        await conn.execute("""
+            CREATE TABLE conversations (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                channel TEXT NOT NULL,
+                status TEXT DEFAULT 'active',
+                message_count INTEGER DEFAULT 0,
+                last_message_at TEXT,
+                category TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE messages (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL REFERENCES conversations(id),
+                role TEXT NOT NULL,
+                content TEXT,
+                channel TEXT,
+                message_type TEXT DEFAULT 'chat',
+                model_used TEXT,
+                tokens_in INTEGER,
+                tokens_out INTEGER,
+                cost_usd REAL,
+                metadata_json TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await conn.execute("""
+            CREATE TABLE message_deliveries (
+                id TEXT PRIMARY KEY,
+                message_id TEXT NOT NULL REFERENCES messages(id),
+                channel TEXT NOT NULL,
+                delivered_at TEXT,
+                seen_at TEXT
+            )
+        """)
         await conn.commit()
         yield db
 

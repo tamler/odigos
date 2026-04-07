@@ -53,27 +53,27 @@ async def test_metrics_empty_db(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_metrics_with_data(client: AsyncClient, db: Database):
     await db.execute(
-        "INSERT INTO conversations (id, channel, started_at, last_message_at, message_count) "
+        "INSERT INTO conversations (id, channel, created_at, last_message_at, message_count) "
         "VALUES (?, ?, ?, ?, ?)",
         ("c1", "telegram", "2026-01-01 00:00:00", "2026-01-01 01:00:00", 2),
     )
     await db.execute(
-        "INSERT INTO conversations (id, channel, started_at, last_message_at, message_count) "
+        "INSERT INTO conversations (id, channel, created_at, last_message_at, message_count) "
         "VALUES (?, ?, ?, ?, ?)",
         ("c2", "telegram", "2026-01-02 00:00:00", "2026-01-02 01:00:00", 1),
     )
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, cost_usd, timestamp) "
+        "INSERT INTO messages (id, conversation_id, role, content, cost_usd, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
         ("m1", "c1", "user", "Hello", 0.01, "2026-01-01 00:00:00"),
     )
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, cost_usd, timestamp) "
+        "INSERT INTO messages (id, conversation_id, role, content, cost_usd, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
         ("m2", "c1", "assistant", "Hi!", 0.05, "2026-01-01 00:01:00"),
     )
     await db.execute(
-        "INSERT INTO messages (id, conversation_id, role, content, cost_usd, timestamp) "
+        "INSERT INTO messages (id, conversation_id, role, content, cost_usd, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
         ("m3", "c2", "user", "Hey", 0.02, "2026-01-02 00:00:00"),
     )

@@ -146,7 +146,15 @@ class Database:
                 except Exception as e:
                     logger.warning("Migration %s partially failed: %s", migration_file.name, e)
             else:
-                await self.conn.executescript(sql)
+                try:
+                    await self.conn.executescript(sql)
+                except Exception as e:
+                    # Schema.sql creates all tables in their current form before migrations
+                    # run. Some older migrations will fail because they reference columns
+                    # that no longer exist (schema rewrite) or try to ADD columns that
+                    # schema.sql already created. Log and continue so the migration is
+                    # marked applied and not retried on every start.
+                    logger.warning("Migration %s partially failed (schema evolved): %s", migration_file.name, e)
             await self.conn.execute(
                 "INSERT INTO _migrations (name) VALUES (?)",
                 (migration_file.name,),
