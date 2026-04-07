@@ -46,7 +46,12 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           else if (priority === 'warning') toast.warning(label)
           else toast.info(label)
         }
-        if (msg.type === 'status') chat.setStatus(msg.text as string)
+        if (msg.type === 'status') {
+          chat.setStatus(msg.text as string)
+          if (useChatStore.getState().isStreaming) {
+            chat.finalizeLastMessage()
+          }
+        }
         if (msg.type === 'chat_chunk') {
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
           chat.setThinking(false)
@@ -63,7 +68,7 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
         }
         if (msg.type === 'chat_response') {
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
-          if (!activeIdRef.current && msg.conversation_id) {
+          if (!activeIdRef.current && !useChatStore.getState().messages.length && msg.conversation_id) {
             const newId = msg.conversation_id as string
             const chatId = newId.includes(':') ? newId.split(':')[1] : newId
             chat.setActiveConversationId(chatId)

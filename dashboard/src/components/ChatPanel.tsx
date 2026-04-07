@@ -139,6 +139,9 @@ export const ChatPanel = memo(({
       get<{ messages: { role: string; content: string; timestamp: string }[] }>(`/api/conversations/${cid}/messages?limit=50&offset=0`),
       get<{ artifacts: Artifact[] }>(`/api/artifacts?conversation_id=${cid}`)
     ]).then(([msgRes, artRes]) => {
+      // Guard: user may have switched conversations while fetch was in-flight
+      if (loadedConvRef.current !== cid) return
+
       if (msgRes.status === 'fulfilled' && msgRes.value?.messages) {
         setMessages(
           msgRes.value.messages.map((m) => ({
@@ -268,6 +271,10 @@ export const ChatPanel = memo(({
   const handleSend = useCallback((overrideContent?: string) => {
     const content = (overrideContent ?? inputValue).trim()
     if (!content && pendingFiles.length === 0) return
+    if (pendingFiles.some(p => p.uploading)) {
+      toast.warning('Files still uploading...')
+      return
+    }
 
     const attachments = pendingFiles
       .filter((p) => p.id)

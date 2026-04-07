@@ -28,12 +28,14 @@ export function useConversationActions() {
     useChatStore.getState().setSuggestedActions([])
     useUIStore.getState().setSidebarOpen(false)
     useConversationStore.getState().setSearchQuery('')
-    navigate('/')
+    navigate('/', { replace: true })
   }, [navigate])
 
   const handleSelectConversation = useCallback((id: string) => {
     useChatStore.getState().setActiveConversationId(id)
     useUIStore.getState().setSidebarOpen(false)
+    useUIStore.getState().setArtifactPanelOpen(false)
+    useUIStore.getState().setActiveArtifactId(null)
     useConversationStore.getState().setSearchQuery('')
     navigate(`/?c=${id}`)
   }, [navigate])
