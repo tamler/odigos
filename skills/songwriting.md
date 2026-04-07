@@ -7,48 +7,31 @@ complexity: standard
 
 # Songwriting Mode
 
-When the user wants to create a song, collaborate on every aspect before generating. Do NOT immediately call generate_music — work with the user first.
+Help the user create a song. Move at their pace — if they give you everything upfront, write lyrics immediately. If they're vague, ask ONE focused question to fill the biggest gap. Never ask about things they've already told you.
 
-## Process
+## What you need before generating
 
-### 1. Understand the concept
-Ask the user about:
-- **Theme/topic**: What's the song about?
-- **Mood/emotion**: Happy, sad, energetic, melancholic, funny, romantic?
-- **Target audience**: Personal, for someone else, for a project?
+- **Concept**: What's the song about? What emotion?
+- **Style**: Genre, tempo, vocal vibe
+- **Lyrics**: Written collaboratively, with [Verse], [Chorus], [Bridge] markers
 
-### 2. Choose the style
-Discuss musical direction:
-- **Genre**: Pop, rock, folk, jazz, hip-hop, country, electronic, R&B, classical, comedy?
-- **Tempo**: Fast/upbeat, medium, slow/ballad?
-- **Vocal preference**: Male, female, or auto? Any vocal style (raspy, smooth, operatic)?
-- **Instruments**: Acoustic guitar, piano, full band, electronic, orchestral?
+You DON'T need all details upfront. Infer sensible defaults from context. If the user says "write a funny country song about my dog", you have concept AND style — go straight to writing lyrics.
 
-Present this as a conversation, not a checklist.
+## Flow
 
-### 3. Write the lyrics
-Draft lyrics WITH the user:
-- Write a first draft with [Verse], [Chorus], [Bridge] markers
-- Show it to the user for feedback
-- Revise based on their input
-- The lyrics should be complete before generating
+1. Read what the user gave you. Fill in gaps from context.
+2. If you have enough to write lyrics, write them. Share the draft.
+3. Ask for feedback. Revise if needed.
+4. When lyrics are approved (or user says "go" / "send it" / "generate"), call generate_music with:
+   - `prompt`: the finalized lyrics
+   - `style`: specific genre + instruments (e.g., "country, acoustic guitar, twangy male vocals")
+   - `title`: song title
+   - `vocal_gender`: m or f based on discussion
+   - Use `negative_tags` if the user mentioned things to avoid
 
-### 4. Set production parameters
-Based on the discussion, set:
-- `prompt`: The finalized lyrics (in custom mode, these are sung literally)
-- `style`: Specific genre + instrumentation (e.g., "indie folk, acoustic guitar, warm male vocals")
-- `title`: The song title
-- `vocal_gender`: m or f
-- `negative_tags`: Styles to avoid (e.g., "autotune, electronic, heavy metal")
-- `style_weight`: How strictly to follow the style (0.0-1.0)
-- `weirdness`: Creative unpredictability (0.0-1.0, keep low for mainstream, higher for experimental)
+## Don't
 
-### 5. Generate
-Call generate_music with all parameters. Tell the user it's generating and they'll be notified when ready.
-
-## Guidelines
-- Always write lyrics before generating — don't send a description and hope for the best
-- Use custom mode (style + title) so the prompt is used as literal lyrics
-- Keep style descriptions specific: "indie folk, acoustic guitar, warm male vocals" not just "folk"
-- If the user just says "make me a song about X", start with step 1 — don't skip ahead
-- Share the lyrics draft for approval before generating
+- Don't ask a list of questions before starting. Read the room.
+- Don't repeat back what the user already said. Build on it.
+- Don't ask permission to write lyrics. Just write them and ask for feedback.
+- Don't wait for explicit approval of every parameter. Use good judgment.

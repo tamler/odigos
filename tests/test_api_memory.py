@@ -113,7 +113,7 @@ async def test_search_returns_results(db: Database):
         base_url="http://test",
         headers={"Authorization": "Bearer test-key"},
     ) as c:
-        resp = await c.get("/api/memory/search", params={"q": "Alice", "limit": 5})
+        resp = await c.get("/api/memory/search", params={"q": "Alice", "limit": 5, "mode": "vector"})
 
     assert resp.status_code == 200
     data = resp.json()

@@ -2,11 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add file read/write tool, conversation export, remove dead code, and convert 3 opt-in capabilities to plugins.
+**Goal:** Add file read/write tool, conversation export, remove dead code, create AgentService facade, and convert all opt-in capabilities (including Telegram) to plugins.
 
-**Architecture:** FileTool with configurable sandboxed paths via config.yaml. Export endpoint on existing conversations API. SearXNG, GWS, and Browser move from main.py conditional blocks to `plugins/` using the existing register(ctx) pattern. Telegram stays in main.py (needs Agent instance which doesn't exist at plugin load time).
+**Architecture:** AgentService facade wraps Agent, GoalStore, BudgetTracker, and ApprovalGate behind a single interface. PluginContext gets two-phase loading: tool phase (before Agent) and channel phase (after Agent, with AgentService). All opt-in capabilities become plugins. FileTool with configurable sandboxed paths. Export endpoint on conversations API.
 
-**Tech Stack:** FastAPI, aiosqlite, existing plugin system, existing tool base classes
+**Tech Stack:** FastAPI, aiosqlite, existing plugin system, existing tool/channel base classes
 
 **Design doc:** `docs/plans/2026-03-12-capability-audit-design.md`
 
@@ -153,7 +153,6 @@ Create `odigos/tools/file.py`:
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 from odigos.tools.base import BaseTool, ToolResult
@@ -198,10 +197,7 @@ class FileTool(BaseTool):
         ]
 
     def _validate_path(self, path_str: str) -> tuple[Path, str | None]:
-        """Resolve path and check it's within allowed directories.
-
-        Returns (resolved_path, error_message). error_message is None if valid.
-        """
+        """Resolve path and check it's within allowed directories."""
         try:
             resolved = Path(path_str).expanduser().resolve()
         except (ValueError, OSError) as e:
@@ -244,8 +240,6 @@ class FileTool(BaseTool):
             return ToolResult(success=False, data="", error=f"File not found: {path}")
         if not path.is_file():
             return ToolResult(success=False, data="", error=f"Not a file: {path}")
-
-        # Check for binary content
         try:
             data = path.read_bytes()
             if b"\x00" in data[:8192]:
@@ -260,7 +254,6 @@ class FileTool(BaseTool):
     async def _write(self, path: Path, content: str) -> ToolResult:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            # Validate parent is still within sandbox after creation
             _, err = self._validate_path(str(path.parent.resolve()))
             if err:
                 return ToolResult(success=False, data="", error=err)
@@ -274,7 +267,6 @@ class FileTool(BaseTool):
             return ToolResult(success=False, data="", error=f"Directory not found: {path}")
         if not path.is_dir():
             return ToolResult(success=False, data="", error=f"Not a directory: {path}")
-
         lines = []
         for entry in sorted(path.iterdir()):
             if entry.is_file():
@@ -308,11 +300,11 @@ git commit -m "feat: add FileTool with sandboxed path validation"
 ### Task 3: Register FileTool in main.py
 
 **Files:**
-- Modify: `odigos/main.py` (add FileTool registration after code tool)
+- Modify: `odigos/main.py` (add FileTool registration after code tool block)
 
 **Step 1: Add registration**
 
-After the code tool registration block (after line ~232), add:
+After the code tool registration block (after `logger.info("Code tool initialized (sandbox)")`), add:
 
 ```python
     # Initialize file tool with configured allowed paths
@@ -339,7 +331,7 @@ git commit -m "feat: register FileTool in main with configured allowed_paths"
 ### Task 4: Conversation export endpoint
 
 **Files:**
-- Modify: `odigos/api/conversations.py` (add export endpoint)
+- Modify: `odigos/api/conversations.py` (add export functions and endpoint)
 - Create: `tests/test_conversation_export.py`
 
 **Step 1: Write the failing tests**
@@ -406,14 +398,7 @@ Expected: FAIL — functions don't exist
 
 **Step 3: Add export functions and endpoint**
 
-In `odigos/api/conversations.py`, add at the top:
-
-```python
-import json
-from fastapi.responses import PlainTextResponse
-```
-
-Then add these functions and endpoint at the bottom of the file:
+In `odigos/api/conversations.py`, add `import json` and `from fastapi.responses import PlainTextResponse` at the top. Then add at the bottom:
 
 ```python
 async def _export_markdown(db: Database, conversation_id: str) -> str | None:
@@ -523,7 +508,7 @@ if TYPE_CHECKING:
     from odigos.core.agent_client import AgentClient
 ```
 
-And change the constructor:
+And change:
 
 ```python
     def __init__(self, peer_client: PeerClient) -> None:
@@ -543,13 +528,12 @@ rm odigos/core/peers.py tests/test_peer_client.py tests/test_peer_dedup.py
 
 **Step 3: Verify no remaining references**
 
-Run: `uv run python -c "from odigos.tools.peer import MessagePeerTool; print('OK')"`
-And: `grep -r "from odigos.core.peers" odigos/ tests/` should return nothing.
+Run: `grep -r "from odigos.core.peers" odigos/ tests/` — should return nothing
 
 **Step 4: Run full tests**
 
 Run: `uv run pytest tests/ -q`
-Expected: All pass (minus the 2 deleted test files)
+Expected: All pass
 
 **Step 5: Commit**
 
@@ -561,25 +545,251 @@ git commit -m "chore: remove dead PeerClient code, fix MessagePeerTool type hint
 
 ---
 
-### Task 6: Pass settings to PluginContext
+### Task 6: Create AgentService facade
 
 **Files:**
-- Modify: `odigos/main.py` (~line 360, plugin_context creation)
+- Create: `odigos/core/agent_service.py`
+- Create: `tests/test_agent_service.py`
 
-**Step 1: Pass settings through config dict**
+**Step 1: Write the failing tests**
 
-In `odigos/main.py`, change:
+Create `tests/test_agent_service.py`:
 
 ```python
-    plugin_context = PluginContext(
-        tool_registry=tool_registry,
-        channel_registry=channel_registry,
-        tracer=tracer,
-        config={},  # Will come from settings.plugins when config schema is updated
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from odigos.core.agent_service import AgentService
+
+
+@pytest.fixture
+def service():
+    return AgentService(
+        agent=AsyncMock(),
+        goal_store=AsyncMock(),
+        budget_tracker=AsyncMock(),
+        approval_gate=MagicMock(),
     )
+
+
+class TestAgentService:
+    async def test_handle_message(self, service):
+        service.agent.handle_message.return_value = "Hello!"
+        result = await service.handle_message(MagicMock())
+        assert result == "Hello!"
+        service.agent.handle_message.assert_called_once()
+
+    async def test_list_goals(self, service):
+        service.goal_store.list_goals.return_value = [{"id": "g1"}]
+        result = await service.list_goals()
+        assert len(result) == 1
+
+    async def test_list_todos(self, service):
+        service.goal_store.list_todos.return_value = [{"id": "t1"}]
+        result = await service.list_todos()
+        assert len(result) == 1
+
+    async def test_list_reminders(self, service):
+        service.goal_store.list_reminders.return_value = [{"id": "r1"}]
+        result = await service.list_reminders()
+        assert len(result) == 1
+
+    async def test_cancel_item(self, service):
+        service.goal_store.cancel.return_value = True
+        result = await service.cancel_item("g1")
+        assert result is True
+
+    async def test_check_budget(self, service):
+        service.budget_tracker.check_budget.return_value = MagicMock(within_budget=True)
+        result = await service.check_budget()
+        assert result.within_budget
+
+    async def test_resolve_approval(self, service):
+        service.approval_gate.resolve.return_value = True
+        result = service.resolve_approval("a1", "approved")
+        assert result is True
+
+    async def test_heartbeat_pause_resume(self, service):
+        service.agent.heartbeat = MagicMock(paused=False)
+        service.pause_heartbeat()
+        assert service.agent.heartbeat.paused is True
+        service.resume_heartbeat()
+        assert service.agent.heartbeat.paused is False
+
+    async def test_no_approval_gate(self):
+        service = AgentService(
+            agent=AsyncMock(),
+            goal_store=AsyncMock(),
+            budget_tracker=AsyncMock(),
+            approval_gate=None,
+        )
+        result = service.resolve_approval("a1", "approved")
+        assert result is False
 ```
 
-To:
+**Step 2: Run tests to verify they fail**
+
+Run: `uv run pytest tests/test_agent_service.py -v`
+Expected: FAIL — module not found
+
+**Step 3: Implement AgentService**
+
+Create `odigos/core/agent_service.py`:
+
+```python
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from odigos.channels.base import UniversalMessage
+    from odigos.core.agent import Agent
+    from odigos.core.approval import ApprovalGate
+    from odigos.core.budget import BudgetTracker
+    from odigos.core.goal_store import GoalStore
+
+
+class AgentService:
+    """Facade providing a single entry point for all interaction interfaces.
+
+    Wraps Agent, GoalStore, BudgetTracker, and ApprovalGate so that channels
+    and plugins don't need to know about each individual dependency.
+    """
+
+    def __init__(
+        self,
+        agent: Agent,
+        goal_store: GoalStore,
+        budget_tracker: BudgetTracker,
+        approval_gate: ApprovalGate | None = None,
+    ) -> None:
+        self.agent = agent
+        self.goal_store = goal_store
+        self.budget_tracker = budget_tracker
+        self.approval_gate = approval_gate
+
+    # -- Message handling --
+
+    async def handle_message(self, message: UniversalMessage) -> str:
+        """Send a message to the agent and return the response."""
+        return await self.agent.handle_message(message)
+
+    # -- Goals / Todos / Reminders --
+
+    async def list_goals(self) -> list[dict]:
+        return await self.goal_store.list_goals()
+
+    async def list_todos(self) -> list[dict]:
+        return await self.goal_store.list_todos()
+
+    async def list_reminders(self) -> list[dict]:
+        return await self.goal_store.list_reminders()
+
+    async def cancel_item(self, item_id: str) -> bool:
+        return await self.goal_store.cancel(item_id)
+
+    # -- Budget --
+
+    async def check_budget(self) -> Any:
+        return await self.budget_tracker.check_budget()
+
+    # -- Approvals --
+
+    def resolve_approval(self, approval_id: str, decision: str) -> bool:
+        if not self.approval_gate:
+            return False
+        return self.approval_gate.resolve(approval_id, decision)
+
+    # -- Heartbeat --
+
+    def pause_heartbeat(self) -> None:
+        if self.agent.heartbeat:
+            self.agent.heartbeat.paused = True
+
+    def resume_heartbeat(self) -> None:
+        if self.agent.heartbeat:
+            self.agent.heartbeat.paused = False
+
+    @property
+    def heartbeat_paused(self) -> bool | None:
+        if self.agent.heartbeat:
+            return self.agent.heartbeat.paused
+        return None
+```
+
+**Step 4: Run tests**
+
+Run: `uv run pytest tests/test_agent_service.py -v`
+Expected: All PASS
+
+**Step 5: Commit**
+
+```bash
+git add odigos/core/agent_service.py tests/test_agent_service.py
+git commit -m "feat: add AgentService facade for interaction interfaces"
+```
+
+---
+
+### Task 7: Two-phase plugin loading — add AgentService to PluginContext
+
+**Files:**
+- Modify: `odigos/core/plugin_context.py` (add set_service method)
+- Modify: `odigos/core/plugins.py` (add load_channels phase)
+- Modify: `odigos/main.py` (create AgentService, pass settings, call channel phase)
+
+**Step 1: Add set_service to PluginContext**
+
+In `odigos/core/plugin_context.py`, add to the TYPE_CHECKING block:
+
+```python
+    from odigos.core.agent_service import AgentService
+```
+
+Add a field in `__init__`:
+
+```python
+        self.service: AgentService | None = None
+```
+
+Add a method:
+
+```python
+    def set_service(self, service: AgentService) -> None:
+        """Set the AgentService after agent initialization (phase 2)."""
+        self.service = service
+```
+
+**Step 2: Add channel-phase loading to PluginManager**
+
+In `odigos/core/plugins.py`, add a new method to `PluginManager`:
+
+```python
+    def load_channels(self, plugins_dir: str) -> None:
+        """Phase 2: Load channel plugins that need AgentService.
+
+        Scans for plugins in a 'channels' subdirectory.
+        These are loaded after the Agent is created and AgentService is set on the context.
+        """
+        channels_path = Path(plugins_dir) / "channels"
+        if not channels_path.exists():
+            return
+
+        for subdir in sorted(channels_path.iterdir()):
+            if subdir.is_dir() and not subdir.name.startswith("__"):
+                init = subdir / "__init__.py"
+                if init.exists():
+                    self._load_plugin(init, name_override=subdir.name)
+            elif subdir.suffix == ".py" and not subdir.name.startswith("__"):
+                self._load_plugin(subdir)
+```
+
+**Step 3: Wire into main.py**
+
+In `odigos/main.py`:
+
+1. Pass settings to plugin_context (replace `config={}`):
 
 ```python
     plugin_context = PluginContext(
@@ -590,26 +800,55 @@ To:
     )
 ```
 
-**Step 2: Verify**
+2. After Agent creation and Telegram block, create AgentService and set on context. Add import at the top imports area or inline:
+
+```python
+    from odigos.core.agent_service import AgentService
+
+    agent_service = AgentService(
+        agent=agent,
+        goal_store=goal_store,
+        budget_tracker=budget_tracker,
+        approval_gate=approval_gate,
+    )
+    plugin_context.set_service(agent_service)
+    app.state.agent_service = agent_service
+```
+
+3. After setting the service, load channel plugins:
+
+```python
+    plugin_manager.load_channels("plugins")
+    logger.info("Channel plugins loaded")
+```
+
+**Step 4: Verify**
 
 Run: `uv run python -c "import odigos.main"`
 
-**Step 3: Commit**
+**Step 5: Run full tests**
+
+Run: `uv run pytest tests/ -q`
+Expected: All pass
+
+**Step 6: Commit**
 
 ```bash
-git add odigos/main.py
-git commit -m "feat: pass settings to PluginContext for plugin config access"
+git add odigos/core/plugin_context.py odigos/core/plugins.py odigos/main.py
+git commit -m "feat: two-phase plugin loading with AgentService on PluginContext"
 ```
 
 ---
 
-### Task 7: Convert SearXNG to plugin
+### Task 8: Convert SearXNG, GWS, and Browser to plugins
 
 **Files:**
 - Create: `plugins/searxng/__init__.py`
-- Modify: `odigos/main.py` (remove SearXNG block, lines ~182-194)
+- Create: `plugins/gws/__init__.py`
+- Create: `plugins/browser/__init__.py`
+- Modify: `odigos/main.py` (remove all three conditional blocks)
 
-**Step 1: Create the plugin**
+**Step 1: Create SearXNG plugin**
 
 Create `plugins/searxng/__init__.py`:
 
@@ -642,55 +881,7 @@ def register(ctx):
     logger.info("SearXNG search plugin loaded (%s)", settings.searxng_url)
 ```
 
-**Step 2: Remove from main.py**
-
-Remove the SearXNG block (lines ~182-194):
-
-```python
-    # Add search tool if SearXNG is configured
-    if settings.searxng_url:
-        from odigos.providers.searxng import SearxngProvider
-        from odigos.tools.search import SearchTool
-
-        _searxng = SearxngProvider(
-            url=settings.searxng_url,
-            username=settings.searxng_username,
-            password=settings.searxng_password,
-        )
-        search_tool = SearchTool(searxng=_searxng)
-        tool_registry.register(search_tool)
-        logger.info("Search tool initialized (SearXNG: %s)", settings.searxng_url)
-```
-
-Also remove `_searxng = None` from module-level (line ~63) and the `_searxng` cleanup in shutdown:
-
-```python
-    if _searxng:
-        await _searxng.close()
-```
-
-Note: The SearxngProvider.close() will need to be handled differently. For now, the provider will be garbage collected on shutdown. If SearxngProvider holds an httpx client, the plugin should store the provider reference for cleanup. Check if this matters — if `SearxngProvider.close()` just closes an httpx client, the GC will handle it. If it's important, add the provider to plugin_context via `register_provider("searxng", searxng)` and close it in shutdown.
-
-**Step 3: Verify**
-
-Run: `uv run python -c "import odigos.main"`
-
-**Step 4: Commit**
-
-```bash
-git add plugins/searxng/__init__.py odigos/main.py
-git commit -m "refactor: move SearXNG search from main.py to plugin"
-```
-
----
-
-### Task 8: Convert GWS to plugin
-
-**Files:**
-- Create: `plugins/gws/__init__.py`
-- Modify: `odigos/main.py` (remove GWS block, lines ~234-247)
-
-**Step 1: Create the plugin**
+**Step 2: Create GWS plugin**
 
 Create `plugins/gws/__init__.py`:
 
@@ -725,43 +916,7 @@ def register(ctx):
     logger.info("Google Workspace plugin loaded (gws CLI)")
 ```
 
-**Step 2: Remove from main.py**
-
-Remove the GWS block (lines ~234-247):
-
-```python
-    # Register Google Workspace tool if enabled
-    if settings.gws.enabled:
-        import shutil
-        from odigos.tools.gws import GWSTool
-
-        if shutil.which("gws"):
-            gws_tool = GWSTool(timeout=settings.gws.timeout)
-            tool_registry.register(gws_tool)
-            logger.info("Google Workspace tool initialized (gws CLI)")
-        else:
-            logger.warning(
-                "GWS enabled but gws CLI not found. "
-                "Install: npm install -g @googleworkspace/cli"
-            )
-```
-
-**Step 3: Commit**
-
-```bash
-git add plugins/gws/__init__.py odigos/main.py
-git commit -m "refactor: move Google Workspace from main.py to plugin"
-```
-
----
-
-### Task 9: Convert Browser to plugin
-
-**Files:**
-- Create: `plugins/browser/__init__.py`
-- Modify: `odigos/main.py` (remove Browser block, lines ~249-262)
-
-**Step 1: Create the plugin**
+**Step 3: Create Browser plugin**
 
 Create `plugins/browser/__init__.py`:
 
@@ -796,32 +951,166 @@ def register(ctx):
     logger.info("Agent Browser plugin loaded")
 ```
 
-**Step 2: Remove from main.py**
+**Step 4: Remove from main.py**
 
-Remove the Browser block (lines ~249-262):
+Remove these three blocks from `odigos/main.py`:
 
+1. The SearXNG block (~lines 182-194):
+```python
+    # Add search tool if SearXNG is configured
+    if settings.searxng_url:
+        ...
+```
+
+2. The GWS block (~lines 234-247):
+```python
+    # Register Google Workspace tool if enabled
+    if settings.gws.enabled:
+        ...
+```
+
+3. The Browser block (~lines 249-262):
 ```python
     # Register Agent Browser tool if enabled
     if settings.browser.enabled:
-        import shutil
-        from odigos.tools.browser import BrowserTool
-
-        if shutil.which("agent-browser"):
-            browser_tool = BrowserTool(timeout=settings.browser.timeout)
-            tool_registry.register(browser_tool)
-            logger.info("Agent Browser tool initialized")
-        else:
-            logger.warning(
-                "Browser enabled but agent-browser CLI not found. "
-                "Install: npm install -g @anthropic-ai/agent-browser"
-            )
+        ...
 ```
 
-**Step 3: Commit**
+Also clean up module-level references and shutdown:
+- Remove `_searxng = None` from module-level globals
+- Remove `_searxng` from the `global` declaration in lifespan
+- Remove `if _searxng: await _searxng.close()` from shutdown
+
+**Step 5: Run full tests**
+
+Run: `uv run pytest tests/ -q`
+Expected: All pass
+
+**Step 6: Commit**
 
 ```bash
-git add plugins/browser/__init__.py odigos/main.py
-git commit -m "refactor: move Browser automation from main.py to plugin"
+git add plugins/searxng/__init__.py plugins/gws/__init__.py plugins/browser/__init__.py odigos/main.py
+git commit -m "refactor: move SearXNG, GWS, Browser from main.py to plugins"
+```
+
+---
+
+### Task 9: Convert Telegram to channel plugin
+
+**Files:**
+- Create: `plugins/channels/telegram/__init__.py`
+- Modify: `odigos/main.py` (remove Telegram block and import)
+
+**Step 1: Create the Telegram channel plugin**
+
+Create `plugins/channels/telegram/__init__.py`:
+
+```python
+"""Telegram bot channel plugin.
+
+Registers the Telegram channel when telegram_bot_token is configured.
+Loaded in phase 2 (after AgentService is available).
+"""
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def register(ctx):
+    settings = ctx.config.get("settings")
+    if not settings or not settings.telegram_bot_token:
+        logger.info("Telegram plugin skipped: no telegram_bot_token configured")
+        return
+
+    if not ctx.service:
+        logger.warning("Telegram plugin skipped: AgentService not available (wrong loading phase?)")
+        return
+
+    from odigos.channels.telegram import TelegramChannel
+
+    telegram_channel = TelegramChannel(
+        token=settings.telegram_bot_token,
+        service=ctx.service,
+        mode=settings.telegram.mode,
+        webhook_url=settings.telegram.webhook_url,
+    )
+    ctx.register_channel("telegram", telegram_channel)
+    logger.info("Telegram channel plugin loaded")
+```
+
+**Step 2: Refactor TelegramChannel to use AgentService**
+
+In `odigos/channels/telegram.py`, change the constructor and all references:
+
+Replace the import and constructor:
+
+```python
+from odigos.core.agent import Agent
+```
+becomes:
+```python
+from odigos.core.agent_service import AgentService
+```
+
+Replace `__init__`:
+```python
+    def __init__(
+        self,
+        token: str,
+        service: AgentService,
+        mode: str = "polling",
+        webhook_url: str = "",
+    ) -> None:
+        self.token = token
+        self.service = service
+        self.mode = mode
+        self.webhook_url = webhook_url
+        self._app: Application | None = None
+```
+
+Then update all method bodies:
+- `self.agent.handle_message(message)` -> `self.service.handle_message(message)`
+- `self.goal_store.list_goals()` -> `self.service.list_goals()`
+- `self.goal_store.list_todos()` -> `self.service.list_todos()`
+- `self.goal_store.list_reminders()` -> `self.service.list_reminders()`
+- `self.goal_store.cancel(...)` -> `self.service.cancel_item(...)`
+- `self.budget_tracker.check_budget()` -> `self.service.check_budget()`
+- `self.approval_gate.resolve(...)` -> `self.service.resolve_approval(...)`
+- `self.agent.heartbeat.paused = True` -> `self.service.pause_heartbeat()`
+- `self.agent.heartbeat.paused = False` -> `self.service.resume_heartbeat()`
+- `self.agent.heartbeat.paused` (read) -> `self.service.heartbeat_paused`
+- `self.agent.heartbeat` (truthiness check) -> `self.service.heartbeat_paused is not None`
+
+**Step 3: Remove Telegram block from main.py**
+
+Remove:
+```python
+from odigos.channels.telegram import TelegramChannel
+```
+from the imports.
+
+Remove the Telegram initialization block:
+```python
+    # Initialize Telegram channel (optional — skipped if no token)
+    if settings.telegram_bot_token:
+        telegram_channel = TelegramChannel(
+            ...
+        )
+        channel_registry.register("telegram", telegram_channel)
+    else:
+        logger.warning("No TELEGRAM_BOT_TOKEN set — Telegram channel disabled")
+```
+
+**Step 4: Run full tests**
+
+Run: `uv run pytest tests/ -q`
+Expected: All pass
+
+**Step 5: Commit**
+
+```bash
+git add plugins/channels/telegram/__init__.py odigos/channels/telegram.py odigos/main.py
+git commit -m "refactor: convert Telegram channel to plugin using AgentService"
 ```
 
 ---
@@ -836,7 +1125,7 @@ Expected: All pass
 **Step 2: Verify no dead imports**
 
 Run: `grep -r "from odigos.core.peers" odigos/ tests/` — should return nothing
-Run: `grep -r "_searxng" odigos/main.py` — should return nothing (removed)
+Run: `grep -r "_searxng" odigos/main.py` — should return nothing
 
 **Step 3: Verify plugins load**
 
@@ -844,11 +1133,14 @@ Run: `uv run python -c "
 from odigos.core.plugins import PluginManager
 from odigos.core.plugin_context import PluginContext
 from odigos.tools.registry import ToolRegistry
-pm = PluginManager(plugin_context=PluginContext(tool_registry=ToolRegistry(), config={}))
+from odigos.channels.base import ChannelRegistry
+pm = PluginManager(plugin_context=PluginContext(tool_registry=ToolRegistry(), channel_registry=ChannelRegistry(), config={}))
 pm.load_all('plugins')
-print(f'Loaded {len(pm.loaded_plugins)} plugins: {[p[\"name\"] for p in pm.loaded_plugins]}')
+print(f'Phase 1 plugins: {[p[\"name\"] for p in pm.loaded_plugins]}')
+pm.load_channels('plugins')
+print(f'All plugins: {[p[\"name\"] for p in pm.loaded_plugins]}')
 "`
-Expected: Lists docling, searxng (skipped — no settings), gws (skipped), browser (skipped)
+Expected: Lists docling, searxng (skipped), gws (skipped), browser (skipped) in phase 1; telegram (skipped — no service) in phase 2
 
 **Step 4: Commit if any fixes were needed**
 
@@ -861,13 +1153,19 @@ Expected: Lists docling, searxng (skipped — no settings), gws (skipped), brows
 | `odigos/config.py` | Add FileAccessConfig |
 | `odigos/tools/file.py` | New: FileTool with sandbox |
 | `tests/test_file_tool.py` | New: FileTool tests |
-| `odigos/main.py` | Register FileTool, pass settings to PluginContext, remove SearXNG/GWS/Browser blocks |
 | `odigos/api/conversations.py` | Add export endpoint |
 | `tests/test_conversation_export.py` | New: export tests |
 | `odigos/core/peers.py` | Delete (dead code) |
 | `tests/test_peer_client.py` | Delete (dead tests) |
 | `tests/test_peer_dedup.py` | Delete (dead tests) |
 | `odigos/tools/peer.py` | Fix type hint to AgentClient |
+| `odigos/core/agent_service.py` | New: AgentService facade |
+| `tests/test_agent_service.py` | New: AgentService tests |
+| `odigos/core/plugin_context.py` | Add set_service, service field |
+| `odigos/core/plugins.py` | Add load_channels phase 2 method |
+| `odigos/main.py` | Register FileTool, create AgentService, pass settings to PluginContext, two-phase loading, remove SearXNG/GWS/Browser/Telegram blocks |
+| `odigos/channels/telegram.py` | Refactor to use AgentService instead of individual deps |
 | `plugins/searxng/__init__.py` | New: SearXNG plugin |
 | `plugins/gws/__init__.py` | New: GWS plugin |
 | `plugins/browser/__init__.py` | New: Browser plugin |
+| `plugins/channels/telegram/__init__.py` | New: Telegram channel plugin |
