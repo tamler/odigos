@@ -135,10 +135,10 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.accept()
 
     session_id = uuid.uuid4().hex[:12]
-    conversation_id = f"web:{session_id}"
+    conversation_id = None  # No conversation until first message
 
     web_channel = websocket.app.state.container.web_channel
-    web_channel.register_connection(conversation_id, websocket)
+    web_channel.register_connection(session_id, websocket)
 
     first_message = True
     chat_queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_QUEUED_MESSAGES)
@@ -159,10 +159,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 if client_conv_id and client_conv_id != "new":
                     conversation_id = client_conv_id
                 elif client_conv_id == "new" or not client_conv_id:
-                    conversation_id = f"web:{uuid.uuid4().hex[:16]}"
+                    bus = websocket.app.state.container.message_bus
+                    conversation_id = await bus.create_conversation(channel="web")
 
-                chat_id = conversation_id.split(":", 1)[1] if ":" in conversation_id else conversation_id
-                msg_metadata = {"chat_id": chat_id}
+                # Register WebSocket under the conversation_id for push delivery
+                web_channel.register_connection(conversation_id, websocket)
+
+                msg_metadata = {"conversation_id": conversation_id}
                 if data.get("context"):
                     msg_metadata["context"] = data["context"]
                 msg = UniversalMessage(
@@ -181,6 +184,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         pass  # Client disconnected
 
                 streamed = False
+                streaming_msg_id = uuid.uuid4().hex
 
                 async def send_chunk(text: str) -> None:
                     nonlocal streamed
@@ -190,6 +194,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "type": "chat_chunk",
                             "content": text,
                             "conversation_id": conversation_id,
+                            "message_id": streaming_msg_id,
                         })
                     except Exception:
                         pass  # Client disconnected
@@ -198,6 +203,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 cancel_event = asyncio.Event()
                 user_content = data.get("content", "")
                 recent_turns.append({"role": "user", "content": user_content[:500]})
+                msg_metadata["streaming_msg_id"] = streaming_msg_id
                 response = await agent_service.handle_message(
                     msg, status_callback=send_status, stream_callback=send_chunk,
                     abort_event=cancel_event,
@@ -288,7 +294,6 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.send_json({
             "type": "connected",
             "session_id": session_id,
-            "conversation_id": conversation_id,
         })
 
         # Start the chat message processor
@@ -325,7 +330,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 peer_name = data.get("agent_name", "")
                 if peer_name:
                     # Re-register under peer conversation_id
-                    web_channel.unregister_connection(conversation_id, websocket)
+                    if conversation_id:
+                        web_channel.unregister_connection(conversation_id, websocket)
                     conversation_id = f"peer:{peer_name}"
                     web_channel.register_connection(conversation_id, websocket)
                     await websocket.send_json({
@@ -453,8 +459,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
             elif msg_type == "subscribe":
                 channels = data.get("channels", [])
+                sub_key = conversation_id or session_id
                 for channel_name in channels:
-                    web_channel.add_subscription(conversation_id, channel_name)
+                    web_channel.add_subscription(sub_key, channel_name)
                 await websocket.send_json({
                     "type": "subscribed",
                     "channels": channels,
@@ -472,4 +479,6 @@ async def websocket_endpoint(websocket: WebSocket):
         for task in background_tasks:
             task.cancel()
         background_tasks.clear()
-        web_channel.unregister_connection(conversation_id, websocket)
+        web_channel.unregister_connection(session_id, websocket)
+        if conversation_id:
+            web_channel.unregister_connection(conversation_id, websocket)

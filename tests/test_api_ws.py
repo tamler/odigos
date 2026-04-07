@@ -39,10 +39,14 @@ def _make_app(api_key: str = "", agent: Optional[MagicMock] = None) -> FastAPI:
     web_channel.unregister_connection = MagicMock()
     web_channel.add_subscription = MagicMock()
 
+    message_bus = MagicMock()
+    message_bus.create_conversation = AsyncMock(return_value="abc123def456")
+
     app.state.container = Container(
         settings=SimpleNamespace(api_key=api_key),
         agent_service=agent_service,
         web_channel=web_channel,
+        message_bus=message_bus,
     )
     return app
 
@@ -82,8 +86,7 @@ class TestAuthValidToken:
             data = ws.receive_json()
             assert data["type"] == "connected"
             assert "session_id" in data
-            assert "conversation_id" in data
-            assert data["conversation_id"].startswith("web:")
+            assert "conversation_id" not in data  # No conversation until first message
 
 
 class TestAuthNoKeyConfigured:
@@ -111,16 +114,15 @@ class TestChatMessage:
         with client.websocket_connect("/api/chat?token=test-key") as ws:
             connected = ws.receive_json()
             session_id = connected["session_id"]
-            conversation_id = connected["conversation_id"]
 
             ws.send_json({"type": "chat", "content": "Hi there"})
 
             # First message on a new conversation is conversation_started
             started = ws.receive_json()
             assert started["type"] == "conversation_started"
-            # Chat may generate a new conversation_id (web:16-char-hex)
+            # conversation_id is now a plain UUID from MessageBus
             chat_conv_id = started["conversation_id"]
-            assert chat_conv_id.startswith("web:")
+            assert chat_conv_id == "abc123def456"
 
             response = ws.receive_json()
             assert response["type"] == "chat_response"
@@ -135,18 +137,17 @@ class TestChatMessage:
 
 
 class TestChatConversationId:
-    """Chat auto-generates a conversation_id of the form web:<hex>."""
+    """Chat auto-generates a plain UUID conversation_id via MessageBus."""
 
     def test_chat_auto_generates_conversation_id(self):
         app = _make_app(api_key="test-key")
         client = TestClient(app)
         with client.websocket_connect("/api/chat?token=test-key") as ws:
             data = ws.receive_json()
-            conversation_id = data["conversation_id"]
-            assert conversation_id.startswith("web:")
-            suffix = conversation_id.split(":", 1)[1]
-            assert len(suffix) == 12
-            int(suffix, 16)  # should not raise
+            assert data["type"] == "connected"
+            assert "session_id" in data
+            # conversation_id is NOT in connected event -- only after first message
+            assert "conversation_id" not in data
 
 
 class TestSubscribe:
@@ -157,7 +158,7 @@ class TestSubscribe:
         client = TestClient(app)
         with client.websocket_connect("/api/chat?token=test-key") as ws:
             connected = ws.receive_json()
-            conversation_id = connected["conversation_id"]
+            session_id = connected["session_id"]
 
             ws.send_json({"type": "subscribe", "channels": ["events", "logs"]})
             response = ws.receive_json()
@@ -167,3 +168,7 @@ class TestSubscribe:
 
             web_channel = app.state.container.web_channel
             assert web_channel.add_subscription.call_count == 2
+            # Before any chat, subscription uses session_id as key
+            calls = web_channel.add_subscription.call_args_list
+            assert calls[0][0][0] == session_id
+            assert calls[1][0][0] == session_id

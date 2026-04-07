@@ -118,6 +118,7 @@ class Agent:
 
         # Extract context_metadata from message metadata (set by ws.py)
         context_metadata = message.metadata.get("context") if message.metadata else None
+        streaming_msg_id = message.metadata.get("streaming_msg_id") if message.metadata else None
 
         # Session serialization -- one turn at a time per session
         lock = self._get_session_lock(conversation_id)
@@ -132,6 +133,7 @@ class Agent:
                 plan_context=plan_context,
                 background_model=background_model,
                 recent_turns=recent_turns,
+                streaming_msg_id=streaming_msg_id,
             )
 
     async def _run(
@@ -147,6 +149,7 @@ class Agent:
         plan_context: str = "",
         background_model: str = "",
         recent_turns: list[dict] | None = None,
+        streaming_msg_id: str | None = None,
     ) -> str:
         """Execute the agent loop with timeout."""
         await self.message_bus.publish(
@@ -249,6 +252,7 @@ class Agent:
             result.response,
             user_message=message.content,
             channel=message.channel,
+            message_id=streaming_msg_id,
         )
 
         if self.tracer:
