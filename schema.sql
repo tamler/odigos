@@ -73,7 +73,10 @@ CREATE TABLE IF NOT EXISTS entities (
     summary TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now')),
-    source TEXT
+    source TEXT,
+    source_type TEXT,
+    source_id TEXT,
+    content_hash TEXT
 );
 
 CREATE TABLE IF NOT EXISTS edges (
@@ -148,6 +151,16 @@ CREATE TRIGGER IF NOT EXISTS memory_entries_au AFTER UPDATE ON memory_entries BE
     INSERT INTO memory_fts(rowid, content_preview, when_to_use)
     VALUES (new.rowid, new.content_preview, new.when_to_use);
 END;
+
+CREATE TABLE IF NOT EXISTS pending_wiki_writes (
+    id TEXT PRIMARY KEY,
+    entity_id TEXT,
+    fact_id TEXT,
+    operation TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_wiki_created ON pending_wiki_writes(created_at);
 
 -- ════════════════════════════════════════════════════════════════════
 -- TASKS, GOALS, SCHEDULING
@@ -784,6 +797,9 @@ CREATE TABLE IF NOT EXISTS user_facts (
     fact TEXT NOT NULL,
     category TEXT DEFAULT 'general',
     source TEXT DEFAULT 'extracted',
+    source_type TEXT,
+    source_id TEXT,
+    content_hash TEXT,
     confidence REAL DEFAULT 0.8,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
