@@ -1,6 +1,6 @@
-DROP TABLE IF EXISTS tasks;
+-- DROP TABLE IF EXISTS tasks;  -- removed: tasks table now managed by schema.sql
 
-CREATE TABLE goals (
+CREATE TABLE IF NOT EXISTS goals (
     id TEXT PRIMARY KEY,
     description TEXT NOT NULL,
     status TEXT DEFAULT 'active',
@@ -10,7 +10,7 @@ CREATE TABLE goals (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE todos (
+CREATE TABLE IF NOT EXISTS todos (
     id TEXT PRIMARY KEY,
     description TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
@@ -23,7 +23,7 @@ CREATE TABLE todos (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE reminders (
+CREATE TABLE IF NOT EXISTS reminders (
     id TEXT PRIMARY KEY,
     description TEXT NOT NULL,
     due_at TEXT NOT NULL,
@@ -34,7 +34,7 @@ CREATE TABLE reminders (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_goals_status ON goals(status);
+CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
 CREATE INDEX idx_todos_status ON todos(status);
 CREATE INDEX idx_todos_scheduled ON todos(scheduled_at);
 CREATE INDEX idx_reminders_status ON reminders(status);
