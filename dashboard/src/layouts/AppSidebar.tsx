@@ -223,7 +223,7 @@ export const AppSidebar = memo(({
               </div>
             ) : (
               filteredConversations.length === 0 ? (
-                <div className="px-3 py-6 mt-4 text-center text-xs text-muted-foreground italic">No conversations found</div>
+                searchQuery ? <div className="px-3 py-6 mt-4 text-center text-xs text-muted-foreground italic">No conversations found</div> : null
               ) : (
                 filteredConversations.map((c: any) => (
                   <div key={c.id} className="group relative mb-0.5" onMouseEnter={() => handleConversationHover(c.id)} onMouseLeave={handleConversationHoverEnd}>
