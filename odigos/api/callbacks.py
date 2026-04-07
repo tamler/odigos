@@ -92,7 +92,7 @@ async def handle_callback(task_id: str, request: Request):
                 if conversation_id:
                     import uuid
                     await db.execute(
-                        "INSERT INTO messages (id, conversation_id, role, content, created_at) "
+                        "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
                         "VALUES (?, ?, 'system', ?, datetime('now'))",
                         (str(uuid.uuid4()), conversation_id,
                          f"[Background task completed] {result.data}"),

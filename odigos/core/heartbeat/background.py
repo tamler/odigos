@@ -57,7 +57,7 @@ async def poll_pending_tasks(hb) -> bool:
                 # Inject system message into conversation
                 if conversation_id:
                     await hb.db.execute(
-                        "INSERT INTO messages (id, conversation_id, role, content, created_at) "
+                        "INSERT INTO messages (id, conversation_id, role, content, timestamp) "
                         "VALUES (?, ?, 'system', ?, datetime('now'))",
                         (str(uuid.uuid4()), conversation_id,
                          f"[Background task completed] {result.data}"),
