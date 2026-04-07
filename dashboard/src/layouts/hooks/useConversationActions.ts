@@ -88,7 +88,7 @@ export function useConversationActions() {
 
   const displayTitle = useCallback((c: Conversation): string => {
     if (c.title) return c.title
-    const raw = c.last_message_at || c.started_at
+    const raw = c.last_message_at || c.created_at
     if (!raw) return 'New chat'
     const date = new Date(raw + 'Z')
     return `Chat ${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`

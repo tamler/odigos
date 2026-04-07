@@ -50,9 +50,9 @@ export function QuickSwitcher({ open, onOpenChange }: { open: boolean; onOpenCha
       const all: SearchResult[] = [
         ...convs.conversations.map(c => ({
           id: c.id,
-          title: c.title || `Chat ${new Date(c.started_at).toLocaleDateString()}`,
+          title: c.title || `Chat ${new Date(c.created_at).toLocaleDateString()}`,
           type: 'conversation' as const,
-          updated_at: c.last_message_at || c.started_at
+          updated_at: c.last_message_at || c.created_at
         })),
         ...notes.notebooks
           .filter((n: any) => n.title.toLowerCase().includes(lowerQ))

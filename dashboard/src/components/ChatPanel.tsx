@@ -147,7 +147,7 @@ export const ChatPanel = memo(({
           msgRes.value.messages.map((m) => ({
             role: m.role as 'user' | 'assistant',
             content: m.content,
-            timestamp: m.timestamp,
+            timestamp: m.created_at,
           }))
         )
       }

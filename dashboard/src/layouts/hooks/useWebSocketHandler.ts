@@ -54,16 +54,33 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
         }
         if (msg.type === 'chat_chunk') {
           if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
+          const msgId = msg.message_id as string | undefined
+          // Drop late chunks for already-finalized messages
+          const currentStreamId = useChatStore.getState().streamingMessageId
+          if (msgId && currentStreamId !== null && msgId !== currentStreamId) return
           chat.setThinking(false)
           chat.setStatus(null)
           const chunk = msg.content as string
 
           if (!useChatStore.getState().isStreaming) {
-            // First chunk: create assistant message (addMessage sets isStreaming atomically)
-            chat.addMessage({ role: 'assistant', content: chunk, timestamp: new Date().toISOString() })
+            chat.addMessage({ role: 'assistant', content: chunk, timestamp: new Date().toISOString() }, msgId)
           } else {
-            // Subsequent chunks: append to the existing message
             chat.appendToLastMessage(chunk)
+          }
+        }
+        if (msg.type === 'message') {
+          if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
+          const msgId = msg.id as string
+          // If this matches the streaming message, finalize it
+          if (msgId && useChatStore.getState().streamingMessageId === msgId) {
+            chat.finalizeStreaming(msg.content as string)
+          } else {
+            // Non-streaming message from bus (system, notification, background result)
+            chat.addMessage({
+              role: msg.role as 'user' | 'assistant' | 'system',
+              content: msg.content as string,
+              timestamp: (msg.created_at as string) || new Date().toISOString(),
+            })
           }
         }
         if (msg.type === 'chat_response') {
@@ -112,7 +129,7 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
             if (prev.find(c => c.id === convId)) return prev
             return [{
               id: convId,
-              started_at: new Date().toISOString(),
+              created_at: new Date().toISOString(),
               last_message_at: new Date().toISOString(),
               title: null,
               message_count: 1,
@@ -146,14 +163,6 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           const resultText = msg.result as string || 'Ready'
           toast.success(`${toolLabel} complete: ${resultText}`, { duration: 5000 })
 
-          // Add system message to chat if it's the active conversation
-          if (msg.conversation_id === activeIdRef.current) {
-            chat.setMessages((prev) => [...prev, {
-              role: 'system',
-              content: `[Background task completed] ${resultText}`,
-              timestamp: new Date().toISOString(),
-            }])
-          }
           // Refresh conversation list to update message counts/last activity
           useConversationStore.getState().refreshConversations()
         }
@@ -161,7 +170,31 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
       (isConnected) => {
         const wasConnected = useUIStore.getState().connected
         useUIStore.getState().setConnected(isConnected)
-        if (isConnected && !wasConnected) toast.dismiss()
+        if (isConnected && !wasConnected) {
+          toast.dismiss()
+          // Catch-up: fetch messages since last seen
+          const activeId = activeIdRef.current
+          const messages = useChatStore.getState().messages
+          if (activeId && messages.length > 0) {
+            const lastTimestamp = messages[messages.length - 1].timestamp
+            if (lastTimestamp) {
+              import('@/lib/api').then(({ get }) => {
+                get(`/api/conversations/${activeId}/messages?after=${encodeURIComponent(lastTimestamp)}`).then((data: any) => {
+                  if (data?.messages?.length > 0) {
+                    const chat = useChatStore.getState()
+                    for (const m of data.messages) {
+                      chat.addMessage({
+                        role: m.role,
+                        content: m.content,
+                        timestamp: m.created_at,
+                      })
+                    }
+                  }
+                }).catch(() => {})
+              })
+            }
+          }
+        }
         if (!isConnected && wasConnected) toast('Reconnecting...', { duration: 3000 })
       },
     )

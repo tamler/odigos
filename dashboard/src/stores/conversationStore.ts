@@ -4,7 +4,7 @@ import type { Artifact } from '@/components/ArtifactCard'
 
 interface Conversation {
   id: string
-  started_at: string
+  created_at: string
   last_message_at: string | null
   title?: string | null
   message_count: number
