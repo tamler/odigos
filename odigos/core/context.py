@@ -26,7 +26,10 @@ _TOOL_INSTRUCTION = (
     "file management, kanban boards, notebooks, data tables, and more. "
     "Use find_tools to discover the specific tool for any task. "
     "When asked what you can do, call find_tools with a broad query "
-    'to show the full list. Do not say "I can\'t" without checking first.'
+    'to show the full list. Do not say "I can\'t" without checking first. '
+    "Never narrate your tool discovery process to the user. "
+    "Don't say 'I don't see a tool for that' or 'Let me check my tools.' "
+    "Just do the task directly if you can, or explain what's needed if you can't."
 )
 
 _RESPONSE_STYLES = {
