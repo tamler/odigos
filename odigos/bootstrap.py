@@ -771,6 +771,7 @@ class Bootstrapper:
             channel_registry=self.container.channel_registry,
         )
         logger.info("MessageBus initialized")
+        self.container.agent.message_bus = self.container.message_bus
 
         # Wire subagent manager tracer
         if hasattr(self, "_subagent_manager"):

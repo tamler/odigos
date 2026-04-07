@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from odigos.core.approval import ApprovalGate
     from odigos.core.budget import BudgetTracker
     from odigos.core.classifier import QueryClassifier
+    from odigos.core.message_bus import MessageBus
     from odigos.core.trace import Tracer
     from odigos.memory.corrections import CorrectionsManager
     from odigos.memory.manager import MemoryManager
@@ -63,6 +64,7 @@ class Agent:
         self.tracer = tracer
         self.classifier = classifier
         self.heartbeat = None  # set after construction to avoid circular init
+        self.message_bus: MessageBus | None = None  # set after construction
         self._max_tool_turns = max_tool_turns
         self._run_timeout = run_timeout
         self._session_locks: dict[str, asyncio.Lock] = {}
@@ -147,9 +149,12 @@ class Agent:
         recent_turns: list[dict] | None = None,
     ) -> str:
         """Execute the agent loop with timeout."""
-        await self.db.execute(
-            "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
-            (message.id, conversation_id, "user", message.content),
+        await self.message_bus.publish(
+            conversation_id=conversation_id,
+            role="user",
+            content=message.content,
+            channel=message.channel,
+            message_id=message.id,
         )
 
         # Fire-and-forget structured profile update (bounded by semaphore)
@@ -253,12 +258,6 @@ class Agent:
                 "cost_usd": result.response.cost_usd,
             })
 
-        await self.db.execute(
-            "UPDATE conversations SET last_message_at = datetime('now'), "
-            "message_count = message_count + 2 WHERE id = ?",
-            (conversation_id,),
-        )
-
         # Disk backup -- export conversation to markdown file
         try:
             from odigos.core.data_export import export_conversation
@@ -312,18 +311,12 @@ class Agent:
         return self._session_locks[conversation_id]
 
     async def _get_or_create_conversation(self, message: UniversalMessage) -> str:
-        """Get existing conversation for this chat, or create a new one."""
-        chat_id = message.metadata.get("chat_id", message.sender)
-        lookup_id = f"{message.channel}:{chat_id}"
-
-        existing = await self.db.fetch_one(
-            "SELECT id FROM conversations WHERE id = ?", (lookup_id,)
-        )
-        if existing:
-            return existing["id"]
-
-        await self.db.execute(
-            "INSERT OR IGNORE INTO conversations (id, channel) VALUES (?, ?)",
-            (lookup_id, message.channel),
-        )
-        return lookup_id
+        """Get existing conversation or create a new one via the message bus."""
+        conv_id = message.metadata.get("conversation_id", "")
+        if conv_id:
+            existing = await self.db.fetch_one(
+                "SELECT id FROM conversations WHERE id = ?", (conv_id,)
+            )
+            if existing:
+                return existing["id"]
+        return await self.message_bus.create_conversation(channel=message.channel)
