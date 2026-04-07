@@ -75,6 +75,18 @@ class DocumentIngester:
             (doc_id, text),
         )
 
+        # Archive full content to data/sources/
+        try:
+            from odigos.memory.source_archiver import archive_source
+            await archive_source(
+                content=text,
+                title=filename,
+                url=source_url,
+                content_type="document",
+            )
+        except Exception:
+            logger.debug("Source archival failed for %s", filename)
+
         stored_count = 0
         for chunk_text in chunks:
             scan = _ingest_filter.scan(chunk_text)

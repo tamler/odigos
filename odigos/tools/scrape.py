@@ -71,4 +71,16 @@ class ScrapeTool(BaseTool):
 
         raw_output = "\n".join(lines)
 
+        # Archive source content to data/sources/
+        try:
+            from odigos.memory.source_archiver import archive_source
+            await archive_source(
+                content=page.content,
+                title=page.title or url,
+                url=url,
+                content_type="web_page",
+            )
+        except Exception:
+            logger.debug("Source archival failed for %s", url)
+
         return filter_external_content(raw_output, url)
