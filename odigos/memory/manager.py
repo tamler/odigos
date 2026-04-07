@@ -238,7 +238,7 @@ class MemoryManager:
                     source_type="conversation",
                     source_id=conversation_id,
                 )
-                entity_data["_stored_id"] = entity_id
+                entity_data["_stored_id"] = entity_id.entity_id if hasattr(entity_id, 'entity_id') else str(entity_id)
             except Exception:
                 logger.debug("Entity storage failed for %s", entity_data.get("name"))
 
