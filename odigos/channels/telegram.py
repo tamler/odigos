@@ -88,6 +88,13 @@ class TelegramChannel(Channel):
                 await self._app.stop()
             await self._app.shutdown()
 
+    async def deliver(self, msg_data: dict) -> None:
+        """Telegram is pull-based — MessageBus delivery is a no-op here."""
+
+    def is_reachable(self) -> bool:
+        """Telegram bot is reachable when the application is running."""
+        return self._app is not None and self._app.running
+
     async def send_message(self, chat_id_or_conv: int | str, text: str) -> None:
         """Send a message. Accepts chat_id (int) or conversation_id (str like 'telegram:123')."""
         if not self._app:

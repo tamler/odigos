@@ -33,6 +33,17 @@ class Channel(ABC):
         """Stop the channel and clean up."""
         ...
 
+    @abstractmethod
+    async def deliver(self, msg_data: dict) -> None:
+        """Push a message to connected clients on this channel.
+        Called by MessageBus for every published message."""
+        ...
+
+    @abstractmethod
+    def is_reachable(self) -> bool:
+        """Is at least one client connected on this channel?"""
+        ...
+
     async def send_message(self, conversation_id: str, text: str) -> None:
         """Send a text message to a conversation. Override in subclasses."""
         raise NotImplementedError(f"{type(self).__name__} does not support send_message")

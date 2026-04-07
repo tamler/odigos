@@ -84,6 +84,16 @@ class WebChannel(Channel):
         }
         await self._send_to_connections(conversation_id, payload)
 
+    async def deliver(self, msg_data: dict) -> None:
+        """Push a message to ALL connected WebSocket clients.
+        The bus calls this for every published message — delivery is per-user, not per-conversation."""
+        for cid in list(self._connections.keys()):
+            await self._send_to_connections(cid, msg_data)
+
+    def is_reachable(self) -> bool:
+        """Is at least one WebSocket client connected?"""
+        return bool(self._connections)
+
     async def broadcast_event(self, conversation_id: str, event: dict) -> None:
         if "events" not in self._subscriptions.get(conversation_id, set()):
             return
@@ -101,7 +111,7 @@ class WebChannel(Channel):
 
     def _make_event_handler(self, event_type: str):
         async def handler(et: str, conversation_id: str | None, data: dict) -> None:
-            if not conversation_id or not conversation_id.startswith("web:"):
+            if not conversation_id:
                 return
             await self.broadcast_event(conversation_id, {
                 "type": "event",
