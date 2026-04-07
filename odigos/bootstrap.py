@@ -764,6 +764,14 @@ class Bootstrapper:
         web_channel.setup_tracer_forwarding(self.container.tracer)
         self.container.web_channel = web_channel
 
+        # MessageBus — single interface for all message publishing
+        from odigos.core.message_bus import MessageBus
+        self.container.message_bus = MessageBus(
+            db=db,
+            channel_registry=self.container.channel_registry,
+        )
+        logger.info("MessageBus initialized")
+
         # Wire subagent manager tracer
         if hasattr(self, "_subagent_manager"):
             self._subagent_manager.tracer = self.container.tracer

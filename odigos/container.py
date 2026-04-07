@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from odigos.core.template_index import AgentTemplateIndex
     from odigos.core.trace import Tracer
     from odigos.channels.web import WebChannel
+    from odigos.core.message_bus import MessageBus
     from odigos.db import Database
     from odigos.memory.ingester import DocumentIngester
     from odigos.memory.manager import MemoryManager
@@ -69,6 +70,7 @@ class Container:
     plugin_context: PluginContext | None = None
     channel_registry: ChannelRegistry | None = None
     web_channel: WebChannel | None = None
+    message_bus: MessageBus | None = None
 
     # Core services
     agent: Agent | None = None
