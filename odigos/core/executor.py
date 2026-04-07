@@ -282,15 +282,12 @@ class Executor:
                 recent_turns=recent_turns,
             )
         else:
-            # Legacy path (backward compat)
-            messages = await self.context_assembler.build(
-                conversation_id, message_content,
-                query_analysis=query_analysis,
-                context_metadata=context_metadata,
-            )
-            tools = None
-            if self.tool_registry and self.tool_registry.list():
-                tools = self.tool_registry.tool_definitions()
+            # No plan available — minimal context with find_tools only
+            messages = [
+                {"role": "system", "content": f"You are {self.context_assembler.agent_name}."},
+                {"role": "user", "content": message_content},
+            ]
+            tools = self.tool_registry.tool_definitions() if self.tool_registry else None
 
         # Count context tokens for efficiency tracking
         context_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)

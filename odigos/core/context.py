@@ -12,7 +12,7 @@ from odigos.core.content_filter import ContentFilter
 from odigos.core.profiler import UserProfile, format_profile_for_context
 from odigos.core.prompt_loader import load_prompt
 from odigos.core.queries import get_recent_tool_errors, get_user_facts, get_user_profile
-from odigos.core.relevance import prune_sections
+# prune_sections removed — planner-driven build_planned() replaces pruning
 from odigos.core.routing import load_routing_rules
 from odigos.db import Database
 from odigos.personality.section_registry import SectionRegistry
@@ -613,11 +613,7 @@ class ContextAssembler:
             "page_context": notebook_context,
             "last_interaction": last_interaction,
         }
-        pruned = prune_sections(
-            query=message_content,
-            sections=prunable,
-            classification=classification,
-        )
+        pruned = prunable  # prune_sections removed — pass through all sections
         memory_context = pruned.get("memory_context", "")
         memory_index = pruned.get("memory_index", "")
         skill_catalog = pruned.get("skill_catalog", "")
