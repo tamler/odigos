@@ -72,13 +72,20 @@ export const useChatStore = create<ChatState>((set) => ({
   suggestedActions: [],
   setSuggestedActions: (actions) => set({ suggestedActions: actions }),
   activeConversationId: null,
-  setActiveConversationId: (id) => set({
-    activeConversationId: id,
-    messages: [],
-    isStreaming: false,
-    thinking: false,
-    status: null,
-    suggestedActions: [],
+  setActiveConversationId: (id) => set((state) => {
+    // Only clear messages when SWITCHING to a different conversation.
+    // Setting the ID for the first time (null → id) preserves current messages.
+    const switching = state.activeConversationId !== null && state.activeConversationId !== id
+    return {
+      activeConversationId: id,
+      ...(switching ? {
+        messages: [],
+        isStreaming: false,
+        thinking: false,
+        status: null,
+        suggestedActions: [],
+      } : {}),
+    }
   }),
   isStreaming: false,
 }))
