@@ -8,6 +8,7 @@ import { stripForTTS, shouldPlayTTS } from '@/lib/tts-filter'
 import { useAudio } from '@/hooks/useAudio'
 import { useDriver } from '@/hooks/useDriver'
 import { subscribeToPush } from '@/lib/push'
+import { useNotificationStore } from '@/stores/notificationStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useConversationStore } from '@/stores/conversationStore'
@@ -48,7 +49,6 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
 
           // Add to notification store for Activity page and bar
           if (msg.id) {
-            const { useNotificationStore } = await import('@/stores/notificationStore')
             useNotificationStore.getState().addNotification({
               id: msg.id as string,
               type: (msg.notification_type as string) || 'status',
