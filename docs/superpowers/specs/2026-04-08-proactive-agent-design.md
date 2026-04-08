@@ -33,6 +33,8 @@ All references to "wiki" become "brain" throughout the codebase:
 
 The agent's diary lives in `data/agent/diary.md` (not brain — the diary is agent self-knowledge, not compiled user knowledge).
 
+**No migration.** Clean deploy — drop DB, fresh schema. No legacy wiki references in the codebase.
+
 ### 2. Proactive Engine Pipeline
 
 A new heartbeat phase replacing idle_think. Four stages, each a separate function in `odigos/core/heartbeat/proactive.py`:
@@ -70,12 +72,12 @@ Adding a new source = writing one function and adding it to the list. No pipelin
 
 Static-first prompt: the ranking instruction template is static (cached), the opportunity list is dynamic.
 
-**Stage 3: Execute (headless agent pipeline)**
+**Stage 3: Execute (headless agent pipeline, async)**
 
 - Build a `UniversalMessage` with the opportunity as content, channel="proactive"
-- Call `agent.handle_message(headless=True)` — full agent pipeline with tools, RAG, budget tracking
-- Same path todos use today — proven, timeout-protected
-- The agent can search the web, read documents, query memory — whatever the opportunity needs
+- Call `agent.handle_message(headless=True)` — headless agent pipeline with budget tracking
+- **Runs as `asyncio.create_task()`** — does not block the heartbeat tick. Stages 1-2 (scan + prioritize) run synchronously in the tick; stages 3-4 (execute + publish) run as a detached background task.
+- **Safe tools only:** Proactive execution uses a `PROACTIVE_SAFE_TOOLS` whitelist: `find_tools`, `search`, `scrape`, `lookup_fact`, `knowledge_lookup`, `check_plan`, `read_file`. No send/write/delete tools (no `send_email`, `create_file`, `update_plan`, `run_code`). The whitelist is configurable in config.yaml under `proactive.safe_tools`.
 - Result is a string (the agent's findings/recommendations)
 
 **Stage 4: Publish (BrainWriter + Notification System)**
@@ -123,7 +125,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 
 `type` values: `finding` (proactive research), `suggestion` (actionable recommendation), `status` (task completion), `alert` (system warning).
 
-`reaction` values: `thumbs_up`, `thumbs_down`, `dismiss`, NULL (no reaction yet).
+`reaction` values: `thumbs_up` (more of this), `not_relevant` (explicit negative — less of this), `dismiss` (neutral hide — just clearing the feed), NULL (no reaction yet).
 
 `source` values: `brain_gaps`, `recent_conversations`, `active_goals`, `failed_ideas`, `background_task`, `system`.
 
@@ -203,6 +205,8 @@ created_at: 2026-04-08T05:30:00Z
 
 **write_source()** absorbs `source_archiver.archive_source()`. Same SHA-256 dedup, same frontmatter. The standalone `source_archiver.py` is removed; callers switch to `BrainWriter.write_source()`.
 
+**Staging pattern:** `write_synthesis()` and `append_diary()` follow the same stage-then-commit pattern as entity writes: insert a row into `pending_brain_writes` (operation: `synthesis_created` or `diary_entry`), then brain_maintenance drains to disk. This prevents file corruption from concurrent writes during maintenance cycles.
+
 **append_diary()** writes to `data/agent/diary.md`:
 
 ```markdown
@@ -235,12 +239,12 @@ Reactions from the notifications table calibrate the proactive engine:
 
 **Per-source scoring:**
 - Each proactive output has a `source` tag (brain_gaps, recent_conversations, etc.)
-- thumbs_up = +1, thumbs_down = -1, dismiss = -0.5
+- thumbs_up = +1, not_relevant = -1, dismiss = 0 (neutral — just hides, doesn't penalize)
 - Sources with cumulative score < -2 are suppressed
 - Scores decay: halve every 7 days (so a bad week doesn't permanently kill a scanner)
 
 **Global controls:**
-- 3+ consecutive thumbs_down on ANY source → auto-pause all proactive work for 24 hours
+- 3+ consecutive not_relevant on ANY source → auto-pause all proactive work for 24 hours
 - Config toggle: `proactive.enabled` (UI toggle in settings)
 - Config frequency: `proactive.max_cycles_per_hour` (UI slider: low=1, medium=4, high=8)
 
