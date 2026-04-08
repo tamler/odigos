@@ -80,6 +80,7 @@ class Agent:
             corrections_manager=corrections_manager,
             settings=settings,
             tool_registry=tool_registry,
+            llm_provider=provider,
         )
         self.executor = Executor(
             provider,

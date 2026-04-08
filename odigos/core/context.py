@@ -131,6 +131,7 @@ class ContextAssembler:
         checkpoint_manager: CheckpointManager | None = None,
         settings=None,
         tool_registry=None,
+        llm_provider=None,
     ) -> None:
         self.db = db
         self.agent_name = agent_name
@@ -142,6 +143,7 @@ class ContextAssembler:
         self.checkpoint_manager = checkpoint_manager
         self.settings = settings
         self.tool_registry = tool_registry
+        self._provider = llm_provider
         self.fallback_registry = SectionRegistry(sections_dir)
 
     async def build(
@@ -753,7 +755,7 @@ class ContextAssembler:
 
         if plan.needs.rag and budget > 0:
             queries = plan.search_queries or [message_content]
-            rag = await self._load_rag_for_plan(queries)
+            rag = await self._load_rag_for_plan(queries, token_budget=max(budget, 500))
             if rag:
                 parts.append(rag)
                 budget -= _estimate_section_tokens(rag)
@@ -895,13 +897,13 @@ class ContextAssembler:
         except Exception:
             return ""
 
-    async def _load_rag_for_plan(self, queries: list[str]) -> str:
+    async def _load_rag_for_plan(self, queries: list[str], token_budget: int = 1000) -> str:
         """Load RAG results for given queries."""
         if not self.memory_manager:
             return ""
         try:
             query = " ".join(queries)
-            result = await self.memory_manager.recall(query)
+            result = await self.memory_manager.recall(query, token_budget=token_budget)
             if result:
                 return f'<external_data source="memory">\n{result}\n</external_data>'
             return ""
