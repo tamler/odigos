@@ -19,6 +19,19 @@ logger = logging.getLogger(__name__)
 
 _recall_filter = ContentFilter()
 
+
+def _clean_truncate(text: str, max_tokens: int) -> str:
+    """Truncate at sentence boundary within token budget."""
+    max_chars = max_tokens * 4
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    for sep in ['. ', '.\n', '! ', '!\n', '? ', '?\n']:
+        idx = truncated.rfind(sep)
+        if idx > max_chars // 2:
+            return truncated[:idx + 1].rstrip() + " [... truncated ...]"
+    return truncated.rstrip() + " [... truncated ...]"
+
 _reranker: CrossEncoder | None = None
 
 
@@ -52,7 +65,7 @@ class MemoryManager:
 
     async def _hybrid_search(
         self, query: str, limit: int = 5, k: int = 60,
-        source_type: str | None = None,
+        source_type: str | None = None, strategy: str = "rrf",
     ) -> list:
         """Run vector + FTS5 search and merge via Reciprocal Rank Fusion."""
         from odigos.memory.vectors import MemoryResult
@@ -65,69 +78,181 @@ class MemoryManager:
             query, limit=fetch_limit, source_type=source_type,
         )
 
-        # RRF: score = sum(1 / (k + rank)) across both result lists
-        scores: dict[str, float] = {}
-        result_map: dict[str, MemoryResult] = {}
+        if strategy == "union":
+            # Set union: combine both lists, deduplicate by key
+            all_results: dict[str, MemoryResult] = {}
+            for r in vector_results:
+                key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
+                all_results[key] = r
+            for r in fts_results:
+                key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
+                if key not in all_results:
+                    all_results[key] = r
+            ranked_results = list(all_results.values())[:limit]
+        else:
+            # RRF: score = sum(1 / (k + rank)) across both result lists
+            scores: dict[str, float] = {}
+            result_map: dict[str, MemoryResult] = {}
 
-        for rank, r in enumerate(vector_results):
-            key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
-            scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
-            result_map[key] = r
-
-        for rank, r in enumerate(fts_results):
-            key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
-            scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
-            if key not in result_map:
+            for rank, r in enumerate(vector_results):
+                key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
+                scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
                 result_map[key] = r
 
-        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            for rank, r in enumerate(fts_results):
+                key = f"{r.source_type}:{r.source_id}:{r.content_preview[:100]}"
+                scores[key] = scores.get(key, 0) + 1.0 / (k + rank + 1)
+                if key not in result_map:
+                    result_map[key] = r
 
-        # After RRF ranking, rerank top candidates with cross-encoder
-        if len(ranked) > limit:
+            ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+            # After RRF ranking, rerank top candidates with cross-encoder
+            if len(ranked) > limit:
+                try:
+                    reranker = _get_reranker()
+                    candidates = [
+                        (query, result_map[key].content_preview)
+                        for key, _ in ranked[:limit * 3]
+                    ]
+                    scores_ce = reranker.predict(candidates)
+                    sorted_pairs = sorted(
+                        zip(scores_ce, [result_map[key] for key, _ in ranked[:limit * 3]]),
+                        key=lambda x: x[0],
+                        reverse=True,
+                    )
+                    # Store cross-encoder scores on results
+                    for score, result in sorted_pairs:
+                        result.cross_encoder_score = score
+                    ranked_results = [result for _, result in sorted_pairs[:limit]]
+                except Exception:
+                    # Fall back to RRF ranking if reranker fails
+                    ranked_results = [result_map[key] for key, _score in ranked[:limit]]
+            else:
+                ranked_results = [result_map[key] for key, _score in ranked[:limit]]
+
+        return ranked_results
+
+    async def _bulk_fetch_full_text(self, source_ids: list[str]) -> dict[str, str]:
+        """Fetch full text for multiple source IDs in one query."""
+        if not source_ids or not self.db:
+            return {}
+        placeholders = ",".join("?" * len(source_ids))
+        result: dict[str, str] = {}
+        # Try document_text table first
+        try:
+            rows = await self.db.fetch_all(
+                f"SELECT document_id, full_text FROM document_text "
+                f"WHERE document_id IN ({placeholders})",
+                tuple(source_ids),
+            )
+            for r in rows:
+                result[r["document_id"]] = r["full_text"]
+        except Exception:
+            pass
+        # Try messages table for conversation memories
+        missing = [sid for sid in source_ids if sid not in result]
+        if missing:
             try:
-                reranker = _get_reranker()
-                candidates = [(query, result_map[key].content_preview) for key, _ in ranked[:limit * 3]]
-                scores_ce = reranker.predict(candidates)
-                reranked = sorted(zip(ranked[:limit * 3], scores_ce), key=lambda x: x[1], reverse=True)
-                return [result_map[key] for (key, _), _score in reranked[:limit]]
+                placeholders2 = ",".join("?" * len(missing))
+                rows = await self.db.fetch_all(
+                    f"SELECT conversation_id, group_concat(content, '\n') as full "
+                    f"FROM messages WHERE conversation_id IN ({placeholders2}) "
+                    f"GROUP BY conversation_id",
+                    tuple(missing),
+                )
+                for r in rows:
+                    result[r["conversation_id"]] = r["full"]
             except Exception:
-                # Fall back to RRF ranking if reranker fails
                 pass
+        return result
 
-        return [result_map[key] for key, _score in ranked[:limit]]
+    def _format_result_line(self, result, is_doc: bool = False) -> str:
+        """Format a single result, using expanded_content if available."""
+        content = getattr(result, 'expanded_content', None) or result.content_preview
+        if is_doc:
+            source_hint = ""
+            if result.when_to_use and "from '" in result.when_to_use:
+                source_hint = result.when_to_use.split("from '")[1].split("'")[0]
+            citation = f"[{source_hint}]" if source_hint else f"[doc:{result.source_id[:8]}]"
+            return f"- {citation} {content}"
+        return f"- {content}"
 
-    async def recall(self, query: str, limit: int = 5) -> str:
+    async def recall(self, query: str, limit: int = 5, token_budget: int = 2000) -> str:
         """Recall relevant memories for the given query.
 
         Searches documents and conversations separately to prevent chat
         messages from drowning out document knowledge.
         Returns a formatted context string for injection into the prompt.
+
+        High-relevance results (cross-encoder score > threshold) get full
+        content loaded from DB within the token budget; low-relevance results
+        stay as 500-char summaries.
         """
+        EXPANSION_THRESHOLD = 0.4
+        MAX_EXPANSIONS = 3
+
         sections = []
 
         # 1. Document knowledge (from uploaded/ingested files)
         doc_results = await self._hybrid_search(
             query, limit=max(limit, 10), source_type="document_chunk",
         )
-        doc_lines = []
-        for result in doc_results:
-            source_hint = ""
-            if result.when_to_use and "from '" in result.when_to_use:
-                source_hint = result.when_to_use.split("from '")[1].split("'")[0]
-            citation = f"[{source_hint}]" if source_hint else f"[doc:{result.source_id[:8]}]"
-            doc_lines.append(f"- {citation} {result.content_preview}")
 
-        if doc_lines:
-            header = "## Document knowledge (cite sources in your response)" if self._cite_sources else "## Document knowledge"
-            sections.append(header + "\n" + "\n".join(doc_lines))
+        # Split document results into tiers
+        doc_tier2 = []
+        doc_tier1 = []
+        for r in doc_results:
+            score = getattr(r, 'cross_encoder_score', 0)
+            if score > EXPANSION_THRESHOLD and len(doc_tier2) < MAX_EXPANSIONS:
+                doc_tier2.append(r)
+            else:
+                doc_tier1.append(r)
 
         # 2. Conversation memory (from past user messages)
         conv_results = await self._hybrid_search(
             query, limit=limit, source_type="user_message",
         )
+
+        # Split conversation results into tiers
+        conv_tier2 = []
+        conv_tier1 = []
+        for r in conv_results:
+            score = getattr(r, 'cross_encoder_score', 0)
+            if score > EXPANSION_THRESHOLD and len(conv_tier2) < MAX_EXPANSIONS:
+                conv_tier2.append(r)
+            else:
+                conv_tier1.append(r)
+
+        # Load full content for all Tier 2 results
+        all_tier2 = doc_tier2 + conv_tier2
+        if all_tier2:
+            tier2_budget = token_budget // 2
+            source_ids = [r.source_id for r in all_tier2]
+            full_texts = await self._bulk_fetch_full_text(source_ids)
+            per_item_budget = tier2_budget // max(len(all_tier2), 1)
+            for r in all_tier2:
+                full = full_texts.get(r.source_id)
+                if full:
+                    r.expanded_content = _clean_truncate(full, per_item_budget)
+
+        # Format document results
+        doc_lines = []
+        for result in doc_tier2 + doc_tier1:
+            doc_lines.append(self._format_result_line(result, is_doc=True))
+
+        if doc_lines:
+            header = (
+                "## Document knowledge (cite sources in your response)"
+                if self._cite_sources
+                else "## Document knowledge"
+            )
+            sections.append(header + "\n" + "\n".join(doc_lines))
+
+        # Format conversation results
         conv_lines = []
-        for result in conv_results:
-            conv_lines.append(f"- {result.content_preview}")
+        for result in conv_tier2 + conv_tier1:
+            conv_lines.append(self._format_result_line(result, is_doc=False))
 
         if conv_lines:
             sections.append("## Conversation history\n" + "\n".join(conv_lines))
