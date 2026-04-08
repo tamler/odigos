@@ -22,6 +22,7 @@ async def call_llm(
     temperature: float = 0.4,
     log_name: str = "llm_call",
     retries: int = 1,
+    response_format=None,
 ):
     """Standard LLM call with retry on transient errors and logging.
 
@@ -31,10 +32,10 @@ async def call_llm(
 
     for attempt in range(retries + 1):
         try:
-            response = await provider.complete(
-                messages, model=use_model,
-                max_tokens=max_tokens, temperature=temperature,
-            )
+            kwargs = {"model": use_model, "max_tokens": max_tokens, "temperature": temperature}
+            if response_format:
+                kwargs["response_format"] = response_format
+            response = await provider.complete(messages, **kwargs)
             logger.debug(
                 "%s: %d in / %d out / $%.5f",
                 log_name, response.tokens_in, response.tokens_out, response.cost_usd,
@@ -62,6 +63,7 @@ async def run_prompt(
     model: str | None = None,
     max_tokens: int = 800,
     temperature: float = 0.4,
+    response_format=None,
 ) -> dict | None:
     """Load a prompt template, format it, call the LLM, parse JSON response.
 
@@ -77,7 +79,7 @@ async def run_prompt(
     response = await call_llm(
         provider, [{"role": "user", "content": prompt_text}],
         model=model, max_tokens=max_tokens, temperature=temperature,
-        log_name=f"prompt:{prompt_name}",
+        log_name=f"prompt:{prompt_name}", response_format=response_format,
     )
     if response is None:
         return None
