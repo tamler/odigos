@@ -44,6 +44,7 @@ class Bootstrapper:
         Path("data/brain/topics").mkdir(parents=True, exist_ok=True)
         Path("data/brain/conversations").mkdir(parents=True, exist_ok=True)
         Path("data/brain/synthesis").mkdir(parents=True, exist_ok=True)
+        Path("data/agent").mkdir(parents=True, exist_ok=True)
 
         self.container.env_path = ".env"
         self.container.upload_dir = str(FILES_DIR)
@@ -925,6 +926,7 @@ class Bootstrapper:
             tool_registry=self.container.tool_registry,
             message_bus=self.container.message_bus,
         )
+        heartbeat._proactive_config = self.settings.proactive
         self.container.agent.heartbeat = heartbeat
         self.container.heartbeat = heartbeat
 
