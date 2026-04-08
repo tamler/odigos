@@ -1,7 +1,7 @@
-"""Parse wiki files to reconstruct DB tables on empty startup.
+"""Parse brain files to reconstruct DB tables on empty startup.
 
-The wiki is the durable human-readable knowledge base. When the DB is lost,
-these functions rebuild the operational tables from the wiki files generated
+The brain is the durable human-readable knowledge base. When the DB is lost,
+these functions rebuild the operational tables from the brain files generated
 by wiki_writer.py and source_archiver.py.
 """
 from __future__ import annotations
@@ -211,8 +211,8 @@ def _parse_source_frontmatter(filepath: Path) -> dict | None:
     }
 
 
-async def rebuild_from_wiki(db, wiki_dir: Path) -> dict:
-    """Rebuild DB tables from wiki files.
+async def rebuild_from_brain(db, brain_dir: Path) -> dict:
+    """Rebuild DB tables from brain files.
 
     Returns stats dict: {"entities": N, "facts": N, "edges": N, "sources": N}
     """
@@ -223,7 +223,7 @@ async def rebuild_from_wiki(db, wiki_dir: Path) -> dict:
     name_to_id: dict[str, str] = {}
 
     # 1. Parse entity pages
-    entities_dir = wiki_dir / "entities"
+    entities_dir = brain_dir / "entities"
     if entities_dir.exists():
         for filepath in sorted(entities_dir.glob("*.md")):
             try:
@@ -260,7 +260,7 @@ async def rebuild_from_wiki(db, wiki_dir: Path) -> dict:
                     "INSERT OR IGNORE INTO user_facts "
                     "(id, fact, category, source, source_type, source_id, "
                     "confidence, created_at, updated_at) "
-                    "VALUES (?, ?, 'general', 'wiki_rebuild', ?, ?, ?, ?, ?)",
+                    "VALUES (?, ?, 'general', 'brain_rebuild', ?, ?, ?, ?, ?)",
                     (
                         fact_id,
                         fact["fact"],
@@ -298,7 +298,7 @@ async def rebuild_from_wiki(db, wiki_dir: Path) -> dict:
                     stats["edges"] += 1
 
     # 2. Parse topic indexes for ungraduated entities
-    topics_dir = wiki_dir / "topics"
+    topics_dir = brain_dir / "topics"
     if topics_dir.exists():
         for filepath in sorted(topics_dir.glob("*.md")):
             try:
@@ -321,7 +321,7 @@ async def rebuild_from_wiki(db, wiki_dir: Path) -> dict:
                 stats["entities"] += 1
 
     # 5. Parse source files
-    sources_dir = wiki_dir.parent / "sources"
+    sources_dir = brain_dir.parent / "sources"
     if sources_dir.exists():
         for filepath in sorted(sources_dir.glob("*.md")):
             source = _parse_source_frontmatter(filepath)
@@ -337,7 +337,7 @@ async def rebuild_from_wiki(db, wiki_dir: Path) -> dict:
             stats["sources"] += 1
 
     logger.info(
-        "Wiki rebuild complete: %d entities, %d facts, %d edges, %d sources",
+        "Brain rebuild complete: %d entities, %d facts, %d edges, %d sources",
         stats["entities"],
         stats["facts"],
         stats["edges"],

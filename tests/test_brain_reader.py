@@ -1,4 +1,4 @@
-"""Tests for wiki_reader: parse wiki files and rebuild DB tables."""
+"""Tests for brain_reader: parse brain files and rebuild DB tables."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from odigos.memory.wiki_reader import parse_entity_page, parse_topic_index, rebuild_from_wiki
+from odigos.memory.brain_reader import parse_entity_page, parse_topic_index, rebuild_from_brain
 from tests.conftest import FakeDB
 
 try:
@@ -207,13 +207,13 @@ def test_parse_relationships(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_rebuild_from_wiki(tmp_path: Path):
-    """Full integration: create a mini wiki, rebuild DB, verify row counts."""
-    # Set up wiki directory structure
-    wiki_dir = tmp_path / "wiki"
-    entities_dir = wiki_dir / "entities"
-    topics_dir = wiki_dir / "topics"
-    sources_dir = tmp_path / "sources"  # wiki_dir.parent / "sources"
+async def test_rebuild_from_brain(tmp_path: Path):
+    """Full integration: create a mini brain, rebuild DB, verify row counts."""
+    # Set up brain directory structure
+    brain_dir = tmp_path / "brain"
+    entities_dir = brain_dir / "entities"
+    topics_dir = brain_dir / "topics"
+    sources_dir = tmp_path / "sources"  # brain_dir.parent / "sources"
     entities_dir.mkdir(parents=True)
     topics_dir.mkdir(parents=True)
     sources_dir.mkdir(parents=True)
@@ -322,7 +322,7 @@ async def test_rebuild_from_wiki(tmp_path: Path):
         """)
         await conn.commit()
 
-        stats = await rebuild_from_wiki(db, wiki_dir)
+        stats = await rebuild_from_brain(db, brain_dir)
 
         # 1 entity page (Jacob) + 1 stub (Odigos from relationship) + 2 from topic index
         # = 4 entities total

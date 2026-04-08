@@ -75,14 +75,14 @@ class Database:
         await self._evolve_schema()
         await self.run_migrations()
 
-        # Check if DB is empty but wiki files exist — trigger rebuild
-        await self._maybe_rebuild_from_wiki()
+        # Check if DB is empty but brain files exist — trigger rebuild
+        await self._maybe_rebuild_from_brain()
 
-    async def _maybe_rebuild_from_wiki(self) -> None:
-        """If DB has no entities but data/wiki/ has files, rebuild from wiki."""
+    async def _maybe_rebuild_from_brain(self) -> None:
+        """If DB has no entities but data/brain/ has files, rebuild from brain."""
         from pathlib import Path
-        wiki_dir = Path("data/wiki")
-        if not wiki_dir.exists():
+        brain_dir = Path("data/brain")
+        if not brain_dir.exists():
             return
 
         # Check if DB already has data
@@ -93,19 +93,19 @@ class Database:
         except Exception:
             return  # Table might not exist yet
 
-        # Check if wiki has content
-        entity_files = list(wiki_dir.glob("entities/*.md"))
-        topic_files = list(wiki_dir.glob("topics/*.md"))
+        # Check if brain has content
+        entity_files = list(brain_dir.glob("entities/*.md"))
+        topic_files = list(brain_dir.glob("topics/*.md"))
         if not entity_files and not topic_files:
             return
 
-        logger.info("Empty DB with existing wiki files — rebuilding from wiki...")
+        logger.info("Empty DB with existing brain files — rebuilding from brain...")
         try:
-            from odigos.memory.wiki_reader import rebuild_from_wiki
-            stats = await rebuild_from_wiki(self, wiki_dir)
-            logger.info("Wiki rebuild complete: %s", stats)
+            from odigos.memory.brain_reader import rebuild_from_brain
+            stats = await rebuild_from_brain(self, brain_dir)
+            logger.info("Brain rebuild complete: %s", stats)
         except Exception:
-            logger.exception("Wiki rebuild failed")
+            logger.exception("Brain rebuild failed")
 
     async def close(self) -> None:
         """Close the database connection."""
