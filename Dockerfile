@@ -51,6 +51,8 @@ ARG CACHE_BUST=0
 # Copy application code
 COPY odigos/ odigos/
 COPY --from=dashboard-builder /dashboard/dist/ dashboard/dist/
+COPY schema.sql .
+COPY config.yaml.example .
 COPY migrations/ migrations/
 COPY plugins/ plugins/
 COPY skills/ skills/
