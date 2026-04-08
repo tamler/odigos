@@ -70,6 +70,17 @@ class HeartbeatConfig(BaseModel):
     morning_briefing: bool = True
 
 
+class ProactiveConfig(BaseModel):
+    enabled: bool = True
+    interval_seconds: int = 900
+    max_cycles_per_hour: int = 4
+    max_per_cycle: int = 1
+    safe_tools: list[str] = [
+        "find_tools", "search", "scrape", "lookup_fact",
+        "knowledge_lookup", "check_plan", "read_file",
+    ]
+
+
 class SandboxConfig(BaseModel):
     timeout_seconds: int = 5
     max_memory_mb: int = 512
@@ -261,6 +272,7 @@ class Settings(BaseSettings):
     budget: BudgetConfig = BudgetConfig()
     skills: SkillsConfig = SkillsConfig()
     heartbeat: HeartbeatConfig = HeartbeatConfig()
+    proactive: ProactiveConfig = ProactiveConfig()
     sandbox: SandboxConfig = SandboxConfig()
     mcp: MCPConfig = MCPConfig()
     gws: GWSConfig = GWSConfig()
