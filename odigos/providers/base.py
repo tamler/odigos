@@ -20,6 +20,7 @@ class LLMResponse:
     cost_usd: float
     generation_id: str | None = None
     tool_calls: list[ToolCall] | None = None
+    cached_tokens: int = 0
 
 
 class LLMProvider(ABC):
