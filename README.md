@@ -25,7 +25,7 @@
 
 Most AI assistants are stateless -- every conversation starts from scratch. Odigos is different:
 
-- **It remembers.** Three-layer memory: explicit facts you tell it ("I prefer Python"), a user profile it builds by analyzing your conversations while idle, and long-term conversation memory with vector search and entity graphs. It knows who you are, not just what you said.
+- **It remembers.** Durable knowledge persistence: wiki-style markdown files that survive database drops, structured entity/fact extraction on every conversation turn, provenance tracking (every fact links back to where it was learned), and a background lint pass that audits for stale claims and contradictions. It knows who you are, not just what you said.
 - **It improves itself.** A built-in evolution engine evaluates every response, runs experiments on its own behavior, and promotes changes that work. No manual prompt tuning.
 - **It builds its own tools.** When the agent writes code that solves a problem, it can save it as a reusable executable skill. Next time a similar problem comes up, the tool is already there.
 - **It understands complex requests.** An adaptive classifier routes simple questions fast and decomposes complex ones into sub-tasks. The agent tracks its plan, learns from errors, and gets better at routing over time.
@@ -253,25 +253,37 @@ When all steps are done, the plan outcome is evaluated: did the plan achieve its
   <img src="docs/images/memory-system-v2.jpg" alt="Memory System" width="80%">
 </p>
 
-Odigos has a five-layer memory architecture. Each layer serves a different purpose and operates at a different timescale.
+Odigos has a durable, layered memory architecture. Knowledge persists in markdown files on disk (surviving database drops) while the database provides fast operational access.
 
-### Layer 1: Conversation History
-The most immediate layer. Every message (user and assistant) is stored in SQLite with timestamps, conversation IDs, and token counts. The context assembler loads recent history and injects conversation summaries for older exchanges. When conversations grow long, the summarizer compresses old messages into paragraph-length summaries that preserve key decisions and context.
+### Durable Layer: Wiki Files
+Compiled knowledge lives in `data/wiki/` as structured markdown with YAML frontmatter. Entity pages, topic indexes, and conversation summaries are written by the heartbeat and can rebuild the database from scratch if it's lost. External content (scraped pages, documents) is archived as cleaned markdown in `data/sources/` -- immutable, with SHA-256 dedup.
 
-### Layer 2: Vector Memory (RAG)
-All conversation messages and uploaded documents are chunked, embedded (nomic-embed-text-v1.5, local CPU), and stored in sqlite-vec for vector search. On every query, the memory manager runs hybrid retrieval: vector similarity search + FTS5 full-text search, then re-ranks results with a cross-encoder model (ms-marco-MiniLM). This gives the agent access to relevant information from any past conversation or document without loading everything into context.
+### Structured Extraction
+Every conversation turn runs a dedicated extraction pass (separate from the main response) that identifies entities, facts, and relationships in structured JSON. This replaces fragile inline parsing with guaranteed extraction via the LLM's structured output mode. Facts are SHA-256 deduped at write time; semantic dedup runs in periodic lint passes.
 
-### Layer 3: Explicit Facts
-When the user says "remember that I prefer Python" or "I'm allergic to shellfish," the agent stores discrete facts in a dedicated `user_facts` table via the `remember_fact` tool. Facts have categories, timestamps, and are injected into every conversation's system prompt. Unlike RAG recall, facts are always present -- they don't depend on semantic similarity to the current query.
+### Provenance
+Every entity and fact tracks where it came from -- conversation ID, document ID, or scraped source. Wiki files render these as inline citations. The lint pass validates that referenced sources still exist.
 
-### Layer 4: User Profile (Dreaming)
-During idle heartbeat cycles, the agent "dreams" -- analyzing recent conversations to build a structured user profile. This captures communication style, expertise areas, preferences, and engagement patterns. The profile is built automatically without the user explicitly stating anything. Inspired by [Honcho](https://github.com/plastic-labs/honcho) and [ChatGPT's memory architecture](https://manthanguptaa.in/posts/chatgpt_memory/).
+### Vector Memory (RAG)
+All conversation messages and uploaded documents are chunked, embedded (nomic-embed-text-v1.5, local CPU), and stored in sqlite-vec for vector search. Hybrid retrieval: vector similarity + FTS5 full-text search with set-union merge, then cross-encoder re-ranking (ms-marco-MiniLM).
 
-### Layer 5: Tactical Experiences (XSkill)
-The agent learns from its own tool usage. When a tool call succeeds or fails, the experience is stored with the context, outcome, and a lesson. A confidence score tracks reliability -- successes boost confidence (+0.05), retryable failures erode it (-0.1). Experiences are surfaced via dynamic tool mapping: the system looks up which tools were historically used for the current query type and retrieves relevant lessons. Three fallback tiers ensure coverage: query log history, static classification map, and tool category matching. Stale experiences (30 days unused) and low-confidence lessons (<0.2) are automatically pruned. Inspired by [XSkill](https://arxiv.org/html/2603.12056v2).
+### Explicit Facts
+The agent stores discrete facts in `user_facts` with categories, provenance, and confidence scores. Facts are injected into every conversation's context.
+
+### User Profile (Dreaming)
+During idle heartbeat cycles, the agent analyzes recent conversations to build a structured user profile -- communication style, expertise, preferences, engagement patterns. Built automatically without the user explicitly stating anything.
+
+### Tactical Experiences (XSkill)
+The agent learns from tool usage. Successes and failures are stored with context, outcome, and lessons. A confidence score tracks reliability. Stale experiences are automatically pruned. Inspired by [XSkill](https://arxiv.org/html/2603.12056v2).
 
 ### Entity Graph
-Spanning all layers, an entity graph tracks people, tools, documents, and concepts mentioned across conversations. Entities are linked with typed relationships and confidence scores. The graph supports multi-hop traversal -- when the agent encounters "The Q3 Project," it pulls in related entities like "Sarah (Lead)" and "Budget.docx" automatically via 2-hop graph traversal, even if they aren't in the same text chunk. Relationship paths are shown in context (`-> works_on -> Odigos -> uses -> SQLite`) so the agent can trace reasoning chains.
+An entity graph tracks people, tools, documents, and concepts across conversations. Entities are linked with typed relationships, confidence scores, and provenance. Multi-hop traversal (2-hop BFS) pulls in related entities automatically. Relationship paths are shown in context so the agent can trace reasoning chains.
+
+### Wiki Maintenance
+A heartbeat phase projects changed entities to wiki files every 30 seconds. A lint pass runs every 5 minutes: flags stale claims, orphan entities, contradictions, and missing cross-references. Semantic dedup generates merge proposals (not destructive auto-merges). Findings are logged to `data/wiki/log.md`.
+
+### Database Rebuild
+If the database is lost but `data/wiki/` exists, the system automatically rebuilds entity, fact, and edge tables from the wiki files on startup. Conversation summaries provide context for what was discussed. Auto schema evolution detects and adds missing columns without migration files.
 
 ### Active Reasoning Critique
 Inspired by [AREW](https://arxiv.org/abs/2603.12109), the evaluator scores two dimensions after every response: **Action Selection** (did the agent use appropriate tools to gather information?) and **Belief Tracking** (did the agent actually use the information it retrieved?). User sentiment is tracked on every message via TextBlob NLP -- polarity and subjectivity feed directly into the evolution engine. These signals feed into the strategist, which proposes improvements when the agent shows patterns of ignoring its own memory or tools.
@@ -291,8 +303,11 @@ One process. One database. No microservices.
 - **Unified HTTP client** (`api.ts`) -- all frontend HTTP through one module with CSRF
 - **Unified LLM wrapper** (`call_llm`) -- standard retry, logging, and cost tracking
 - **Single-task prompts** -- each LLM call does one thing. Entity extraction, correction detection, classification, evaluation, and profiling are separate calls. No multi-task prompts that mix response generation with metadata extraction.
-- **Background processing** -- entity extraction and correction detection run as fire-and-forget tasks after each response, using the background model. Long-running tools (image/music generation) execute asynchronously via heartbeat polling.
-- **Heartbeat loop** -- modular 9-file package (orchestrator, scheduled, todos, plans, peers, idle, profiling, maintenance, background) for goal tracking, evolution trials, proactive plan execution, background task polling, nudges, follow-up detection, idle research, auto-updates, storage quota monitoring. Headless execution mode uses plan context summaries instead of full chat history (~67% token savings).
+- **MessageBus** -- single `publish()` interface for all message storage and delivery. Writes to DB (source of truth) and pushes to all channel adapters. Idempotency keys prevent duplicate messages from callbacks. Pre-allocated message IDs correlate streaming chunks with final stored messages.
+- **Channel-agnostic identity** -- conversations use plain UUIDs (no channel prefix). Each message tracks its originating channel independently. Same conversation accessible from web, Telegram, or API.
+- **Auto schema evolution** -- on startup, compares `schema.sql` column definitions against the live database and adds missing columns via ALTER TABLE. No migration files needed.
+- **Background processing** -- structured entity/fact extraction runs as a dedicated LLM call after each response. Long-running tools (image/music generation) execute asynchronously via heartbeat polling.
+- **Heartbeat loop** -- modular 10-file package (orchestrator, scheduled, todos, plans, peers, idle, profiling, maintenance, background, wiki_maintenance) for goal tracking, evolution trials, proactive plan execution, background task polling, wiki file projection, knowledge lint, nudges, follow-up detection, idle research, auto-updates, storage quota monitoring. Headless execution mode uses plan context summaries instead of full chat history (~67% token savings).
 - **Tool type hierarchy** -- `APITool` (shared HTTP client, polling, retry), `CLITool` (subprocess, input hardening, JSON-first), and local tools. Parameter validation via jsonschema. Observation filtering via `format_for_context()` with auto-distill fallback.
 - **Failure taxonomy** classifies tool errors (transient, input, permission, unavailable) with per-category retry strategies
 - **Parallel context assembly** -- 13 context queries run concurrently via asyncio.gather
