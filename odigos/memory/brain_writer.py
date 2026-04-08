@@ -1,7 +1,7 @@
-"""Write entity pages, topic indexes, index.md, log.md, and conversation summaries to data/wiki/.
+"""Write entity pages, topic indexes, index.md, log.md, and conversation summaries to data/brain/.
 
-The wiki is the human-readable and LLM-readable knowledge base surface.
-Heartbeat maintenance calls these methods; the wiki reader parses the output.
+The brain is the human-readable and LLM-readable knowledge base surface.
+Heartbeat maintenance calls these methods; the brain reader parses the output.
 """
 from __future__ import annotations
 
@@ -59,9 +59,9 @@ def _collect_sources(facts: list[dict], entity: dict | None = None) -> list[str]
     return sources
 
 
-class WikiWriter:
-    def __init__(self, wiki_dir: Path | None = None):
-        self.wiki_dir = wiki_dir or Path("data/wiki")
+class BrainWriter:
+    def __init__(self, brain_dir: Path | None = None):
+        self.brain_dir = brain_dir or Path("data/brain")
 
     async def write_entity_page(
         self,
@@ -69,8 +69,8 @@ class WikiWriter:
         facts: list[dict],
         relationships: list[dict],
     ) -> str:
-        """Write a full entity page to wiki/entities/{slug}.md. Returns filepath."""
-        entities_dir = self.wiki_dir / "entities"
+        """Write a full entity page to brain/entities/{slug}.md. Returns filepath."""
+        entities_dir = self.brain_dir / "entities"
         entities_dir.mkdir(parents=True, exist_ok=True)
 
         name = entity.get("name", "unknown")
@@ -133,8 +133,8 @@ class WikiWriter:
         graduated: list[dict],
         indexed: list[dict],
     ) -> str:
-        """Write a topic index to wiki/topics/{type}.md. Returns filepath."""
-        topics_dir = self.wiki_dir / "topics"
+        """Write a topic index to brain/topics/{type}.md. Returns filepath."""
+        topics_dir = self.brain_dir / "topics"
         topics_dir.mkdir(parents=True, exist_ok=True)
 
         slug = _slugify(entity_type)
@@ -183,9 +183,9 @@ class WikiWriter:
         all_entities: list[dict],
         topic_types: list[str],
     ) -> str:
-        """Regenerate wiki/index.md -- master catalog."""
-        self.wiki_dir.mkdir(parents=True, exist_ok=True)
-        filepath = self.wiki_dir / "index.md"
+        """Regenerate brain/index.md -- master catalog."""
+        self.brain_dir.mkdir(parents=True, exist_ok=True)
+        filepath = self.brain_dir / "index.md"
 
         lines = [
             "---",
@@ -230,9 +230,9 @@ class WikiWriter:
         return str(filepath)
 
     async def append_log(self, operation: str, details: str) -> None:
-        """Append an entry to wiki/log.md with timestamp prefix."""
-        self.wiki_dir.mkdir(parents=True, exist_ok=True)
-        filepath = self.wiki_dir / "log.md"
+        """Append an entry to brain/log.md with timestamp prefix."""
+        self.brain_dir.mkdir(parents=True, exist_ok=True)
+        filepath = self.brain_dir / "log.md"
 
         entry = f"## [{_now_iso()}] {operation}\n{details}\n\n"
 
@@ -253,8 +253,8 @@ class WikiWriter:
         created_at: str,
         facts_extracted: list[str],
     ) -> str:
-        """Write a conversation summary to wiki/conversations/{date}-{slug}.md."""
-        convos_dir = self.wiki_dir / "conversations"
+        """Write a conversation summary to brain/conversations/{date}-{slug}.md."""
+        convos_dir = self.brain_dir / "conversations"
         convos_dir.mkdir(parents=True, exist_ok=True)
 
         # Extract date from created_at (ISO format)
@@ -288,3 +288,63 @@ class WikiWriter:
     def should_graduate(self, fact_count: int, relationship_count: int) -> bool:
         """Entity graduates to full page at 3+ facts or 2+ relationships."""
         return fact_count >= 3 or relationship_count >= 2
+
+    async def write_synthesis(self, title: str, content: str, source: str,
+                               source_context: str, conversation_id: str | None = None) -> str:
+        """Write a proactive finding to brain/synthesis/. Returns filepath."""
+        synth_dir = self.brain_dir / "synthesis"
+        synth_dir.mkdir(parents=True, exist_ok=True)
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        slug = _slugify(title)
+        filepath = synth_dir / f"{date}-{slug}.md"
+        counter = 1
+        while filepath.exists():
+            filepath = synth_dir / f"{date}-{slug}-{counter}.md"
+            counter += 1
+        now = _now_iso()
+        fm = f"---\ntype: finding\ntitle: {title}\nsource: {source}\nsource_context: {source_context}\n"
+        if conversation_id:
+            fm += f"conversation_id: {conversation_id}\n"
+        fm += f"created_at: {now}\n---\n\n"
+        filepath.write_text(fm + f"# {title}\n\n{content}\n", encoding="utf-8")
+        logger.info("Wrote synthesis: %s", filepath.name)
+        return str(filepath)
+
+    async def write_source(self, content: str, title: str, url: str | None = None,
+                            content_type: str = "article") -> str | None:
+        """Write external content to data/sources/. Returns filepath or None if duplicate."""
+        import hashlib
+        sources_dir = Path("data/sources")
+        sources_dir.mkdir(parents=True, exist_ok=True)
+        sha = hashlib.sha256(content.encode()).hexdigest()
+        for existing in sources_dir.glob("*.md"):
+            try:
+                header = existing.read_text(encoding="utf-8")[:500]
+                if f"sha256: {sha}" in header:
+                    return None
+            except Exception:
+                continue
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        slug = _slugify(title) if title else _slugify(url or "untitled")
+        filepath = sources_dir / f"{date}-{slug}.md"
+        counter = 1
+        while filepath.exists():
+            filepath = sources_dir / f"{date}-{slug}-{counter}.md"
+            counter += 1
+        now = _now_iso()
+        fm = f"---\nurl: {url or ''}\ntitle: {title}\nscraped_at: {now}\ncontent_type: {content_type}\nsha256: {sha}\n---\n\n"
+        filepath.write_text(fm + content, encoding="utf-8")
+        logger.info("Archived source: %s", filepath.name)
+        return str(filepath)
+
+    async def append_diary(self, summary: str, open_threads: str = "") -> None:
+        """Append an entry to data/agent/diary.md."""
+        diary_dir = Path("data/agent")
+        diary_dir.mkdir(parents=True, exist_ok=True)
+        diary_path = diary_dir / "diary.md"
+        now = _now_iso()
+        entry = f"\n## [{now}] proactive_cycle\n{summary}\n"
+        if open_threads:
+            entry += f"Open threads: {open_threads}\n"
+        with open(diary_path, "a", encoding="utf-8") as f:
+            f.write(entry)

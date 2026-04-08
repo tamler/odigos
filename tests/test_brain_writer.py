@@ -1,16 +1,16 @@
-"""Tests for the wiki writer module."""
+"""Tests for the brain writer module."""
 from __future__ import annotations
 
 import asyncio
 
 import pytest
 
-from odigos.memory.wiki_writer import WikiWriter
+from odigos.memory.brain_writer import BrainWriter
 
 
 @pytest.fixture
 def writer(tmp_path):
-    return WikiWriter(wiki_dir=tmp_path)
+    return BrainWriter(brain_dir=tmp_path)
 
 
 def _run(coro):
