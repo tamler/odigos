@@ -152,7 +152,7 @@ CREATE TRIGGER IF NOT EXISTS memory_entries_au AFTER UPDATE ON memory_entries BE
     VALUES (new.rowid, new.content_preview, new.when_to_use);
 END;
 
-CREATE TABLE IF NOT EXISTS pending_wiki_writes (
+CREATE TABLE IF NOT EXISTS pending_brain_writes (
     id TEXT PRIMARY KEY,
     entity_id TEXT,
     fact_id TEXT,
@@ -160,7 +160,23 @@ CREATE TABLE IF NOT EXISTS pending_wiki_writes (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_pending_wiki_created ON pending_wiki_writes(created_at);
+CREATE INDEX IF NOT EXISTS idx_pending_brain_created ON pending_brain_writes(created_at);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    artifact_path TEXT,
+    conversation_id TEXT,
+    source TEXT,
+    read INTEGER DEFAULT 0,
+    reaction TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
 
 -- ════════════════════════════════════════════════════════════════════
 -- TASKS, GOALS, SCHEDULING
