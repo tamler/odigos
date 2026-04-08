@@ -16,7 +16,7 @@ A `complete_json()` method on the LLM provider that guarantees parsed JSON outpu
 
 1. **json_schema** — strict mode with a schema. Tried first if provider supports it.
 2. **json_object** — guaranteed JSON, no schema. Fallback if strict mode fails or returns 400.
-3. **Regex extraction** — parse JSON from freeform text via `re.search(r'\{.*\}', raw, re.DOTALL)`. Last resort.
+3. **Regex extraction** — find the largest balanced `{}` block from freeform text (not just first match). Last resort.
 
 ```python
 class LLMClient:
@@ -25,16 +25,19 @@ class LLMClient:
         messages: list[dict],
         schema: dict | None = None,
         **kwargs,
-    ) -> dict:
+    ) -> tuple[dict, bool]:
         """LLM call that guarantees parsed JSON output.
-        Returns empty dict on all failures — never raises for JSON issues."""
+        Returns (parsed_dict, success). Empty dict + False on failure."""
 ```
 
 The method:
 1. Tries `complete()` with `response_format={"type": "json_schema", "json_schema": schema}` if schema provided
 2. On 400/error, retries with `response_format={"type": "json_object"}`
-3. On parse failure, falls back to regex extraction from raw content
-4. Returns `{}` if all three fail (logged at WARNING)
+3. On parse failure, falls back to regex extraction (largest balanced `{}` block)
+4. **Schema validation:** If `schema` was provided and we fell back to tier 2 or 3, validate the parsed JSON against the schema locally (jsonschema). Log and return `({}, False)` if invalid.
+5. Returns `({}, False)` if all three fail (logged at ERROR for visibility)
+
+Callers can check the `success` bool to distinguish "nothing to extract" (`({"entities": []}, True)`) from "extraction failed" (`({}, False)`).
 
 **Callers that switch to `complete_json()`:**
 - `odigos/memory/extractor.py` — entity/fact extraction
@@ -82,11 +85,13 @@ When `supports_explicit_cache` is True, the system prompt message is formatted a
 ]}
 ```
 
-When False (Groq, OpenAI, etc.), the system prompt stays a plain string — the provider handles caching automatically based on prefix matching.
+When False (Groq, OpenAI, etc.), the system prompt stays a plain string — the provider handles caching automatically based on prefix matching. Use exactly one cache breakpoint to stay well within Anthropic's 4-breakpoint limit.
+
+**Stable sort for cache consistency:** Tool definitions and skill instructions within the static prefix must be sorted alphabetically. Non-deterministic ordering (dict iteration, dynamic loading order) would change the prefix text on every call, invalidating the cache.
 
 **All other LLM calls:** The prompt template is already the first message in classifier, evaluator, profiling, and extraction calls. No reordering needed — just document the convention: static prompt templates first, variable data last.
 
-**Observability:** Log `cached_tokens` from API responses when available (`usage.prompt_tokens_details.cached_tokens` for Groq/OpenAI). No behavior change, just visibility into cache hit rates.
+**Observability:** Add `cached_tokens: int = 0` to the `LLMResponse` dataclass in `odigos/providers/base.py`. Populate from `usage.prompt_tokens_details.cached_tokens` (Groq/OpenAI) or `cache_read_input_tokens` (Anthropic). Log cache hit rate periodically.
 
 ### 3. Pyramid Expansion in Recall
 
@@ -103,9 +108,12 @@ Current: `recall()` returns 500-char `content_preview` for all results. New: thr
 
 **Token budget enforcement:**
 - `recall()` adds `token_budget: int = 2000` parameter
-- Tier 1 results fill greedily by score until half the budget is spent
-- Tier 2 expansions fill remaining budget, highest score first
-- Full expansion truncated if it would exceed budget
+- **Expansions first:** Calculate token cost for Tier 2 full-text expansions (highest relevance first), reserve that budget
+- **Summaries fill remainder:** Tier 1 summaries fill the remaining budget greedily by score
+- **Clean truncation:** If a full expansion exceeds its allocation, truncate at the nearest sentence boundary and append `[... truncated ...]` — never mid-sentence or mid-code-block
+- **Bulk fetch:** Load all Tier 2 full texts in a single DB query (not N+1)
+
+**Score threshold note:** Cross-encoder scores (ms-marco-MiniLM) are not normalized 0-1. The 0.4 default may need calibration. Use `estimate_tokens()` (tiktoken-based, already in context.py) for budget math, not `len//4`.
 
 **Configurable parameters:**
 
@@ -125,7 +133,7 @@ async def recall(self, query: str, limit: int = 5, token_budget: int = 2000) -> 
 
 `context.py` passes the remaining prompt budget to `recall()`.
 
-**Internal refactor:** `_hybrid_search()` returns raw result objects with scores. Formatting (the markdown string with sections) moves to a separate `_format_results()` method that handles tier selection and budget enforcement. This keeps search and presentation cleanly separated.
+**Internal refactor:** `_hybrid_search()` returns raw result objects with scores and accepts a `strategy: str = "rrf"` parameter for the merge algorithm (RRF fusion vs set-union). Formatting (the markdown string with sections) moves to a separate `_format_results()` method that handles tier selection and budget enforcement. This keeps search and presentation cleanly separated and enables A/B testing of retrieval strategies.
 
 ### 4. Parallel Tool Call Instruction
 
@@ -137,11 +145,14 @@ Add to `_TOOL_INSTRUCTION` in `context.py`:
 
 The executor already handles parallel tool calls if the model returns multiple in one response. This instruction tells the model to actually do it.
 
+**Note:** This is a best-effort behavioral hint. Some models may not parallelize correctly or may hallucinate dependencies. The executor remains the source of truth for dependency handling — if a tool call fails, the retry logic handles it regardless of whether other tools ran in parallel.
+
 ## File Changes
 
 | File | Change |
 |------|--------|
-| `odigos/providers/llm.py` | Add `complete_json()` with 3-tier fallback, add `supports_explicit_cache` property, log cached_tokens |
+| `odigos/providers/base.py` | Add `cached_tokens: int = 0` to `LLMResponse` dataclass |
+| `odigos/providers/llm.py` | Add `complete_json()` with 3-tier fallback, add `supports_explicit_cache` property, populate cached_tokens from response |
 | `odigos/core/context.py` | Reorder `build_planned()` static-first, format Anthropic cache blocks, pass token budget to recall, add parallel tool instruction |
 | `odigos/memory/manager.py` | Add `token_budget` to `recall()`, refactor `_hybrid_search()` to return raw results, add `_format_results()` with tier logic |
 | `odigos/memory/extractor.py` | Switch to `complete_json()` |
