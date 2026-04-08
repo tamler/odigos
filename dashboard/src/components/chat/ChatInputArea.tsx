@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom'
 import { ArrowUp, Paperclip, X, Mic, Square, Camera } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FileUploadTrigger } from '@/components/ui/file-upload'
@@ -28,7 +27,6 @@ interface ChatInputAreaProps {
   setUseCamera: (value: boolean | 'environment') => void
   agentName: string
   isSidePanel: boolean
-  hasNewEmail: boolean
   isMobile: boolean
   pushToTalk: {
     recording: boolean
@@ -37,7 +35,6 @@ interface ChatInputAreaProps {
   }
   socketRef: React.MutableRefObject<ChatSocket | null>
   stopTTS: () => void
-  onEmailClick: () => void
 }
 
 function BackgroundTaskIndicator() {
@@ -72,14 +69,11 @@ export function ChatInputArea({
   setUseCamera,
   agentName,
   isSidePanel,
-  hasNewEmail,
   isMobile,
   pushToTalk,
   socketRef,
   stopTTS,
-  onEmailClick,
 }: ChatInputAreaProps) {
-  const navigate = useNavigate()
 
   return (
     <div className="pb-safe pt-2 px-4 shrink-0 bg-background/50 backdrop-blur-sm">

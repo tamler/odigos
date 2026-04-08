@@ -401,15 +401,10 @@ export const ChatPanel = memo(({
           setUseCamera={setUseCamera}
           agentName={agentName}
           isSidePanel={isSidePanel}
-          hasNewEmail={hasNewEmail}
           isMobile={isMobile}
           pushToTalk={pushToTalk}
           socketRef={socketRef}
           stopTTS={stopTTS}
-          onEmailClick={() => {
-            useUIStore.getState().setHasNewEmail(false)
-            handleSend('Check my email')
-          }}
         />
       </div>
     </FileUpload>

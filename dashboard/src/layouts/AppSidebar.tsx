@@ -25,8 +25,6 @@ import {
   Link as LinkIcon,
   Rss,
   Eye,
-  Columns3,
-  Image as ImageIcon,
   Upload,
   Key,
   Activity,
