@@ -6,7 +6,6 @@ cheap LLM call to extract structured knowledge from each conversation turn.
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -67,27 +66,19 @@ async def extract_knowledge(
     )
 
     try:
-        response = await provider.complete(
+        parsed, success = await provider.complete_json(
             [{"role": "user", "content": prompt}],
             max_tokens=500,
             temperature=0.1,
             model=model or None,
-            response_format={"type": "json_object"},
         )
-        raw = response.content.strip()
-        # Strip markdown code fences if present
-        if raw.startswith("```"):
-            raw = re.sub(r"^```\w*\n?", "", raw)
-            raw = re.sub(r"\n?```\s*$", "", raw)
-        parsed = json.loads(raw)
+        if not success:
+            return _EMPTY
         return {
             "entities": parsed.get("entities", []),
             "facts": parsed.get("facts", []),
             "relationships": parsed.get("relationships", []),
         }
-    except json.JSONDecodeError as e:
-        logger.warning("Knowledge extraction JSON parse failed: %s — raw[:200]: %s", e, raw[:200])
-        return _EMPTY
     except Exception as e:
         logger.warning("Knowledge extraction failed: %s", e)
         return _EMPTY

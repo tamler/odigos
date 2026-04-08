@@ -22,6 +22,15 @@ class FakeLLM:
             cost_usd=0,
         )
 
+    async def complete_json(self, messages, **kwargs):
+        resp = await self.complete(messages, **kwargs)
+        try:
+            import json
+            parsed = json.loads(resp.content)
+            return parsed, True
+        except Exception:
+            return {}, False
+
 
 @pytest.mark.asyncio
 async def test_extract_entities_and_facts():
