@@ -245,6 +245,21 @@ async def _execute_and_publish(hb: Heartbeat, opportunity: Opportunity) -> None:
             )
             return
 
+        # Quality threshold — reject low-quality results
+        result_text = result.strip()
+        low_quality_markers = [
+            "i don't know", "i cannot", "i'm not sure", "i am not sure",
+            "i don't have enough", "no information available",
+            "i was unable to find", "i couldn't find",
+        ]
+        result_lower = result_text.lower()
+        if any(marker in result_lower for marker in low_quality_markers):
+            logger.info("Proactive result below quality threshold: %s", opportunity.title)
+            return
+        if len(result_text) < 100:
+            logger.info("Proactive result too short (%d chars): %s", len(result_text), opportunity.title)
+            return
+
         # Publish via BrainWriter
         writer = BrainWriter()
         artifact_path = await writer.write_synthesis(

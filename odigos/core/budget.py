@@ -16,6 +16,7 @@ class BudgetStatus:
     monthly_spend: float
     daily_limit: float
     monthly_limit: float
+    circuit_breaker: bool = False  # True when spend exceeds 90% of limit
 
 
 class BudgetTracker:
@@ -71,6 +72,16 @@ class BudgetTracker:
                 daily, self.daily_limit, monthly, self.monthly_limit,
             )
 
+        # Circuit breaker trips at 90% of limit — forces fallback model + reduced tool turns
+        near_daily = self.daily_limit > 0 and daily >= self.daily_limit * 0.9
+        near_monthly = self.monthly_limit > 0 and monthly >= self.monthly_limit * 0.9
+        circuit_breaker = near_daily or near_monthly
+
+        if circuit_breaker and within:
+            logger.info(
+                "Budget circuit breaker: >90%% of limit, switching to degraded mode"
+            )
+
         return BudgetStatus(
             within_budget=within,
             warning=warning,
@@ -78,4 +89,5 @@ class BudgetTracker:
             monthly_spend=monthly,
             daily_limit=self.daily_limit,
             monthly_limit=self.monthly_limit,
+            circuit_breaker=circuit_breaker,
         )

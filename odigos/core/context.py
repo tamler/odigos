@@ -734,6 +734,20 @@ class ContextAssembler:
                 parts.append(f"## Active Skill: {skill.name}\n\n{skill.system_prompt}")
                 budget -= _estimate_section_tokens(skill.system_prompt)
 
+        # L0/L1 wake-up context — critical facts always loaded (not gated by plan.needs)
+        try:
+            critical_facts = await self.db.fetch_all(
+                "SELECT fact FROM user_facts ORDER BY confidence DESC, updated_at DESC LIMIT 5"
+            ) if self.db else []
+            if critical_facts:
+                facts_block = "## Key facts\n" + "\n".join(
+                    f"- {r['fact']}" for r in critical_facts
+                )
+                parts.append(facts_block)
+                budget -= _estimate_section_tokens(facts_block)
+        except Exception:
+            pass
+
         # Dynamic sections (change every turn)
         if plan.needs.experiences and budget > 0:
             exp = await self._load_experiences_for_plan(plan.tool_hint)

@@ -182,6 +182,13 @@ class Agent:
                     "I can still help with simple tasks that don't need an LLM call. "
                     "Use /status to see current budget usage."
                 )
+            if status.circuit_breaker:
+                # Degraded mode: force fallback model, reduce tool turns
+                background_model = background_model or getattr(
+                    self.provider, "fallback_model", ""
+                )
+                if not headless:
+                    logger.info("Budget circuit breaker: using fallback model")
 
         # Classify the query
         analysis = None
