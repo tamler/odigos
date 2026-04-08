@@ -117,6 +117,9 @@ class LLMClient(LLMProvider):
 
         tokens_in = usage.get("prompt_tokens", 0)
         tokens_out = usage.get("completion_tokens", 0)
+        cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
+        if not cached:
+            cached = usage.get("cache_read_input_tokens", 0)
         # Use provider-reported cost if available; fall back to configured rate
         cost = usage.get("cost") or 0.0
         if not cost and self._cost_per_million and (tokens_in or tokens_out):
@@ -130,6 +133,7 @@ class LLMClient(LLMProvider):
             cost_usd=cost,
             generation_id=data.get("id"),
             tool_calls=tool_calls,
+            cached_tokens=cached,
         )
 
     async def stream_complete(self, messages: list[dict], **kwargs):
@@ -219,6 +223,14 @@ class LLMClient(LLMProvider):
                         tokens_out = usage.get("completion_tokens", 0)
                         provider_cost = usage.get("cost") or 0.0
 
+                cached = 0
+                if usage:
+                    cached = (usage.get("prompt_tokens_details") or {}).get(
+                        "cached_tokens", 0
+                    )
+                    if not cached:
+                        cached = usage.get("cache_read_input_tokens", 0)
+
                 # Build tool calls if present
                 parsed_tool_calls = None
                 if tool_calls_data:
@@ -245,6 +257,7 @@ class LLMClient(LLMProvider):
                     cost_usd=cost,
                     generation_id=generation_id,
                     tool_calls=parsed_tool_calls,
+                    cached_tokens=cached,
                 )
                 yield None, final
 
@@ -252,6 +265,89 @@ class LLMClient(LLMProvider):
             logger.warning("Streaming failed, falling back to non-streaming: %s", e)
             resp = await self.complete(messages, model=model, **kwargs)
             yield resp.content, resp
+
+    @property
+    def supports_explicit_cache(self) -> bool:
+        """Does this provider need explicit cache_control breakpoints?"""
+        model = (self.default_model or "").lower()
+        url = (self.base_url or "").lower()
+        return "claude" in model or "anthropic" in url
+
+    async def complete_json(
+        self,
+        messages: list[dict],
+        schema: dict | None = None,
+        **kwargs,
+    ) -> tuple[dict, bool]:
+        """LLM call with 3-tier JSON fallback. Returns (parsed_dict, success)."""
+        import json as _json
+
+        from odigos.core.json_utils import parse_json_response
+
+        # Tier 1: json_schema (if schema provided)
+        if schema:
+            try:
+                resp = await self.complete(
+                    messages,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "response", "schema": schema},
+                    },
+                    **kwargs,
+                )
+                parsed = _json.loads(resp.content)
+                return parsed, True
+            except Exception:
+                pass  # Fall through to tier 2
+
+        # Tier 2: json_object
+        try:
+            resp = await self.complete(
+                messages,
+                response_format={"type": "json_object"},
+                **kwargs,
+            )
+            parsed = _json.loads(resp.content)
+            if schema:
+                try:
+                    import jsonschema
+
+                    jsonschema.validate(parsed, schema)
+                except ImportError:
+                    pass
+                except Exception as e:
+                    logger.warning("JSON schema validation failed (tier 2): %s", str(e)[:100])
+                    return {}, False
+            return parsed, True
+        except Exception:
+            pass  # Fall through to tier 3
+
+        # Tier 3: regex extraction from freeform text
+        try:
+            resp = await self.complete(messages, **kwargs)
+            parsed = parse_json_response(resp.content)
+            if parsed is not None:
+                if schema:
+                    try:
+                        import jsonschema
+
+                        jsonschema.validate(parsed, schema)
+                    except ImportError:
+                        pass
+                    except Exception as e:
+                        logger.warning(
+                            "JSON schema validation failed (tier 3): %s", str(e)[:100]
+                        )
+                        return {}, False
+                return parsed, True
+        except Exception:
+            pass
+
+        logger.error(
+            "complete_json: all 3 tiers failed for %d-char prompt",
+            sum(len(m.get("content", "")) for m in messages),
+        )
+        return {}, False
 
     async def close(self) -> None:
         await self._client.aclose()
