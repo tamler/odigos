@@ -18,6 +18,7 @@ from odigos.api.agent import router as agent_router
 from odigos.api.system import router as system_router
 from odigos.api.content import router as content_router
 from odigos.api.media import router as media_router
+from odigos.api.notifications import router as notifications_router
 
 from odigos.dashboard import mount_dashboard
 
@@ -76,6 +77,7 @@ app.include_router(agent_router)
 app.include_router(workspace_router)
 app.include_router(content_router)
 app.include_router(media_router)
+app.include_router(notifications_router)
 
 
 @app.get("/health")

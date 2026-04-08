@@ -33,21 +33,28 @@ class Notifier:
         self,
         title: str,
         body: str,
+        *,
+        type: str = "status",
+        artifact_path: str | None = None,
         conversation_id: str | None = None,
+        source: str | None = None,
         channels: list[str] | None = None,
-    ) -> None:
-        """Send a notification to specified channels (or all).
+    ) -> str:
+        """Persist notification + push to all channels. Returns notification ID."""
+        import uuid as _uuid
+        notif_id = _uuid.uuid4().hex
 
-        Also sends via web push to all stored subscriptions when
-        VAPID keys are configured.
+        # Persist to DB
+        if self.db:
+            try:
+                await self.db.execute(
+                    "INSERT INTO notifications (id, type, title, body, artifact_path, "
+                    "conversation_id, source) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (notif_id, type, title, body, artifact_path, conversation_id, source),
+                )
+            except Exception:
+                logger.debug("Failed to persist notification", exc_info=True)
 
-        Args:
-            title: Short notification title.
-            body: Notification body text.
-            conversation_id: Optional conversation to target.
-            channels: Optional list of channel names.
-                If None, sends to all.
-        """
         text = f"{title}\n\n{body}" if title else body
 
         if channels:
@@ -90,6 +97,8 @@ class Notifier:
 
         # Send web push notifications to all stored subscriptions
         await self._send_push_notifications(title, body)
+
+        return notif_id
 
     async def _send_push_notifications(
         self, title: str, body: str
