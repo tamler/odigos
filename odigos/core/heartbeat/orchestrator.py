@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from odigos.core.heartbeat import scheduled, todos, plans, peers, idle, profiling, maintenance
+from odigos.core.heartbeat import scheduled, todos, plans, peers, profiling, maintenance
 
 if TYPE_CHECKING:
     from odigos.channels.base import ChannelRegistry
@@ -206,9 +206,10 @@ class Heartbeat:
         if not did_work and not _over_budget:
             did_work |= await plans.work_in_progress_plans(self)
 
-        # Phase 5: Idle thoughts (LLM calls)
+        # Phase 5: Proactive pipeline (scan → prioritize → execute → publish)
         if not did_work and not _over_budget:
-            await idle.idle_think(self)
+            from odigos.core.heartbeat import proactive
+            await proactive.run_proactive(self)
 
         # Phase 6: Self-improvement cycle (LLM calls)
         if not did_work and not _over_budget and self.evolution_engine:
