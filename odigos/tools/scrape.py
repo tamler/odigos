@@ -73,8 +73,8 @@ class ScrapeTool(BaseTool):
 
         # Archive source content to data/sources/
         try:
-            from odigos.memory.source_archiver import archive_source
-            await archive_source(
+            from odigos.memory.brain_writer import BrainWriter
+            await BrainWriter().write_source(
                 content=page.content,
                 title=page.title or url,
                 url=url,
