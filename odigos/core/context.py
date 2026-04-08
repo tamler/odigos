@@ -29,7 +29,9 @@ _TOOL_INSTRUCTION = (
     'to show the full list. Do not say "I can\'t" without checking first. '
     "Never narrate your tool discovery process to the user. "
     "Don't say 'I don't see a tool for that' or 'Let me check my tools.' "
-    "Just do the task directly if you can, or explain what's needed if you can't."
+    "Just do the task directly if you can, or explain what's needed if you can't. "
+    "When you need to call multiple tools that don't depend on each other, "
+    "call them all in a single response rather than one at a time."
 )
 
 _RESPONSE_STYLES = {
@@ -712,13 +714,25 @@ class ContextAssembler:
         parts: list[str] = []
         budget = max_prompt_tokens
 
-        # Always: identity + tool instruction
+        # Static sections first (maximise prefix caching)
         identity = self._load_identity()
         parts.append(identity)
         parts.append(_TOOL_INSTRUCTION)
         budget -= _estimate_section_tokens(identity + _TOOL_INSTRUCTION)
 
-        # Load only what the planner says we need
+        # Response style (static per session)
+        style_text = _RESPONSE_STYLES.get(plan.response_style, "")
+        if style_text:
+            parts.append(style_text)
+
+        # Auto-activate skill if classifier recommended one
+        if plan.skill_hint and self.skill_registry:
+            skill = self.skill_registry.get(plan.skill_hint)
+            if skill and skill.system_prompt:
+                parts.append(f"## Active Skill: {skill.name}\n\n{skill.system_prompt}")
+                budget -= _estimate_section_tokens(skill.system_prompt)
+
+        # Dynamic sections (change every turn)
         if plan.needs.experiences and budget > 0:
             exp = await self._load_experiences_for_plan(plan.tool_hint)
             if exp:
@@ -755,18 +769,6 @@ class ContextAssembler:
             if history:
                 parts.append(history)
                 budget -= _estimate_section_tokens(history)
-
-        # Auto-activate skill if classifier recommended one
-        if plan.skill_hint and self.skill_registry:
-            skill = self.skill_registry.get(plan.skill_hint)
-            if skill and skill.system_prompt:
-                parts.append(f"## Active Skill: {skill.name}\n\n{skill.system_prompt}")
-                budget -= _estimate_section_tokens(skill.system_prompt)
-
-        # Response style as last instruction (highest attention position)
-        style_text = _RESPONSE_STYLES.get(plan.response_style, "")
-        if style_text:
-            parts.append(style_text)
 
         # Build system prompt
         system_prompt = "\n\n".join(p for p in parts if p.strip())
@@ -812,6 +814,9 @@ class ContextAssembler:
                             t.get("function", {}).get("name") == tool_name for t in tools
                         ):
                             tools.append(self.tool_registry._tool_to_def(tool))
+
+        # Sort tools alphabetically to prevent cache churn from non-deterministic ordering
+        tools = sorted(tools, key=lambda t: t.get("function", {}).get("name", ""))
 
         return messages, tools
 
