@@ -56,7 +56,6 @@ export const ChatPanel = memo(({
   const setArtifactPanelOpen = useUIStore(s => s.setArtifactPanelOpen)
   const setActiveArtifactId = useUIStore(s => s.setActiveArtifactId)
   const agentName = useUIStore(s => s.agentName)
-  const hasNewEmail = useUIStore(s => s.hasNewEmail)
 
   const [messageDisplayLimit, setMessageDisplayLimit] = useState(100)
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
