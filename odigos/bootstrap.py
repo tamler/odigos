@@ -38,12 +38,12 @@ class Bootstrapper:
 
         ensure_dirs()
 
-        # Create wiki and source directories for memory redesign
+        # Create brain and source directories for memory redesign
         Path("data/sources").mkdir(parents=True, exist_ok=True)
-        Path("data/wiki/entities").mkdir(parents=True, exist_ok=True)
-        Path("data/wiki/topics").mkdir(parents=True, exist_ok=True)
-        Path("data/wiki/conversations").mkdir(parents=True, exist_ok=True)
-        Path("data/wiki/synthesis").mkdir(parents=True, exist_ok=True)
+        Path("data/brain/entities").mkdir(parents=True, exist_ok=True)
+        Path("data/brain/topics").mkdir(parents=True, exist_ok=True)
+        Path("data/brain/conversations").mkdir(parents=True, exist_ok=True)
+        Path("data/brain/synthesis").mkdir(parents=True, exist_ok=True)
 
         self.container.env_path = ".env"
         self.container.upload_dir = str(FILES_DIR)

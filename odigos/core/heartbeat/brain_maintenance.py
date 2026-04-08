@@ -1,4 +1,4 @@
-"""Heartbeat phase 3d: drain pending_wiki_writes queue and project entity wiki pages."""
+"""Heartbeat phase 3d: drain pending_brain_writes queue and project entity brain pages."""
 from __future__ import annotations
 
 import logging
@@ -11,26 +11,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def run_wiki_maintenance(hb: Heartbeat) -> bool:
-    """Drain pending_wiki_writes and project entity data into wiki markdown files."""
+async def run_brain_maintenance(hb: Heartbeat) -> bool:
+    """Drain pending_brain_writes and project entity data into brain markdown files."""
     try:
-        return await _do_wiki_maintenance(hb)
+        return await _do_brain_maintenance(hb)
     except Exception:
-        logger.exception("Wiki maintenance failed")
+        logger.exception("Brain maintenance failed")
         return False
 
 
-async def _do_wiki_maintenance(hb: Heartbeat) -> bool:
-    from odigos.memory.wiki_writer import WikiWriter
+async def _do_brain_maintenance(hb: Heartbeat) -> bool:
+    from odigos.memory.brain_writer import BrainWriter
 
     # 1. Fetch pending writes
     rows = await hb.db.fetch_all(
-        "SELECT * FROM pending_wiki_writes ORDER BY created_at LIMIT 50"
+        "SELECT * FROM pending_brain_writes ORDER BY created_at LIMIT 50"
     )
     if not rows:
         return False
 
-    writer = WikiWriter()
+    writer = BrainWriter()
 
     # 2. Collect unique entity_ids from pending writes
     entity_ids: set[str] = set()
@@ -136,7 +136,7 @@ async def _do_wiki_maintenance(hb: Heartbeat) -> bool:
             await writer.write_topic_index(entity_type, graduated_for_type, indexed_for_type)
 
         except Exception:
-            logger.exception("Wiki maintenance: failed processing entity %s", entity_id)
+            logger.exception("Brain maintenance: failed processing entity %s", entity_id)
 
     # 5. Rebuild wiki/index.md
     try:
@@ -161,30 +161,30 @@ async def _do_wiki_maintenance(hb: Heartbeat) -> bool:
         topic_types.sort()
         await writer.write_index(all_entities, topic_types)
     except Exception:
-        logger.exception("Wiki maintenance: failed rebuilding index")
+        logger.exception("Brain maintenance: failed rebuilding index")
 
     # 6. Append to wiki/log.md
     try:
         details = f"Processed {len(rows)} pending writes, {len(entity_ids)} entities"
-        await writer.append_log("wiki_maintenance", details)
+        await writer.append_log("brain_maintenance", details)
     except Exception:
-        logger.exception("Wiki maintenance: failed writing log")
+        logger.exception("Brain maintenance: failed writing log")
 
     # 7. Delete processed rows
     try:
         ids = [row["id"] for row in rows]
         placeholders = ",".join("?" for _ in ids)
         await hb.db.execute(
-            f"DELETE FROM pending_wiki_writes WHERE id IN ({placeholders})",
+            f"DELETE FROM pending_brain_writes WHERE id IN ({placeholders})",
             tuple(ids),
         )
     except Exception:
-        logger.exception("Wiki maintenance: failed deleting processed rows")
+        logger.exception("Brain maintenance: failed deleting processed rows")
 
     return True
 
 
-async def run_wiki_lint(hb: Heartbeat) -> bool:
+async def run_brain_lint(hb: Heartbeat) -> bool:
     """Lint pass: find orphan entities with no edges older than 7 days."""
     try:
         return await _do_wiki_lint(hb)
@@ -194,7 +194,7 @@ async def run_wiki_lint(hb: Heartbeat) -> bool:
 
 
 async def _do_wiki_lint(hb: Heartbeat) -> bool:
-    from odigos.memory.wiki_writer import WikiWriter
+    from odigos.memory.brain_writer import BrainWriter
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -209,7 +209,7 @@ async def _do_wiki_lint(hb: Heartbeat) -> bool:
     if not orphans:
         return False
 
-    writer = WikiWriter()
+    writer = BrainWriter()
     names = [o.get("name", "?") for o in orphans]
     details = f"Found {len(orphans)} orphan entities (no edges, >7 days old): {', '.join(names[:20])}"
     await writer.append_log("wiki_lint", details)

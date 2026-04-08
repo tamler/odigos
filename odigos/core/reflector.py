@@ -137,14 +137,14 @@ class Reflector:
                 stored_id = entity.get("_stored_id")
                 if stored_id:
                     await self.db.execute(
-                        "INSERT INTO pending_wiki_writes (id, entity_id, operation) VALUES (?, ?, ?)",
+                        "INSERT INTO pending_brain_writes (id, entity_id, operation) VALUES (?, ?, ?)",
                         (_uuid.uuid4().hex, stored_id, "entity_created"),
                     )
             for fact in extracted.get("facts", []):
                 stored_id = fact.get("_stored_id")
                 if stored_id:
                     await self.db.execute(
-                        "INSERT INTO pending_wiki_writes (id, fact_id, operation) VALUES (?, ?, ?)",
+                        "INSERT INTO pending_brain_writes (id, fact_id, operation) VALUES (?, ?, ?)",
                         (_uuid.uuid4().hex, stored_id, "fact_created"),
                     )
 
