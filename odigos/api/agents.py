@@ -25,7 +25,8 @@ class SpawnRequest(BaseModel):
 async def list_agents(db: Database = Depends(get_db)):
     """List all registered agents."""
     rows = await db.fetch_all(
-        "SELECT * FROM agent_registry ORDER BY agent_name"
+        "SELECT agent_name, role, description, specialty, status, last_seen, "
+        "evolution_score, netbird_ip FROM agent_registry ORDER BY agent_name"
     )
     return {"agents": [dict(r) for r in rows]}
 
