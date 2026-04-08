@@ -172,6 +172,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     source TEXT,
     read INTEGER DEFAULT 0,
     reaction TEXT,
+    opened_at TEXT,
+    discussed_at TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
