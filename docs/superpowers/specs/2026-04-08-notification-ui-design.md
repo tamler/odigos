@@ -17,7 +17,8 @@ A bar that appears at the top of the chat area when unread notifications exist. 
 **Collapsed state:**
 - Bell icon with unread count badge
 - Latest notification title as preview text
-- Auto-fades after 8 seconds if not clicked
+- Auto-fades after 8 seconds if not clicked — this is "seen" but NOT "read"
+- Only clicking a notification (opening it) marks it as "read" and clears the badge count
 - Subtle gradient background, not blocking chat
 
 **Expanded state (click to open):**
@@ -31,6 +32,7 @@ A bar that appears at the top of the chat area when unread notifications exist. 
 - Listen for `notification` events from the bus (already sent by Notifier)
 - When a new notification arrives: show the bar, update count
 - When all are read: hide the bar
+- Multi-tab sync: refetch unread count on `document.visibilitychange` (tab focus). No server-side broadcast needed for MVP.
 
 **State:** Add `notifications` and `unreadCount` to a new `useNotificationStore` Zustand store. Fetch on app load via `GET /api/notifications?unread_only=true&limit=5`.
 
@@ -54,8 +56,12 @@ A new page accessible from the sidebar navigation. Shows all agent activity time
 | `alert` | Yellow | warning | Discuss |
 
 **Actions:**
-- "Discuss" — if notification has `conversation_id`, navigate to `/?c={id}`. If not, create new conversation via `POST /api/conversations` then navigate. The agent gets artifact context through normal context assembly (the notification's `artifact_path` links to a brain file the agent can read).
-- "View artifact" — open `artifact_path` content. For MVP: fetch and display in a modal or new tab. Future: open in the editor.
+- "Discuss" — if notification has `conversation_id`, navigate to `/?c={id}`. If not, create new conversation via `POST /api/conversations` then navigate. The artifact content is explicitly injected as the first user message: `"Let's discuss your finding: {title}\n\n[artifact content loaded from artifact_path]"`. This guarantees the agent has the full context regardless of RAG budget.
+- "View artifact" — render `artifact_path` content in a modal using `react-markdown` (already in project deps). Renders headings, lists, code blocks, links properly. Future: open in the full editor.
+
+**Activity page pagination:** Infinite scroll, loading 20 notifications per page via `GET /api/notifications?limit=20&offset={n}`. Not "load all."
+
+**Read state on scroll:** Notifications on the Activity page are marked as read when they've been in the viewport for 500ms+ (intersection observer with delay). Prevents accidental read-marking from fast scrolling.
 
 **Implicit feedback tracking:**
 - When a notification card is viewed (scrolled into viewport or page loaded): mark as read via `PATCH /api/notifications/{id} {read: true}`
@@ -76,9 +82,10 @@ A new tab in the Settings page: "Proactive"
 
 Add "Activity" to the sidebar navigation with a notification badge.
 
-- Icon: bell or activity icon (lucide-react)
+- Icon: Activity icon from lucide-react
 - Badge: unread notification count (hidden when 0)
-- Position: near the top, after Chat / before Notebooks
+- Position: in the existing navigation group (Chat, Notebooks, Boards, Images), near the top
+- Badge visible even when sidebar is collapsed (positioned on the icon)
 
 ### 5. Telegram Support
 
