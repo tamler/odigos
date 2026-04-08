@@ -88,10 +88,67 @@ async def scan_active_goals(hb: Heartbeat) -> list[Opportunity]:
     return opportunities
 
 
+async def scan_synthesis_opportunities(hb: Heartbeat) -> list[Opportunity]:
+    """Find opportunities to synthesize across accumulated knowledge.
+
+    Looks for entity pairs connected through shared relationships and
+    topics that recur across multiple conversations.
+    """
+    opportunities = []
+    if not hb.db:
+        return opportunities
+
+    # Entity pairs connected through shared relationship targets
+    try:
+        pairs = await hb.db.fetch_all(
+            "SELECT DISTINCT e1.name as name1, e1.type as type1, "
+            "e2.name as name2, e2.type as type2 "
+            "FROM edges a "
+            "JOIN edges b ON a.target_id = b.target_id AND a.source_id != b.source_id "
+            "JOIN entities e1 ON a.source_id = e1.id "
+            "JOIN entities e2 ON b.source_id = e2.id "
+            "WHERE e1.status = 'active' AND e2.status = 'active' "
+            "LIMIT 5"
+        )
+        for p in pairs:
+            opportunities.append(Opportunity(
+                source="synthesis",
+                title=f"Connection: {p['name1']} and {p['name2']}",
+                context=f"{p['name1']} ({p['type1']}) and {p['name2']} ({p['type2']}) "
+                        f"share a common relationship — worth exploring",
+                priority_hint=0.3,
+            ))
+    except Exception:
+        pass
+
+    # Topics recurring across multiple conversations in the last 7 days
+    try:
+        repeated = await hb.db.fetch_all(
+            "SELECT substr(content, 1, 50) as topic, "
+            "COUNT(DISTINCT conversation_id) as conv_count "
+            "FROM messages WHERE role = 'user' "
+            "AND created_at > datetime('now', '-7 days') "
+            "AND length(content) > 30 "
+            "GROUP BY topic HAVING conv_count >= 2 LIMIT 3"
+        )
+        for r in repeated:
+            opportunities.append(Opportunity(
+                source="synthesis",
+                title=f"Recurring topic: {r['topic']}",
+                context=f"Appeared in {r['conv_count']} conversations — may warrant synthesis",
+                priority_hint=0.35,
+            ))
+    except Exception:
+        pass
+
+    return opportunities
+
+
 SIGNAL_SOURCES = [
     scan_brain_gaps,
     scan_recent_conversations,
     scan_active_goals,
+    scan_synthesis_opportunities,
 ]
 
 

@@ -185,34 +185,76 @@ async def _do_brain_maintenance(hb: Heartbeat) -> bool:
 
 
 async def run_brain_lint(hb: Heartbeat) -> bool:
-    """Lint pass: find orphan entities with no edges older than 7 days."""
+    """Lint pass: orphan entities, experience PRUNE/MERGE."""
     try:
-        return await _do_wiki_lint(hb)
+        return await _do_brain_lint(hb)
     except Exception:
-        logger.exception("Wiki lint failed")
+        logger.exception("Brain lint failed")
         return False
 
 
-async def _do_wiki_lint(hb: Heartbeat) -> bool:
+async def _do_brain_lint(hb: Heartbeat) -> bool:
     from odigos.memory.brain_writer import BrainWriter
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    findings: list[str] = []
 
+    # 1. Orphan entities (no edges, older than 7 days)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
     orphans = await hb.db.fetch_all(
-        "SELECT e.id, e.name, e.type, e.created_at FROM entities e "
-        "WHERE e.status = 'active' "
-        "AND e.created_at < ? "
+        "SELECT e.id, e.name, e.type FROM entities e "
+        "WHERE e.status = 'active' AND e.created_at < ? "
         "AND NOT EXISTS (SELECT 1 FROM edges WHERE source_id = e.id OR target_id = e.id)",
         (cutoff,),
     )
+    for o in orphans:
+        findings.append(f"Orphan entity: {o['name']} ({o['type']})")
 
-    if not orphans:
+    # 2. Experience PRUNE — stale (14 days unused) and low-confidence
+    stale = await hb.db.fetch_all(
+        "SELECT id, lesson FROM agent_experiences "
+        "WHERE times_applied = 0 AND created_at < datetime('now', '-14 days')"
+    )
+    for exp in stale:
+        await hb.db.execute("DELETE FROM agent_experiences WHERE id = ?", (exp["id"],))
+        findings.append(f"Pruned stale experience: {exp['lesson'][:60]}")
+
+    low_conf = await hb.db.fetch_all(
+        "SELECT id, lesson FROM agent_experiences "
+        "WHERE confidence < 0.3 AND times_applied < 2"
+    )
+    for exp in low_conf:
+        await hb.db.execute("DELETE FROM agent_experiences WHERE id = ?", (exp["id"],))
+        findings.append(f"Pruned low-confidence experience: {exp['lesson'][:60]}")
+
+    # 3. Experience MERGE — consolidate near-duplicate lessons per tool
+    tools = await hb.db.fetch_all("SELECT DISTINCT tool_name FROM agent_experiences")
+    for tool in tools:
+        exps = await hb.db.fetch_all(
+            "SELECT id, lesson, confidence FROM agent_experiences "
+            "WHERE tool_name = ? ORDER BY confidence DESC",
+            (tool["tool_name"],),
+        )
+        if len(exps) < 2:
+            continue
+        seen: list[dict] = []
+        for exp in exps:
+            words_a = set(exp["lesson"].lower().split())
+            is_dup = False
+            for kept in seen:
+                words_b = set(kept["lesson"].lower().split())
+                union = words_a | words_b
+                if union and len(words_a & words_b) / len(union) > 0.6:
+                    await hb.db.execute("DELETE FROM agent_experiences WHERE id = ?", (exp["id"],))
+                    findings.append(f"Merged duplicate experience: {exp['lesson'][:40]}")
+                    is_dup = True
+                    break
+            if not is_dup:
+                seen.append(dict(exp))
+
+    if not findings:
         return False
 
     writer = BrainWriter()
-    names = [o.get("name", "?") for o in orphans]
-    details = f"Found {len(orphans)} orphan entities (no edges, >7 days old): {', '.join(names[:20])}"
-    await writer.append_log("wiki_lint", details)
-    logger.info("Wiki lint: %s", details)
-
+    await writer.append_log("brain_lint", "\n".join(findings))
+    logger.info("Brain lint: %d findings", len(findings))
     return True
