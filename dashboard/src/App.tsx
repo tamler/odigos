@@ -16,6 +16,7 @@ const NotebookPage = lazy(() => import('./pages/NotebookPage'))
 const KanbanPage = lazy(() => import('./pages/KanbanPage'))
 const ArtifactsPage = lazy(() => import('./pages/ArtifactsPage'))
 const ImagesPage = lazy(() => import('./pages/ImagesPage'))
+const ActivityPage = lazy(() => import('./pages/ActivityPage'))
 const SharedNotebookPage = lazy(() => import('./pages/SharedNotebookPage'))
 const SharedBoardPage = lazy(() => import('./pages/SharedBoardPage'))
 
@@ -115,6 +116,7 @@ export default function App() {
               <Route path="/kanban/:id" element={<Suspense fallback={null}><KanbanPage /></Suspense>} />
               <Route path="/artifacts" element={<Suspense fallback={null}><ArtifactsPage /></Suspense>} />
               <Route path="/images" element={<Suspense fallback={null}><ImagesPage /></Suspense>} />
+              <Route path="/activity" element={<Suspense fallback={null}><ActivityPage /></Suspense>} />
               <Route path="*" element={<NotFoundPage />} />
             </Route>
           </Routes>

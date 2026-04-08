@@ -28,7 +28,8 @@ import {
   Columns3,
   Image as ImageIcon,
   Upload,
-  Key
+  Key,
+  Activity
 } from 'lucide-react'
 import { NotebookSidebar } from '@/components/NotebookSidebar'
 import { Button } from '@/components/ui/button'
@@ -47,6 +48,7 @@ import { prefetchMessages } from '@/lib/prefetch'
 import { useChatStore } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useConversationStore } from '@/stores/conversationStore'
+import { useNotificationStore } from '@/stores/notificationStore'
 import { Artifact } from '@/components/ArtifactCard'
 import type { Conversation } from '@/stores/conversationStore'
 
@@ -117,7 +119,9 @@ export const AppSidebar = memo(({
   const isNotebook = location.pathname.startsWith('/notebooks')
   const isKanban = location.pathname.startsWith('/kanban')
   const isImages = location.pathname.startsWith('/images')
-  const isChat = !isSettings && !isNotebook && !isKanban && !isImages
+  const isActivity = location.pathname === '/activity'
+  const isChat = !isSettings && !isNotebook && !isKanban && !isImages && !isActivity
+  const unreadCount = useNotificationStore((s) => s.unreadCount)
   const currentTab = location.pathname.split('/')[2] || 'general'
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -174,6 +178,10 @@ export const AppSidebar = memo(({
             <button onClick={() => navigate('/notebooks')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isNotebook ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Notebooks"><FileText className="h-4 w-4" /></button>
             <button onClick={() => navigate('/kanban')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isKanban ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Boards"><Columns3 className="h-4 w-4" /></button>
             <button onClick={() => navigate('/images')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors ${isImages ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Images"><ImageIcon className="h-4 w-4" /></button>
+            <button onClick={() => navigate('/activity')} className={`flex-1 p-2 rounded-lg flex items-center justify-center transition-colors relative ${isActivity ? 'bg-primary/10 text-primary shadow-inner' : 'text-muted-foreground hover:bg-muted'}`} title="Activity">
+              <Activity className="h-4 w-4" />
+              {unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-500 rounded-full text-[8px] text-white flex items-center justify-center font-bold">{unreadCount > 9 ? '!' : unreadCount}</span>}
+            </button>
           </div>
         )}
 

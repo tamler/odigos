@@ -16,6 +16,7 @@ import { Artifact } from '@/components/ArtifactCard'
 import { useChatStore } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useConversationStore } from '@/stores/conversationStore'
+import { NotificationBar } from '@/components/NotificationBar'
 import { AppSidebar } from './AppSidebar'
 import { useRouteState } from './hooks/useRouteState'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -173,6 +174,7 @@ export default function AppLayout() {
 
         <div className="flex-1 flex overflow-hidden relative">
           <main className={`flex-1 flex flex-col min-w-0 overflow-hidden lg:pt-0 transition-all duration-300 ${artifactPanelOpen ? 'lg:max-w-[350px] border-r border-border/40' : ''}`}>
+            <NotificationBar />
             <ErrorBoundary>
               {artifactPanelOpen ? (
                 <ChatPanel activeConversationId={activeConversationId} socketRef={socketRef} connected={connected} chatContext={chatContext} isSidePanel={false} />

@@ -45,6 +45,24 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           if (priority === 'urgent') toast.error(label)
           else if (priority === 'warning') toast.warning(label)
           else toast.info(label)
+
+          // Add to notification store for Activity page and bar
+          if (msg.id) {
+            const { useNotificationStore } = await import('@/stores/notificationStore')
+            useNotificationStore.getState().addNotification({
+              id: msg.id as string,
+              type: (msg.notification_type as string) || 'status',
+              title: title || '',
+              body: body || null,
+              artifact_path: null,
+              conversation_id: (msg.conversation_id as string) || null,
+              source: null,
+              read: 0,
+              created_at: new Date().toISOString(),
+              opened_at: null,
+              discussed_at: null,
+            })
+          }
         }
         if (msg.type === 'status') {
           chat.setStatus(msg.text as string)

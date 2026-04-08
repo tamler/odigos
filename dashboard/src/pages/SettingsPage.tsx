@@ -3,6 +3,7 @@ import { useParams, useNavigate, useOutletContext } from 'react-router-dom'
 import GeneralSettings from './settings/GeneralSettings'
 import AccountTab from './settings/AccountTab'
 import EvolutionTab from './settings/EvolutionTab'
+import ProactiveTab from './settings/ProactiveTab'
 import AgentsTab from './settings/AgentsTab'
 import PluginsTab from './settings/PluginsTab'
 import SkillsTab from './settings/SkillsTab'
@@ -41,6 +42,7 @@ import {
   ChevronRight,
   MessageCircle,
   Key,
+  Activity,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageTransition } from '@/components/ui/page-transition'
@@ -52,6 +54,7 @@ const SECTIONS = [
   { id: 'voice', label: 'Voice', icon: Volume2 },
   { id: 'skills', label: 'Skills', icon: Zap },
   { id: 'prompts', label: 'Prompts', icon: Terminal },
+  { id: 'proactive', label: 'Proactive', icon: Activity },
   { id: 'evolution', label: 'Evolution', icon: TrendingUp },
   { id: 'agents', label: 'Agents', icon: User },
   { id: 'plugins', label: 'Plugins', icon: Puzzle },
@@ -137,6 +140,7 @@ export default function SettingsPage() {
         {resolvedTab === 'general' && <GeneralSettings active={true} />}
         {resolvedTab === 'skills' && <SkillsTab active={true} />}
         {resolvedTab === 'prompts' && <PromptsTab active={true} />}
+        {resolvedTab === 'proactive' && <ProactiveTab />}
         {resolvedTab === 'evolution' && <EvolutionTab active={true} />}
         {resolvedTab === 'agents' && <AgentsTab active={true} />}
         {resolvedTab === 'plugins' && <PluginsTab active={true} />}
