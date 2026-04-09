@@ -17,6 +17,7 @@ export interface LoaderProps {
     | "text-shimmer"
     | "loading-dots"
     | "thinking"
+    | "dot-matrix"
   size?: "sm" | "md" | "lg"
   text?: string
   className?: string
@@ -497,6 +498,53 @@ export function ThinkingLoader({
   )
 }
 
+export function DotMatrixLoader({
+  className,
+  size = "md",
+}: {
+  className?: string
+  size?: "sm" | "md" | "lg"
+}) {
+  // 4 columns x 3 rows of dots
+  const dotSizes = {
+    sm: "size-1",
+    md: "size-1.5",
+    lg: "size-2",
+  }
+
+  const gapSizes = {
+    sm: "gap-0.5",
+    md: "gap-1",
+    lg: "gap-1.5",
+  }
+
+  // Wave pattern: each column lights up in sequence
+  const cols = 4
+  const rows = 3
+
+  return (
+    <div className={cn("inline-flex flex-col", gapSizes[size], className)}>
+      {[...Array(rows)].map((_, rowIdx) => (
+        <div key={rowIdx} className={cn("flex", gapSizes[size])}>
+          {[...Array(cols)].map((_, colIdx) => (
+            <div
+              key={colIdx}
+              className={cn(
+                "bg-primary rounded-full animate-[dot-matrix_1.4s_ease-in-out_infinite]",
+                dotSizes[size]
+              )}
+              style={{
+                animationDelay: `${(colIdx * 0.12) + (rowIdx * 0.04)}s`,
+              }}
+            />
+          ))}
+        </div>
+      ))}
+      <span className="sr-only">Loading</span>
+    </div>
+  )
+}
+
 function Loader({
   variant = "circular",
   size = "md",
@@ -530,6 +578,8 @@ function Loader({
       return <TextDotsLoader text={text} size={size} className={className} />
     case "thinking":
       return <ThinkingLoader size={size} className={className} />
+    case "dot-matrix":
+      return <DotMatrixLoader size={size} className={className} />
     default:
       return <CircularLoader size={size} className={className} />
   }
