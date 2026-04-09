@@ -68,9 +68,15 @@ class CreateSkillTool(BaseTool):
         "required": ["name", "description", "instructions"],
     }
 
-    def __init__(self, skill_registry: SkillRegistry, tool_registry: ToolRegistry | None = None) -> None:
+    def __init__(
+        self,
+        skill_registry: SkillRegistry,
+        tool_registry: ToolRegistry | None = None,
+        verifier=None,
+    ) -> None:
         self._registry = skill_registry
         self._tool_registry = tool_registry
+        self._verifier = verifier
 
     async def execute(self, params: dict) -> ToolResult:
         name = params.get("name")
@@ -129,6 +135,26 @@ class CreateSkillTool(BaseTool):
             msg += " as an executable code skill tool"
         msg += " and available in the catalog."
 
+        # Run verification if verifier is available
+        if self._verifier:
+            try:
+                vresult = await self._verifier.verify_skill(name)
+                skill.verified = vresult.passed
+                skill.verification_score = vresult.overall_score
+                from datetime import datetime, timezone
+                skill.verification_at = datetime.now(timezone.utc).isoformat()
+                self._registry.save(name)
+                if vresult.passed:
+                    msg += f" Verification passed (score: {vresult.overall_score:.2f})."
+                else:
+                    msg += (
+                        f" Verification FAILED (score: {vresult.overall_score:.2f}). "
+                        f"Diagnostics: {vresult.diagnostics or 'No details.'} "
+                        "Consider revising the instructions."
+                    )
+            except Exception:
+                logger.debug("Verification failed for skill '%s'", name, exc_info=True)
+
         return ToolResult(success=True, data=msg)
 
 
@@ -174,9 +200,15 @@ class UpdateSkillTool(BaseTool):
         "required": ["name"],
     }
 
-    def __init__(self, skill_registry: SkillRegistry, tool_registry: ToolRegistry | None = None) -> None:
+    def __init__(
+        self,
+        skill_registry: SkillRegistry,
+        tool_registry: ToolRegistry | None = None,
+        verifier=None,
+    ) -> None:
         self._registry = skill_registry
         self._tool_registry = tool_registry
+        self._verifier = verifier
 
     async def execute(self, params: dict) -> ToolResult:
         name = params.get("name")
@@ -223,7 +255,26 @@ class UpdateSkillTool(BaseTool):
             )
             self._tool_registry.register(runner)
 
-        return ToolResult(
-            success=True,
-            data=f"Skill '{skill.name}' updated.",
-        )
+        msg = f"Skill '{skill.name}' updated."
+
+        # Run verification if verifier is available
+        if self._verifier:
+            try:
+                vresult = await self._verifier.verify_skill(name)
+                skill.verified = vresult.passed
+                skill.verification_score = vresult.overall_score
+                from datetime import datetime, timezone
+                skill.verification_at = datetime.now(timezone.utc).isoformat()
+                self._registry.save(name)
+                if vresult.passed:
+                    msg += f" Verification passed (score: {vresult.overall_score:.2f})."
+                else:
+                    msg += (
+                        f" Verification FAILED (score: {vresult.overall_score:.2f}). "
+                        f"Diagnostics: {vresult.diagnostics or 'No details.'} "
+                        "Consider revising the instructions."
+                    )
+            except Exception:
+                logger.debug("Verification failed for skill '%s'", name, exc_info=True)
+
+        return ToolResult(success=True, data=msg)
