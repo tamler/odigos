@@ -1,12 +1,27 @@
 """Tests for structured memory system."""
 from __future__ import annotations
 
+import json
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
 
 from odigos.db import Database
+from odigos.memory.classifier import ClassificationResult
+from odigos.memory.store import MemoryRecord, MemoryStore
+from odigos.providers.base import LLMResponse
+
+
+def _make_llm_response(content: str) -> LLMResponse:
+    return LLMResponse(
+        content=content,
+        model="test/model",
+        tokens_in=50,
+        tokens_out=100,
+        cost_usd=0.001,
+    )
 
 
 @pytest_asyncio.fixture
@@ -75,3 +90,104 @@ class TestSchema:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='user_facts'"
         )
         assert row2 is None
+
+
+class TestMemoryStore:
+    async def test_store_inserts_memory_and_embedding(self, db):
+        mock_llm = AsyncMock()
+        mock_llm.complete = AsyncMock(
+            return_value=_make_llm_response(
+                json.dumps({
+                    "memory_type": "fact",
+                    "keywords": ["timezone", "PST"],
+                    "tags": ["user-profile"],
+                    "context_description": "User is in PST timezone.",
+                })
+            )
+        )
+
+        mock_embedder = AsyncMock()
+        mock_embedder.embed = AsyncMock(return_value=[0.1] * 768)
+
+        store = MemoryStore(
+            db=db,
+            llm_client=mock_llm,
+            embedder=mock_embedder,
+            prompts_dir="data/prompts",
+        )
+        record = await store.store(
+            content="My timezone is PST",
+            source_type="conversation",
+            source_id="conv-1",
+        )
+
+        assert record is not None
+        assert record.memory_type == "fact"
+
+        row = await db.fetch_one("SELECT * FROM memories WHERE id = ?", (record.id,))
+        assert row is not None
+        assert row["memory_type"] == "fact"
+        assert row["content"] == "My timezone is PST"
+        assert json.loads(row["keywords_json"]) == ["timezone", "PST"]
+
+    async def test_store_deduplicates_exact_match(self, db):
+        mock_llm = AsyncMock()
+        mock_llm.complete = AsyncMock(
+            return_value=_make_llm_response(
+                json.dumps({
+                    "memory_type": "fact",
+                    "keywords": ["timezone"],
+                    "tags": [],
+                    "context_description": "Timezone info.",
+                })
+            )
+        )
+
+        mock_embedder = AsyncMock()
+        mock_embedder.embed = AsyncMock(return_value=[0.1] * 768)
+        mock_embedder.embed_query = AsyncMock(return_value=[0.1] * 768)
+
+        store = MemoryStore(
+            db=db,
+            llm_client=mock_llm,
+            embedder=mock_embedder,
+            prompts_dir="data/prompts",
+        )
+
+        r1 = await store.store("My timezone is PST", "conversation", "conv-1")
+        r2 = await store.store("My timezone is PST", "conversation", "conv-2")
+
+        assert r1.id == r2.id
+
+        rows = await db.fetch_all("SELECT * FROM memories")
+        assert len(rows) == 1
+
+    async def test_store_with_bulk_skips_linking(self, db):
+        mock_llm = AsyncMock()
+        mock_llm.complete = AsyncMock(
+            return_value=_make_llm_response(
+                json.dumps({
+                    "memory_type": "general",
+                    "keywords": ["docker"],
+                    "tags": ["infra"],
+                    "context_description": "Docker content.",
+                })
+            )
+        )
+
+        mock_embedder = AsyncMock()
+        mock_embedder.embed = AsyncMock(return_value=[0.1] * 768)
+
+        store = MemoryStore(
+            db=db,
+            llm_client=mock_llm,
+            embedder=mock_embedder,
+            prompts_dir="data/prompts",
+        )
+        record = await store.store(
+            "Docker deployment steps...", "document", "doc-1", bulk=True,
+        )
+
+        assert record is not None
+        links = await db.fetch_all("SELECT * FROM memory_links")
+        assert len(links) == 0
