@@ -9,6 +9,7 @@ from odigos.api.agent_message import router as agent_message_router
 from odigos.api.goals import router as goals_router
 from odigos.api.memory import router as memory_router
 from odigos.api.agents import router as agents_router
+from odigos.api.plans import router as plans_router
 
 router = APIRouter()
 router.include_router(conversations_router)
@@ -20,3 +21,4 @@ router.include_router(agent_message_router)
 router.include_router(goals_router)
 router.include_router(memory_router)
 router.include_router(agents_router)
+router.include_router(plans_router)
