@@ -64,7 +64,8 @@ async def _do_brain_maintenance(hb: Heartbeat) -> bool:
 
             # Fetch related facts
             facts = await hb.db.fetch_all(
-                "SELECT * FROM user_facts WHERE fact LIKE ? LIMIT 20",
+                "SELECT id, content as fact, source_type as category, confidence FROM memories "
+                "WHERE memory_type = 'fact' AND status = 'active' AND content LIKE ? LIMIT 20",
                 (f"%{entity_name}%",),
             )
 
@@ -119,7 +120,7 @@ async def _do_brain_maintenance(hb: Heartbeat) -> bool:
             indexed_for_type = []
             for e in type_entities:
                 e_facts = await hb.db.fetch_all(
-                    "SELECT id FROM user_facts WHERE fact LIKE ? LIMIT 20",
+                    "SELECT id FROM memories WHERE memory_type = 'fact' AND status = 'active' AND content LIKE ? LIMIT 20",
                     (f"%{e.get('name', '')}%",),
                 )
                 e_edges = await hb.db.fetch_all(
@@ -146,7 +147,7 @@ async def _do_brain_maintenance(hb: Heartbeat) -> bool:
         # Mark which have pages
         for e in all_entities:
             e_facts = await hb.db.fetch_all(
-                "SELECT id FROM user_facts WHERE fact LIKE ? LIMIT 5",
+                "SELECT id FROM memories WHERE memory_type = 'fact' AND status = 'active' AND content LIKE ? LIMIT 5",
                 (f"%{e.get('name', '')}%",),
             )
             e_edges = await hb.db.fetch_all(

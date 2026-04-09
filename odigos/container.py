@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from odigos.db import Database
     from odigos.memory.ingester import DocumentIngester
     from odigos.memory.manager import MemoryManager
-    from odigos.memory.vectors import VectorMemory
     from odigos.providers.embeddings import EmbeddingProvider
     from odigos.providers.llm import LLMClient
     from odigos.providers.markitdown import MarkItDownProvider
@@ -58,7 +57,8 @@ class Container:
     embeddings: EmbeddingProvider | None = None
 
     # Phase 4: Memory
-    vector_memory: VectorMemory | None = None
+    # vector_memory retained for bootstrap compatibility during Task 9 migration
+    vector_memory: object | None = None
     memory_manager: MemoryManager | None = None
 
     # Phase 5: Tools

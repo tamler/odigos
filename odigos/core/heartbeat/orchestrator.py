@@ -233,6 +233,20 @@ class Heartbeat:
                 self._experience_tick_counter = 0
                 await profiling.extract_experiences(self)
 
+        # Phase 9.5: Memory evolution (refine + consolidate structured memories)
+        if not did_work and not _over_budget:
+            if hasattr(self, "memory_evolution") and self.memory_evolution:
+                try:
+                    stats = await self.memory_evolution.run_cycle()
+                    if stats.get("processed", 0) > 0:
+                        logger.info(
+                            "Memory evolution: %d processed, %d consolidated",
+                            stats["processed"],
+                            stats.get("consolidated", 0),
+                        )
+                except Exception:
+                    logger.debug("Memory evolution failed", exc_info=True)
+
         # Phase 10: Outcome evaluation (LLM calls, idle only)
         if not did_work and not _over_budget:
             self._outcome_tick_counter += 1

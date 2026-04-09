@@ -133,10 +133,6 @@ def get_agent(container: Container = Depends(get_container)):
     return container.agent
 
 
-def get_vector_memory(container: Container = Depends(get_container)):
-    """Get the VectorMemory instance from the container."""
-    return container.vector_memory
-
 
 def get_budget_tracker(container: Container = Depends(get_container)):
     """Get the BudgetTracker instance from the container."""

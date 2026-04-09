@@ -209,7 +209,10 @@ class Bootstrapper:
         from odigos.memory.manager import MemoryManager
         from odigos.memory.resolver import EntityResolver
         from odigos.memory.summarizer import ConversationSummarizer
-        from odigos.memory.vectors import VectorMemory
+        from odigos.memory.store import MemoryStore
+        from odigos.memory.recall import MemoryRecall
+        from odigos.memory.classifier import MemoryClassifier
+        from odigos.memory.evolution import MemoryEvolution
         from odigos.core.goal_store import GoalStore
         from odigos.core.trace import Tracer
 
@@ -217,18 +220,38 @@ class Bootstrapper:
         embedder = self.container.embeddings
         provider = self.container.llm_provider
 
-        vector_memory = VectorMemory(embedder=embedder, db=db)
-        self.container.vector_memory = vector_memory
+        memory_store = MemoryStore(
+            db=db,
+            llm_client=provider,
+            embedder=embedder,
+            prompts_dir="data/prompts",
+        )
+        memory_recall = MemoryRecall(db=db, embedder=embedder)
+        memory_classifier = MemoryClassifier(
+            llm_client=provider,
+            prompts_dir="data/prompts",
+        )
+        memory_evolution = MemoryEvolution(
+            db=db,
+            llm_client=provider,
+            prompts_dir="data/prompts",
+            embedder=embedder,
+        )
+        self.container.memory_store = memory_store
+        self.container.memory_recall = memory_recall
+        self.container.memory_classifier = memory_classifier
+        self.container.memory_evolution = memory_evolution
 
         chunking_service = ChunkingService()
 
         graph = EntityGraph(db=db)
-        resolver = EntityResolver(graph=graph, vector_memory=vector_memory)
+        resolver = EntityResolver(graph=graph, memory_store=memory_store)
         summarizer = ConversationSummarizer(
-            db=db, vector_memory=vector_memory, llm_provider=provider,
+            db=db, memory_store=memory_store, llm_provider=provider,
         )
         self.container.memory_manager = MemoryManager(
-            vector_memory=vector_memory,
+            memory_store=memory_store,
+            memory_recall=memory_recall,
             graph=graph,
             resolver=resolver,
             summarizer=summarizer,
@@ -239,7 +262,7 @@ class Bootstrapper:
         logger.info("Memory system initialized")
 
         # Corrections manager (stored on container for agent init)
-        self._corrections_manager = CorrectionsManager(db=db, vector_memory=vector_memory)
+        self._corrections_manager = CorrectionsManager(db=db, memory_store=memory_store)
         logger.info("Corrections manager initialized")
 
         # Goal store
@@ -297,7 +320,7 @@ class Bootstrapper:
         db = self.container.db
         settings = self.settings
         provider = self.container.llm_provider
-        vector_memory = self.container.vector_memory
+        memory_store = self.container.memory_store
         memory_manager = self.container.memory_manager
         goal_store = self.container.goal_store
         skill_registry = self.container.skill_registry
@@ -308,7 +331,7 @@ class Bootstrapper:
         registry = ToolRegistry()
 
         # -- Core tools --
-        self._register_core_tools(registry, db, settings, vector_memory)
+        self._register_core_tools(registry, db, settings, memory_store)
         self._register_workspace_tools(registry, db, skill_registry)
         self._register_media_tools(registry, db, settings)
         self._register_comms_tools(registry, settings)
@@ -347,7 +370,7 @@ class Bootstrapper:
 
         # Remember fact tool
         from odigos.tools.remember_fact import RememberFactTool
-        _embedder = vector_memory.embedder if vector_memory else None
+        _embedder = memory_store._embedder if memory_store else None
         registry.register(RememberFactTool(
             db=db, provider=provider, embedder=_embedder,
             background_model=settings.llm.background_model,
@@ -360,7 +383,7 @@ class Bootstrapper:
         self.container.tool_registry = registry
         self._subagent_manager = subagent_manager
 
-    def _register_core_tools(self, registry, db, settings, vector_memory):
+    def _register_core_tools(self, registry, db, settings, memory_store):
         """Search, scrape, code, file, document tools."""
         from odigos.providers.scraper import ScraperProvider
         from odigos.tools.scrape import ScrapeTool
@@ -383,7 +406,9 @@ class Bootstrapper:
         self.container.markitdown_provider = markitdown_provider
 
         doc_ingester = DocumentIngester(
-            db=db, vector_memory=vector_memory,
+            db=db,
+            memory_store=memory_store,
+            memory_classifier=self.container.memory_classifier,
             chunking_service=self._chunking_service,
         )
         self.container.doc_ingester = doc_ingester
@@ -730,7 +755,6 @@ class Bootstrapper:
         # Query classifier
         classifier = QueryClassifier(
             provider=provider, db=db,
-            vector_memory=self.container.vector_memory,
             tool_registry=self.container.tool_registry,
             skill_registry=self.container.skill_registry,
         )
@@ -971,6 +995,10 @@ class Bootstrapper:
             logger.info("SkillVerifier attached to heartbeat")
         except Exception:
             logger.warning("Could not attach consolidator/skill_verifier to heartbeat", exc_info=True)
+
+        # Wire memory evolution into heartbeat
+        heartbeat.memory_evolution = self.container.memory_evolution
+        logger.info("MemoryEvolution attached to heartbeat")
 
         # Wire email config
         if s.email.imap_host:

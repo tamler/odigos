@@ -257,15 +257,12 @@ async def rebuild_from_brain(db, brain_dir: Path) -> dict:
             for fact in entity["facts"]:
                 fact_id = uuid.uuid4().hex[:12]
                 await db.execute(
-                    "INSERT OR IGNORE INTO user_facts "
-                    "(id, fact, category, source, source_type, source_id, "
-                    "confidence, created_at, updated_at) "
-                    "VALUES (?, ?, 'general', 'brain_rebuild', ?, ?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO memories "
+                    "(id, content, memory_type, source_type, source, confidence, status, created_at, updated_at) "
+                    "VALUES (?, ?, 'fact', 'general', 'brain_rebuild', ?, 'active', ?, ?)",
                     (
                         fact_id,
                         fact["fact"],
-                        fact.get("source_type"),
-                        fact.get("source_id"),
                         entity["confidence"],
                         now,
                         now,

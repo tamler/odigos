@@ -49,7 +49,8 @@ async def find_similar_facts(
         # Fallback: simple keyword overlap
         words = set(new_fact.lower().split())
         all_facts = await db.fetch_all(
-            "SELECT id, fact, category, confidence FROM user_facts ORDER BY updated_at DESC LIMIT 100"
+            "SELECT id, content as fact, source_type as category, confidence FROM memories "
+            "WHERE memory_type = 'fact' AND status = 'active' ORDER BY updated_at DESC LIMIT 100"
         )
         results = []
         for f in all_facts:
@@ -63,11 +64,9 @@ async def find_similar_facts(
     try:
         new_vec = await embedder.embed(new_fact)
 
-        # Query sqlite-vec for similar facts
-        # We need to check if facts have been indexed in the vector store
-        # For now, use the simpler approach: embed and compare against all facts
         all_facts = await db.fetch_all(
-            "SELECT id, fact, category, confidence FROM user_facts ORDER BY updated_at DESC LIMIT 100"
+            "SELECT id, content as fact, source_type as category, confidence FROM memories "
+            "WHERE memory_type = 'fact' AND status = 'active' ORDER BY updated_at DESC LIMIT 100"
         )
         if not all_facts:
             return []
@@ -115,10 +114,13 @@ async def check_and_store_fact(
     fact_id = uuid.uuid4().hex
 
     # 1. Check exact duplicate
-    existing = await db.fetch_one("SELECT id FROM user_facts WHERE fact = ?", (fact,))
+    existing = await db.fetch_one(
+        "SELECT id FROM memories WHERE memory_type = 'fact' AND content = ? AND status = 'active'",
+        (fact,),
+    )
     if existing:
         await db.execute(
-            "UPDATE user_facts SET updated_at = ?, confidence = ? WHERE id = ?",
+            "UPDATE memories SET updated_at = ?, confidence = ? WHERE id = ?",
             (now, confidence, existing["id"]),
         )
         return {
@@ -143,7 +145,7 @@ async def check_and_store_fact(
                     old_fact = s["fact"]
                     # Replace the old fact with the new one
                     await db.execute(
-                        "UPDATE user_facts SET fact = ?, category = ?, source = ?, "
+                        "UPDATE memories SET content = ?, source_type = ?, source = ?, "
                         "confidence = ?, updated_at = ? WHERE id = ?",
                         (fact, category, source, confidence, now, s["id"]),
                     )
@@ -163,8 +165,8 @@ async def check_and_store_fact(
 
     # 4. No contradiction found — store as new
     await db.execute(
-        "INSERT INTO user_facts (id, fact, category, source, confidence, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO memories (id, content, memory_type, source_type, source, confidence, status, created_at, updated_at) "
+        "VALUES (?, ?, 'fact', ?, ?, ?, 'active', ?, ?)",
         (fact_id, fact, category, source, confidence, now, now),
     )
     return {
