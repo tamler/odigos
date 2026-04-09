@@ -486,7 +486,8 @@ CREATE TABLE IF NOT EXISTS corrections (
     correction TEXT,
     context TEXT,
     category TEXT,
-    applied_count INTEGER DEFAULT 0
+    applied_count INTEGER DEFAULT 0,
+    consolidated_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_corrections_conversation ON corrections(conversation_id);
@@ -934,3 +935,35 @@ CREATE TABLE IF NOT EXISTS agent_templates (
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_templates_division ON agent_templates(division);
+
+-- ════════════════════════════════════════════════════════════════════
+-- SKILL VERIFICATION & CONSOLIDATION
+-- ════════════════════════════════════════════════════════════════════
+
+-- Skill verification history
+CREATE TABLE IF NOT EXISTS skill_verifications (
+    id TEXT PRIMARY KEY,
+    skill_name TEXT NOT NULL,
+    scenarios_json TEXT,
+    results_json TEXT,
+    overall_score REAL,
+    escalation_level INTEGER DEFAULT 0,
+    diagnostics TEXT,
+    model_used TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_verifications_skill
+    ON skill_verifications(skill_name);
+
+-- Consolidation audit log
+CREATE TABLE IF NOT EXISTS consolidation_log (
+    id TEXT PRIMARY KEY,
+    axis TEXT NOT NULL,
+    corrections_processed INTEGER,
+    operations_json TEXT,
+    rules_before INTEGER,
+    rules_after INTEGER,
+    compacted INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now'))
+);

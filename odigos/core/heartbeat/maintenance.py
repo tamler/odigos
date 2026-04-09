@@ -27,6 +27,27 @@ async def run_evolution(hb: "Heartbeat") -> None:
         # Domain performance rollup (cheap, runs every evolution cycle)
         await hb.evolution_engine.rollup_domain_performance()
 
+        # Consolidate corrections into prompt sections
+        if hasattr(hb, "consolidator") and hb.consolidator:
+            try:
+                stats = await hb.consolidator.consolidate()
+                if stats.get("corrections_processed", 0) > 0:
+                    logger.info(
+                        "Consolidation: processed %d corrections, %d ops, %d knowledge skipped",
+                        stats["corrections_processed"],
+                        stats.get("operations", 0),
+                        stats.get("knowledge_skipped", 0),
+                    )
+            except Exception:
+                logger.debug("Consolidation failed", exc_info=True)
+
+        # Re-verify one skill per cycle if score diverges
+        if hasattr(hb, "skill_verifier") and hb.skill_verifier and hasattr(hb, "skill_registry") and hb.skill_registry:
+            try:
+                await _reverify_one_skill(hb)
+            except Exception:
+                logger.debug("Skill re-verification failed", exc_info=True)
+
         # Run strategist if enough new evaluations
         if hb.strategist:
             if await hb.strategist.should_run():
@@ -36,6 +57,34 @@ async def run_evolution(hb: "Heartbeat") -> None:
                                 len(analysis.get("hypotheses", [])))
     except Exception:
         logger.debug("Evolution cycle failed", exc_info=True)
+
+
+async def _reverify_one_skill(hb) -> None:
+    """Re-verify at most one committed/mature skill whose real-world score diverges."""
+    from odigos.skills.maturity import demote_on_failed_verification
+
+    for skill in hb.skill_registry.list():
+        if skill.builtin or skill.maturity not in ("committed", "mature"):
+            continue
+        if not skill.verified or skill.verification_score == 0.0:
+            continue
+        if skill.avg_score < skill.verification_score - 0.15:
+            logger.info(
+                "Re-verifying skill '%s' (avg=%.2f vs vscore=%.2f)",
+                skill.name, skill.avg_score, skill.verification_score,
+            )
+            skill.escalation_level += 1
+            result = await hb.skill_verifier.verify_skill(skill.name)
+            skill.verification_score = result.overall_score
+            from datetime import datetime, timezone
+            skill.verification_at = datetime.now(timezone.utc).isoformat()
+            skill.verified = result.passed
+            demotion = demote_on_failed_verification(skill)
+            if demotion:
+                skill.maturity = demotion
+                skill.escalation_level = 0
+            hb.skill_registry.save(skill.name)
+            return  # max 1 per cycle
 
 
 async def check_for_updates(hb: "Heartbeat") -> None:

@@ -484,12 +484,28 @@ class Bootstrapper:
 
         from odigos.tools.skill_tool import ActivateSkillTool
         from odigos.tools.skill_manage import CreateSkillTool, UpdateSkillTool
+
+        # Build skill verifier for use in skill tools (lazy — llm_provider available at this point)
+        try:
+            from odigos.skills.verifier import SkillVerifier as _SkillVerifier
+            _skill_verifier = _SkillVerifier(
+                llm_client=self.container.llm_provider,
+                prompts_dir="data/prompts",
+                skill_registry=skill_registry,
+                db=db,
+            )
+        except Exception:
+            logger.warning("SkillVerifier unavailable for skill tools", exc_info=True)
+            _skill_verifier = None
+
         registry.register(ActivateSkillTool(skill_registry=skill_registry))
         registry.register(CreateSkillTool(
             skill_registry=skill_registry, tool_registry=registry,
+            verifier=_skill_verifier,
         ))
         registry.register(UpdateSkillTool(
             skill_registry=skill_registry, tool_registry=registry,
+            verifier=_skill_verifier,
         ))
         logger.info("Skill tools registered (activate, create, update)")
 
@@ -929,6 +945,32 @@ class Bootstrapper:
         heartbeat._proactive_config = self.settings.proactive
         self.container.agent.heartbeat = heartbeat
         self.container.heartbeat = heartbeat
+
+        # Wire consolidator and skill verifier into heartbeat
+        try:
+            from odigos.core.consolidation import PromptConsolidator
+            from odigos.skills.verifier import SkillVerifier
+
+            consolidator = PromptConsolidator(
+                db=db,
+                llm_client=self.container.llm_provider,
+                prompts_dir="data/prompts",
+                sections_dir="data/agent",
+            )
+            heartbeat.consolidator = consolidator
+            logger.info("PromptConsolidator attached to heartbeat")
+
+            skill_verifier = SkillVerifier(
+                llm_client=self.container.llm_provider,
+                prompts_dir="data/prompts",
+                skill_registry=self.container.skill_registry,
+                db=db,
+            )
+            heartbeat.skill_verifier = skill_verifier
+            heartbeat.skill_registry = self.container.skill_registry
+            logger.info("SkillVerifier attached to heartbeat")
+        except Exception:
+            logger.warning("Could not attach consolidator/skill_verifier to heartbeat", exc_info=True)
 
         # Wire email config
         if s.email.imap_host:

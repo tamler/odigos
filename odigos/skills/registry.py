@@ -29,6 +29,9 @@ class Skill:
     failure_count: int = 0
     avg_score: float = 0.0
     last_used_at: str = ""
+    verification_score: float = 0.0
+    verification_at: str = ""
+    escalation_level: int = 0
 
 
 class SkillRegistry:

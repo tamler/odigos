@@ -23,6 +23,7 @@ def _make_skill(
     failure_count: int = 0,
     avg_score: float = 0.0,
     builtin: bool = False,
+    verified: bool = True,
 ) -> Skill:
     return Skill(
         name=name,
@@ -31,12 +32,20 @@ def _make_skill(
         complexity="standard",
         system_prompt="Do the thing.",
         builtin=builtin,
+        verified=verified,
         maturity=maturity,
         usage_count=usage_count,
         success_count=success_count,
         failure_count=failure_count,
         avg_score=avg_score,
     )
+
+
+def test_skill_has_verification_fields():
+    skill = _make_skill()
+    assert skill.verification_score == 0.0
+    assert skill.verification_at == ""
+    assert skill.escalation_level == 0
 
 
 def test_progenitor_to_committed():
@@ -55,6 +64,7 @@ def test_committed_to_mature():
         usage_count=MATURE_MIN_USES,
         avg_score=MATURE_MIN_SCORE,
     )
+    skill.verification_score = 0.75
     result = evaluate_maturity(skill)
     assert result == "mature"
 
@@ -144,3 +154,67 @@ def test_builtin_immune():
     )
     result2 = evaluate_maturity(skill2)
     assert result2 is None
+
+
+def test_progenitor_to_committed_requires_verified():
+    skill = _make_skill(
+        maturity="progenitor",
+        usage_count=COMMIT_MIN_USES,
+        avg_score=COMMIT_MIN_SCORE,
+    )
+    skill.verified = False
+    result = evaluate_maturity(skill)
+    assert result is None
+
+
+def test_progenitor_to_committed_with_verified():
+    skill = _make_skill(
+        maturity="progenitor",
+        usage_count=COMMIT_MIN_USES,
+        avg_score=COMMIT_MIN_SCORE,
+    )
+    skill.verified = True
+    result = evaluate_maturity(skill)
+    assert result == "committed"
+
+
+def test_committed_to_mature_requires_verification_score():
+    skill = _make_skill(
+        maturity="committed",
+        usage_count=MATURE_MIN_USES,
+        avg_score=MATURE_MIN_SCORE,
+    )
+    skill.verified = True
+    skill.verification_score = 0.65
+    result = evaluate_maturity(skill)
+    assert result is None
+
+
+def test_committed_to_mature_with_verification_score():
+    skill = _make_skill(
+        maturity="committed",
+        usage_count=MATURE_MIN_USES,
+        avg_score=MATURE_MIN_SCORE,
+    )
+    skill.verified = True
+    skill.verification_score = 0.75
+    result = evaluate_maturity(skill)
+    assert result == "mature"
+
+
+def test_demotion_on_failed_reverification():
+    from odigos.skills.maturity import demote_on_failed_verification
+    skill = _make_skill(maturity="committed", usage_count=10, avg_score=0.65)
+    skill.verification_score = 0.45
+    skill.escalation_level = 1
+    result = demote_on_failed_verification(skill)
+    assert result == "progenitor"
+
+
+def test_no_demotion_if_verification_passing():
+    from odigos.skills.maturity import demote_on_failed_verification
+    skill = _make_skill(maturity="committed", usage_count=10, avg_score=0.65)
+    skill.verification_score = 0.7
+    skill.escalation_level = 0
+    result = demote_on_failed_verification(skill)
+    assert result is None
