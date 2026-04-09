@@ -84,7 +84,12 @@ Shows live agent state from `/api/state`.
 }
 ```
 
-The heartbeat orchestrator sets these on the heartbeat instance as it enters each phase. The `/api/state` endpoint reads from the live heartbeat instance.
+**Heartbeat state reporting:** The `Heartbeat` class gains a `get_status() -> dict` method that returns `{current_phase, current_activity, current_plan}`. The orchestrator sets these as instance attributes when entering/exiting each phase. The `/api/state` endpoint accesses the singleton heartbeat via existing dependency injection and calls `get_status()`.
+
+**State endpoint caching:** `/api/state` already does multiple heavy queries (active conversations, total messages, memory counts, trial status). To avoid making it slower:
+- Cache the heavy aggregate counts for 60 seconds in-memory (`functools.lru_cache` with TTL via a small wrapper, or a simple dict + timestamp)
+- The Working Now data (`current_phase`, `current_plan`, `current_activity`) is read live from the heartbeat singleton — never cached
+- Budget data is read live from BudgetTracker — never cached
 
 ### Budget Card
 
@@ -115,7 +120,9 @@ Pulled from `/api/goals?status=active`.
 **Empty state:** "No active goals. Set one in chat."
 
 **Backend gap:**
-- Add `progress: int (0-100)` field to `goals` table
+- Add `progress: int (0-100)` field to `goals` table (default 0)
+- `GoalStore.create_goal` initializes `progress=0` explicitly
+- `GoalStore.update_goal` adds `progress` to its allowed update fields
 - Existing `update_goal` tool gains a `progress` argument; agent updates manually
 - Goals with `progress == 0` AND `created_at < 24h ago` render without the bar (just title) to avoid wall-of-empty-bars
 - Schema migration `007_goal_progress.sql` — `ALTER TABLE goals ADD COLUMN progress INTEGER DEFAULT 0`
@@ -160,6 +167,8 @@ async def list_active_plans(db: Database = Depends(get_db)):
 ```
 
 Helper functions parse the `steps` JSON to count done/total.
+
+**Future optimization (deferred):** If active plan count grows large, add `completed_steps` and `total_steps` columns to `task_plans`, updated by the plan executor as it progresses. For V2, JSON parsing is fine — typical active plan count is < 5.
 
 ---
 
