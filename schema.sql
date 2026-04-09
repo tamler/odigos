@@ -106,19 +106,53 @@ CREATE TABLE IF NOT EXISTS conversation_summaries (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS memory_entries (
+-- Structured memories (replaces memory_entries + user_facts)
+CREATE TABLE IF NOT EXISTS memories (
     id TEXT PRIMARY KEY,
-    content_preview TEXT NOT NULL,
+    content TEXT NOT NULL,
+    memory_type TEXT NOT NULL,
+    keywords_json TEXT DEFAULT '[]',
+    tags_json TEXT DEFAULT '[]',
+    context_description TEXT,
     source_type TEXT NOT NULL,
     source_id TEXT NOT NULL,
-    when_to_use TEXT DEFAULT '',
-    memory_type TEXT DEFAULT 'general',
-    created_at TEXT DEFAULT (datetime('now'))
+    conversation_id TEXT,
+    confidence REAL DEFAULT 0.8,
+    status TEXT DEFAULT 'active',
+    superseded_by TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_memory_entries_source_type ON memory_entries(source_type);
-CREATE INDEX IF NOT EXISTS idx_memory_entries_source_id ON memory_entries(source_id);
-CREATE INDEX IF NOT EXISTS idx_memory_entries_memory_type ON memory_entries(memory_type);
+CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(memory_type);
+CREATE INDEX IF NOT EXISTS idx_memories_status ON memories(status);
+CREATE INDEX IF NOT EXISTS idx_memories_source ON memories(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_memories_conversation ON memories(conversation_id);
+
+-- Bidirectional memory links
+CREATE TABLE IF NOT EXISTS memory_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_note_id TEXT REFERENCES memories(id) ON DELETE CASCADE,
+    target_note_id TEXT REFERENCES memories(id) ON DELETE CASCADE,
+    relationship TEXT NOT NULL,
+    strength REAL DEFAULT 1.0,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(source_note_id, target_note_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_links_source ON memory_links(source_note_id);
+CREATE INDEX IF NOT EXISTS idx_memory_links_target ON memory_links(target_note_id);
+
+-- Evolution queue (deferred memory refinement)
+CREATE TABLE IF NOT EXISTS evolution_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    existing_memory_id TEXT REFERENCES memories(id),
+    new_content TEXT NOT NULL,
+    new_source_id TEXT,
+    reason TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    processed_at TEXT
+);
 
 -- Vector search (sqlite-vec, 768-d embeddings)
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec USING vec0(
@@ -128,28 +162,27 @@ CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec USING vec0(
 
 -- Full-text search
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-    content_preview,
-    when_to_use,
-    content='memory_entries',
+    content, context_description, keywords_json,
+    content='memories',
     content_rowid='rowid'
 );
 
 -- FTS sync triggers
-CREATE TRIGGER IF NOT EXISTS memory_entries_ai AFTER INSERT ON memory_entries BEGIN
-    INSERT INTO memory_fts(rowid, content_preview, when_to_use)
-    VALUES (new.rowid, new.content_preview, new.when_to_use);
+CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+    INSERT INTO memory_fts(rowid, content, context_description, keywords_json)
+    VALUES (new.rowid, new.content, new.context_description, new.keywords_json);
 END;
 
-CREATE TRIGGER IF NOT EXISTS memory_entries_ad AFTER DELETE ON memory_entries BEGIN
-    INSERT INTO memory_fts(memory_fts, rowid, content_preview, when_to_use)
-    VALUES ('delete', old.rowid, old.content_preview, old.when_to_use);
+CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+    INSERT INTO memory_fts(memory_fts, rowid, content, context_description, keywords_json)
+    VALUES ('delete', old.rowid, old.content, old.context_description, old.keywords_json);
 END;
 
-CREATE TRIGGER IF NOT EXISTS memory_entries_au AFTER UPDATE ON memory_entries BEGIN
-    INSERT INTO memory_fts(memory_fts, rowid, content_preview, when_to_use)
-    VALUES ('delete', old.rowid, old.content_preview, old.when_to_use);
-    INSERT INTO memory_fts(rowid, content_preview, when_to_use)
-    VALUES (new.rowid, new.content_preview, new.when_to_use);
+CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+    INSERT INTO memory_fts(memory_fts, rowid, content, context_description, keywords_json)
+    VALUES ('delete', old.rowid, old.content, old.context_description, old.keywords_json);
+    INSERT INTO memory_fts(rowid, content, context_description, keywords_json)
+    VALUES (new.rowid, new.content, new.context_description, new.keywords_json);
 END;
 
 CREATE TABLE IF NOT EXISTS pending_brain_writes (
@@ -811,20 +844,6 @@ CREATE TABLE IF NOT EXISTS user_profile_v2 (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS user_facts (
-    id TEXT PRIMARY KEY,
-    fact TEXT NOT NULL,
-    category TEXT DEFAULT 'general',
-    source TEXT DEFAULT 'extracted',
-    source_type TEXT,
-    source_id TEXT,
-    content_hash TEXT,
-    confidence REAL DEFAULT 0.8,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_user_facts_category ON user_facts(category);
 
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
     id TEXT PRIMARY KEY,
