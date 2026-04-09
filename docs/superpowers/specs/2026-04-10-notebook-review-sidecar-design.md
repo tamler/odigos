@@ -42,6 +42,7 @@ The only genuinely new pieces are (1) three columns on `notebook_entries`, (2) o
 ALTER TABLE notebook_entries ADD COLUMN quote TEXT;
 ALTER TABLE notebook_entries ADD COLUMN trigger_type TEXT;
 ALTER TABLE notebook_entries ADD COLUMN viewed_at TEXT;
+ALTER TABLE notebook_entries ADD COLUMN parent_id TEXT REFERENCES notebook_entries(id);
 
 -- Add to existing notebooks table
 ALTER TABLE notebooks ADD COLUMN last_reviewed_at TEXT;
@@ -60,11 +61,13 @@ Migration: `migrations/008_notebook_notes_extension.sql`
 - `active` — visible
 - `rejected` — user rejected an agent_suggestion
 - `dead` — NEW: user archived an agent review comment
+- `stale` — NEW: quoted text no longer exists in the notebook. Rendered in UI with a "[quote no longer in document]" indicator. Detected by the next review cycle.
 
 **New fields:**
 - `quote` (TEXT, nullable) — text from the notebook that the agent is commenting on. Only populated for `entry_type='agent'`.
 - `trigger_type` (TEXT, nullable) — why the entry was created: `heartbeat`, `on-demand`, `scheduled`, `reply`. NULL for normal user entries.
 - `viewed_at` (TEXT, nullable) — when the user last viewed this entry. Drives unread indicators.
+- `parent_id` (TEXT, nullable, FK to notebook_entries.id) — for user replies to agent observations. Phase 1 stores the relationship; Phase 2 renders threaded UI.
 
 ### Notebook Backup File Split
 
@@ -194,6 +197,7 @@ REVIEW_INTERVAL_HOURS = 24
 MAX_NOTEBOOKS_PER_CYCLE = 1
 MIN_CONTENT_CHARS = 500
 MAX_ACTIVE_NOTES_PER_NOTEBOOK = 10
+MAX_REVIEW_CONTENT_CHARS = 8000  # ~2000 tokens
 
 
 async def review_notebooks(hb) -> int:
@@ -208,17 +212,20 @@ async def review_notebooks(hb) -> int:
 1. Find the oldest `share_with_agent=true` notebook with `last_reviewed_at IS NULL OR last_reviewed_at < datetime('now', '-24 hours')`. LIMIT 1.
 2. Skip if notebook has < 500 chars of user content (nothing to say).
 3. Count existing active agent notes on the notebook. Skip if >= 10 (avoid spam).
-4. Load user entries + existing agent notes (for the "don't repeat yourself" context).
-5. Call LLM with `data/prompts/notebook_review.md` prompt using `background_model`.
-6. Parse response JSON: `{"observations": [{"quote": str, "comment": str}, ...]}`.
-7. For each observation:
+4. **Stale quote check:** Load all active agent notes for this notebook. For each, check if `note.quote` still exists as a substring (case-insensitive) in the current notebook content. If not, UPDATE `status='stale'`.
+5. Load user entries + existing active agent notes (for the "don't repeat yourself" context).
+6. **Content window:** Concatenate user entry content. If total > 8000 chars, truncate to the 8000 most recent chars and log a warning. This keeps the LLM call within budget regardless of notebook size.
+7. Load `data/agent/behavioral_principles.md` content (best-effort; use empty string if missing).
+8. Call LLM with `data/prompts/notebook_review.md` prompt using `background_model`. Fill `{agent_principles}`, `{existing_notes_summary}`, `{notebook_content}` placeholders.
+9. Parse response JSON: `{"observations": [{"quote": str, "comment": str}, ...]}`.
+10. For each observation:
    - Validate the quote appears in the notebook content (skip hallucinated quotes)
    - INSERT a new notebook_entry with `entry_type='agent'`, `trigger_type='heartbeat'`, `quote=...`, `content=comment`, `status='active'`
-8. After the batch, call `_backup_to_disk()` to regenerate both files.
-9. UPDATE `notebooks SET last_reviewed_at = datetime('now') WHERE id = ?`.
-10. For each observation, publish a WebSocket message `{type: 'note_added', notebook_id, entry_id}` via the existing message bus.
-11. For each observation, create a notification via the existing notification store: `{type: 'suggestion', title: f'Agent reviewed {notebook_title}', body: comment[:200], metadata: {notebook_id, entry_id}}`.
-12. Return 1.
+11. After the batch, call `_backup_to_disk()` to regenerate both files. **Backup calls are serialized per notebook via an asyncio.Lock keyed by notebook_id** to prevent file write collisions under concurrent updates.
+12. UPDATE `notebooks SET last_reviewed_at = datetime('now') WHERE id = ?`.
+13. For each observation, publish a WebSocket message `{type: 'note_added', notebook_id, entry_id}` via the existing message bus.
+14. For each observation, create a notification via the existing notification store: `{type: 'suggestion', title: f'Agent reviewed {notebook_title}', body: comment[:200], metadata: {notebook_id, entry_id}}`.
+15. Return 1.
 
 ### Cost control
 
@@ -236,6 +243,10 @@ async def review_notebooks(hb) -> int:
 You are a thoughtful reviewer for a user's personal notebook. Read the notebook
 content and surface observations that might be useful to the user.
 
+## Agent principles
+
+{agent_principles}
+
 ## Rules
 
 - Focus on patterns, contradictions, and connections to things you know about the user
@@ -244,6 +255,7 @@ content and surface observations that might be useful to the user.
 - Do NOT comment on typos, style, grammar, or spelling.
 - Do NOT repeat observations you've already made (listed below).
 - Do NOT make judgmental comments. Be a helpful peer, not a critic.
+- Follow the agent principles above — they define your voice and behavior across all surfaces.
 - If nothing is worth saying, return an empty list.
 
 ## Existing agent notes on this notebook
@@ -345,12 +357,28 @@ Changes:
 7. Keyboard shortcut `Cmd+Shift+N` toggles the panel
 
 ```tsx
-<div className="flex h-full">
-  <div className={showNotes ? "flex-1 min-w-0" : "w-full"}>
+<div className="flex h-full relative">
+  <div className={showNotes ? "flex-1 min-w-0 md:pr-0" : "w-full"}>
     <MarkdownEditor ... onSelectionChange={setSelectedQuote} />
   </div>
+
+  {/* Desktop (>=768px): split view on right */}
   {showNotes && (
-    <div className="w-[40%] border-l border-border overflow-y-auto">
+    <div className="hidden md:block md:w-[40%] border-l border-border overflow-y-auto">
+      <NoteSidecar
+        notebookId={notebookId}
+        onQuoteClick={handleQuoteClick}
+        onReplyClick={handleReplyClick}
+      />
+    </div>
+  )}
+
+  {/* Mobile (<768px): bottom sheet drawer */}
+  {showNotes && (
+    <div
+      className="md:hidden fixed inset-x-0 bottom-0 top-16 z-40 bg-background border-t border-border overflow-y-auto rounded-t-2xl shadow-lg"
+      onClick={(e) => e.target === e.currentTarget && setShowNotes(false)}
+    >
       <NoteSidecar
         notebookId={notebookId}
         onQuoteClick={handleQuoteClick}
@@ -360,6 +388,8 @@ Changes:
   )}
 </div>
 ```
+
+**Mobile behavior:** Below 768px, the sidecar becomes a bottom-sheet drawer that covers the lower portion of the screen when toggled. Tapping the overlay area closes it. The editor stays full-width behind it for quick dismiss-and-reference. The TOC and entry list remain the same — just the container swaps.
 
 ### Quote-click jump behavior
 
