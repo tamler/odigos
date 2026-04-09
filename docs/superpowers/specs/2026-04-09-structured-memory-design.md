@@ -187,6 +187,12 @@ Receives raw content, returns JSON:
 
 Uses cheapest available model.
 
+**Type disambiguation rules** (embedded in prompt):
+- If content is *about* a named entity (person, project, tool, organization): use `entity`
+- If content is a standalone verifiable statement not tied to a specific entity: use `fact`
+- Example: "The project lead is Rachel" -> `entity` (about Rachel and the project). "Meetings are at 10am" -> `fact`.
+- If content expresses what the user wants/likes/dislikes: use `preference` (not `fact`)
+
 ### Link Discovery Prompt
 
 File: `data/prompts/memory_link.md`
@@ -210,7 +216,7 @@ Single LLM call for all candidates. Skip link discovery for `summary` type memor
 - 1 classification LLM call per store (cheap model)
 - 1 link discovery LLM call per store (cheap model, skippable)
 - Total: ~2 cheap LLM calls per memory stored
-- Bulk ingestion mode: classification only, linking deferred
+- Bulk ingestion mode: classify the *document* once (from filename + first chunk), apply same keywords/tags to all chunks. Only context_description varies per chunk (generated from content without LLM call). Reduces N classification calls to 1. Linking deferred to evolution.
 
 ---
 
@@ -237,9 +243,12 @@ Input: query, classification_type (from query analysis)
    c. Entity graph: find matching entities -> 2-hop traverse -> pull entity-type memories
     |
     v
-3. RRF fusion + cross-encoder reranking
+3. RRF fusion + recency weighting + cross-encoder reranking
    - Merge vector + FTS results via reciprocal rank fusion
+   - Apply recency decay: score *= 1.0 / (1.0 + days_since_update * decay_rate)
+     decay_rate by type: preference/task/fact = 0.01, entity/experience = 0.002, summary = 0.0
    - Cross-encoder rerank top-15 candidates
+   - Filter: confidence >= 0.5 (low-confidence memories excluded from recall)
    - Score threshold: keep results above 0.4
     |
     v
