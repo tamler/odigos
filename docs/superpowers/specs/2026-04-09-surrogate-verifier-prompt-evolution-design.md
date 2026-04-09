@@ -33,7 +33,8 @@ SkillVerifier.verify(skill_name)
     |
     v
 2. For each scenario:
-   a. Activate skill (inject system_prompt into fresh context)
+   a. Activate skill via ContextAssembler (realistic prompt with
+      personality sections, corrections, experiences -- not bare injection)
    b. Run scenario query through LLM -> get response
     |
     v
@@ -100,7 +101,11 @@ The verifier uses two separate LLM calls, neither of which sees the skill's syst
 1. **Scenario generation call:** Receives skill name + description. Generates test queries + edge cases. Uses a dedicated prompt (`data/prompts/verification_scenarios.md`).
 2. **Evaluation call:** Receives task description + scenario + response. Synthesizes assertions and scores. Uses a dedicated prompt (`data/prompts/verification_evaluate.md`).
 
-The skill execution (step 2 in the flow) is a normal agent call with the skill activated — this is the only step that uses the skill's system_prompt, and its internal reasoning is never passed to the verifier.
+The skill execution (step 2 in the flow) uses ContextAssembler to build a realistic prompt that includes all active personality sections (identity, voice, operational_rules, behavioral_principles, etc.) alongside the skill's system_prompt. This ensures the verifier catches conflicts where global instructions might break skill behavior. The execution's internal reasoning is never passed to the verifier.
+
+### V2 Extensions
+
+**Multi-turn trajectories:** Most text skills are single-turn (legal-draft, journal, songwriting). Multi-turn skills like agent-browser require trajectory replay with tool call simulation — a fundamentally different verification approach. Deferred to V2. The `ScenarioResult` can be extended with a `trajectory: list[dict]` field when needed.
 
 ### Escalation Loop
 
@@ -110,7 +115,7 @@ When a skill passes initial verification but accumulates poor real-world scores 
 - Include adversarial edge cases (contradictory requirements, missing context)
 - Require stricter quality thresholds (0.7 at level 1, 0.8 at level 2)
 
-Escalation is triggered during heartbeat Phase 6 when a committed skill's `avg_score` drops below its `verification_score - 0.15` (real-world performance diverging from verification).
+Escalation is triggered during heartbeat Phase 6 when a committed skill's `avg_score` drops below its `verification_score - 0.15` (real-world performance diverging from verification). Limited to 1 re-verification per heartbeat cycle to avoid token bursts.
 
 ### New Skill Fields
 
@@ -125,10 +130,11 @@ The existing `verified: bool` field (currently code-skills only) extends to all 
 
 ### Maturity Gate
 
-Update `maturity.py` to require verification for promotion:
+Update `maturity.py` to require verification for promotion and trigger demotion on failure:
 
 - **progenitor -> committed:** requires `verified == True` (in addition to existing 5+ uses, 0.6+ score)
 - **committed -> mature:** requires `verification_score >= 0.7` (in addition to existing 20+ uses, 0.75+ score)
+- **Demotion on failed re-verification:** if a committed or mature skill fails re-verification (score < 0.5 after escalation), demote to progenitor. This prevents users from relying on a degraded skill.
 
 ### Integration Points
 
@@ -169,7 +175,7 @@ Two new prompt files:
 ### Cost
 
 - 2 LLM calls per verification (scenario gen + evaluation), plus 3-5 skill execution calls (one per scenario)
-- Uses cheapest available model for scenario gen and evaluation (config: `verification_model`)
+- Defaults to the agent's own model for scenario gen and evaluation (quality judgment requires comparable reasoning). Config override: `verification_model`.
 - Skill execution uses the agent's normal model
 - Total cost per verification: roughly equivalent to one normal agent conversation turn
 - Runs at creation time + periodic re-verification (not on every skill use)
@@ -188,6 +194,9 @@ Periodically consolidate raw user corrections into two personality section files
 |------|-------------|----------|------------|--------|---------|
 | Operational | `data/agent/operational_rules.md` | 25 | accuracy, tool_choice | Concrete "do X not Y" fixes, recent | "Always verify dates before comparison" |
 | Behavioral | `data/agent/behavioral_principles.md` | 15 | tone, preference, behavior | Stable identity patterns, generalized | "Prefer concise responses; expand only when asked" |
+| Knowledge | (not consolidated) | N/A | factual | Stays in vector RAG only | "Project deadline is Friday, not Thursday" |
+
+Knowledge corrections are marked `consolidated_at = 'skipped'` so they don't re-enter the pipeline, but remain available via `CorrectionsManager.relevant()` vector search.
 
 Priority 15 places behavioral principles right after identity (10), before voice (20). Priority 25 places operational rules after voice, before general capabilities.
 
@@ -206,8 +215,10 @@ Phase 6 (run_evolution) -- after rollup_domain_performance(), before strategist
     |
     v
 3. LLM classifies each correction into axis:
-   - operational: accuracy, tool_choice
-   - behavioral: tone, preference, behavior
+   - operational: accuracy, tool_choice -> concrete "do X not Y"
+   - behavioral: tone, preference, behavior -> identity patterns
+   - knowledge: factual corrections -> EXCLUDED from consolidation,
+     stays in vector RAG only (e.g., "deadline is Friday not Thursday")
     |
     v
 4. For each axis with new corrections:
@@ -245,7 +256,7 @@ class PromptConsolidator:
     OPERATIONAL_PATH = "data/agent/operational_rules.md"
     BEHAVIORAL_PATH = "data/agent/behavioral_principles.md"
     MIN_BATCH_SIZE = 3
-    MAX_SECTION_TOKENS = 500
+    MAX_SECTION_TOKENS = 300  # 300 per section, 600 total across both axes
 
     async def consolidate(self) -> dict:
         """Run one consolidation pass. Returns stats."""
@@ -300,6 +311,12 @@ Output format:
 
 Prompt file: `data/prompts/consolidation_merge.md`
 
+### Contradiction Resolution
+
+When a batch contains contradictory corrections (e.g., one says "be more formal" and another says "stay casual"), the merge prompt applies **recency-wins** — the most recent correction takes precedence. If the contradiction is significant (opposing rules with similar recency), the LLM flags it in the operations output with `"conflict": true` and the consolidation log records it. This allows audit review but doesn't block the pipeline.
+
+The merge prompt explicitly instructs: "If two corrections in this batch contradict each other, apply the most recent one. If an incoming correction contradicts an existing rule, UPDATE or REMOVE the existing rule."
+
 ### Reflection-Based Revision
 
 When a correction directly contradicts an existing rule, the merge prompt includes both the rule and the contradiction with full context. The LLM decides:
@@ -311,7 +328,7 @@ This prevents stale rules from persisting after preferences change.
 
 ### Compaction
 
-Runs when a section exceeds `MAX_SECTION_TOKENS` (500). Dedicated prompt (`data/prompts/consolidation_compact.md`) instructs the LLM to:
+Runs when a section exceeds `MAX_SECTION_TOKENS` (300). Dedicated prompt (`data/prompts/consolidation_compact.md`) instructs the LLM to:
 
 - Merge overlapping rules into single statements
 - Remove rules subsumed by more general principles
@@ -373,6 +390,10 @@ CREATE TABLE IF NOT EXISTS consolidation_log (
 );
 ```
 
+### Migration Cold Start
+
+On first run after migration, deployments may have many existing corrections with `consolidated_at IS NULL`. To avoid an expensive initial consolidation pass, the first run limits to corrections from the last 30 days (ordered by recency). Older corrections are marked `consolidated_at = 'pre-migration'` and remain available via vector retrieval only.
+
 ### Heartbeat Integration
 
 In `odigos/core/heartbeat/maintenance.py`, `run_evolution()` gains a consolidation step:
@@ -405,7 +426,7 @@ async def run_evolution(hb):
 - 1-2 LLM calls per consolidation pass (classify + merge per axis)
 - Runs only when 3+ unconsolidated corrections exist
 - At typical correction rates (2-5/day), consolidation runs at most once per heartbeat cycle
-- Uses cheapest available model (classification-grade task)
+- Uses cheapest available model (classification is a simple task; merge quality matters less than verification since results are auditable and the LLM produces structured ops)
 
 ---
 
