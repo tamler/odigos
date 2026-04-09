@@ -172,3 +172,44 @@ class TestCrossTableCancel:
     async def test_cancel_nonexistent_returns_false(self, store):
         result = await store.cancel("nonexistent-id")
         assert result is False
+
+
+class TestGoalProgress:
+    async def test_create_goal_defaults_progress_to_zero(self, db):
+        store = GoalStore(db)
+        goal_id = await store.create_goal("Ship the feature")
+        goals = await store.list_goals(status="active")
+        match = next((g for g in goals if g["id"] == goal_id), None)
+        assert match is not None
+        assert match["progress"] == 0
+
+    async def test_update_goal_progress(self, db):
+        store = GoalStore(db)
+        goal_id = await store.create_goal("Ship the feature")
+        result = await store.update_goal(goal_id, progress=75)
+        assert result is True
+        goals = await store.list_goals(status="active")
+        match = next((g for g in goals if g["id"] == goal_id), None)
+        assert match["progress"] == 75
+
+    async def test_update_goal_progress_with_other_fields(self, db):
+        store = GoalStore(db)
+        goal_id = await store.create_goal("Ship the feature")
+        result = await store.update_goal(
+            goal_id, progress=50, progress_note="halfway"
+        )
+        assert result is True
+        goals = await store.list_goals(status="active")
+        match = next((g for g in goals if g["id"] == goal_id), None)
+        assert match["progress"] == 50
+        assert match["progress_note"] == "halfway"
+
+    async def test_update_goal_rejects_unknown_fields(self, db):
+        store = GoalStore(db)
+        goal_id = await store.create_goal("Ship the feature")
+        # Unknown field is silently dropped, valid field still applied
+        result = await store.update_goal(goal_id, progress=25, bogus="ignored")
+        assert result is True
+        goals = await store.list_goals(status="active")
+        match = next((g for g in goals if g["id"] == goal_id), None)
+        assert match["progress"] == 25

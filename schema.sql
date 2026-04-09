@@ -224,6 +224,7 @@ CREATE TABLE IF NOT EXISTS goals (
     created_by TEXT DEFAULT 'user',
     progress_note TEXT,
     reviewed_at TEXT,
+    progress INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 

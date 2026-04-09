@@ -187,12 +187,26 @@ async def work_in_progress_plans(hb: "Heartbeat") -> bool:
         plan_summary = await build_plan_summary(hb.db, plan_id)
         bg_model = getattr(hb, "background_model", "")
 
-        result = await hb.agent.handle_message(
-            message,
-            headless=True,
-            plan_context=plan_summary,
-            background_model=bg_model,
-        )
+        hb.current_phase = "plans"
+        hb.current_activity = f"Executing step {step_num}: {step_desc[:80]}"
+        hb.current_plan = {
+            "id": plan_id,
+            "goal": goal or "",
+            "current_step": int(step_num) if step_num.isdigit() else 0,
+            "total_steps": len(steps),
+            "conversation_id": conversation_id,
+        }
+        try:
+            result = await hb.agent.handle_message(
+                message,
+                headless=True,
+                plan_context=plan_summary,
+                background_model=bg_model,
+            )
+        finally:
+            hb.current_phase = None
+            hb.current_activity = None
+            hb.current_plan = None
 
         if result and any(m in result.lower() for m in _FAIL_MARKERS):
             hb._plan_fail_count += 1

@@ -100,6 +100,9 @@ class Heartbeat:
         self._quota_tick_counter: int = 0
         self._plan_fail_count: int = 0
         self._brain_lint_counter: int = 0
+        self.current_phase: str | None = None
+        self.current_activity: str | None = None
+        self.current_plan: dict | None = None
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._loop())
@@ -113,6 +116,14 @@ class Heartbeat:
             except asyncio.CancelledError:
                 pass
             logger.info("Heartbeat stopped")
+
+    def get_status(self) -> dict:
+        """Return current heartbeat status for the activity dashboard."""
+        return {
+            "current_phase": self.current_phase,
+            "current_activity": self.current_activity,
+            "current_plan": self.current_plan,
+        }
 
     async def _loop(self) -> None:
         while True:
@@ -231,12 +242,20 @@ class Heartbeat:
             self._experience_tick_counter += 1
             if self._experience_tick_counter >= self._experience_interval_ticks:
                 self._experience_tick_counter = 0
-                await profiling.extract_experiences(self)
+                try:
+                    self.current_phase = "experience_extraction"
+                    self.current_activity = "Extracting agent experiences"
+                    await profiling.extract_experiences(self)
+                finally:
+                    self.current_phase = None
+                    self.current_activity = None
 
         # Phase 9.5: Memory evolution (refine + consolidate structured memories)
         if not did_work and not _over_budget:
             if hasattr(self, "memory_evolution") and self.memory_evolution:
                 try:
+                    self.current_phase = "memory_evolution"
+                    self.current_activity = "Refining memories"
                     stats = await self.memory_evolution.run_cycle()
                     if stats.get("processed", 0) > 0:
                         logger.info(
@@ -246,6 +265,9 @@ class Heartbeat:
                         )
                 except Exception:
                     logger.debug("Memory evolution failed", exc_info=True)
+                finally:
+                    self.current_phase = None
+                    self.current_activity = None
 
         # Phase 10: Outcome evaluation (LLM calls, idle only)
         if not did_work and not _over_budget:
