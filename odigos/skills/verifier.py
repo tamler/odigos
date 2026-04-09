@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -211,18 +212,12 @@ class SkillVerifier:
         """Parse JSON from LLM response, handling markdown fences."""
         text = content.strip()
 
-        # Strip ```json ... ``` or ``` ... ``` fences
+        # Strip ```json ... ``` or ``` ... ``` fences using regex
+        # (safer than line-walking — handles embedded backticks in JSON strings)
         if text.startswith("```"):
-            lines = text.splitlines()
-            # Drop the opening fence line and the closing fence
-            inner_lines = []
-            for i, line in enumerate(lines):
-                if i == 0:
-                    continue
-                if line.strip() == "```":
-                    break
-                inner_lines.append(line)
-            text = "\n".join(inner_lines).strip()
+            text = re.sub(r"^```[a-z]*\n?", "", text, count=1)
+            text = re.sub(r"\n?```\s*$", "", text.rstrip())
+            text = text.strip()
 
         try:
             result = json.loads(text)
@@ -275,8 +270,8 @@ class SkillVerifier:
                 """
                 INSERT INTO skill_verifications
                     (id, skill_name, scenarios_json, results_json,
-                     overall_score, escalation_level, diagnostics)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                     overall_score, escalation_level, diagnostics, model_used)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     record_id,
@@ -286,6 +281,7 @@ class SkillVerifier:
                     result.overall_score,
                     result.escalation_level,
                     result.diagnostics,
+                    getattr(self._llm, "default_model", None),
                 ),
             )
             await self._db.commit()
