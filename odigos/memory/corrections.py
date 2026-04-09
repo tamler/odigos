@@ -3,15 +3,15 @@ from __future__ import annotations
 import uuid
 
 from odigos.db import Database
-from odigos.memory.vectors import VectorMemory
 
 
 class CorrectionsManager:
     """Stores and retrieves user corrections for learning from feedback."""
 
-    def __init__(self, db: Database, vector_memory: VectorMemory) -> None:
+    def __init__(self, db: Database, vector_memory=None, memory_store=None) -> None:
         self.db = db
-        self.vector_memory = vector_memory
+        # vector_memory kept for backward compat but unused (references dropped table)
+        self._memory_store = memory_store
 
     async def store(
         self,
@@ -21,7 +21,7 @@ class CorrectionsManager:
         context: str,
         category: str,
     ) -> str:
-        """Store a correction in the DB and embed it for vector search.
+        """Store a correction in the DB and embed it via MemoryStore.
 
         Returns the correction ID.
         """
@@ -33,34 +33,49 @@ class CorrectionsManager:
             (correction_id, conversation_id, original_response, correction, context, category),
         )
 
-        embedding_text = f"{context}: {correction}"
-        await self.vector_memory.store(embedding_text, "correction", correction_id)
+        if self._memory_store:
+            from odigos.memory.classifier import ClassificationResult
+            classification = ClassificationResult(
+                memory_type="correction",
+                keywords=[category],
+                tags=["user-feedback"],
+                context_description=f"[{category}] {correction} (context: {context})",
+            )
+            await self._memory_store.store(
+                content=f"{context}: {correction}",
+                source_type="correction",
+                source_id=correction_id,
+                conversation_id=conversation_id,
+                classification=classification,
+            )
 
         return correction_id
 
     async def relevant(self, query: str, limit: int = 5) -> str:
-        """Find corrections relevant to the query via vector search.
+        """Find corrections relevant to the query.
 
         Returns a formatted string with learned corrections, or "" if none found.
         """
-        results = await self.vector_memory.search(query, limit=limit)
-
-        # Filter to correction source_type only
-        correction_results = [r for r in results if r.source_type == "correction"]
-
-        if not correction_results:
+        if not self.db:
             return ""
 
-        # Fetch full rows from DB
+        rows = await self.db.fetch_all(
+            "SELECT m.source_id FROM memories m WHERE m.memory_type = 'correction' "
+            "AND m.status = 'active' ORDER BY m.created_at DESC LIMIT ?",
+            (limit,),
+        )
+        if not rows:
+            return ""
+
         lines = []
-        for result in correction_results:
-            row = await self.db.fetch_one(
+        for row in rows:
+            corr = await self.db.fetch_one(
                 "SELECT correction, context, category FROM corrections WHERE id = ?",
-                (result.source_id,),
+                (row["source_id"],),
             )
-            if row:
+            if corr:
                 lines.append(
-                    f"- [{row['category']}] {row['correction']} (context: {row['context']})"
+                    f"- [{corr['category']}] {corr['correction']} (context: {corr['context']})"
                 )
 
         if not lines:

@@ -5,7 +5,6 @@ import uuid
 from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
 from odigos.db import Database
-from odigos.memory.vectors import VectorMemory
 from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -23,13 +22,15 @@ class ConversationSummarizer:
     def __init__(
         self,
         db: Database,
-        vector_memory: VectorMemory,
         llm_provider: LLMProvider,
+        vector_memory=None,
+        memory_store=None,
         context_window: int = 20,
     ) -> None:
         self.db = db
-        self.vector_memory = vector_memory
+        # vector_memory kept for backward compat but unused (references dropped table)
         self.llm_provider = llm_provider
+        self._memory_store = memory_store
         self.context_window = context_window
 
     async def summarize_if_needed(self, conversation_id: str, force: bool = False) -> None:
@@ -130,34 +131,37 @@ class ConversationSummarizer:
                 (summary_id, conversation_id, already_summarized, cutoff, summary_text),
             )
 
-        # Store key facts in user_facts table
-        if key_facts and isinstance(key_facts, list):
+        # Store key facts via MemoryStore (routes to memories table)
+        if key_facts and isinstance(key_facts, list) and self._memory_store:
             for fact_text in key_facts:
                 if not isinstance(fact_text, str) or not fact_text.strip():
                     continue
-                existing = await self.db.fetch_one(
-                    "SELECT id FROM user_facts WHERE fact = ?", (fact_text.strip(),)
-                )
-                if existing:
-                    continue
                 try:
-                    fact_id = str(uuid.uuid4())
-                    await self.db.execute(
-                        "INSERT INTO user_facts (id, fact, category, source, confidence, created_at, updated_at) "
-                        "VALUES (?, ?, 'general', 'summarizer', 0.7, datetime('now'), datetime('now'))",
-                        (fact_id, fact_text.strip()),
+                    await self._memory_store.store(
+                        content=fact_text.strip(),
+                        source_type="conversation",
+                        source_id=conversation_id,
+                        conversation_id=conversation_id,
                     )
                 except Exception:
                     logger.debug("Failed to store summarizer fact: %s", fact_text[:80])
 
-        # Embed the summary for vector search
-        await self.vector_memory.store(
-            text=summary_text,
-            source_type="conversation_summary",
-            source_id=summary_id,
-            memory_type="summary",
-            when_to_use=f"when recalling context from conversation {conversation_id}",
-        )
+        # Store the summary via MemoryStore
+        if self._memory_store:
+            from odigos.memory.classifier import ClassificationResult
+            classification = ClassificationResult(
+                memory_type="summary",
+                keywords=tags[:5] if isinstance(tags, list) else [],
+                tags=["conversation-summary"],
+                context_description=summary_text[:300],
+            )
+            await self._memory_store.store(
+                content=summary_text,
+                source_type="conversation",
+                source_id=conversation_id,
+                conversation_id=conversation_id,
+                classification=classification,
+            )
 
         logger.info(
             "Summarized messages %d-%d for conversation %s (tags: %s)",

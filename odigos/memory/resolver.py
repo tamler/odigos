@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from odigos.db import Database
 from odigos.memory.graph import EntityGraph
-from odigos.memory.vectors import VectorMemory
 
 logger = logging.getLogger(__name__)
 
@@ -18,19 +18,21 @@ class ResolutionResult:
 class EntityResolver:
     """Multi-stage entity resolution pipeline.
 
-    Stages: exact match -> fuzzy match -> vector match -> create new.
+    Stages: exact match -> fuzzy match -> memory LIKE match -> create new.
     LLM tiebreaker is deferred until an LLM provider is available for cheap calls.
     """
 
     def __init__(
         self,
         graph: EntityGraph,
-        vector_memory: VectorMemory,
+        vector_memory=None,
         llm_provider=None,
+        memory_store=None,
     ) -> None:
         self.graph = graph
-        self.vector_memory = vector_memory
+        # vector_memory kept for backward compat but unused (references dropped table)
         self.llm_provider = llm_provider
+        self._memory_store = memory_store
 
     async def resolve(
         self, name: str, entity_type: str, context: str,
@@ -60,17 +62,22 @@ class EntityResolver:
                 confidence=0.85,
             )
 
-        # Stage 3: Vector match
-        vector_results = await self.vector_memory.search(f"{entity_type}: {name}", limit=3)
-        for vr in vector_results:
-            if vr.source_type == "entity_name" and vr.distance < 0.3:
-                entity = await self.graph.get_entity(vr.source_id)
-                if entity and entity["type"] == entity_type:
-                    return ResolutionResult(
-                        entity_id=entity["id"],
-                        action="matched",
-                        confidence=0.7,
-                    )
+        # Stage 3: Memory LIKE match against the memories table
+        rows = await self.graph.db.fetch_all(
+            "SELECT m.source_id, m.content FROM memories m "
+            "WHERE m.memory_type = 'entity' AND m.status = 'active' "
+            "AND (m.content LIKE ? OR m.context_description LIKE ?) "
+            "LIMIT 5",
+            (f"%{name}%", f"%{name}%"),
+        )
+        for row in rows:
+            entity = await self.graph.get_entity(row["source_id"])
+            if entity and entity["type"] == entity_type:
+                return ResolutionResult(
+                    entity_id=entity["id"],
+                    action="matched",
+                    confidence=0.7,
+                )
 
         # Stage 4: No match -- create new entity
         entity_id = await self.graph.create_entity(
@@ -78,12 +85,24 @@ class EntityResolver:
             source_type=source_type, source_id=source_id,
         )
 
-        # Embed the entity name for future vector matching
-        await self.vector_memory.store(
-            text=f"{entity_type}: {name}",
-            source_type="entity_name",
-            source_id=entity_id,
-        )
+        # Store the entity name in MemoryStore for future matching
+        if self._memory_store:
+            from odigos.memory.classifier import ClassificationResult
+            classification = ClassificationResult(
+                memory_type="entity",
+                keywords=[name, entity_type],
+                tags=["entity"],
+                context_description=f"{entity_type}: {name}",
+            )
+            try:
+                await self._memory_store.store(
+                    content=f"{entity_type}: {name}",
+                    source_type="entity",
+                    source_id=entity_id,
+                    classification=classification,
+                )
+            except Exception:
+                logger.debug("Failed to store entity memory for %s", name)
 
         return ResolutionResult(
             entity_id=entity_id,

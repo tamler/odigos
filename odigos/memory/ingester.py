@@ -6,7 +6,6 @@ import uuid
 from odigos.core.content_filter import ContentFilter
 from odigos.db import Database
 from odigos.memory.chunking import ChunkingService
-from odigos.memory.vectors import VectorMemory
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +13,20 @@ _ingest_filter = ContentFilter()
 
 
 class DocumentIngester:
-    """Chunks and embeds documents into VectorMemory for RAG retrieval."""
+    """Chunks and embeds documents into MemoryStore for RAG retrieval."""
 
     def __init__(
-        self, db: Database, vector_memory: VectorMemory,
+        self, db: Database, vector_memory=None,
         chunking_service: ChunkingService | None = None,
+        content_filter=None,
+        memory_store=None,
+        memory_classifier=None,
     ) -> None:
         self.db = db
-        self.vector_memory = vector_memory
+        # vector_memory kept for backward compat but unused (references dropped table)
         self.chunking = chunking_service or ChunkingService()
+        self._memory_store = memory_store
+        self._classifier = memory_classifier
 
     async def ingest(
         self,
@@ -87,6 +91,16 @@ class DocumentIngester:
         except Exception:
             logger.debug("Source archival failed for %s", filename)
 
+        # Classify the document once (from filename + first chunk)
+        shared_classification = None
+        if self._classifier and self._memory_store and chunks:
+            try:
+                shared_classification = await self._classifier.classify_document(
+                    filename=filename, first_chunk=chunks[0],
+                )
+            except Exception:
+                logger.debug("Document classification failed for %s", filename)
+
         stored_count = 0
         for chunk_text in chunks:
             scan = _ingest_filter.scan(chunk_text)
@@ -96,14 +110,16 @@ class DocumentIngester:
                     filename, scan.matched_patterns,
                 )
                 chunk_text = scan.sanitized_text
-            when_to_use = f"when referencing content from '{filename}': {chunk_text[:100]}"
             try:
-                await self.vector_memory.store(
-                    text=chunk_text,
-                    source_type="document_chunk",
-                    source_id=doc_id,
-                    when_to_use=when_to_use,
-                )
+                if self._memory_store:
+                    await self._memory_store.store(
+                        content=chunk_text,
+                        source_type="document",
+                        source_id=doc_id,
+                        conversation_id=conversation_id,
+                        bulk=True,
+                        classification=shared_classification,
+                    )
                 stored_count += 1
             except Exception:
                 logger.warning(
@@ -128,7 +144,7 @@ class DocumentIngester:
         return doc_id
 
     async def delete(self, document_id: str) -> None:
-        """Delete a document and all its chunks from vector memory."""
+        """Delete a document and all its memory chunks."""
         # Count for logging before deletion
         row = await self.db.fetch_one(
             "SELECT chunk_count FROM documents WHERE id = ?",
@@ -136,7 +152,11 @@ class DocumentIngester:
         )
         chunk_count = row["chunk_count"] if row else 0
 
-        await self.vector_memory.delete_by_source("document_chunk", document_id)
+        # Remove memories associated with this document
+        await self.db.execute(
+            "DELETE FROM memories WHERE source_type = 'document' AND source_id = ?",
+            (document_id,),
+        )
 
         await self.db.execute(
             "DELETE FROM documents WHERE id = ?",
