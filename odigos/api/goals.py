@@ -39,3 +39,13 @@ async def list_reminders(
     """List reminders filtered by status."""
     reminders = await store.list_reminders(status=status)
     return {"reminders": reminders}
+
+
+@router.post("/todos/{todo_id}/complete")
+async def complete_todo_endpoint(
+    todo_id: str,
+    store: GoalStore = Depends(get_goal_store),
+):
+    """Mark a todo as complete."""
+    await store.complete_todo(todo_id)
+    return {"ok": True}
