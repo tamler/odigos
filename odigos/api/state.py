@@ -1,6 +1,7 @@
 """Agent State Inspector API — comprehensive snapshot of agent internals."""
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import sys
@@ -20,12 +21,36 @@ from odigos.api.deps import (
 )
 from odigos.db import Database
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/api",
     dependencies=[Depends(require_auth)],
 )
 
 _start_time = time.monotonic()
+
+# -- In-memory TTL cache for heavy aggregate queries --
+_STATE_CACHE: dict = {}
+_STATE_CACHE_TTL_SECONDS = 60
+
+
+def _state_cache_get(key: str):
+    entry = _STATE_CACHE.get(key)
+    if entry is None:
+        return None
+    value, expires_at = entry
+    if time.time() > expires_at:
+        return None
+    return value
+
+
+def _state_cache_set(key: str, value):
+    _STATE_CACHE[key] = (value, time.time() + _STATE_CACHE_TTL_SECONDS)
+
+
+def _state_cache_clear():
+    _STATE_CACHE.clear()
 
 
 def _format_uptime(seconds: float) -> str:
@@ -58,23 +83,68 @@ async def get_state(
     uptime_seconds = time.monotonic() - _start_time
     uptime_formatted = _format_uptime(uptime_seconds)
 
-    # -- Agent info --
-    active_convs = await db.fetch_one(
-        "SELECT COUNT(DISTINCT conversation_id) AS cnt FROM messages "
-        "WHERE created_at > datetime('now', '-1 hour')"
-    )
-    total_convs = await db.fetch_one(
-        "SELECT COUNT(*) AS cnt FROM conversations"
-    )
-    agent_info = {
-        "name": settings.agent.name,
-        "role": settings.agent.role,
-        "uptime": uptime_formatted,
-        "uptime_seconds": round(uptime_seconds, 1),
-        "active_conversations": active_convs["cnt"] if active_convs else 0,
-    }
+    # -- Cached aggregates (heavy DB queries, 60s TTL) --
+    aggregates = _state_cache_get("aggregates")
+    if aggregates is None:
+        # -- Memory --
+        mem_total = await db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM memories WHERE status = 'active'"
+        )
+        mem_recent = await db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM memories WHERE status = 'active'"
+            " AND created_at > datetime('now', '-24 hours')"
+        )
+        memory_info = {
+            "total": mem_total["cnt"] if mem_total else 0,
+            "recent_24h": mem_recent["cnt"] if mem_recent else 0,
+        }
 
-    # -- Budget --
+        # -- Conversations --
+        active_convs = await db.fetch_one(
+            "SELECT COUNT(DISTINCT conversation_id) AS cnt FROM messages "
+            "WHERE created_at > datetime('now', '-1 hour')"
+        )
+        total_convs = await db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM conversations"
+        )
+        recent_activity = await db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM messages WHERE created_at > datetime('now', '-1 hour')"
+        )
+        conversations_info = {
+            "active": active_convs["cnt"] if active_convs else 0,
+            "total": total_convs["cnt"] if total_convs else 0,
+            "recent_messages_1h": recent_activity["cnt"] if recent_activity else 0,
+        }
+
+        # -- Evolution --
+        eval_count_row = await db.fetch_one("SELECT COUNT(*) AS cnt FROM evaluations")
+        recent_evals = await db.fetch_all(
+            "SELECT overall_score FROM evaluations ORDER BY created_at DESC LIMIT 20"
+        )
+        scores = [r["overall_score"] for r in recent_evals if r["overall_score"] is not None]
+        avg_score = round(sum(scores) / len(scores), 2) if scores else None
+
+        active_trial = await db.fetch_one(
+            "SELECT id, hypothesis, target, status FROM trials "
+            "WHERE status = 'active' ORDER BY started_at DESC LIMIT 1"
+        )
+        trial_count_row = await db.fetch_one("SELECT COUNT(*) AS cnt FROM trials")
+
+        evolution_info = {
+            "cycle_count": trial_count_row["cnt"] if trial_count_row else 0,
+            "evaluation_count": eval_count_row["cnt"] if eval_count_row else 0,
+            "recent_avg_score": avg_score,
+            "active_trial": dict(active_trial) if active_trial else None,
+        }
+
+        aggregates = {
+            "memory": memory_info,
+            "conversations": conversations_info,
+            "evolution": evolution_info,
+        }
+        _state_cache_set("aggregates", aggregates)
+
+    # -- Budget (not cached — small query, reflects spend in near-real-time) --
     budget_status = await budget_tracker.check_budget()
     budget_info = {
         "daily_spend": round(budget_status.daily_spend, 4),
@@ -85,33 +155,22 @@ async def get_state(
         "warning": budget_status.warning,
     }
 
-    # -- Memory --
-    mem_total = await db.fetch_one("SELECT COUNT(*) AS cnt FROM memories WHERE status = 'active'")
-    mem_recent = await db.fetch_one(
-        "SELECT COUNT(*) AS cnt FROM memories WHERE status = 'active' AND created_at > datetime('now', '-24 hours')"
-    )
-    memory_info = {
-        "total": mem_total["cnt"] if mem_total else 0,
-        "recent_24h": mem_recent["cnt"] if mem_recent else 0,
+    # -- Agent info (uptime is live, conversation count from cache) --
+    agent_info = {
+        "name": settings.agent.name,
+        "role": settings.agent.role,
+        "uptime": uptime_formatted,
+        "uptime_seconds": round(uptime_seconds, 1),
+        "active_conversations": aggregates["conversations"]["active"],
     }
 
-    # -- Conversations --
-    recent_activity = await db.fetch_one(
-        "SELECT COUNT(*) AS cnt FROM messages WHERE created_at > datetime('now', '-1 hour')"
-    )
-    conversations_info = {
-        "active": active_convs["cnt"] if active_convs else 0,
-        "total": total_convs["cnt"] if total_convs else 0,
-        "recent_messages_1h": recent_activity["cnt"] if recent_activity else 0,
-    }
-
-    # -- Tools --
+    # -- Tools (in-process, not a DB query) --
     tool_registry = agent.executor.tool_registry
     tool_names = []
     if tool_registry:
         tool_names = [t.name for t in tool_registry.list()]
 
-    # -- Skills --
+    # -- Skills (in-process) --
     skills_info = []
     if skill_registry:
         for s in skill_registry.list():
@@ -122,7 +181,7 @@ async def get_state(
                 "enabled": True,
             })
 
-    # -- Plugins --
+    # -- Plugins (in-process) --
     plugins_info = []
     if plugin_manager:
         for p in plugin_manager.loaded_plugins:
@@ -131,33 +190,24 @@ async def get_state(
                 "status": p.get("status", "unknown"),
             })
 
-    # -- Evolution --
-    eval_count_row = await db.fetch_one("SELECT COUNT(*) AS cnt FROM evaluations")
-    recent_evals = await db.fetch_all(
-        "SELECT overall_score FROM evaluations ORDER BY created_at DESC LIMIT 20"
-    )
-    scores = [r["overall_score"] for r in recent_evals if r["overall_score"] is not None]
-    avg_score = round(sum(scores) / len(scores), 2) if scores else None
-
-    active_trial = await db.fetch_one(
-        "SELECT id, hypothesis, target, status FROM trials "
-        "WHERE status = 'active' ORDER BY started_at DESC LIMIT 1"
-    )
-    trial_count_row = await db.fetch_one("SELECT COUNT(*) AS cnt FROM trials")
-
-    evolution_info = {
-        "cycle_count": trial_count_row["cnt"] if trial_count_row else 0,
-        "evaluation_count": eval_count_row["cnt"] if eval_count_row else 0,
-        "recent_avg_score": avg_score,
-        "active_trial": dict(active_trial) if active_trial else None,
-    }
-
-    # -- Heartbeat --
+    # -- Heartbeat (always live — never cached) --
     heartbeat = getattr(agent, "heartbeat", None)
+    heartbeat_status = {
+        "current_phase": None,
+        "current_activity": None,
+        "current_plan": None,
+    }
+    if heartbeat is not None:
+        try:
+            heartbeat_status = heartbeat.get_status()
+        except Exception:
+            logger.debug("Failed to get heartbeat status", exc_info=True)
+
     heartbeat_info = {
         "interval": heartbeat._interval if heartbeat else None,
         "paused": heartbeat.paused if heartbeat else None,
         "uptime": uptime_formatted,
+        **heartbeat_status,
     }
 
     # -- Cron --
@@ -179,12 +229,12 @@ async def get_state(
     return {
         "agent": agent_info,
         "budget": budget_info,
-        "memory": memory_info,
-        "conversations": conversations_info,
+        "memory": aggregates["memory"],
+        "conversations": aggregates["conversations"],
         "tools": tool_names,
         "skills": skills_info,
         "plugins": plugins_info,
-        "evolution": evolution_info,
+        "evolution": aggregates["evolution"],
         "heartbeat": heartbeat_info,
         "cron": cron_info,
         "system": system_info,

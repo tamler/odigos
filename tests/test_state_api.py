@@ -136,6 +136,8 @@ async def test_state_system_info(client):
 
 @pytest.mark.asyncio
 async def test_state_conversations_and_memory(client, db):
+    from odigos.api.state import _state_cache_clear
+
     # Insert a conversation and message to verify counting
     import uuid
     conv_id = str(uuid.uuid4())
@@ -149,6 +151,9 @@ async def test_state_conversations_and_memory(client, db):
         "VALUES (?, ?, 'user', 'hello', datetime('now'))",
         (str(uuid.uuid4()), conv_id),
     )
+
+    # Ensure a fresh DB read (cache may hold stale counts from prior test)
+    _state_cache_clear()
 
     resp = await client.get("/api/state")
     data = resp.json()
@@ -167,12 +172,18 @@ async def test_state_tools_and_skills(client):
 
 @pytest.mark.asyncio
 async def test_state_evolution_info(client, db):
+    from odigos.api.state import _state_cache_clear
+
     import uuid
     # Insert an evaluation
     await db.execute(
         "INSERT INTO evaluations (id, overall_score, created_at) VALUES (?, ?, datetime('now'))",
         (str(uuid.uuid4()), 8.0),
     )
+
+    # Ensure a fresh DB read (cache may hold stale counts from prior test)
+    _state_cache_clear()
+
     resp = await client.get("/api/state")
     data = resp.json()
     evo = data["evolution"]
@@ -194,3 +205,47 @@ async def test_state_rejects_wrong_key(unauthed_client):
         headers={"Authorization": "Bearer wrong-key"},
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_state_includes_heartbeat_status_fields(client):
+    """Heartbeat status fields are always present (may be None when no heartbeat running)."""
+    resp = await client.get("/api/state")
+    assert resp.status_code == 200
+    data = resp.json()
+    heartbeat = data["heartbeat"]
+    assert "current_phase" in heartbeat
+    assert "current_activity" in heartbeat
+    assert "current_plan" in heartbeat
+
+
+@pytest.mark.asyncio
+async def test_state_cache_clear_works(client):
+    """Cache can be cleared without breaking subsequent requests."""
+    from odigos.api.state import _state_cache_clear
+
+    _state_cache_clear()
+
+    resp1 = await client.get("/api/state")
+    assert resp1.status_code == 200
+
+    resp2 = await client.get("/api/state")
+    assert resp2.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_state_cache_populated_after_request(client):
+    """Cache is populated after first request and returned on second."""
+    from odigos.api.state import _state_cache_clear, _state_cache_get
+
+    _state_cache_clear()
+    assert _state_cache_get("aggregates") is None
+
+    resp = await client.get("/api/state")
+    assert resp.status_code == 200
+
+    cached = _state_cache_get("aggregates")
+    assert cached is not None
+    assert "memory" in cached
+    assert "conversations" in cached
+    assert "evolution" in cached
