@@ -14,6 +14,8 @@ MATURE_MIN_SCORE = 0.75
 APOPTOSIS_MIN_USES = 5
 APOPTOSIS_MAX_SCORE = 0.3
 APOPTOSIS_FAIL_RATIO = 0.7
+VERIFICATION_DEMOTION_SCORE = 0.5
+MATURE_VERIFICATION_SCORE = 0.7
 
 
 def evaluate_maturity(skill) -> str | None:
@@ -54,7 +56,11 @@ def evaluate_maturity(skill) -> str | None:
 
     # Promotion: progenitor -> committed
     if current == "progenitor":
-        if uses >= COMMIT_MIN_USES and score >= COMMIT_MIN_SCORE:
+        if (
+            uses >= COMMIT_MIN_USES
+            and score >= COMMIT_MIN_SCORE
+            and skill.verified
+        ):
             logger.info(
                 "Skill '%s' promoted: progenitor -> committed "
                 "(uses=%d, score=%.2f)",
@@ -64,7 +70,12 @@ def evaluate_maturity(skill) -> str | None:
 
     # Promotion: committed -> mature
     if current == "committed":
-        if uses >= MATURE_MIN_USES and score >= MATURE_MIN_SCORE:
+        if (
+            uses >= MATURE_MIN_USES
+            and score >= MATURE_MIN_SCORE
+            and skill.verified
+            and skill.verification_score >= MATURE_VERIFICATION_SCORE
+        ):
             logger.info(
                 "Skill '%s' promoted: committed -> mature "
                 "(uses=%d, score=%.2f)",
@@ -102,3 +113,22 @@ def update_skill_stats(
     skill.last_used_at = (
         datetime.now(timezone.utc).isoformat()
     )
+
+
+def demote_on_failed_verification(skill) -> str | None:
+    """Demote skill to progenitor if re-verification failed after escalation."""
+    if skill.builtin:
+        return None
+    if skill.maturity not in ("committed", "mature"):
+        return None
+    if (
+        skill.escalation_level >= 1
+        and skill.verification_score < VERIFICATION_DEMOTION_SCORE
+    ):
+        logger.info(
+            "Skill '%s' demoted to progenitor: failed re-verification "
+            "(vscore=%.2f, escalation=%d)",
+            skill.name, skill.verification_score, skill.escalation_level,
+        )
+        return "progenitor"
+    return None
