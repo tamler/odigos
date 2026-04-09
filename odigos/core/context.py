@@ -217,18 +217,23 @@ class ContextAssembler:
                 if now - cached_at < _MEMORY_INDEX_TTL:
                     return cached_val
             try:
-                row = await self.db.fetch_one("""
-                    SELECT
-                        (SELECT COUNT(*) FROM memory_entries WHERE source_type = 'document_chunk') as doc_chunks,
-                        (SELECT COUNT(*) FROM memory_entries WHERE source_type = 'user_message') as conversations,
-                        (SELECT COUNT(*) FROM entities WHERE status = 'active') as entities,
-                        (SELECT COUNT(*) FROM documents) as documents
-                """)
+                count_docs = await self.db.fetch_one(
+                    "SELECT COUNT(*) as c FROM memories WHERE source_type = 'document' AND status = 'active'"
+                )
+                count_convos = await self.db.fetch_one(
+                    "SELECT COUNT(*) as c FROM memories WHERE source_type IN ('user_message', 'conversation') AND status = 'active'"
+                )
+                count_entities = await self.db.fetch_one(
+                    "SELECT COUNT(*) as c FROM entities WHERE status = 'active'"
+                )
+                count_documents = await self.db.fetch_one(
+                    "SELECT COUNT(*) as c FROM documents"
+                )
                 counts = {
-                    "doc_chunks": row["doc_chunks"] if row else 0,
-                    "conversations": row["conversations"] if row else 0,
-                    "entities": row["entities"] if row else 0,
-                    "documents": row["documents"] if row else 0,
+                    "doc_chunks": count_docs["c"] if count_docs else 0,
+                    "conversations": count_convos["c"] if count_convos else 0,
+                    "entities": count_entities["c"] if count_entities else 0,
+                    "documents": count_documents["c"] if count_documents else 0,
                 }
                 result = ""
                 if any(counts.values()):
@@ -737,7 +742,8 @@ class ContextAssembler:
         # L0/L1 wake-up context — critical facts always loaded (not gated by plan.needs)
         try:
             critical_facts = await self.db.fetch_all(
-                "SELECT fact FROM user_facts ORDER BY confidence DESC, updated_at DESC LIMIT 5"
+                "SELECT content as fact FROM memories WHERE memory_type = 'fact' AND status = 'active' "
+                "ORDER BY confidence DESC, updated_at DESC LIMIT 5"
             ) if self.db else []
             if critical_facts:
                 facts_block = "## Key facts\n" + "\n".join(
@@ -885,7 +891,8 @@ class ContextAssembler:
             return ""
         try:
             rows = await self.db.fetch_all(
-                "SELECT fact, category FROM user_facts ORDER BY updated_at DESC LIMIT 10"
+                "SELECT content as fact FROM memories WHERE memory_type = 'fact' AND status = 'active' "
+                "ORDER BY updated_at DESC LIMIT 10"
             )
             if not rows:
                 return ""

@@ -116,7 +116,8 @@ async def export_user_data(db: Database) -> None:
 
         # Facts
         facts = await db.fetch_all(
-            "SELECT category, fact, created_at FROM user_facts ORDER BY category, created_at"
+            "SELECT source_type as category, content as fact, created_at FROM memories "
+            "WHERE memory_type = 'fact' AND status = 'active' ORDER BY source_type, created_at"
         )
         if facts:
             lines = ["# User Facts", ""]

@@ -337,7 +337,8 @@ async def get_facts(request: Request, db=Depends(get_db), settings=Depends(get_s
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     rows = await db.fetch_all(
-        "SELECT * FROM user_facts ORDER BY updated_at DESC"
+        "SELECT id, content as fact, source_type as category, confidence, created_at, updated_at "
+        "FROM memories WHERE memory_type = 'fact' AND status = 'active' ORDER BY updated_at DESC"
     )
     return {"facts": [dict(row) for row in rows]}
 
@@ -351,7 +352,7 @@ async def delete_fact(fact_id: str, request: Request, db=Depends(get_db), settin
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    await db.execute("DELETE FROM user_facts WHERE id = ?", (fact_id,))
+    await db.execute("UPDATE memories SET status = 'deleted' WHERE id = ? AND memory_type = 'fact'", (fact_id,))
     return {"status": "ok"}
 
 

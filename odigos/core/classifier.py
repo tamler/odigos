@@ -18,7 +18,6 @@ from odigos.core.prompt_loader import load_prompt
 
 if TYPE_CHECKING:
     from odigos.db import Database
-    from odigos.memory.vectors import VectorMemory
     from odigos.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -159,7 +158,7 @@ class QueryClassifier:
         self,
         provider: LLMProvider | None = None,
         db: Database | None = None,
-        vector_memory: VectorMemory | None = None,
+        vector_memory: object | None = None,
         tool_registry=None,
         skill_registry=None,
     ) -> None:

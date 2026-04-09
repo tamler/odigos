@@ -86,9 +86,9 @@ async def get_state(
     }
 
     # -- Memory --
-    mem_total = await db.fetch_one("SELECT COUNT(*) AS cnt FROM memory_entries")
+    mem_total = await db.fetch_one("SELECT COUNT(*) AS cnt FROM memories WHERE status = 'active'")
     mem_recent = await db.fetch_one(
-        "SELECT COUNT(*) AS cnt FROM memory_entries WHERE created_at > datetime('now', '-24 hours')"
+        "SELECT COUNT(*) AS cnt FROM memories WHERE status = 'active' AND created_at > datetime('now', '-24 hours')"
     )
     memory_info = {
         "total": mem_total["cnt"] if mem_total else 0,

@@ -31,7 +31,8 @@ async def get_user_profile(db: Database) -> dict | None:
 async def get_user_facts(db: Database, limit: int = 20) -> list[dict]:
     """Get user facts ordered by confidence and recency."""
     rows = await db.fetch_all(
-        "SELECT fact, category FROM user_facts "
+        "SELECT content as fact, source_type as category FROM memories "
+        "WHERE memory_type = 'fact' AND status = 'active' "
         "ORDER BY confidence DESC, updated_at DESC LIMIT ?",
         (limit,),
     )
