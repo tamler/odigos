@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import uuid
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -183,3 +185,70 @@ class TestConsolidation:
         await consolidator.consolidate()
         rows = await db.fetch_all("SELECT * FROM consolidation_log")
         assert len(rows) >= 1
+
+
+class TestConsolidationIntegration:
+    async def test_full_consolidation_writes_section_file(self, db):
+        """Full flow: corrections consolidated into a real section file."""
+        ids = await _seed_corrections(db, count=4)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Write initial empty section files
+            op_path = Path(tmpdir) / "operational_rules.md"
+            op_path.write_text("---\npriority: 25\nalways_include: true\n---\n")
+
+            beh_path = Path(tmpdir) / "behavioral_principles.md"
+            beh_path.write_text("---\npriority: 15\nalways_include: true\n---\n")
+
+            merge_response = json.dumps({
+                "classifications": [
+                    {"correction_id": ids[0], "axis": "operational"},
+                    {"correction_id": ids[1], "axis": "behavioral"},
+                    {"correction_id": ids[2], "axis": "operational"},
+                    {"correction_id": ids[3], "axis": "knowledge"},
+                ],
+                "operations": [
+                    {"op": "ADD", "rule": "Always verify dates",
+                     "source_correction_id": ids[0]},
+                    {"op": "ADD", "rule": "Prefer concise responses",
+                     "source_correction_id": ids[1]},
+                    {"op": "ADD", "rule": "Search broadly first",
+                     "source_correction_id": ids[2]},
+                    {"op": "SKIP", "source_correction_id": ids[3],
+                     "reason": "Factual"},
+                ],
+                "updated_section": "- Always verify dates\n- Search broadly first",
+            })
+
+            mock_llm = AsyncMock()
+            mock_llm.complete = AsyncMock(
+                return_value=_make_llm_response(merge_response)
+            )
+
+            consolidator = PromptConsolidator(
+                db=db, llm_client=mock_llm,
+                prompts_dir="data/prompts", sections_dir=tmpdir,
+            )
+            stats = await consolidator.consolidate()
+
+            assert stats["corrections_processed"] == 4
+
+            # Verify section file was written
+            content = op_path.read_text()
+            assert "priority: 25" in content  # frontmatter preserved
+
+            # Verify knowledge correction marked as skipped
+            row = await db.fetch_one(
+                "SELECT consolidated_at FROM corrections WHERE id = ?",
+                (ids[3],),
+            )
+            assert row["consolidated_at"] == "skipped"
+
+            # Verify non-knowledge corrections marked with timestamp
+            for cid in ids[:3]:
+                row = await db.fetch_one(
+                    "SELECT consolidated_at FROM corrections WHERE id = ?",
+                    (cid,),
+                )
+                assert row["consolidated_at"] is not None
+                assert row["consolidated_at"] != "skipped"
