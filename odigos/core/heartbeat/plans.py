@@ -17,6 +17,35 @@ logger = logging.getLogger(__name__)
 
 _MAX_PLAN_RETRIES: int = 3
 _FAIL_MARKERS = ("couldn't process", "having trouble reaching", "ran out of time", "went wrong")
+_STUCK_STEP_THRESHOLD_MINUTES: int = 30
+
+
+def _reset_stale_in_progress_steps(steps: list, plan_updated_at: str) -> bool:
+    """Reset steps stuck in_progress past the staleness threshold to pending.
+
+    Returns True if any steps were reset.
+    """
+    try:
+        updated = datetime.fromisoformat(plan_updated_at.replace("Z", "+00:00"))
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+    except (ValueError, AttributeError):
+        return False
+
+    age_minutes = (datetime.now(timezone.utc) - updated).total_seconds() / 60
+    if age_minutes < _STUCK_STEP_THRESHOLD_MINUTES:
+        return False
+
+    has_stuck = False
+    for s in steps:
+        if s.get("status") == "in_progress":
+            s["status"] = "pending"
+            has_stuck = True
+        for sub in s.get("substeps", []):
+            if sub.get("status") == "in_progress":
+                sub["status"] = "pending"
+                has_stuck = True
+    return has_stuck
 
 
 async def build_plan_summary(db, plan_id: str) -> str:
@@ -64,7 +93,7 @@ async def work_in_progress_plans(hb: "Heartbeat") -> bool:
 
     try:
         row = await hb.db.fetch_one(
-            "SELECT id, conversation_id, steps, goal FROM task_plans "
+            "SELECT id, conversation_id, steps, goal, updated_at FROM task_plans "
             "WHERE status = 'in_progress' "
             "ORDER BY updated_at ASC LIMIT 1",
         )
@@ -73,6 +102,19 @@ async def work_in_progress_plans(hb: "Heartbeat") -> bool:
             return False
 
         steps = json.loads(row["steps"])
+
+        # Reset any steps stuck in_progress past the staleness threshold
+        # (handles crashes/silent failures mid-step execution)
+        if _reset_stale_in_progress_steps(steps, row["updated_at"]):
+            await hb.db.execute(
+                "UPDATE task_plans SET steps = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(steps), datetime.now(timezone.utc).isoformat(), row["id"]),
+            )
+            logger.info(
+                "Reset stale in_progress steps for plan %s (>%dm old)",
+                row["id"][:8], _STUCK_STEP_THRESHOLD_MINUTES,
+            )
+
         next_step = None
         for s in steps:
             if s.get("status") in (None, "pending"):
