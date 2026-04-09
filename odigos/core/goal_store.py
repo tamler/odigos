@@ -32,7 +32,7 @@ class GoalStore:
         )
 
     async def update_goal(self, goal_id: str, **kwargs) -> bool:
-        allowed = {"status", "progress_note", "reviewed_at"}
+        allowed = {"status", "progress_note", "reviewed_at", "progress"}
         fields = {k: v for k, v in kwargs.items() if k in allowed}
         if not fields:
             return False
