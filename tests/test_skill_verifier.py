@@ -347,3 +347,76 @@ class TestEscalation:
             escalation_level=2,
         )
         assert result2.passed is False, f"Level 2 should fail at score {target_score}"
+
+
+# ---------------------------------------------------------------------------
+# TestIntegrationWithDB
+# ---------------------------------------------------------------------------
+
+
+class TestIntegrationWithDB:
+    @pytest.mark.asyncio
+    async def test_verify_skill_stores_verification_record(self, tmp_db_path):
+        """Full flow: verify_skill stores a record in skill_verifications table."""
+        from odigos.db import Database
+
+        db = Database(tmp_db_path, migrations_dir="migrations")
+        await db.initialize()
+
+        try:
+            scenarios_response = json.dumps({
+                "scenarios": ["Write a haiku about coding"]
+            })
+            eval_response = json.dumps({
+                "assertions": [{"text": "Is a haiku", "passed": True}],
+                "scores": {"relevance": 0.9, "completeness": 0.9,
+                           "quality": 0.9, "no_hallucination": 1.0},
+                "overall_score": 0.93,
+                "diagnostics": None,
+            })
+
+            async def mock_complete(**kwargs):
+                msgs = kwargs.get("messages", [])
+                content = msgs[0]["content"] if msgs else ""
+                if "quality assurance" in content.lower():
+                    return _make_llm_response(scenarios_response)
+                elif "independent quality evaluator" in content.lower():
+                    return _make_llm_response(eval_response)
+                else:
+                    return _make_llm_response("Code flows like streams\nBugs hide in the deepest lines\nTests reveal the truth")
+
+            mock_llm = AsyncMock()
+            mock_llm.complete = mock_complete
+            mock_llm.default_model = "test/model"
+
+            from odigos.skills.registry import SkillRegistry
+            registry = SkillRegistry()
+            registry._skills["haiku"] = Skill(
+                name="haiku",
+                description="Write haiku poems on any topic",
+                tools=[],
+                complexity="light",
+                system_prompt="You are a haiku master. Write haikus.",
+            )
+
+            verifier = SkillVerifier(
+                llm_client=mock_llm,
+                prompts_dir="data/prompts",
+                skill_registry=registry,
+                db=db,
+            )
+
+            result = await verifier.verify_skill("haiku")
+
+            assert result.passed is True
+            assert result.overall_score > 0.6
+
+            # Check DB record
+            row = await db.fetch_one(
+                "SELECT * FROM skill_verifications WHERE skill_name = 'haiku'"
+            )
+            assert row is not None
+            assert row["overall_score"] > 0.6
+            assert row["model_used"] == "test/model"
+        finally:
+            await db.close()

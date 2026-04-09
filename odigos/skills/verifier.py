@@ -284,6 +284,5 @@ class SkillVerifier:
                     getattr(self._llm, "default_model", None),
                 ),
             )
-            await self._db.commit()
         except Exception as exc:
             logger.error("Failed to store verification record for '%s': %s", skill_name, exc)
