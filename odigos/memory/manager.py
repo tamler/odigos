@@ -219,33 +219,18 @@ class MemoryManager:
                     rel.get("from"), rel.get("to"),
                 )
 
-        # 3. Store facts via MemoryStore (classified as 'fact' memory_type)
-        import hashlib
+        # 3. Store facts via MemoryStore (classifier determines fact/preference type)
         for fact_data in extracted["facts"]:
             try:
                 fact_text = fact_data["text"]
-                fact_hash = hashlib.sha256(
-                    fact_text.strip().lower().encode(),
-                ).hexdigest()[:16]
-                if self.db:
-                    existing = await self.db.fetch_one(
-                        "SELECT id FROM user_facts WHERE content_hash = ?",
-                        (fact_hash,),
-                    )
-                    if existing:
-                        continue  # Exact duplicate, skip
-                    import uuid
-                    fact_id = uuid.uuid4().hex
-                    await self.db.execute(
-                        "INSERT INTO user_facts (id, fact, category, source, source_type,"
-                        " source_id, content_hash, confidence, created_at, updated_at) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
-                        (
-                            fact_id, fact_text, fact_data.get("category", "general"),
-                            "extracted", "conversation", conversation_id, fact_hash, 0.8,
-                        ),
-                    )
-                    fact_data["_stored_id"] = fact_id
+                record = await self.memory_store.store(
+                    content=fact_text,
+                    source_type="extraction",
+                    source_id=conversation_id,
+                    conversation_id=conversation_id,
+                )
+                if record:
+                    fact_data["_stored_id"] = record.id
             except Exception:
                 logger.debug("Fact storage failed: %s", fact_data.get("text", "")[:50])
 
