@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -32,6 +32,7 @@ class Skill:
     verification_score: float = 0.0
     verification_at: str = ""
     escalation_level: int = 0
+    overrides: list[str] = field(default_factory=list)
 
 
 class SkillRegistry:
@@ -368,4 +369,5 @@ class SkillRegistry:
             failure_count=meta.get("failure_count", 0),
             avg_score=meta.get("avg_score", 0.0),
             last_used_at=meta.get("last_used_at", ""),
+            overrides=meta.get("overrides", []) or [],
         )
