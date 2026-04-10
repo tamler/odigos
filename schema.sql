@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     last_message_at TEXT,
     category        TEXT,
     created_at      TEXT DEFAULT (datetime('now')),
-    updated_at      TEXT DEFAULT (datetime('now'))
+    updated_at      TEXT DEFAULT (datetime('now')),
+    parent_conversation_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
+CREATE INDEX IF NOT EXISTS idx_conversations_parent ON conversations(parent_conversation_id);
 
 CREATE TABLE IF NOT EXISTS message_deliveries (
     id              TEXT PRIMARY KEY,
@@ -293,11 +295,22 @@ CREATE TABLE IF NOT EXISTS tasks (
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 3,
     created_at TEXT DEFAULT (datetime('now')),
-    completed_at TEXT
+    completed_at TEXT,
+    persona TEXT,
+    parent_task_id TEXT,
+    concurrency_key TEXT DEFAULT 'default',
+    max_runtime_seconds INTEGER DEFAULT 600,
+    cancel_requested INTEGER DEFAULT 0,
+    started_at TEXT,
+    artifact_path TEXT,
+    duration_ms INTEGER,
+    cost_usd REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
+CREATE INDEX IF NOT EXISTS idx_tasks_type_status ON tasks(type, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
 
 -- Task plans: multi-step plan persistence
 CREATE TABLE IF NOT EXISTS task_plans (

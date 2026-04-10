@@ -1,7 +1,9 @@
 import asyncio
+import uuid
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
 
 from odigos.core.heartbeat import Heartbeat
 from odigos.core.subagent import MAX_CONCURRENT_PER_CONVERSATION, SubagentManager
@@ -12,12 +14,52 @@ from odigos.tools.registry import ToolRegistry
 from odigos.tools.subagent_tool import SpawnSubagentTool
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def db(tmp_db_path: str):
     database = Database(tmp_db_path, migrations_dir="migrations")
     await database.initialize()
     yield database
     await database.close()
+
+
+class TestSubagentSchema:
+    async def test_tasks_table_has_subagent_columns(self, db):
+        task_id = str(uuid.uuid4())
+        await db.execute(
+            "INSERT INTO tasks (id, type, status, persona, concurrency_key, "
+            "max_runtime_seconds, cancel_requested, started_at, artifact_path, "
+            "duration_ms, cost_usd, parent_task_id, arguments_json) "
+            "VALUES (?, 'subagent', 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                task_id, "researcher", "default", 600, 0,
+                None, None, None, None, None, '{"task": "test"}',
+            ),
+        )
+        row = await db.fetch_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        assert row is not None
+        assert row["type"] == "subagent"
+        assert row["persona"] == "researcher"
+        assert row["concurrency_key"] == "default"
+        assert row["max_runtime_seconds"] == 600
+        assert row["cancel_requested"] == 0
+
+    async def test_conversations_has_parent_conversation_id(self, db):
+        parent_id = str(uuid.uuid4())
+        child_id = str(uuid.uuid4())
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            (parent_id, "chat"),
+        )
+        await db.execute(
+            "INSERT INTO conversations (id, channel, parent_conversation_id) "
+            "VALUES (?, ?, ?)",
+            (child_id, "subagent", parent_id),
+        )
+        row = await db.fetch_one(
+            "SELECT parent_conversation_id FROM conversations WHERE id = ?",
+            (child_id,),
+        )
+        assert row["parent_conversation_id"] == parent_id
 
 
 async def _seed_conversation(db: Database, conversation_id: str) -> None:
