@@ -127,11 +127,15 @@ async def run_subagent(
     tools: list[str] | None = None,
     model: str | None = None,
     context_facts: list[str] | None = None,
+    memory_refs: list[str] | None = None,
     input_artifact: str | None = None,
+    workspace_root: str | None = None,
     wait_for_result: bool = False,
     timeout_seconds: int | None = None,
     on_complete: dict | None = None,
+    on_failure: dict | None = None,
     concurrency_key: str | None = None,
+    max_retries: int = 2,
     conversation_id: str | None = None,
 ) -> SubagentDispatchResult:
     """Dispatch a sub-agent task.
@@ -141,15 +145,29 @@ async def run_subagent(
         persona: Name of a persona definition in data/subagents/.
         skill: Name of a skill to use as system prompt base.
         system_prompt: Ad-hoc system prompt (alternative to persona/skill).
-        tools: Tool whitelist for this sub-agent. Defaults to empty.
+        tools: Tool whitelist for this sub-agent. Union with persona+skill tools unless tools_override=True on persona.
         model: Model override (default, background, reasoning, or specific ID).
-        context_facts: User-facing knowledge to inject (from memory layer).
+        context_facts: User-facing knowledge to inject (inline, passed as-is).
+        memory_refs: Memory queries resolved at EXECUTION time (not dispatch)
+            so facts are fresh when the sub-agent runs. Each ref is a string
+            query passed to MemoryRecall.search() at worker pickup.
         input_artifact: Current state for refinement tasks.
+        workspace_root: Filesystem sandbox root for file tools. Default:
+            data/subagent_workspace/{task_id}/. File tools refuse paths
+            outside this root.
         wait_for_result: If True, block until complete or timeout. If False,
-            dispatch async and return task_id immediately.
+            dispatch async and return task_id immediately. NOTE: API-facing
+            endpoints always set False. Only orchestrator-internal fast
+            tasks (< 10s) use True.
         timeout_seconds: Max runtime (defaults vary by mode).
         on_complete: Optional follow-up dispatch: {persona, task, input_from: 'result'}.
-        concurrency_key: Optional key for grouping concurrent tasks (budget).
+        on_failure: Optional failure handler: {persona, task, error_message}
+            dispatched if this task fails (after retries exhausted).
+        concurrency_key: Global pool name. Tasks with the same key share a
+            slot pool. Default pool if None. See concurrency section.
+        max_retries: Retries for transient failures (network, rate limit,
+            transient LLM errors). Non-transient failures are not retried.
+            Default 2.
         conversation_id: Parent conversation for tracking/context.
 
     Returns:
@@ -159,12 +177,16 @@ async def run_subagent(
 
 ### Two Execution Paths
 
-**Synchronous path (`wait_for_result=True`):**
+**Synchronous path (`wait_for_result=True`) — ORCHESTRATOR-INTERNAL ONLY:**
+- Never exposed via HTTP API endpoints. API dispatches are always async.
+- Used only when the orchestrator is confident the task is fast (< 10s)
+  and wants the result in the current LLM turn.
 - Creates a fresh `Executor` instance with scoped config
 - Runs the sub-agent inline
 - Returns result directly
-- Used for fast tasks (< 10s) where immediate integration is needed
 - Default timeout: 30 seconds
+- On timeout, the inline path falls back to creating a pending task row and
+  returning `status='running'` so the caller can poll.
 
 **Asynchronous path (`wait_for_result=False`) — DEFAULT:**
 - Creates a row in `tasks` table with `type='subagent'`, `status='pending'`
@@ -174,29 +196,95 @@ async def run_subagent(
 - Default timeout: 10 minutes
 - On completion, creates notification + artifact + publishes WebSocket event
 
+**HTTP API dispatch pattern:**
+- API endpoints that dispatch sub-agents return `202 Accepted` with `{task_id, status_url: "/api/tasks/{id}"}`
+- Clients poll `status_url` or subscribe to the WebSocket for completion events
+- No long-polling in HTTP handlers — no more than ~1 second of blocking in any API request
+
 ### Sub-Agent Execution (internal)
 
 The worker (`_execute_subagent_task`) does:
 
-1. Resolve system prompt:
+1. **Resolve system prompt:**
    - If `persona` given, load from `data/subagents/{persona}.md`
    - If `skill` given, load from `SkillRegistry.get(skill)` and use its `system_prompt`
    - If `system_prompt` given, use directly
    - Combine: persona's template can reference a skill for base instructions + extra
-2. Resolve tool whitelist: persona's defaults, overridden by explicit `tools` param
-3. Resolve model: explicit `model` → persona default → global default
-4. Create a fresh conversation in DB with `channel='subagent'`, `parent_conversation_id=conversation_id`
-5. Build context facts block (markdown formatted) if provided
-6. Build input artifact block if provided
-7. Construct initial message: `{system: system_prompt + facts + artifact + persona constraints, user: task}`
-8. Run via `Executor.execute()` with scoped tool registry (whitelist filter)
-9. Capture the final response text
-10. Store result in `tasks.result_json`
-11. If result > 500 chars OR structured: write as an artifact, set `artifact_path`
-12. Update `tasks.status = 'done'`, `completed_at = now`
-13. Publish WebSocket `subagent_complete` event
-14. Create notification: `{type: 'suggestion', title: 'Sub-agent task complete: {persona}', body: result[:200], metadata: {task_id, artifact_path}}`
-15. If `on_complete` set: dispatch the next sub-agent with the current result as input
+2. **Resolve tool whitelist (union semantics):**
+   - Start with `skill.tools ∪ persona.tools`
+   - If persona declares `tools_override: true` in frontmatter, replace instead of union
+   - Explicit `tools` param overrides everything
+   - Validate: all tools referenced in the persona's system prompt (regex-matched from known tool names) must be in the resolved whitelist, else log warning
+3. **Resolve model:** explicit `model` → persona default → global default
+4. **Resolve memory_refs at execution time (not dispatch time):**
+   - For each query in `memory_refs`, call `MemoryRecall.search(query, limit=3)` now
+   - Format resolved memories as additional context_facts
+   - This prevents stale facts when tasks sit in queue
+   - Raw `context_facts` passed at dispatch are appended as-is (no resolution)
+5. **Resolve workspace_root:**
+   - Default: `data/subagent_workspace/{task_id}/`
+   - Create the directory
+   - Will be set as the `workspace_root` for file tools in this sub-agent's executor
+6. **Create a fresh conversation** in DB with `channel='subagent'`, `parent_conversation_id=conversation_id`
+7. **Build context blocks:** context_facts (inline + resolved), input_artifact, persona constraints
+8. **Construct initial message:** `{system: system_prompt + facts + artifact + workspace boundary note, user: task}`
+9. **Run via scoped Executor:**
+   - Fresh Executor instance with:
+     - Tool registry filtered to whitelist
+     - `workspace_root` passed to file tools
+     - Chosen model
+     - Fresh conversation_id
+     - No access to parent conversation history
+10. **Capture the final response text**
+11. **Store result** in `tasks.result_json`
+12. **If result > 500 chars OR structured:** write as an artifact in `data/artifacts/`, set `artifact_path`
+13. **Update `tasks.status = 'done'`, `completed_at = now`, `duration_ms`, `cost_usd`**
+14. **Publish WebSocket** `subagent_complete` event
+15. **Create notification:** `{type: 'suggestion', title: 'Sub-agent task complete: {persona}', body: result[:200], metadata: {task_id, artifact_path, parent_task_id}}`
+16. **If `on_complete` set:** dispatch the next sub-agent with the current result as input_artifact
+
+### Error Handling and Retries
+
+**Classification of failures:**
+
+| Category | Examples | Retry? |
+|---|---|---|
+| `transient` | Network timeout, HTTP 502/503, connection reset | Yes (up to max_retries) |
+| `rate_limit` | HTTP 429, rate-limit response | Yes (with longer backoff) |
+| `llm_transient` | Provider returned empty content, partial JSON | Yes (up to max_retries) |
+| `timeout` | Task exceeded `max_runtime_seconds` | No |
+| `tool_error` | Tool raised a non-transient error | No |
+| `parse_error` | Result failed validation | No |
+| `budget_exhausted` | Budget tracker refused the call | No (requeue when budget recovers) |
+| `cancelled` | User requested cancellation | No |
+
+**Retry behavior:**
+- Only `transient`, `rate_limit`, `llm_transient` are retried
+- `retry_count` incremented on each retry
+- Retries stop when `retry_count >= max_retries` (default 2)
+- Exponential backoff: 5s, 15s, 45s
+- Rate-limit backoff: 30s, 120s, 300s
+- On retry exhaustion: `status='failed'`, error stored, `on_failure` handler triggered if set
+
+### On-Failure Handler
+
+If a task fails (after retries exhausted) and has an `on_failure` block in its dispatch params, the worker dispatches the failure handler instead of the success `on_complete` chain:
+
+```python
+on_failure = {
+    "persona": "summarizer",
+    "task": "Summarize why the previous task failed and suggest alternatives",
+    "context_facts": ["original_task", "error_message"],  # auto-populated
+    "notify_user": True,
+}
+```
+
+The handler task receives the original failed task's error message and task description as context. Common patterns:
+- Notify user with a specific message ("I couldn't gather enough sources")
+- Try a different approach (switch from `researcher` to `summarizer` with limited input)
+- Escalate by creating a notification asking the user for guidance
+
+If no `on_failure` is set, the default behavior is: create a notification `{type: 'alert', title: 'Sub-agent task failed: {persona}', body: error[:200]}`.
 
 ### Sub-Agents Cannot Recurse (V1 constraint)
 
@@ -275,6 +363,73 @@ cited URLs with one-line descriptions.
 `odigos/core/subagent.py` loads persona files from `data/subagents/` on demand. Uses a simple in-memory cache keyed by filename, invalidated on mtime change. No DB registration — persona definitions are just files.
 
 If the persona references a skill (via `skill:` frontmatter), the skill's system_prompt is used as the base and the persona's body is appended as additional instructions.
+
+### Persona Validation
+
+At persona load time, `validate_persona()` runs a sanity check:
+1. Parse the system prompt body for known tool name references (regex-matched against the tool registry)
+2. If a tool is referenced in the prompt but not in the resolved whitelist (persona.tools ∪ skill.tools), log a warning: `"Persona {name} references tool {tool} in its prompt but it's not in the whitelist"`
+3. Warnings don't block loading — the persona still works — but they're surfaced in logs for easy debugging
+
+### Persona + Skill Tool Union
+
+When both a persona and a skill define tools, the resolved whitelist is:
+
+```
+resolved_tools = explicit_tools_param  if provided
+               else (persona.tools ∪ skill.tools)  if persona has no override
+               else persona.tools  if persona has tools_override=True
+```
+
+Persona can declare `tools_override: true` in frontmatter to replace the union with just its own tools. This is rare — most personas want to inherit the skill's tools and add their own.
+
+Example:
+
+```yaml
+# data/subagents/legal-researcher.md
+---
+name: legal-researcher
+model: reasoning
+skill: legal-draft          # provides its own tools like doc_format
+tools: [web_search, scrape] # ADDED to legal-draft's tools
+tools_override: false       # (default) union semantics
+---
+```
+
+Resolved whitelist = legal-draft's tools + [web_search, scrape].
+
+### Filesystem Sandboxing
+
+Sub-agents that use file tools (read_file, write_file) are confined to a per-task workspace root:
+
+**Default workspace root:** `data/subagent_workspace/{task_id}/`
+
+The directory is created when the task starts. File tools in the sub-agent's executor are initialized with this workspace_root and refuse any path that:
+- Resolves outside the workspace root (after `Path.resolve()`)
+- Contains `..` traversal
+- Points to absolute paths outside the workspace
+
+**Allowed additional roots** (configurable per persona):
+
+```yaml
+# data/subagents/presenter.md
+---
+name: presenter
+workspace_roots:
+  - data/subagent_workspace/{task_id}/  # default scratch space
+  - data/artifacts/                      # can write final deliverables
+---
+```
+
+The `presenter` persona can write to `data/artifacts/` specifically to save the final PDF. Most personas don't need this — they work in scratch space and the worker moves the result to artifacts on completion.
+
+**Forbidden roots** (global, never allowed for any sub-agent):
+- `/` (system root)
+- `/etc`, `/home`, `/usr`, `/var`
+- The odigos installation directory
+- `.env`, `config.yaml`, anything with secrets
+
+The `workspace_root` enforcement happens in the file tools themselves (not in the sub-agent's prompt), so it's a hard technical constraint, not a soft guideline.
 
 ---
 
@@ -419,11 +574,25 @@ except Exception:
 
 ### Concurrency & Resource Management
 
-- **MAX_CONCURRENT_SUBAGENTS = 3** — bounded parallelism
-- **Budget gating** — if budget is at danger threshold, new tasks are not started (but existing ones continue)
-- **Timeout** — per-task timeout via `asyncio.wait_for`
+**Concurrency key scope is GLOBAL.** Tasks with the same `concurrency_key` share a slot pool across all conversations. Different keys don't block each other. This is single-user, single-process — "global" means process-wide.
+
+**Default concurrency limits:**
+
+| Pool (key) | Slots | Rationale |
+|---|---|---|
+| `default` (no key) | 3 | General sub-agent work |
+| `research` | 2 | Research tasks are long and expensive; limit to 2 concurrent |
+| `fast` | 5 | Summarizer and quick transformations; higher throughput |
+| `heavy` | 1 | Presenter and anything that writes many files; serialize |
+
+The orchestrator sets `concurrency_key` when dispatching. If not set, the task competes for the `default` pool. The worker counts running tasks per pool and only starts a new task if the matching pool has an available slot.
+
+**Other controls:**
+- **Budget gating** — if budget is at danger threshold, new tasks are not started (existing ones continue until timeout or completion)
+- **Per-task timeout** — `asyncio.wait_for` with `max_runtime_seconds` (default 600)
 - **Cancellation** — `cancel_requested=1` marks the task; worker checks before starting, active tasks are cancelled via stored asyncio.Task reference
-- **Retry** — failed sub-agent tasks are NOT auto-retried (different from network tasks). User can manually retry via API if needed.
+- **Retry** — transient failures retried with exponential backoff up to `max_retries` (default 2); non-transient failures not retried (see Error Handling section)
+- **Orphaned task recovery** — on heartbeat startup, tasks with `status='running'` are checked: if `started_at` is older than `max_runtime_seconds + 60s`, mark as failed with error `"interrupted (process restart)"`, trigger `on_failure` if set
 
 ---
 
@@ -554,11 +723,51 @@ Returns: `{task_ids: [...], dispatched: N}`
 ```python
 class SubagentStatusTool(BaseTool):
     name = "subagent_status"
-    description = "Check the status of a dispatched sub-agent task by task_id."
-    # Returns: {task_id, status, result?, artifact_path?, error?}
+    description = (
+        "Check the status of a dispatched sub-agent task by task_id. "
+        "Optionally include the tool-call trace (intermediate steps) for "
+        "debugging or verification."
+    )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "task_id": {"type": "string"},
+            "include_trace": {
+                "type": "boolean",
+                "description": "If true, include the sub-agent's tool calls and intermediate reasoning",
+                "default": False,
+            },
+        },
+        "required": ["task_id"],
+    }
 ```
 
-Lets the main agent check on dispatched tasks if the user asks ("is the research done yet?").
+Returns:
+```typescript
+{
+  task_id: string,
+  status: 'pending' | 'running' | 'done' | 'failed' | 'cancelled',
+  persona: string,
+  result?: string,
+  artifact_path?: string,
+  error?: string,
+  duration_ms?: number,
+  cost_usd?: number,
+  trace?: [                       // only when include_trace=true
+    {
+      step: number,
+      tool?: string,
+      tool_input?: object,
+      tool_output?: string,        // truncated to 1000 chars
+      thought?: string,
+    }
+  ]
+}
+```
+
+The trace is built by querying `messages` from the sub-agent's `conversation_id` (via `parent_conversation_id` chain) and extracting the tool call / response pairs. The orchestrator uses this to verify sub-agent work quality or debug failures ("what did the researcher actually search for?").
+
+Lets the main agent check on dispatched tasks if the user asks ("is the research done yet?") or verify sub-agent work before delivering results to the user.
 
 ### Cancellation
 
