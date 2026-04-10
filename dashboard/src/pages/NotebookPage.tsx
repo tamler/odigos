@@ -9,6 +9,7 @@ import { MarkdownEditor } from '@/components/Editor'
 import { AgentInputBar } from '@/components/AgentInputBar'
 import { ShareDialog } from '@/components/ShareDialog'
 import { PageTransition } from '@/components/ui/page-transition'
+import { NoteSidecar } from '@/components/notes/NoteSidecar'
 
 interface Notebook {
   id: string
@@ -48,6 +49,9 @@ export default function NotebookPage() {
   const [shareOpen, setShareOpen] = useState(false)
   const [title, setTitle] = useState('')
   const saveTimeout = useRef<any>(null)
+  const [showNotes, setShowNotes] = useState(false)
+  const [replyPrefill, setReplyPrefill] = useState<string | null>(null)
+  const [unreadNoteCount, setUnreadNoteCount] = useState(0)
 
   const loadNotebook = useCallback(async () => {
     if (!notebookId) {
@@ -108,6 +112,36 @@ export default function NotebookPage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [focusMode, setFocusMode])
+
+  useEffect(() => {
+    async function checkUnread() {
+      try {
+        const resp = await fetch(`/api/notebooks/${notebookId}/entries?entry_type=agent`)
+        if (resp.ok) {
+          const data = await resp.json()
+          setUnreadNoteCount(data.unread_count || 0)
+          if (data.unread_count > 0) {
+            setShowNotes(true)
+          }
+        }
+      } catch {
+        // Non-critical
+      }
+    }
+    if (notebookId) void checkUnread()
+  }, [notebookId])
+
+  const handleQuoteClick = useCallback((quote: string) => {
+    const content = document.querySelector('.ProseMirror')?.textContent || ''
+    const idx = content.toLowerCase().indexOf(quote.toLowerCase())
+    if (idx === -1) {
+      console.warn('Quoted text no longer in document')
+    }
+  }, [])
+
+  const handleReplyClick = useCallback((quote: string) => {
+    setReplyPrefill(`> ${quote}\n\n`)
+  }, [])
 
   const handleUpdateTitle = async () => {
     if (!notebook || title === notebook.title || !title.trim()) return
@@ -176,6 +210,12 @@ export default function NotebookPage() {
           </div>
           
           <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setShowNotes(!showNotes)}
+              className="text-xs text-muted-foreground hover:text-foreground px-2 py-1"
+            >
+              Notes{unreadNoteCount > 0 && ` (${unreadNoteCount})`}
+            </button>
             <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-9 lg:w-9 text-muted-foreground" onClick={() => setFocusMode(true)} title="Focus Mode (Cmd+.)">
               <Maximize2 className="h-5 w-5 lg:h-4 lg:w-4" />
             </Button>
@@ -195,12 +235,39 @@ export default function NotebookPage() {
       )}
 
       {/* Editor Content */}
-      <div className={`flex-1 overflow-y-auto custom-scrollbar relative ${focusMode ? 'max-w-4xl mx-auto w-full rounded-2xl border border-border/10 bg-background/50 shadow-2xl overflow-hidden' : ''}`}>
-        <MarkdownEditor
-          content={content}
-          onChange={handleContentChange}
-        />
-        <div className="h-32 shrink-0" /> {/* Bottom spacer for agent bar */}
+      <div className={`flex flex-1 min-h-0 relative ${focusMode ? 'max-w-4xl mx-auto w-full rounded-2xl border border-border/10 bg-background/50 shadow-2xl overflow-hidden' : ''}`}>
+        <div className={`overflow-y-auto custom-scrollbar ${showNotes && !focusMode ? 'flex-1 min-w-0' : 'w-full'}`}>
+          <MarkdownEditor
+            content={content}
+            onChange={handleContentChange}
+          />
+          <div className="h-32 shrink-0" /> {/* Bottom spacer for agent bar */}
+        </div>
+
+        {/* Desktop split view */}
+        {showNotes && !focusMode && (
+          <div className="hidden md:block md:w-[40%] border-l border-border overflow-y-auto">
+            <NoteSidecar
+              notebookId={notebookId || ''}
+              onQuoteClick={handleQuoteClick}
+              onReplyClick={handleReplyClick}
+            />
+          </div>
+        )}
+
+        {/* Mobile bottom sheet */}
+        {showNotes && !focusMode && (
+          <div
+            className="md:hidden fixed inset-x-0 bottom-0 top-16 z-40 bg-background border-t border-border overflow-y-auto rounded-t-2xl shadow-lg"
+            onClick={(e) => e.target === e.currentTarget && setShowNotes(false)}
+          >
+            <NoteSidecar
+              notebookId={notebookId || ''}
+              onQuoteClick={handleQuoteClick}
+              onReplyClick={handleReplyClick}
+            />
+          </div>
+        )}
       </div>
 
       {/* Agent Input Bar */}
@@ -219,6 +286,8 @@ export default function NotebookPage() {
               socketRef={socketRef}
               connected={connected}
               sttAvailable={true}
+              prefill={replyPrefill}
+              onPrefillConsumed={() => setReplyPrefill(null)}
             />
           </div>
         </div>

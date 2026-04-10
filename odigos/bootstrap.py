@@ -1000,6 +1000,9 @@ class Bootstrapper:
         heartbeat.memory_evolution = self.container.memory_evolution
         logger.info("MemoryEvolution attached to heartbeat")
 
+        # Wire notebook review phase
+        heartbeat.notes_review_enabled = True
+
         # Wire email config
         if s.email.imap_host:
             heartbeat._email_config = s.email

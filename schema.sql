@@ -871,9 +871,10 @@ CREATE TABLE IF NOT EXISTS notebooks (
     mode TEXT DEFAULT 'general',
     collaboration TEXT DEFAULT 'read',
     share_with_agent INTEGER DEFAULT 0,
+    share_token TEXT,
+    last_reviewed_at TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    share_token TEXT
+    updated_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_notebooks_mode ON notebooks(mode);
@@ -886,6 +887,10 @@ CREATE TABLE IF NOT EXISTS notebook_entries (
     status TEXT DEFAULT 'active',
     mood TEXT,
     metadata TEXT,
+    quote TEXT,
+    trigger_type TEXT,
+    viewed_at TEXT,
+    parent_id TEXT REFERENCES notebook_entries(id),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
