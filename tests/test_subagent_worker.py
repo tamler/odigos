@@ -19,7 +19,14 @@ async def db(tmp_db_path: str):
     await d.close()
 
 
-def _make_hb(db) -> MagicMock:
+def _make_hb(db, manager_execute=None) -> MagicMock:
+    """Build a mock Heartbeat with a subagent_manager.
+
+    Args:
+        db: real Database instance
+        manager_execute: optional async callable to use as the manager's
+            execute_task() implementation. Defaults to a no-op.
+    """
     hb = MagicMock()
     hb.db = db
     hb.llm_provider = AsyncMock()
@@ -30,6 +37,16 @@ def _make_hb(db) -> MagicMock:
     hb.notifier.create = AsyncMock()
     hb.message_bus = MagicMock()
     hb.message_bus.publish = AsyncMock()
+
+    # Attach a SubagentManager mock. The worker delegates execution to it.
+    manager = MagicMock()
+    manager.db = db
+    if manager_execute is None:
+        async def _noop(task_row):
+            return
+        manager_execute = _noop
+    manager.execute_task = AsyncMock(side_effect=manager_execute)
+    hb.subagent_manager = manager
     return hb
 
 
@@ -102,10 +119,10 @@ def _make_llm_response(content: str) -> LLMResponse:
 
 
 class TestWorkerExecution:
-    async def test_execution_writes_result(self, db, tmp_path, monkeypatch):
+    async def test_execution_writes_result(self, db):
+        """Worker delegates to manager, manager writes result to DB."""
         from odigos.core.heartbeat import subagent_worker
 
-        # Seed a pending task
         task_id = str(uuid.uuid4())
         params = {
             "task": "Summarize this",
@@ -120,29 +137,18 @@ class TestWorkerExecution:
             (task_id, json.dumps(params)),
         )
 
-        hb = _make_hb(db)
-        hb.llm_provider.complete = AsyncMock(
-            return_value=_make_llm_response("TL;DR: This is a summary."),
-        )
+        # execute_task mock writes a "done" row directly
+        async def fake_execute(task_row):
+            await db.execute(
+                "UPDATE tasks SET status = 'done', result_json = ? WHERE id = ?",
+                (json.dumps({"result": "TL;DR: This is a summary."}), task_row["id"]),
+            )
 
-        # Patch the execution helper to use the mock LLM directly
-        async def mock_execute_inline(hb, params, task_id, workspace_root):
-            return {
-                "result": "TL;DR: This is a summary.",
-                "artifact_path": None,
-                "duration_ms": 100,
-                "cost_usd": 0.001,
-                "tool_calls": [],
-            }
-        monkeypatch.setattr(
-            subagent_worker, "_execute_subagent_inline", mock_execute_inline,
-        )
-
+        hb = _make_hb(db, manager_execute=fake_execute)
         started = await subagent_worker.poll_subagent_tasks(hb)
         assert started == 1
 
-        # Wait for the background asyncio.Task to complete
-        import asyncio as _aio
+        # Wait for the background asyncio.Task to finish
         running = subagent_worker._running_tasks.get(task_id)
         if running:
             await running
@@ -154,7 +160,8 @@ class TestWorkerExecution:
         result = json.loads(row["result_json"])
         assert "summary" in result["result"].lower()
 
-    async def test_execution_creates_notification_on_done(self, db, monkeypatch):
+    async def test_worker_calls_manager_execute_task(self, db):
+        """The worker delegates to SubagentManager.execute_task per dispatched row."""
         from odigos.core.heartbeat import subagent_worker
 
         task_id = str(uuid.uuid4())
@@ -168,33 +175,35 @@ class TestWorkerExecution:
         )
 
         hb = _make_hb(db)
-
-        async def mock_execute_inline(hb, params, task_id, workspace_root):
-            return {
-                "result": "Done.",
-                "artifact_path": None,
-                "duration_ms": 50,
-                "cost_usd": 0.0,
-                "tool_calls": [],
-            }
-        monkeypatch.setattr(
-            subagent_worker, "_execute_subagent_inline", mock_execute_inline,
-        )
-
         await subagent_worker.poll_subagent_tasks(hb)
         running = subagent_worker._running_tasks.get(task_id)
         if running:
             await running
 
-        # Verify notification was created
-        assert hb.notifier.create.called
+        # The worker should have called manager.execute_task with the task row
+        assert hb.subagent_manager.execute_task.called
+        call_args = hb.subagent_manager.execute_task.call_args
+        passed_row = call_args[0][0]
+        assert passed_row["id"] == task_id
 
 
 class TestChaining:
-    async def test_on_complete_dispatches_follow_up(self, db, monkeypatch):
-        from odigos.core.heartbeat import subagent_worker
+    """Chaining is internal to SubagentManager. Test it directly."""
 
-        # Seed a pending task with on_complete
+    async def _make_manager(self, db, llm_content: str = "done"):
+        from odigos.core.subagent import SubagentManager
+        from odigos.tools.registry import ToolRegistry
+
+        provider = AsyncMock()
+        provider.complete = AsyncMock(return_value=_make_llm_response(llm_content))
+        return SubagentManager(
+            db=db,
+            llm_provider=provider,
+            tool_registry=ToolRegistry(),
+        )
+
+    async def test_on_complete_dispatches_follow_up(self, db):
+        """When a task has on_complete, a chained task is created on success."""
         task_id = str(uuid.uuid4())
         params = {
             "task": "Research X",
@@ -209,30 +218,19 @@ class TestChaining:
             "INSERT INTO tasks "
             "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
             "arguments_json, max_retries, retry_count) "
-            "VALUES (?, 'subagent', 'pending', 'researcher', 'default', 600, ?, 2, 0)",
+            "VALUES (?, 'subagent', 'running', 'researcher', 'default', 600, ?, 2, 0)",
             (task_id, json.dumps(params)),
         )
 
-        hb = _make_hb(db)
+        manager = await self._make_manager(db, llm_content="Research complete.")
+        row = await db.fetch_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        await manager.execute_task(dict(row))
 
-        async def mock_execute_inline(hb, params, task_id, workspace_root):
-            return {
-                "result": "Research complete.",
-                "artifact_path": None,
-                "duration_ms": 50,
-                "cost_usd": 0.0,
-                "tool_calls": [],
-            }
-        monkeypatch.setattr(
-            subagent_worker, "_execute_subagent_inline", mock_execute_inline,
-        )
+        # Original task should be done
+        updated = await db.fetch_one("SELECT status, result_json FROM tasks WHERE id = ?", (task_id,))
+        assert updated["status"] == "done"
 
-        await subagent_worker.poll_subagent_tasks(hb)
-        running = subagent_worker._running_tasks.get(task_id)
-        if running:
-            await running
-
-        # Verify a chained task was created
+        # Chained task should exist with parent_task_id pointing to original
         chained_rows = await db.fetch_all(
             "SELECT * FROM tasks WHERE parent_task_id = ?", (task_id,),
         )
@@ -242,9 +240,8 @@ class TestChaining:
         chained_params = json.loads(chained["arguments_json"])
         assert chained_params["input_artifact"] == "Research complete."
 
-    async def test_on_failure_dispatches_recovery(self, db, monkeypatch):
-        from odigos.core.heartbeat import subagent_worker
-
+    async def test_on_failure_dispatches_recovery(self, db):
+        """When a task has on_failure, a recovery task is created on exception."""
         task_id = str(uuid.uuid4())
         params = {
             "task": "Research X",
@@ -258,34 +255,38 @@ class TestChaining:
             "INSERT INTO tasks "
             "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
             "arguments_json, max_retries, retry_count) "
-            "VALUES (?, 'subagent', 'pending', 'researcher', 'default', 600, ?, 0, 0)",
+            "VALUES (?, 'subagent', 'running', 'researcher', 'default', 600, ?, 0, 0)",
             (task_id, json.dumps(params)),
         )
 
-        hb = _make_hb(db)
+        # Build a manager whose _run_inline raises
+        from odigos.core.subagent import SubagentManager
+        from odigos.tools.registry import ToolRegistry
 
-        async def mock_execute_inline(hb, params, task_id, workspace_root):
-            raise RuntimeError("network error during research")
-
-        monkeypatch.setattr(
-            subagent_worker, "_execute_subagent_inline", mock_execute_inline,
+        provider = AsyncMock()
+        provider.complete = AsyncMock(side_effect=RuntimeError("network error"))
+        manager = SubagentManager(
+            db=db,
+            llm_provider=provider,
+            tool_registry=ToolRegistry(),
         )
 
-        await subagent_worker.poll_subagent_tasks(hb)
-        running = subagent_worker._running_tasks.get(task_id)
-        if running:
-            await running
+        row = await db.fetch_one("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        await manager.execute_task(dict(row))
 
-        # Verify the original task is failed
-        row = await db.fetch_one("SELECT status FROM tasks WHERE id = ?", (task_id,))
-        assert row["status"] == "failed"
+        # Original task should be failed
+        updated = await db.fetch_one(
+            "SELECT status, error FROM tasks WHERE id = ?", (task_id,),
+        )
+        assert updated["status"] == "failed"
 
-        # Verify on_failure task was created
+        # Recovery task should exist
         failure_rows = await db.fetch_all(
             "SELECT * FROM tasks WHERE parent_task_id = ? AND type = 'subagent'",
             (task_id,),
         )
         assert len(failure_rows) == 1
+        assert failure_rows[0]["persona"] == "summarizer"
 
 
 class TestWorkerOrphanRecovery:

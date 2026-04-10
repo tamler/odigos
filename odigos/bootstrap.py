@@ -337,11 +337,15 @@ class Bootstrapper:
         self._register_comms_tools(registry, settings)
         self._register_productivity_tools(registry, db, goal_store, settings, provider)
 
-        # Subagent manager
+        # Subagent manager — unified lifecycle (dispatch, execute, deliver, chain)
         from odigos.core.subagent import SubagentManager
         subagent_manager = SubagentManager(
-            db=db, provider=provider, tool_registry=registry,
-            tracer=None, memory_manager=memory_manager,
+            db=db,
+            llm_provider=provider,
+            tool_registry=registry,
+            memory_recall=getattr(memory_manager, "memory_recall", None) if memory_manager else None,
+            skill_registry=skill_registry,
+            tracer=None,
         )
         logger.info("Subagent manager initialized")
 

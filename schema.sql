@@ -304,7 +304,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     started_at TEXT,
     artifact_path TEXT,
     duration_ms INTEGER,
-    cost_usd REAL
+    cost_usd REAL,
+    delivered_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -710,18 +711,8 @@ CREATE TABLE IF NOT EXISTS peer_messages (
 CREATE INDEX IF NOT EXISTS idx_peer_messages_peer ON peer_messages(peer_name);
 CREATE INDEX IF NOT EXISTS idx_peer_messages_status ON peer_messages(status);
 
-CREATE TABLE IF NOT EXISTS subagent_tasks (
-    id TEXT PRIMARY KEY,
-    parent_conversation_id TEXT NOT NULL,
-    instruction TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'running',
-    result TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    completed_at TEXT,
-    delivered_at TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_subagent_status ON subagent_tasks(status);
+-- subagent_tasks table removed 2026-04-10. Sub-agent work now lives in the
+-- unified tasks table (type='subagent') managed by SubagentManager.
 
 CREATE TABLE IF NOT EXISTS agent_registry (
     agent_name TEXT PRIMARY KEY,
