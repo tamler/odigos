@@ -205,6 +205,33 @@ class ExecuteResult:
     background_tasks: list[dict] | None = None
 
 
+def _build_skill_activation_message(skill_prompt: str, overrides: list[str]) -> str:
+    """Build the system message that injects an active skill.
+
+    The framing is explicit about the skill being additive to the main
+    personality, not replacing it. When overrides are present, those
+    personality aspects are explicitly suppressed for this task.
+    """
+    base = (
+        "[Active skill instructions — additive, not replacing]\n\n"
+        f"{skill_prompt}\n\n"
+        "These instructions add specialized capability for this task. "
+        "Your persona, voice, and the user's preferences from your main "
+        "system prompt still apply to how you talk about this work. "
+        "When the skill's instructions conflict with the user's "
+        "preferences, prefer the user's preferences unless the skill "
+        "explicitly declares an override."
+    )
+    if overrides:
+        suppression = ", ".join(overrides)
+        base += (
+            f"\n\n[Override] For this task specifically, suppress the "
+            f"following personality aspects: {suppression}. The skill's "
+            f"instructions take priority over these."
+        )
+    return base
+
+
 class Executor:
     """ReAct-style agentic loop engine.
 
@@ -242,6 +269,7 @@ class Executor:
         self._active_skill_name: str | None = None
         self._active_skill_tools: set[str] = set()
         self._pending_skill_prompt: str | None = None
+        self._pending_skill_overrides: list[str] = []
 
     async def execute(
         self,
@@ -265,6 +293,7 @@ class Executor:
         self._active_skill_name = None
         self._active_skill_tools = set()
         self._pending_skill_prompt = None
+        self._pending_skill_overrides = []
         self._pending_suggested_actions: list[str] | None = None
         self._pending_background_tasks: list[dict] = []
 
@@ -505,13 +534,17 @@ class Executor:
                     "content": "Before proceeding to the next step, verify the result of the current step is correct and complete.",
                 })
 
-            # Check for skill activation -- inject system message
+            # Check for skill activation -- inject system message with personality-preserving framing
             if self._pending_skill_prompt:
+                overrides = getattr(self, "_pending_skill_overrides", [])
                 messages.append({
                     "role": "system",
-                    "content": f"[Active skill instructions]:\n\n{self._pending_skill_prompt}",
+                    "content": _build_skill_activation_message(
+                        self._pending_skill_prompt, overrides,
+                    ),
                 })
                 self._pending_skill_prompt = None
+                self._pending_skill_overrides = []
         else:
             logger.warning("Hit max tool turns (%d) for conversation %s", self._max_tool_turns, conversation_id)
 
@@ -750,6 +783,7 @@ class Executor:
                 self._active_skill_name = result.side_effect["skill_name"]
                 self._active_skill_tools = set(result.side_effect.get("skill_tools", []))
                 self._pending_skill_prompt = result.side_effect["skill_prompt"]
+                self._pending_skill_overrides = result.side_effect.get("skill_overrides", [])
                 return result.data
 
             # Persist decomposed plan or attach substeps to parent

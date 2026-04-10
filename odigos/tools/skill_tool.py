@@ -54,5 +54,6 @@ class ActivateSkillTool(BaseTool):
                 "skill_name": skill.name,
                 "skill_prompt": skill.system_prompt,
                 "skill_tools": skill.tools,
+                "skill_overrides": skill.overrides,
             },
         )

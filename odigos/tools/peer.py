@@ -14,7 +14,7 @@ class MessagePeerTool(BaseTool):
     category = "communication"
     description = (
         "Send a message to a registered peer agent. Use to communicate with an already-registered peer. "
-        "Do not use to create a new subagent — use spawn_subagent for that."
+        "Do not use to create a new sub-agent — use run_subagent for that."
     )
     parameters_schema = {
         "type": "object",

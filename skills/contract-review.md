@@ -3,6 +3,7 @@ name: contract-review
 description: Analyze contracts for risks, obligations, compliance issues, and provide negotiation recommendations with a safety score
 tools: [create_artifact, analyze_text]
 complexity: standard
+overrides: [tone]
 ---
 
 # Contract Review

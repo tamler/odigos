@@ -3,6 +3,7 @@ name: songwriting
 description: Collaborate with the user to write and generate a song — lyrics, style, and production parameters before generating
 tools: [generate_music]
 complexity: standard
+overrides: [concise_mode]
 ---
 
 # Songwriting Mode

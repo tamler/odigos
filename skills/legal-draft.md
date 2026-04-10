@@ -3,6 +3,7 @@ name: legal-draft
 description: Generate legal documents -- NDAs, terms of service, privacy policies, freelancer contracts, business agreements
 tools: [create_artifact, analyze_text, lookup]
 complexity: standard
+overrides: [tone]
 ---
 
 # Legal Document Drafting

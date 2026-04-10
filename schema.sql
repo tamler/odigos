@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     last_message_at TEXT,
     category        TEXT,
     created_at      TEXT DEFAULT (datetime('now')),
-    updated_at      TEXT DEFAULT (datetime('now'))
+    updated_at      TEXT DEFAULT (datetime('now')),
+    parent_conversation_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
+CREATE INDEX IF NOT EXISTS idx_conversations_parent ON conversations(parent_conversation_id);
 
 CREATE TABLE IF NOT EXISTS message_deliveries (
     id              TEXT PRIMARY KEY,
@@ -293,11 +295,23 @@ CREATE TABLE IF NOT EXISTS tasks (
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 3,
     created_at TEXT DEFAULT (datetime('now')),
-    completed_at TEXT
+    completed_at TEXT,
+    persona TEXT,
+    parent_task_id TEXT,
+    concurrency_key TEXT DEFAULT 'default',
+    max_runtime_seconds INTEGER DEFAULT 600,
+    cancel_requested INTEGER DEFAULT 0,
+    started_at TEXT,
+    artifact_path TEXT,
+    duration_ms INTEGER,
+    cost_usd REAL,
+    delivered_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
+CREATE INDEX IF NOT EXISTS idx_tasks_type_status ON tasks(type, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
 
 -- Task plans: multi-step plan persistence
 CREATE TABLE IF NOT EXISTS task_plans (
@@ -697,18 +711,8 @@ CREATE TABLE IF NOT EXISTS peer_messages (
 CREATE INDEX IF NOT EXISTS idx_peer_messages_peer ON peer_messages(peer_name);
 CREATE INDEX IF NOT EXISTS idx_peer_messages_status ON peer_messages(status);
 
-CREATE TABLE IF NOT EXISTS subagent_tasks (
-    id TEXT PRIMARY KEY,
-    parent_conversation_id TEXT NOT NULL,
-    instruction TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'running',
-    result TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    completed_at TEXT,
-    delivered_at TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_subagent_status ON subagent_tasks(status);
+-- subagent_tasks table removed 2026-04-10. Sub-agent work now lives in the
+-- unified tasks table (type='subagent') managed by SubagentManager.
 
 CREATE TABLE IF NOT EXISTS agent_registry (
     agent_name TEXT PRIMARY KEY,

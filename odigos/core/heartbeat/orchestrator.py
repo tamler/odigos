@@ -105,6 +105,17 @@ class Heartbeat:
         self.current_plan: dict | None = None
 
     async def start(self) -> None:
+        # On startup: recover orphaned sub-agent tasks
+        try:
+            from odigos.core.heartbeat import subagent_worker
+            recovered = await subagent_worker.recover_orphaned_tasks(self)
+            if recovered > 0:
+                logger.info(
+                    "Sub-agent worker: recovered %d orphaned tasks on startup", recovered
+                )
+        except Exception:
+            logger.debug("Sub-agent orphan recovery failed", exc_info=True)
+
         self._task = asyncio.create_task(self._loop())
         logger.info("Heartbeat started (interval: %.1fs)", self._interval)
 
@@ -176,7 +187,16 @@ class Heartbeat:
         from odigos.core.heartbeat import background
         did_work |= await background.poll_pending_tasks(self)
 
-        # Phase 3d: Wiki maintenance (drain pending writes, project entity pages)
+        # Phase 3d: Sub-agent task execution
+        try:
+            from odigos.core.heartbeat import subagent_worker
+            started = await subagent_worker.poll_subagent_tasks(self)
+            if started > 0:
+                logger.info("Sub-agent worker: started %d tasks", started)
+        except Exception:
+            logger.debug("Sub-agent worker failed", exc_info=True)
+
+        # Phase 3e: Wiki maintenance (drain pending writes, project entity pages)
         from odigos.core.heartbeat import brain_maintenance
         did_work |= await brain_maintenance.run_brain_maintenance(self)
 
