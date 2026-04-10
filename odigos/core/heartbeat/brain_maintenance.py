@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+BRAIN_DIR = "data/brain"
 
 if TYPE_CHECKING:
     from odigos.core.heartbeat.orchestrator import Heartbeat
@@ -104,6 +108,35 @@ async def _do_brain_maintenance(hb: Heartbeat) -> bool:
             rel_count = len(outgoing) + len(incoming)
 
             if writer.should_graduate(fact_count, rel_count):
+                # Check if the compiler has enriched this entity page — don't overwrite
+                entity_slug = entity["name"].lower().replace(" ", "-")
+                entity_page = Path(BRAIN_DIR) / "entities" / f"{entity_slug}.md"
+                if entity_page.exists():
+                    page_content = entity_page.read_text(encoding="utf-8")
+                    if "compiled_at:" in page_content:
+                        match = re.search(r"compiled_at:\s*(\S+)", page_content)
+                        if match:
+                            try:
+                                compiled_at = datetime.fromisoformat(
+                                    match.group(1).replace("Z", "+00:00")
+                                )
+                                entity_updated = datetime.fromisoformat(
+                                    entity.get("updated_at", "1970-01-01").replace("Z", "+00:00")
+                                )
+                                if compiled_at.tzinfo is None:
+                                    compiled_at = compiled_at.replace(tzinfo=timezone.utc)
+                                if entity_updated.tzinfo is None:
+                                    entity_updated = entity_updated.replace(tzinfo=timezone.utc)
+                                if compiled_at > entity_updated:
+                                    logger.debug(
+                                        "Skipping entity page %s: compiler version is newer",
+                                        entity_slug,
+                                    )
+                                    entity["has_page"] = True
+                                    graduated_entities.append(entity)
+                                    continue  # Skip this entity — compiler version takes precedence
+                            except (ValueError, AttributeError):
+                                pass  # Can't parse, proceed with normal write
                 await writer.write_entity_page(entity, facts, relationships)
                 entity["has_page"] = True
                 graduated_entities.append(entity)
