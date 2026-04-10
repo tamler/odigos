@@ -345,6 +345,17 @@ class Bootstrapper:
         )
         logger.info("Subagent manager initialized")
 
+        # Subagent orchestration tools
+        from odigos.tools.subagent_tools import (
+            RunSubagentTool, RunParallelSubagentsTool,
+            SubagentStatusTool, CancelSubagentTool,
+        )
+        registry.register(RunSubagentTool(db=db))
+        registry.register(RunParallelSubagentsTool(db=db))
+        registry.register(SubagentStatusTool(db=db))
+        registry.register(CancelSubagentTool(db=db))
+        logger.info("Subagent orchestration tools registered")
+
         # Peer messaging (skip in hermit mode)
         if mesh_enabled:
             from odigos.tools.peer import MessagePeerTool
