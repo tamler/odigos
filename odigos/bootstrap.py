@@ -468,6 +468,11 @@ class Bootstrapper:
         registry.register(TranslateTool())
         logger.info("Translation tool registered")
 
+        # Marp slide rendering
+        from odigos.tools.marp_tool import MarpTool
+        registry.register(MarpTool())
+        logger.info("Marp tool registered")
+
         # Text analysis
         from odigos.tools.text_analysis import TextAnalysisTool
         registry.register(TextAnalysisTool())
