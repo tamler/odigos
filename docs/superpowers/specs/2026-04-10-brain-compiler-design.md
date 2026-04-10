@@ -46,8 +46,9 @@ async def dispatch_compilation(hb) -> str:
 
 1. Build the compilation context (the sub-agent's input_artifact):
    - List current brain articles: `ls data/brain/entities/*.md data/brain/concepts/*.md` → filenames + first 100 chars each
-   - New memories since last compile: query `memories WHERE created_at > brain_last_compiled AND status='active'`, max 50, fields: `id, content[:200], memory_type, keywords_json, context_description[:200]`
+   - New memories since last compile: query `memories WHERE created_at > brain_last_compiled AND status='active'`, max 50, fields: `id, content[:200], memory_type, keywords_json, context_description[:200], confidence, status, superseded_by`. Prioritize high-confidence + fact/preference types. If total input exceeds 6000 chars, drop lowest-confidence memories first. Truncate general/summary memories to 100 chars.
    - New/updated entities since last compile: query `entities WHERE updated_at > brain_last_compiled`, fields: `id, name, type, summary[:200]`
+   - Full list of existing slugs: ALL filenames in `data/brain/entities/`, `data/brain/concepts/`, `data/brain/archive/` (prevents fragmented duplicate concepts across compilation cycles)
    - Current `data/brain/index.md` content
 2. Dispatch via `hb.subagent_manager.dispatch(persona="brain-compiler", task="...", input_artifact=context, concurrency_key="heavy")`
 3. Store the task_id in `kv` table as `brain_compile_task`
@@ -161,13 +162,32 @@ For every article (new or updated):
 - Add inline [links](../path.md) where concepts or entities are mentioned
 - Ensure bidirectional linking: if A mentions B, B should mention A
 - Add a "See Also" section if not already present
+- IMPORTANT: If Article A needs a link to Article B, but B isn't being
+  updated in this compilation, emit a "minimal update" operation for B
+  that ONLY adds the backlink. Do not rewrite B's content — just add
+  the link to its "See Also" section.
+
+SLUG REUSE: You receive a list of all existing slugs. ALWAYS check
+this list before creating a new concept. If a similar slug exists
+(e.g., "testing-patterns" exists, don't create "test-patterns"),
+update the existing article instead of creating a duplicate.
 
 ## Pass 5: Staleness Check
 
 For existing articles not touched by passes 1-4:
-- If the article's source facts no longer appear in the current memory set, mark for archival
+- Check source memory IDs cited in the article against the input data.
+  A memory is stale if its status is 'superseded' (check the superseded_by
+  field) or if it no longer exists. An article is stale if ALL of its
+  source memories are stale.
 - Don't archive if the article has 5+ cross-links (high-connectivity = still valuable)
 - Don't archive conversation summaries (they're historical records)
+
+## Article Footer
+
+Every article (new or updated) MUST end with:
+
+### Feedback
+[Discuss or correct this article](/?c=new&about=concept:{slug})
 
 ## Output
 
@@ -232,6 +252,15 @@ After all operations:
 3. **Update kv:** `brain_last_compiled = datetime('now')`
 4. **Create notification:** `{type: 'status', title: 'Brain compiled', body: summary}`
 
+### Operation Ordering
+
+Apply operations in dependency order to avoid broken references:
+1. All `create` operations first (new articles that might be referenced by updates)
+2. All `update` operations second (enrichments + backlinks)
+3. All `archive` operations last (only after references have been updated)
+
+This is NOT fully atomic. If a crash occurs mid-apply, the brain may have partial state. This is acceptable because: (a) single-user system, (b) the next compilation reads current state and self-repairs, (c) archive operations are last so they don't delete articles before backlinks are updated.
+
 ### Safety
 
 - Path validation: reject any path not starting with `data/brain/`
@@ -284,10 +313,11 @@ The only new directories are `concepts/` and `archive/`. Created on first use.
 | File | Change |
 |------|--------|
 | `odigos/core/heartbeat/orchestrator.py` | Add Phase 3f: brain compilation trigger + check |
+| `odigos/core/heartbeat/brain_maintenance.py` | Skip entity page overwrite when compiled_at > entity.updated_at |
 
-### What Stays Unchanged
+### What Stays Unchanged (with one refinement)
 
-- `brain_maintenance.py` — still projects entities to files every heartbeat. Compiler reads those files as input.
+- `brain_maintenance.py` — still projects entities to files every heartbeat. **Refinement:** before overwriting an entity page, brain_maintenance checks the page's frontmatter for a `compiled_at` timestamp. If `compiled_at > entity.updated_at`, skip the overwrite — the compiler's enriched version takes precedence. brain_maintenance only writes when it has data newer than the compiler. This prevents race conditions where maintenance overwrites the compiler's enriched output.
 - `BrainWriter` / `BrainReader` — untouched. Compiler uses the same markdown format.
 - `data/sources/` — untouched. Compiler reads memories, not raw sources.
 - `memories` / `entities` / `edges` tables — read-only from the compiler's perspective.
