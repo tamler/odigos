@@ -200,6 +200,15 @@ class Heartbeat:
         from odigos.core.heartbeat import brain_maintenance
         did_work |= await brain_maintenance.run_brain_maintenance(self)
 
+        # Phase 3f: Brain compilation (sub-agent dispatch)
+        try:
+            from odigos.core.heartbeat import brain_compiler
+            applied = await brain_compiler.check_compilation(self)
+            if not applied and await brain_compiler.should_compile(self.db):
+                await brain_compiler.dispatch_compilation(self)
+        except Exception:
+            logger.debug("Brain compiler phase failed", exc_info=True)
+
         # Wiki lint (every 10 ticks)
         self._brain_lint_counter += 1
         if self._brain_lint_counter >= 10:
