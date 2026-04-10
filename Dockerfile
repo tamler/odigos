@@ -40,7 +40,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
     ffmpeg \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
+
+# Marp CLI for slide rendering (used by MarpTool)
+RUN npm install -g @marp-team/marp-cli
 
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
