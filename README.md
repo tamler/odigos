@@ -37,7 +37,7 @@ A personal AI agent that runs on your machine. It remembers your conversations, 
 - **LLM API key** from [OpenRouter](https://openrouter.ai/keys), OpenAI, Groq, Ollama, or any OpenAI-compatible provider
 - **Docker** (recommended) or **Python 3.12+** with `uv` package manager
 - **Node.js 20+** (for building the dashboard)
-- **4 CPU, 8GB RAM** minimum (16GB recommended for local embeddings)
+- **2 CPU, 2GB RAM** for a single agent (4 CPU / 8GB if you want local embeddings). Odigos is designed to be light — a Raspberry Pi 5 or a small VPS is plenty for one person.
 
 ## Installation
 
@@ -274,7 +274,7 @@ One process. One SQLite database. No microservices.
 - **Reranking:** ms-marco-MiniLM cross-encoder
 - **Package manager:** uv (Python), npm (frontend)
 
-Everything runs on a single VPS. 4 CPU, 16GB RAM is comfortable.
+Everything runs on a single VPS. One agent is comfortable on 2 CPU / 2GB; a host running 15+ agents side-by-side wants 4 CPU / 16GB.
 
 ## Commands
 
