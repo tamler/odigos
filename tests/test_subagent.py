@@ -62,6 +62,85 @@ class TestSubagentSchema:
         assert row["parent_conversation_id"] == parent_id
 
 
+class TestPersonaLoader:
+    def test_load_persona_researcher(self):
+        from odigos.core.subagent import load_persona
+
+        persona = load_persona("researcher", personas_dir="data/subagents")
+        assert persona is not None
+        assert persona.name == "researcher"
+        assert persona.model == "reasoning"
+        assert "web_search" in persona.tools
+        assert persona.max_runtime_seconds == 600
+        assert "Deep Research Specialist" in persona.system_prompt
+
+    def test_load_persona_missing_returns_none(self):
+        from odigos.core.subagent import load_persona
+
+        persona = load_persona("nonexistent", personas_dir="data/subagents")
+        assert persona is None
+
+    def test_persona_validate_tools_referenced_in_prompt(self, tmp_path):
+        """validate_persona warns when the prompt references tools not in the whitelist."""
+        from odigos.core.subagent import load_persona, validate_persona
+
+        test_file = tmp_path / "leaky.md"
+        test_file.write_text(
+            "---\n"
+            "name: leaky\n"
+            "description: Test\n"
+            "model: default\n"
+            "tools: [read_file]\n"
+            "max_runtime_seconds: 300\n"
+            "---\n"
+            "\n"
+            "Use write_file to save your work.\n"
+        )
+        persona = load_persona("leaky", personas_dir=str(tmp_path))
+        known_tools = {"read_file", "write_file", "web_search"}
+        warnings = validate_persona(persona, known_tools)
+        assert any("write_file" in w for w in warnings)
+        assert not any("read_file" in w for w in warnings)
+
+    def test_persona_resolves_tools_union_with_skill(self, tmp_path):
+        """Tool resolution: skill.tools union persona.tools by default."""
+        from odigos.core.subagent import resolve_tools
+
+        persona_tools = ["web_search", "scrape"]
+        skill_tools = ["memory_recall", "scrape"]
+        resolved = resolve_tools(
+            persona_tools=persona_tools,
+            skill_tools=skill_tools,
+            explicit_tools=None,
+            tools_override=False,
+        )
+        assert set(resolved) == {"web_search", "scrape", "memory_recall"}
+
+    def test_persona_resolves_tools_override(self):
+        """tools_override=True replaces the union with just persona.tools."""
+        from odigos.core.subagent import resolve_tools
+
+        resolved = resolve_tools(
+            persona_tools=["web_search"],
+            skill_tools=["memory_recall", "read_file"],
+            explicit_tools=None,
+            tools_override=True,
+        )
+        assert resolved == ["web_search"]
+
+    def test_explicit_tools_always_wins(self):
+        """Explicit tools param always wins."""
+        from odigos.core.subagent import resolve_tools
+
+        resolved = resolve_tools(
+            persona_tools=["web_search"],
+            skill_tools=["memory_recall"],
+            explicit_tools=["calculator"],
+            tools_override=False,
+        )
+        assert resolved == ["calculator"]
+
+
 async def _seed_conversation(db: Database, conversation_id: str) -> None:
     await db.execute(
         "INSERT INTO conversations (id, channel) VALUES (?, ?)",

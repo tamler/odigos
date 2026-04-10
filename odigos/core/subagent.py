@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import yaml
 
 from odigos.core.executor import Executor
 from odigos.core.prompt_loader import load_prompt
@@ -17,6 +22,114 @@ if TYPE_CHECKING:
     from odigos.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SubagentPersona:
+    """A sub-agent persona definition loaded from data/subagents/."""
+    name: str
+    description: str
+    model: str = "default"
+    tools: list[str] = field(default_factory=list)
+    max_runtime_seconds: int = 600
+    skill: str | None = None
+    tools_override: bool = False
+    workspace_roots: list[str] = field(default_factory=list)
+    system_prompt: str = ""
+
+
+# Module-level cache: name → (persona, mtime)
+_persona_cache: dict[str, tuple[SubagentPersona, float]] = {}
+
+
+def load_persona(name: str, personas_dir: str = "data/subagents") -> SubagentPersona | None:
+    """Load a sub-agent persona from disk.
+
+    Returns None if the persona file doesn't exist.
+    Uses an mtime-keyed in-memory cache.
+    """
+    path = Path(personas_dir) / f"{name}.md"
+    if not path.exists():
+        return None
+
+    mtime = path.stat().st_mtime
+    cached = _persona_cache.get(name)
+    if cached and cached[1] == mtime:
+        return cached[0]
+
+    text = path.read_text()
+    frontmatter_dict: dict[str, Any] = {}
+    body = text
+
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) >= 3:
+            try:
+                frontmatter_dict = yaml.safe_load(parts[1]) or {}
+            except yaml.YAMLError:
+                logger.warning("Invalid YAML frontmatter in persona %s", name)
+            body = parts[2].lstrip("\n")
+
+    persona = SubagentPersona(
+        name=frontmatter_dict.get("name", name),
+        description=frontmatter_dict.get("description", ""),
+        model=frontmatter_dict.get("model", "default"),
+        tools=list(frontmatter_dict.get("tools") or []),
+        max_runtime_seconds=int(frontmatter_dict.get("max_runtime_seconds", 600)),
+        skill=frontmatter_dict.get("skill"),
+        tools_override=bool(frontmatter_dict.get("tools_override", False)),
+        workspace_roots=list(frontmatter_dict.get("workspace_roots") or []),
+        system_prompt=body.strip(),
+    )
+
+    _persona_cache[name] = (persona, mtime)
+    return persona
+
+
+def validate_persona(persona: SubagentPersona, known_tool_names: set[str]) -> list[str]:
+    """Check that tool names referenced in the system prompt are in the whitelist.
+
+    Returns a list of warning messages.
+    """
+    warnings: list[str] = []
+    whitelist = set(persona.tools)
+
+    for tool_name in known_tool_names:
+        if re.search(rf"\b{re.escape(tool_name)}\b", persona.system_prompt):
+            if tool_name not in whitelist:
+                warnings.append(
+                    f"Persona '{persona.name}' references tool '{tool_name}' "
+                    f"in its prompt but it's not in the whitelist"
+                )
+
+    return warnings
+
+
+def resolve_tools(
+    persona_tools: list[str],
+    skill_tools: list[str],
+    explicit_tools: list[str] | None,
+    tools_override: bool,
+) -> list[str]:
+    """Resolve the sub-agent's tool whitelist.
+
+    Precedence:
+    1. If explicit_tools given, use them.
+    2. If tools_override=True, use persona_tools only.
+    3. Otherwise, union of skill_tools and persona_tools.
+    """
+    if explicit_tools is not None:
+        return list(explicit_tools)
+    if tools_override:
+        return list(persona_tools)
+    # Union, preserving order
+    seen: set[str] = set()
+    result: list[str] = []
+    for t in list(persona_tools) + list(skill_tools):
+        if t not in seen:
+            seen.add(t)
+            result.append(t)
+    return result
 
 _SUBAGENT_SYSTEM_FALLBACK = (
     "You are a focused subagent. Complete the given task concisely. "
