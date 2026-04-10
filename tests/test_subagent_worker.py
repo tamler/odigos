@@ -190,6 +190,104 @@ class TestWorkerExecution:
         assert hb.notifier.create.called
 
 
+class TestChaining:
+    async def test_on_complete_dispatches_follow_up(self, db, monkeypatch):
+        from odigos.core.heartbeat import subagent_worker
+
+        # Seed a pending task with on_complete
+        task_id = str(uuid.uuid4())
+        params = {
+            "task": "Research X",
+            "persona": "researcher",
+            "on_complete": {
+                "persona": "summarizer",
+                "task": "Summarize the research",
+                "input_from": "result",
+            },
+        }
+        await db.execute(
+            "INSERT INTO tasks "
+            "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
+            "arguments_json, max_retries, retry_count) "
+            "VALUES (?, 'subagent', 'pending', 'researcher', 'default', 600, ?, 2, 0)",
+            (task_id, json.dumps(params)),
+        )
+
+        hb = _make_hb(db)
+
+        async def mock_execute_inline(hb, params, task_id, workspace_root):
+            return {
+                "result": "Research complete.",
+                "artifact_path": None,
+                "duration_ms": 50,
+                "cost_usd": 0.0,
+                "tool_calls": [],
+            }
+        monkeypatch.setattr(
+            subagent_worker, "_execute_subagent_inline", mock_execute_inline,
+        )
+
+        await subagent_worker.poll_subagent_tasks(hb)
+        running = subagent_worker._running_tasks.get(task_id)
+        if running:
+            await running
+
+        # Verify a chained task was created
+        chained_rows = await db.fetch_all(
+            "SELECT * FROM tasks WHERE parent_task_id = ?", (task_id,),
+        )
+        assert len(chained_rows) == 1
+        chained = chained_rows[0]
+        assert chained["persona"] == "summarizer"
+        chained_params = json.loads(chained["arguments_json"])
+        assert chained_params["input_artifact"] == "Research complete."
+
+    async def test_on_failure_dispatches_recovery(self, db, monkeypatch):
+        from odigos.core.heartbeat import subagent_worker
+
+        task_id = str(uuid.uuid4())
+        params = {
+            "task": "Research X",
+            "persona": "researcher",
+            "on_failure": {
+                "persona": "summarizer",
+                "task": "Explain why the research failed",
+            },
+        }
+        await db.execute(
+            "INSERT INTO tasks "
+            "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
+            "arguments_json, max_retries, retry_count) "
+            "VALUES (?, 'subagent', 'pending', 'researcher', 'default', 600, ?, 0, 0)",
+            (task_id, json.dumps(params)),
+        )
+
+        hb = _make_hb(db)
+
+        async def mock_execute_inline(hb, params, task_id, workspace_root):
+            raise RuntimeError("network error during research")
+
+        monkeypatch.setattr(
+            subagent_worker, "_execute_subagent_inline", mock_execute_inline,
+        )
+
+        await subagent_worker.poll_subagent_tasks(hb)
+        running = subagent_worker._running_tasks.get(task_id)
+        if running:
+            await running
+
+        # Verify the original task is failed
+        row = await db.fetch_one("SELECT status FROM tasks WHERE id = ?", (task_id,))
+        assert row["status"] == "failed"
+
+        # Verify on_failure task was created
+        failure_rows = await db.fetch_all(
+            "SELECT * FROM tasks WHERE parent_task_id = ? AND type = 'subagent'",
+            (task_id,),
+        )
+        assert len(failure_rows) == 1
+
+
 class TestWorkerOrphanRecovery:
     async def test_orphaned_running_task_marked_failed(self, db):
         from odigos.core.heartbeat import subagent_worker

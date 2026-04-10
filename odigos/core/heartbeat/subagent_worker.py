@@ -195,6 +195,13 @@ async def _execute_subagent_task(hb, task_row: dict) -> None:
             "UPDATE tasks SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
             (str(exc)[:500], datetime.now(timezone.utc).isoformat(), task_id),
         )
+        # on_failure handler
+        try:
+            params = json.loads(task_row["arguments_json"] or "{}")
+            if params.get("on_failure"):
+                await _dispatch_failure_handler(hb, task_row, str(exc), params["on_failure"])
+        except Exception:
+            logger.debug("on_failure dispatch failed", exc_info=True)
     finally:
         _running_tasks.pop(task_id, None)
 
@@ -304,5 +311,77 @@ async def _execute_subagent_inline(hb, params: dict, task_id: str, workspace_roo
 
 
 async def _dispatch_chained_subagent(hb, parent_row: dict, result: dict, on_complete: dict) -> None:
-    """Placeholder for on_complete chaining — filled in Task 7."""
-    pass
+    """Create a follow-up sub-agent task using the parent's result as input."""
+    import uuid as _uuid
+
+    input_from = on_complete.get("input_from", "result")
+    if input_from == "result":
+        input_artifact = result.get("result", "")
+    elif input_from == "artifact":
+        input_artifact = result.get("artifact_path", "")
+    else:
+        input_artifact = ""
+
+    chained_params = {
+        "task": on_complete.get("task", ""),
+        "persona": on_complete.get("persona"),
+        "tools": on_complete.get("tools"),
+        "model": on_complete.get("model"),
+        "input_artifact": input_artifact,
+        "on_complete": on_complete.get("on_complete"),  # nested chain support
+        "on_failure": on_complete.get("on_failure"),
+    }
+
+    chained_id = str(_uuid.uuid4())
+    await hb.db.execute(
+        "INSERT INTO tasks "
+        "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
+        "arguments_json, parent_task_id, max_retries, retry_count) "
+        "VALUES (?, 'subagent', 'pending', ?, ?, ?, ?, ?, 2, 0)",
+        (
+            chained_id,
+            on_complete.get("persona"),
+            parent_row.get("concurrency_key") or "default",
+            on_complete.get("max_runtime_seconds", 600),
+            json.dumps(chained_params),
+            parent_row["id"],
+        ),
+    )
+    logger.info(
+        "Sub-agent chain: dispatched %s (parent=%s)",
+        chained_id[:8], parent_row["id"][:8],
+    )
+
+
+async def _dispatch_failure_handler(hb, parent_row: dict, error: str, on_failure: dict) -> None:
+    """Create a recovery sub-agent task when the parent failed."""
+    import uuid as _uuid
+
+    handler_params = {
+        "task": on_failure.get("task", "Explain the previous failure"),
+        "persona": on_failure.get("persona"),
+        "context_facts": [
+            f"Original task: {json.loads(parent_row['arguments_json']).get('task', '')}",
+            f"Error: {error[:300]}",
+        ],
+    }
+
+    handler_id = str(_uuid.uuid4())
+    await hb.db.execute(
+        "INSERT INTO tasks "
+        "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
+        "arguments_json, parent_task_id, max_retries, retry_count) "
+        "VALUES (?, 'subagent', 'pending', ?, ?, ?, ?, ?, 1, 0)",
+        (
+            handler_id,
+            on_failure.get("persona"),
+            parent_row.get("concurrency_key") or "default",
+            on_failure.get("max_runtime_seconds", 300),
+            json.dumps(handler_params),
+            parent_row["id"],
+        ),
+    )
+    logger.info(
+        "Sub-agent on_failure: dispatched %s (parent=%s)",
+        handler_id[:8], parent_row["id"][:8],
+    )
