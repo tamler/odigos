@@ -13,6 +13,8 @@ interface AgentInputBarProps {
   connected: boolean
   sttAvailable: boolean
   onResponse?: (content: string) => void
+  prefill?: string | null
+  onPrefillConsumed?: () => void
 }
 
 export function AgentInputBar({
@@ -22,6 +24,8 @@ export function AgentInputBar({
   socketRef,
   connected,
   sttAvailable,
+  prefill,
+  onPrefillConsumed,
 }: AgentInputBarProps) {
   const [focused, setFocused] = useState(false)
   const [input, setInput] = useState('')
@@ -46,6 +50,15 @@ export function AgentInputBar({
       inputRef.current?.focus()
     }
   }, [focused])
+
+  useEffect(() => {
+    if (prefill) {
+      setInput(prefill)
+      setFocused(true)
+      onPrefillConsumed?.()
+      inputRef.current?.focus()
+    }
+  }, [prefill, onPrefillConsumed])
 
   // Listen for responses
   useEffect(() => {
