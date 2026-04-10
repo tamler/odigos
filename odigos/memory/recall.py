@@ -13,18 +13,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Memory is for user-facing knowledge only. Agent self-improvement data
+# (experiences, corrections-as-rules) lives in its own operational layer and
+# is retrieved separately via agent_experiences and CorrectionsManager.
 TYPE_ROUTING = {
     "simple": ["fact", "preference", "entity"],
-    "standard": ["fact", "preference", "entity", "experience", "correction"],
+    "standard": ["fact", "preference", "entity"],
     "complex": None,
-    "planning": ["task", "idea", "experience", "fact", "entity"],
+    "planning": ["task", "idea", "fact", "entity"],
     "document_query": ["general", "summary", "fact"],
 }
 
 RECENCY_DECAY = {
     "preference": 0.01, "task": 0.01, "fact": 0.01,
-    "entity": 0.002, "experience": 0.002,
-    "summary": 0.0, "correction": 0.0,
+    "entity": 0.002,
+    "summary": 0.0,
     "idea": 0.005, "general": 0.005,
 }
 
@@ -271,8 +274,7 @@ class MemoryRecall:
         TYPE_HEADERS = {
             "fact": "Facts", "preference": "Preferences",
             "task": "Tasks", "idea": "Ideas",
-            "entity": "Related entities", "experience": "Experiences",
-            "correction": "Learned corrections",
+            "entity": "Related entities",
             "summary": "Relevant summaries", "general": "Other",
         }
 

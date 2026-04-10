@@ -19,9 +19,13 @@ class ClassificationResult:
 
 
 class MemoryClassifier:
+    # Memory layer is for USER-FACING knowledge: facts, preferences, entities,
+    # tasks the user cares about. Self-improvement data (experiences, corrections
+    # as behavioral rules) lives in its own operational layer — agent_experiences
+    # and the corrections table — and must NOT be classified as memories.
     VALID_TYPES = {
         "fact", "preference", "task", "idea", "entity",
-        "experience", "correction", "summary", "general",
+        "summary", "general",
     }
 
     def __init__(self, llm_client, prompts_dir: str = "data/prompts") -> None:
