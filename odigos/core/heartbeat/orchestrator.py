@@ -269,6 +269,21 @@ class Heartbeat:
                     self.current_phase = None
                     self.current_activity = None
 
+        # Phase 9.6: Notebook review
+        if getattr(self, "notes_review_enabled", False):
+            try:
+                self.current_phase = "notebook_review"
+                self.current_activity = "Reviewing shared notebooks"
+                from odigos.core.heartbeat import notes_review
+                reviewed = await notes_review.review_notebooks(self)
+                if reviewed > 0:
+                    logger.info("Notebook review: %d notebook(s) reviewed", reviewed)
+            except Exception:
+                logger.debug("Notebook review phase failed", exc_info=True)
+            finally:
+                self.current_phase = None
+                self.current_activity = None
+
         # Phase 10: Outcome evaluation (LLM calls, idle only)
         if not did_work and not _over_budget:
             self._outcome_tick_counter += 1
