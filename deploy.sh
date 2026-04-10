@@ -126,6 +126,12 @@ ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" <<'REMOTE'
   fi
   git reset --hard origin/main
 
+  # Clean old images and build cache BEFORE building to prevent disk-full failures.
+  # Keeps images used by running containers; prunes everything else.
+  echo "  Cleaning stale Docker images and build cache..."
+  docker image prune -af --filter "until=24h" 2>/dev/null | tail -1
+  docker builder prune -af --keep-storage 5GB 2>/dev/null | tail -1
+
   # Rebuild and restart the odigos service only (system Caddy handles TLS)
   # Touch a file to bust Docker layer cache for code changes
   date +%s > .docker-build-stamp
