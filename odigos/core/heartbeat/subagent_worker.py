@@ -118,21 +118,191 @@ async def recover_orphaned_tasks(hb) -> int:
 
 
 async def _execute_subagent_task(hb, task_row: dict) -> None:
-    """Execute a single sub-agent task. Called via asyncio.create_task.
+    """Execute a single sub-agent task. Called via asyncio.create_task."""
+    task_id = task_row["id"]
 
-    Stub for Task 5 — full execution logic lands in Task 6.
-    """
-    # Task 5 minimum: mark as done immediately with a placeholder result
-    # Full execution logic is added in Task 6 (LLM dispatch, tools, etc.)
     try:
+        params = json.loads(task_row["arguments_json"] or "{}")
+        max_runtime = task_row.get("max_runtime_seconds") or 600
+        workspace_root = params.get("workspace_root") or f"data/subagent_workspace/{task_id}"
+
+        # Create workspace directory
+        from pathlib import Path as _Path
+        _Path(workspace_root).mkdir(parents=True, exist_ok=True)
+
+        # Run the execution inline with timeout
+        result = await asyncio.wait_for(
+            _execute_subagent_inline(hb, params, task_id, workspace_root),
+            timeout=max_runtime,
+        )
+
+        # Store result
         await hb.db.execute(
             "UPDATE tasks SET status = 'done', result_json = ?, "
-            "completed_at = ?, duration_ms = 0 WHERE id = ?",
+            "completed_at = ?, duration_ms = ?, cost_usd = ?, "
+            "artifact_path = ? WHERE id = ?",
             (
-                json.dumps({"placeholder": True}),
+                json.dumps({"result": result.get("result", "")}),
                 datetime.now(timezone.utc).isoformat(),
-                task_row["id"],
+                result.get("duration_ms", 0),
+                result.get("cost_usd", 0.0),
+                result.get("artifact_path"),
+                task_id,
             ),
         )
+
+        # Publish completion event
+        try:
+            await hb.message_bus.publish({
+                "type": "subagent_complete",
+                "task_id": task_id,
+                "persona": task_row.get("persona"),
+                "artifact_path": result.get("artifact_path"),
+            })
+        except Exception:
+            logger.debug("message_bus publish failed", exc_info=True)
+
+        # Create notification
+        try:
+            preview = (result.get("result") or "")[:200]
+            persona_name = task_row.get("persona") or "sub-agent"
+            await hb.notifier.create(
+                type="suggestion",
+                title=f"Sub-agent task complete: {persona_name}",
+                body=preview,
+                metadata={
+                    "task_id": task_id,
+                    "artifact_path": result.get("artifact_path"),
+                    "parent_task_id": task_row.get("parent_task_id"),
+                },
+            )
+        except Exception:
+            logger.debug("notifier.create failed", exc_info=True)
+
+        # Handle on_complete chaining (added in Task 7)
+        if params.get("on_complete"):
+            await _dispatch_chained_subagent(hb, task_row, result, params["on_complete"])
+
+    except asyncio.TimeoutError:
+        await hb.db.execute(
+            "UPDATE tasks SET status = 'failed', error = 'timeout', "
+            "completed_at = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), task_id),
+        )
+    except Exception as exc:
+        logger.exception("Sub-agent task failed: %s", task_id[:8])
+        await hb.db.execute(
+            "UPDATE tasks SET status = 'failed', error = ?, completed_at = ? WHERE id = ?",
+            (str(exc)[:500], datetime.now(timezone.utc).isoformat(), task_id),
+        )
     finally:
-        _running_tasks.pop(task_row["id"], None)
+        _running_tasks.pop(task_id, None)
+
+
+async def _execute_subagent_inline(hb, params: dict, task_id: str, workspace_root: str) -> dict:
+    """Execute the sub-agent LLM call with scoped tools and context.
+
+    Returns a dict with keys: result, artifact_path, duration_ms, cost_usd, tool_calls.
+    """
+    from odigos.core.subagent import (
+        load_persona, resolve_tools, build_scoped_system_prompt,
+    )
+
+    start = datetime.now(timezone.utc)
+
+    persona_name = params.get("persona")
+    skill_name = params.get("skill")
+    explicit_tools = params.get("tools")
+    explicit_system = params.get("system_prompt")
+    model = params.get("model")
+    context_facts = params.get("context_facts") or []
+    memory_refs = params.get("memory_refs") or []
+    input_artifact = params.get("input_artifact")
+    task_text = params.get("task", "")
+
+    persona = load_persona(persona_name) if persona_name else None
+
+    # Resolve skill
+    skill = None
+    if skill_name and hasattr(hb, "skill_registry"):
+        skill = hb.skill_registry.get(skill_name)
+    elif persona and persona.skill and hasattr(hb, "skill_registry"):
+        skill = hb.skill_registry.get(persona.skill)
+
+    # Resolve tools
+    persona_tools = persona.tools if persona else []
+    skill_tools = (skill.tools if skill else []) or []
+    tools_override = persona.tools_override if persona else False
+    resolve_tools(
+        persona_tools=persona_tools,
+        skill_tools=skill_tools,
+        explicit_tools=explicit_tools,
+        tools_override=tools_override,
+    )
+
+    # Resolve model
+    resolved_model = model or (persona.model if persona else "default")
+
+    # Resolve memory_refs at execution time
+    resolved_facts = list(context_facts)
+    if memory_refs and hasattr(hb, "memory_recall") and hb.memory_recall:
+        for ref in memory_refs:
+            try:
+                results = await hb.memory_recall.search(ref, limit=3)
+                for r in results:
+                    resolved_facts.append(r.content_preview or r.content[:200])
+            except Exception:
+                logger.debug("memory_refs resolution failed for %r", ref)
+
+    # Build system prompt
+    system_prompt = build_scoped_system_prompt(
+        persona=persona,
+        skill=skill,
+        explicit_system_prompt=explicit_system,
+        context_facts=resolved_facts,
+        input_artifact=input_artifact,
+        workspace_root=workspace_root,
+    )
+
+    # Run LLM call
+    response = await hb.llm_provider.complete(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": task_text},
+        ],
+        temperature=0.5,
+        max_tokens=4000,
+        model=resolved_model if resolved_model != "default" else hb.background_model,
+    )
+
+    result_text = response.content or ""
+    duration_ms = int(
+        (datetime.now(timezone.utc) - start).total_seconds() * 1000
+    )
+    cost = getattr(response, "cost_usd", 0.0) or 0.0
+
+    # Optional artifact write
+    artifact_path: str | None = None
+    if len(result_text) > 500:
+        try:
+            from pathlib import Path as _Path
+            artifacts_dir = _Path("data/artifacts")
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            artifact_path = str(artifacts_dir / f"subagent-{task_id}.md")
+            _Path(artifact_path).write_text(result_text)
+        except Exception:
+            logger.debug("artifact write failed", exc_info=True)
+            artifact_path = None
+
+    return {
+        "result": result_text,
+        "artifact_path": artifact_path,
+        "duration_ms": duration_ms,
+        "cost_usd": cost,
+        "tool_calls": [],
+    }
+
+
+async def _dispatch_chained_subagent(hb, parent_row: dict, result: dict, on_complete: dict) -> None:
+    """Placeholder for on_complete chaining — filled in Task 7."""
+    pass

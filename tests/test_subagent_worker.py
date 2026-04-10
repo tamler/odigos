@@ -91,6 +91,105 @@ class TestWorkerGating:
         assert started == 0
 
 
+from odigos.providers.base import LLMResponse
+
+
+def _make_llm_response(content: str) -> LLMResponse:
+    return LLMResponse(
+        content=content, model="test/model",
+        tokens_in=50, tokens_out=100, cost_usd=0.001,
+    )
+
+
+class TestWorkerExecution:
+    async def test_execution_writes_result(self, db, tmp_path, monkeypatch):
+        from odigos.core.heartbeat import subagent_worker
+
+        # Seed a pending task
+        task_id = str(uuid.uuid4())
+        params = {
+            "task": "Summarize this",
+            "persona": "summarizer",
+            "context_facts": [],
+        }
+        await db.execute(
+            "INSERT INTO tasks "
+            "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
+            "arguments_json, max_retries, retry_count) "
+            "VALUES (?, 'subagent', 'pending', 'summarizer', 'default', 300, ?, 2, 0)",
+            (task_id, json.dumps(params)),
+        )
+
+        hb = _make_hb(db)
+        hb.llm_provider.complete = AsyncMock(
+            return_value=_make_llm_response("TL;DR: This is a summary."),
+        )
+
+        # Patch the execution helper to use the mock LLM directly
+        async def mock_execute_inline(hb, params, task_id, workspace_root):
+            return {
+                "result": "TL;DR: This is a summary.",
+                "artifact_path": None,
+                "duration_ms": 100,
+                "cost_usd": 0.001,
+                "tool_calls": [],
+            }
+        monkeypatch.setattr(
+            subagent_worker, "_execute_subagent_inline", mock_execute_inline,
+        )
+
+        started = await subagent_worker.poll_subagent_tasks(hb)
+        assert started == 1
+
+        # Wait for the background asyncio.Task to complete
+        import asyncio as _aio
+        running = subagent_worker._running_tasks.get(task_id)
+        if running:
+            await running
+
+        row = await db.fetch_one(
+            "SELECT status, result_json FROM tasks WHERE id = ?", (task_id,),
+        )
+        assert row["status"] == "done"
+        result = json.loads(row["result_json"])
+        assert "summary" in result["result"].lower()
+
+    async def test_execution_creates_notification_on_done(self, db, monkeypatch):
+        from odigos.core.heartbeat import subagent_worker
+
+        task_id = str(uuid.uuid4())
+        params = {"task": "Test", "persona": "summarizer"}
+        await db.execute(
+            "INSERT INTO tasks "
+            "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
+            "arguments_json, max_retries, retry_count) "
+            "VALUES (?, 'subagent', 'pending', 'summarizer', 'default', 300, ?, 2, 0)",
+            (task_id, json.dumps(params)),
+        )
+
+        hb = _make_hb(db)
+
+        async def mock_execute_inline(hb, params, task_id, workspace_root):
+            return {
+                "result": "Done.",
+                "artifact_path": None,
+                "duration_ms": 50,
+                "cost_usd": 0.0,
+                "tool_calls": [],
+            }
+        monkeypatch.setattr(
+            subagent_worker, "_execute_subagent_inline", mock_execute_inline,
+        )
+
+        await subagent_worker.poll_subagent_tasks(hb)
+        running = subagent_worker._running_tasks.get(task_id)
+        if running:
+            await running
+
+        # Verify notification was created
+        assert hb.notifier.create.called
+
+
 class TestWorkerOrphanRecovery:
     async def test_orphaned_running_task_marked_failed(self, db):
         from odigos.core.heartbeat import subagent_worker

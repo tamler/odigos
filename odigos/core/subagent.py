@@ -314,6 +314,54 @@ class SubagentManager:
         )
 
 
+def build_scoped_system_prompt(
+    *,
+    persona: "SubagentPersona | None",
+    skill: Any | None,
+    explicit_system_prompt: str | None,
+    context_facts: list[str],
+    input_artifact: str | None,
+    workspace_root: str | None,
+) -> str:
+    """Construct the sub-agent's system prompt by combining:
+    persona, skill, ad-hoc prompt, context facts, input artifact, workspace note.
+    """
+    parts: list[str] = []
+
+    if skill is not None and getattr(skill, "system_prompt", None):
+        parts.append(str(skill.system_prompt))
+
+    if persona is not None and persona.system_prompt:
+        parts.append(persona.system_prompt)
+
+    if explicit_system_prompt:
+        parts.append(explicit_system_prompt)
+
+    if not parts:
+        parts.append("You are a specialist sub-agent. Produce the task output directly.")
+
+    if context_facts:
+        facts_block = "\n".join(f"- {f}" for f in context_facts)
+        parts.append(f"\n## User context\n{facts_block}")
+
+    if input_artifact:
+        parts.append(f"\n## Current state (input artifact)\n{input_artifact}")
+
+    if workspace_root:
+        parts.append(
+            f"\n## Workspace\nYou may only read and write files under: {workspace_root}\n"
+            f"Do not attempt to access any path outside this directory."
+        )
+
+    parts.append(
+        "\n## Output\nProduce the direct task output. Do not add conversational "
+        "framing — the orchestrator will deliver your output to the user with "
+        "its own voice."
+    )
+
+    return "\n\n".join(parts)
+
+
 import json as _json
 
 
