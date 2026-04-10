@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 from unittest.mock import AsyncMock
 
@@ -497,3 +498,74 @@ class TestSubagentInHeartbeat:
             subagent_manager=subagent_manager,
         )
         await heartbeat._tick()  # should not raise
+
+
+class TestSubagentDispatch:
+    async def test_dispatch_async_creates_pending_task(self, db):
+        from odigos.core.subagent import run_subagent
+
+        result = await run_subagent(
+            task="Research LLM memory architectures",
+            persona="researcher",
+            wait_for_result=False,
+            db=db,
+        )
+        assert result.task_id is not None
+        assert result.status == "pending"
+
+        # Verify task row in DB
+        row = await db.fetch_one(
+            "SELECT * FROM tasks WHERE id = ?", (result.task_id,),
+        )
+        assert row["type"] == "subagent"
+        assert row["status"] == "pending"
+        assert row["persona"] == "researcher"
+
+    async def test_dispatch_stores_arguments_json(self, db):
+        from odigos.core.subagent import run_subagent
+
+        result = await run_subagent(
+            task="Write a song",
+            persona="editor",
+            wait_for_result=False,
+            context_facts=["User loves blues"],
+            db=db,
+        )
+        row = await db.fetch_one(
+            "SELECT arguments_json FROM tasks WHERE id = ?", (result.task_id,),
+        )
+        args = json.loads(row["arguments_json"])
+        assert args["task"] == "Write a song"
+        assert args["persona"] == "editor"
+        assert args["context_facts"] == ["User loves blues"]
+
+    async def test_dispatch_with_unknown_persona_fails_fast(self, db):
+        from odigos.core.subagent import run_subagent
+
+        with pytest.raises(ValueError, match="persona"):
+            await run_subagent(
+                task="Do something",
+                persona="does_not_exist",
+                wait_for_result=False,
+                db=db,
+            )
+
+    async def test_dispatch_with_on_complete_chain(self, db):
+        from odigos.core.subagent import run_subagent
+
+        result = await run_subagent(
+            task="Research X",
+            persona="researcher",
+            wait_for_result=False,
+            on_complete={
+                "persona": "summarizer",
+                "task": "Summarize the research",
+                "input_from": "result",
+            },
+            db=db,
+        )
+        row = await db.fetch_one(
+            "SELECT arguments_json FROM tasks WHERE id = ?", (result.task_id,),
+        )
+        args = json.loads(row["arguments_json"])
+        assert args["on_complete"]["persona"] == "summarizer"

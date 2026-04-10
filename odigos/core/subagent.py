@@ -312,3 +312,100 @@ class SubagentManager:
             "UPDATE subagent_tasks SET delivered_at = ? WHERE id = ?",
             (now, subagent_id),
         )
+
+
+import json as _json
+
+
+@dataclass
+class SubagentDispatchResult:
+    task_id: str
+    status: str  # 'pending' | 'running' | 'done' | 'failed' | 'cancelled'
+    result: str | None = None
+    artifact_path: str | None = None
+    error: str | None = None
+    duration_ms: int | None = None
+    cost_usd: float | None = None
+
+
+async def run_subagent(
+    task: str,
+    *,
+    persona: str | None = None,
+    skill: str | None = None,
+    system_prompt: str | None = None,
+    tools: list[str] | None = None,
+    model: str | None = None,
+    context_facts: list[str] | None = None,
+    memory_refs: list[str] | None = None,
+    input_artifact: str | None = None,
+    workspace_root: str | None = None,
+    wait_for_result: bool = False,
+    timeout_seconds: int | None = None,
+    on_complete: dict | None = None,
+    on_failure: dict | None = None,
+    concurrency_key: str | None = None,
+    max_retries: int = 2,
+    conversation_id: str | None = None,
+    db=None,
+    personas_dir: str = "data/subagents",
+) -> SubagentDispatchResult:
+    """Dispatch a sub-agent task.
+
+    By default (wait_for_result=False), creates a pending task row and
+    returns immediately. The heartbeat worker picks it up and executes.
+
+    When wait_for_result=True, runs the sub-agent inline and returns the
+    final result. Used for fast tasks (< 10s) orchestrator-internal only.
+    """
+    if db is None:
+        raise ValueError("db is required")
+    if not persona and not skill and not system_prompt:
+        raise ValueError(
+            "run_subagent requires at least one of: persona, skill, system_prompt"
+        )
+
+    # Validate persona exists (fail fast)
+    if persona:
+        loaded = load_persona(persona, personas_dir=personas_dir)
+        if loaded is None:
+            raise ValueError(f"Unknown persona: {persona}")
+
+    # Build params dict for storage
+    params: dict = {
+        "task": task,
+        "persona": persona,
+        "skill": skill,
+        "system_prompt": system_prompt,
+        "tools": tools,
+        "model": model,
+        "context_facts": context_facts,
+        "memory_refs": memory_refs,
+        "input_artifact": input_artifact,
+        "workspace_root": workspace_root,
+        "timeout_seconds": timeout_seconds,
+        "on_complete": on_complete,
+        "on_failure": on_failure,
+        "conversation_id": conversation_id,
+    }
+
+    task_id = str(uuid.uuid4())
+    resolved_concurrency = concurrency_key or "default"
+    max_runtime = timeout_seconds or 600
+    if persona:
+        loaded_persona = load_persona(persona, personas_dir=personas_dir)
+        if loaded_persona:
+            max_runtime = timeout_seconds or loaded_persona.max_runtime_seconds
+
+    await db.execute(
+        "INSERT INTO tasks "
+        "(id, type, status, persona, concurrency_key, max_runtime_seconds, "
+        "cancel_requested, max_retries, arguments_json, conversation_id) "
+        "VALUES (?, 'subagent', 'pending', ?, ?, ?, 0, ?, ?, ?)",
+        (
+            task_id, persona, resolved_concurrency, max_runtime,
+            max_retries, _json.dumps(params), conversation_id,
+        ),
+    )
+
+    return SubagentDispatchResult(task_id=task_id, status="pending")
