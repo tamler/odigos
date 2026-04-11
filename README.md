@@ -5,7 +5,7 @@
 <h1 align="center">Odigos</h1>
 
 <p align="center">
-  <strong>Self-hosted personal AI agent with persistent memory, self-improving behavior, and tool creation.</strong><br>
+  <strong>Self-hosted personal AI agent with persistent memory, self-improving behavior, and autonomous sub-agents.</strong><br>
   Deploy it on your own hardware, connect any LLM provider, and own your data.
 </p>
 
@@ -23,13 +23,15 @@
 
 ## What is Odigos?
 
-A personal AI agent that runs on your machine. It remembers your conversations, learns from its mistakes, builds and saves its own tools, and proactively researches topics you care about. One process, one SQLite database, no cloud dependencies.
+A personal AI agent that runs on your machine. It remembers your conversations, learns from its mistakes, builds and saves its own tools, dispatches specialist sub-agents for heavy work, and proactively researches topics you care about. One process, one SQLite database, no cloud dependencies.
 
 **Key differences from ChatGPT/Claude:**
 - Your data stays on your machine
 - The agent improves itself over time (evolution engine)
-- It works proactively when idle (researches, synthesizes, surfaces insights)
+- It dispatches specialist sub-agents for research, coding, analysis, and presentations
+- It works proactively when idle (researches, synthesizes, compiles knowledge)
 - Persistent knowledge stored as durable markdown files (survive database drops)
+- Structured memory with typed records, bidirectional links, and evolution
 - Connect any OpenAI-compatible LLM provider
 
 ## Requirements
@@ -149,27 +151,46 @@ All settings are configurable from the web dashboard under Settings. Changes tak
 
 The web dashboard at `http://localhost:8000` has five main sections:
 
-- **Activity** -- what the agent is doing: proactive findings, morning briefings, task completions
+- **Activity** -- live hub showing what the agent is doing, goals, plans, budget, todos, and recent findings
 - **Chat** -- conversations with the agent, streaming responses, file uploads, voice I/O
-- **Notebook** -- markdown notebooks with journal mode and agent integration
+- **Notebook** -- markdown notebooks with agent review sidecar (the agent comments on your writing)
 - **Todo** -- kanban boards with drag-and-drop for task management
-- **Documents** -- file artifacts the agent has created (CSV, DOCX, Markdown, etc.)
+- **Documents** -- file artifacts the agent has created (CSV, DOCX, Markdown, presentations)
 
 ### Talking to the agent
 
-Just chat naturally. The agent has 45+ tools and discovers the right one automatically:
+Just chat naturally. The agent has 50+ tools and discovers the right one automatically:
 
-- "Research the competitive landscape for X" -- deep research with sources
-- "Remember that I prefer Python" -- stores as an explicit fact
+- "Research the competitive landscape for X" -- dispatches a researcher sub-agent, delivers findings
+- "Make me a 5-slide primer on Y" -- researcher gathers info, presenter formats Marp slides, renders PDF
+- "Remember that I prefer Python" -- stores as a typed memory (preference)
 - "Check my email" -- reads your inbox (requires email config)
 - "Create a kanban board for the project" -- builds a board with columns and cards
 - "Generate an image of a sunset" -- creates images via API
-- "What did we discuss yesterday?" -- searches conversation history
+- "What did we discuss yesterday?" -- searches structured memory with type-filtered retrieval
+
+### Sub-agents
+
+The orchestrator dispatches specialist sub-agents for heavy work:
+
+| Persona | What it does |
+|---------|-------------|
+| **researcher** | Deep research with web search, source citing, cross-referencing |
+| **coder** | Code generation, review, and testing |
+| **editor** | Text editing, refinement, and restructuring |
+| **analyst** | Data analysis, synthesis, and quantified insights |
+| **summarizer** | Fast summarization of long content |
+| **presenter** | Marp slide generation from research or content |
+| **brain-compiler** | Compiles memories into interlinked wiki articles |
+
+Sub-agents run asynchronously in the background. The main agent responds immediately ("On it, I'll ping you when ready") and delivers results via notification when complete. Sub-agents can chain: researcher -> presenter produces a research report then formats it as slides automatically.
 
 ### Proactive behavior
 
 When idle, the agent:
 - Scans recent conversations for topics worth exploring
+- Reviews shared notebooks and adds anchored observations
+- Compiles accumulated knowledge into interlinked wiki articles
 - Checks its knowledge for gaps and unresolved questions
 - Researches opportunities and writes findings to the Activity page
 - Sends push notifications when it finds something interesting
@@ -210,58 +231,90 @@ curl http://localhost:8000/api/notifications \
 
 ```
 odigos/
-  core/           Agent loop, classifier, evolution engine, budget, LLM prompts
-    heartbeat/    Background loop (orchestrator, proactive, profiling, maintenance)
+  core/           Agent loop, classifier, evolution engine, budget, sub-agent orchestration
+    heartbeat/    Background loop (orchestrator, proactive, profiling, brain compiler, sub-agent worker)
+    subagent.py   SubagentManager — dispatch, execute, chain, deliver
   api/            FastAPI route handlers
-  tools/          Agent tools (search, code, scrape, file, image, music, MCP)
-  memory/         Vectors (sqlite-vec), entity graph, brain writer/reader, chunking
+  tools/          Agent tools (search, code, scrape, file, image, music, marp, MCP, sub-agent dispatch)
+  memory/         Structured memories (9 types), entity graph, brain writer/reader, chunking, evolution
   providers/      LLM, search, sandbox, embeddings
   channels/       Web, Telegram channel adapters
-  skills/         Skill validator and registry
-  personality/    Dynamic personality/prompt sections
+  skills/         Skill validator and registry (with personality-preserving activation)
+  personality/    Dynamic personality/prompt sections (operational rules, behavioral principles)
 dashboard/        React/TypeScript frontend (Vite, Tailwind, shadcn/ui)
 data/
-  brain/          Compiled knowledge -- entity pages, topics, synthesis, conversations
+  brain/          Compiled knowledge — entity pages, concept articles, cross-linked wiki
+  subagents/      Sub-agent persona definitions (researcher, coder, editor, analyst, etc.)
   sources/        Archived external content (articles, documents)
-  agent/          Agent identity, capabilities, diary
-tests/            pytest suite (95+ tests)
+  agent/          Agent identity, capabilities, behavioral principles, operational rules
+  prompts/        LLM prompt templates for classification, verification, consolidation, review
+tests/            pytest suite (140+ tests)
 schema.sql        Database schema (single source of truth)
 config.yaml       Runtime configuration
 ```
 
 ## Features
 
-### Memory
+### Structured Memory
 
-The agent has a layered memory system:
+The agent has a three-layer knowledge system:
 
-- **Brain** (`data/brain/`) -- compiled knowledge as durable markdown files. Entity pages, topic indexes, synthesized insights. Survives database drops.
-- **Vector memory** -- all messages and documents embedded locally (nomic-embed-text-v1.5) with hybrid retrieval (vector + FTS5 + cross-encoder reranking)
-- **Explicit facts** -- "remember that I prefer Python" stored and injected into every conversation
-- **User profile** -- built automatically from conversation analysis during idle time
+**Memory layer** (user-facing knowledge, valuable forever):
+- **Structured memories** -- 9 types (fact, preference, task, idea, entity, summary, general) with keywords, tags, context descriptions, and bidirectional links between related memories
+- **Hybrid retrieval** -- vector search (sqlite-vec) + FTS5 keyword search + cross-encoder reranking, with type-filtered routing per query classification and recency decay
+- **Memory evolution** -- heartbeat phase that refines memories when new related content arrives, supersedes outdated records, and synthesizes high-connectivity memories into higher-order insights
 - **Entity graph** -- people, tools, concepts tracked with typed relationships and multi-hop traversal
+
+**Brain layer** (compiled knowledge, durable markdown):
+- **Brain compiler** -- 5-pass LLM compilation (scan, extract concepts, generate articles, cross-link, prune stale) dispatched as a background sub-agent when enough new content accumulates
+- **Concept articles** -- cross-cutting themes synthesized from multiple entities and memories, with bidirectional links and source citations
+- **Entity pages** -- auto-generated from the entity graph, enriched by the compiler with cross-references
+- Everything in `data/brain/` is plain markdown -- browseable in Obsidian, VS Code, or any text editor
+
+**Self-improvement layer** (agent operational, prunable):
 - **Tactical experiences** -- tool successes/failures stored with lessons, confidence-scored, auto-pruned
+- **Corrections** -- user feedback consolidated into behavioral principles and operational rules via two-axis prompt evolution
+- **Surrogate skill verifier** -- validates skill quality via isolated LLM evaluation with escalation loop
+
+### Sub-Agent Orchestration
+
+The main agent (orchestrator) dispatches specialist sub-agents for heavy work. Sub-agents run asynchronously with their own persona, tool whitelist, model, and isolated context. Results are delivered via notification when complete.
+
+- **Async-by-default** -- main agent responds immediately, sub-agent works in background
+- **Per-pool concurrency** -- bounded parallelism (default: 3, research: 2, heavy: 1)
+- **On-complete chaining** -- researcher -> presenter workflows execute automatically
+- **On-failure recovery** -- failed tasks can dispatch graceful fallback sub-agents
+- **Recursion prevention** -- sub-agents cannot invoke other sub-agents
+- **Budget gating** -- sub-agent work respects the budget circuit breaker
 
 ### Self-Improvement
 
 The evolution engine runs continuously: classify every query, evaluate every response, propose experiments, run time-boxed trials, promote what works, revert what doesn't. Classification rules, routing, prompt sections, and skills all evolve.
 
+Corrections from user feedback are consolidated into two personality sections:
+- **Operational rules** -- concrete "do X not Y" fixes from recent corrections
+- **Behavioral principles** -- stable identity patterns generalized across interactions
+
 ### Proactive Agent
 
 A 4-stage pipeline (scan, prioritize, execute, publish) replaces passive idle time. The agent scans for knowledge gaps, conversation topics worth exploring, and goal progress opportunities. Findings are written as markdown artifacts and surfaced on the Activity page with push notifications.
 
+The notebook review system scans shared notebooks during idle time and adds anchored observations referencing specific quoted text, visible in a sidebar panel.
+
 ### Tools
 
-45+ tools organized in a type hierarchy: `APITool` (HTTP APIs with polling and retry), `CLITool` (subprocess with input hardening), and local tools. The smart tool registry uses JIT schema injection -- only relevant tools are loaded per query, not all 45.
+50+ tools organized in a type hierarchy: `APITool` (HTTP APIs with polling and retry), `CLITool` (subprocess with input hardening), and local tools. The smart tool registry uses JIT schema injection -- only relevant tools are loaded per query, not all 50+.
+
+Includes: web search, code execution, file I/O, image generation, music generation, Marp slide rendering, scraping, MCP bridge, email, calendar, kanban, notebook, sub-agent dispatch.
 
 ### Security
 
 - Session-based auth with HTTP-only cookies and API keys
 - Sandboxed code execution (bubblewrap isolation, memory/timeout limits)
-- Path containment on all file operations
+- Path containment on all file operations (sub-agents get per-task workspace roots)
 - Prompt injection defense (multi-layer: regex, NLP, structural separation, canary tokens)
 - SSRF protection (private IP ranges blocked)
-- Budget controls (daily/monthly spending caps)
+- Budget controls (daily/monthly spending caps, sub-agent budget gating)
 
 ## Architecture
 
@@ -318,7 +371,7 @@ Linting: `ruff check odigos/` (line-length 100, target py312)
 
 ## Acknowledgments
 
-Built on research from: [AREW](https://arxiv.org/abs/2603.12109) (active reasoning critique), [SAGE](https://arxiv.org/html/2512.17102v2) (executable skills), [XSkill](https://arxiv.org/html/2603.12056v2) (experience learning), [Omni-SimpleMem](https://arxiv.org/html/2604.01007v2) (memory architecture), [HERA](https://arxiv.org/html/2604.00901v2) (experience library), [EvoSkills](https://arxiv.org/html/2604.01687v1) (self-evolving skills), [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) (knowledge persistence), [NLAH](https://arxiv.org/html/2603.25723v1) (execution contracts), [Paperclip](https://github.com/paperclipai/paperclip) (autonomous behavior), [Hyperagents](https://arxiv.org/abs/2603.19461) (meta-improvement), [Anthropic Harness Design](https://www.anthropic.com/engineering/harness-design-long-running-apps) (evaluator architecture).
+Built on research from: [A-MEM](https://arxiv.org/abs/2502.12110) (Zettelkasten memory), [sage-wiki](https://github.com/xoai/sage-wiki) (wiki compilation), [HERA](https://arxiv.org/html/2604.00901v2) (prompt evolution), [EvoSkills](https://arxiv.org/html/2604.01687v1) (skill verification), [ReVeal](https://arxiv.org/html/2506.11442v1) (self-verification), [Mem^p](https://arxiv.org/html/2508.06433v2) (procedural memory), [AnchoredAI](https://arxiv.org/html/2509.16128v1) (anchored feedback), [AREW](https://arxiv.org/abs/2603.12109) (active reasoning), [SAGE](https://arxiv.org/html/2512.17102v2) (executable skills), [XSkill](https://arxiv.org/html/2603.12056v2) (experience learning), [Omni-SimpleMem](https://arxiv.org/html/2604.01007v2) (memory architecture), [Anthropic Harness Design](https://www.anthropic.com/engineering/harness-design-long-running-apps) (evaluator architecture), [npcpy](https://github.com/NPC-Worldwide/npcpy) (agent orchestration), [botctl](https://github.com/montanaflynn/botctl) (agent management), [jot](https://github.com/badlogic/jot) (inline comment threads).
 
 ## License
 
