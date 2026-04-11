@@ -189,7 +189,7 @@ async def dream_analyze_user(hb: "Heartbeat") -> None:
                     continue
                 fact_id = uuid.uuid4().hex
                 await hb.db.execute(
-                    "INSERT INTO memories (id, content, memory_type, source_type, source, confidence, status, created_at, updated_at) "
+                    "INSERT INTO memories (id, content, memory_type, source_type, source_id, confidence, status, created_at, updated_at) "
                     "VALUES (?, ?, 'fact', ?, 'extracted', 0.8, 'active', ?, ?)",
                     (fact_id, fact_text, category, now, now),
                 )

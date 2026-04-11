@@ -153,13 +153,21 @@ class Agent:
         streaming_msg_id: str | None = None,
     ) -> str:
         """Execute the agent loop with timeout."""
-        await self.message_bus.publish(
-            conversation_id=conversation_id,
-            role="user",
-            content=message.content,
-            channel=message.channel,
-            message_id=message.id,
-        )
+        if self.message_bus:
+            await self.message_bus.publish(
+                conversation_id=conversation_id,
+                role="user",
+                content=message.content,
+                channel=message.channel,
+                message_id=message.id,
+            )
+        else:
+            import uuid as _uuid
+            await self.db.execute(
+                "INSERT INTO messages (id, conversation_id, role, content, channel) "
+                "VALUES (?, ?, 'user', ?, ?)",
+                (_uuid.uuid4().hex, conversation_id, message.content, message.channel),
+            )
 
         # Fire-and-forget structured profile update (bounded by semaphore)
         async def _bg_profile():
@@ -332,4 +340,12 @@ class Agent:
             )
             if existing:
                 return existing["id"]
-        return await self.message_bus.create_conversation(channel=message.channel)
+        if self.message_bus:
+            return await self.message_bus.create_conversation(channel=message.channel)
+        import uuid as _uuid
+        new_id = _uuid.uuid4().hex
+        await self.db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            (new_id, message.channel),
+        )
+        return new_id

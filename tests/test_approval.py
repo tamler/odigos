@@ -192,7 +192,7 @@ def test_registry_for_conversation():
     assert registry.for_conversation("telegram:123") is tg
     assert registry.for_conversation("web:session-abc") is web
     assert registry.for_conversation("unknown:xyz") is None
-    assert registry.for_conversation("no-prefix") is None
+    assert registry.for_conversation("no-prefix") is web  # defaults to web
 
 
 def test_registry_all():

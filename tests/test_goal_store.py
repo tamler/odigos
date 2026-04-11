@@ -36,11 +36,12 @@ class TestGoalStoreSchema:
         )
         assert row is not None
 
-    async def test_tasks_table_dropped(self, db):
+    async def test_tasks_table_exists(self, db):
+        """Tasks table exists (used by subagent system)."""
         row = await db.fetch_one(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
         )
-        assert row is None
+        assert row is not None
 
 
 class TestGoalCRUD:

@@ -64,7 +64,7 @@ class TestToolSchema:
 
 
 class TestToolRegistry:
-    def test_tool_definitions(self):
+    def test_register_and_get(self):
         class FakeTool(BaseTool):
             name = "web_search"
             description = "Search the web"
@@ -78,12 +78,27 @@ class TestToolRegistry:
 
         registry = ToolRegistry()
         registry.register(FakeTool())
-        defs = registry.tool_definitions()
-        assert len(defs) == 1
-        assert defs[0]["type"] == "function"
-        assert defs[0]["function"]["name"] == "web_search"
-        assert defs[0]["function"]["description"] == "Search the web"
-        assert defs[0]["function"]["parameters"]["properties"]["query"]["type"] == "string"
+        tool = registry.get("web_search")
+        assert tool is not None
+        assert tool.name == "web_search"
+        assert tool.description == "Search the web"
+
+    def test_tool_to_def_format(self):
+        class FakeTool(BaseTool):
+            name = "web_search"
+            description = "Search the web"
+            parameters_schema = {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "Search query"}},
+                "required": ["query"],
+            }
+            async def execute(self, params: dict) -> ToolResult:
+                return ToolResult(success=True, data="ok")
+
+        d = ToolRegistry._tool_to_def(FakeTool())
+        assert d["type"] == "function"
+        assert d["function"]["name"] == "web_search"
+        assert d["function"]["parameters"]["properties"]["query"]["type"] == "string"
 
     def test_tool_definitions_empty(self):
         registry = ToolRegistry()

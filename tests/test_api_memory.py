@@ -87,42 +87,52 @@ async def test_search_requires_query_param(client: AsyncClient):
 
 
 @dataclass
-class FakeMemoryResult:
-    content_preview: str
-    source_type: str
-    source_id: str
-    distance: float
+class FakeRecallResult:
+    content: str = ""
+    memory_type: str = ""
+    context_description: str = ""
+    confidence: float = 0.8
+    distance: float = 0.0
+    source: str = ""
 
 
 @pytest.mark.asyncio
 async def test_search_returns_results(db: Database):
-    mock_vm = AsyncMock()
-    mock_vm.search.return_value = [
-        FakeMemoryResult(
-            content_preview="Alice lives in Paris",
-            source_type="conversation",
-            source_id="conv-1",
+    mock_recall = AsyncMock()
+    mock_recall.search.return_value = [
+        FakeRecallResult(
+            content="Alice lives in Paris",
+            memory_type="fact",
+            context_description="user stated",
+            confidence=0.9,
             distance=0.15,
+            source="vector",
         ),
     ]
+    mock_mm = AsyncMock()
+    mock_mm.memory_recall = mock_recall
 
-    app = _make_app(db, vector_memory=mock_vm)
+    app = FastAPI()
+    app.include_router(router)
+    app.state.container = Container(
+        db=db,
+        memory_manager=mock_mm,
+        settings=SimpleNamespace(api_key="test-key"),
+    )
     transport = ASGITransport(app=app)
     async with AsyncClient(
         transport=transport,
         base_url="http://test",
         headers={"Authorization": "Bearer test-key"},
     ) as c:
-        resp = await c.get("/api/memory/search", params={"q": "Alice", "limit": 5, "mode": "vector"})
+        resp = await c.get("/api/memory/search", params={"q": "Alice", "limit": 5})
 
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["results"]) == 1
-    assert data["results"][0]["content_preview"] == "Alice lives in Paris"
-    assert data["results"][0]["source_type"] == "conversation"
-    assert data["results"][0]["source_id"] == "conv-1"
-    assert data["results"][0]["distance"] == pytest.approx(0.15)
-    mock_vm.search.assert_awaited_once_with("Alice", limit=15)
+    assert data["results"][0]["content"] == "Alice lives in Paris"
+    assert data["results"][0]["memory_type"] == "fact"
+    mock_recall.search.assert_awaited_once_with("Alice", limit=5)
 
 
 @pytest.mark.asyncio

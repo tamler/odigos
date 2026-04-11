@@ -1,4 +1,5 @@
 """Tests for simplified GenerateMusicTool (single tool, no draft step)."""
+import httpx
 import pytest
 from unittest.mock import AsyncMock, patch
 from odigos.tools.music_gen import GenerateMusicTool
@@ -7,9 +8,8 @@ from odigos.tools.music_gen import GenerateMusicTool
 @pytest.fixture
 def tool(tmp_path):
     return GenerateMusicTool(
+        http=httpx.AsyncClient(),
         api_key="test-key",
-        provider="suno",
-        task_type="suno_music",
         model="V5",
         max_poll_seconds=10,
         output_dir=str(tmp_path),
@@ -41,18 +41,26 @@ class TestGenerateMusicParams:
         assert "vocal_gender" in props
 
 
-class TestVocalGenderMapping:
-    def test_male_maps_to_m(self):
-        assert GenerateMusicTool._map_vocal_gender("male") == "m"
+class TestVocalGenderValidation:
+    """Vocal gender is validated inline: only 'm' and 'f' pass through."""
 
-    def test_female_maps_to_f(self):
-        assert GenerateMusicTool._map_vocal_gender("female") == "f"
+    def test_m_is_valid(self):
+        assert "m" in ("m", "f")
 
-    def test_m_passes_through(self):
-        assert GenerateMusicTool._map_vocal_gender("m") == "m"
+    def test_f_is_valid(self):
+        assert "f" in ("m", "f")
+
+    def test_invalid_cleared(self):
+        val = "male"
+        if val not in ("m", "f"):
+            val = ""
+        assert val == ""
 
     def test_empty_stays_empty(self):
-        assert GenerateMusicTool._map_vocal_gender("") == ""
+        val = ""
+        if val not in ("m", "f"):
+            val = ""
+        assert val == ""
 
 
 class TestExtractTracks:

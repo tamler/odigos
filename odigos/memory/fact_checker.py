@@ -145,7 +145,7 @@ async def check_and_store_fact(
                     old_fact = s["fact"]
                     # Replace the old fact with the new one
                     await db.execute(
-                        "UPDATE memories SET content = ?, source_type = ?, source = ?, "
+                        "UPDATE memories SET content = ?, source_type = ?, source_id = ?, "
                         "confidence = ?, updated_at = ? WHERE id = ?",
                         (fact, category, source, confidence, now, s["id"]),
                     )
@@ -165,7 +165,7 @@ async def check_and_store_fact(
 
     # 4. No contradiction found — store as new
     await db.execute(
-        "INSERT INTO memories (id, content, memory_type, source_type, source, confidence, status, created_at, updated_at) "
+        "INSERT INTO memories (id, content, memory_type, source_type, source_id, confidence, status, created_at, updated_at) "
         "VALUES (?, ?, 'fact', ?, ?, ?, 'active', ?, ?)",
         (fact_id, fact, category, source, confidence, now, now),
     )

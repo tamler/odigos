@@ -314,8 +314,16 @@ class TestAgentReAct:
         agent = Agent(db=db, provider=provider, agent_name="TestBot")
         agent._run = lambda *a, **kw: tracking_run(agent, *a, **kw)
 
+        # Create a shared conversation so both messages use the same session lock
+        await db.execute(
+            "INSERT INTO conversations (id, channel) VALUES (?, ?)",
+            ("shared-conv", "telegram"),
+        )
+
         msg1 = _make_message("First")
+        msg1.metadata["conversation_id"] = "shared-conv"
         msg2 = _make_message("Second")
+        msg2.metadata["conversation_id"] = "shared-conv"
 
         await asyncio.gather(
             agent.handle_message(msg1),

@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from odigos.core.llm_prompt import run_prompt
+from odigos.core.llm_prompt import call_llm
 
 if TYPE_CHECKING:
     from odigos.db import Database
@@ -203,7 +203,14 @@ async def compose_briefing(
 
     prompt = _BRIEFING_PROMPT.format(data=data)
     try:
-        response = await run_prompt(provider, prompt, model=model)
+        response = await call_llm(
+            provider,
+            [{"role": "user", "content": prompt}],
+            model=model,
+            log_name="briefing",
+        )
+        if response is None:
+            return f"# Morning Briefing\n\n{data}"
         return response.content if hasattr(response, 'content') else str(response)
     except Exception as e:
         logger.warning("Briefing LLM call failed: %s", e)

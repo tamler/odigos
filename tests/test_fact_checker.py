@@ -19,9 +19,11 @@ class TestFactChecker:
         assert result["action"] == "stored"
         assert result["fact_id"]
 
-        rows = await db.fetch_all("SELECT fact FROM user_facts")
+        rows = await db.fetch_all(
+            "SELECT content FROM memories WHERE memory_type = 'fact' AND status = 'active'"
+        )
         assert len(rows) == 1
-        assert rows[0]["fact"] == "User lives in Manila"
+        assert rows[0]["content"] == "User lives in Manila"
 
     @pytest.mark.asyncio
     async def test_exact_duplicate(self, db):
@@ -30,7 +32,9 @@ class TestFactChecker:
         result = await check_and_store_fact(db, "User likes coffee")
         assert result["action"] == "duplicate"
 
-        rows = await db.fetch_all("SELECT fact FROM user_facts")
+        rows = await db.fetch_all(
+            "SELECT content FROM memories WHERE memory_type = 'fact' AND status = 'active'"
+        )
         assert len(rows) == 1  # Still just one fact
 
     @pytest.mark.asyncio
@@ -41,7 +45,9 @@ class TestFactChecker:
         # Without LLM, can't detect contradiction, so stores as new
         assert result["action"] == "stored"
 
-        rows = await db.fetch_all("SELECT fact FROM user_facts")
+        rows = await db.fetch_all(
+            "SELECT content FROM memories WHERE memory_type = 'fact' AND status = 'active'"
+        )
         assert len(rows) == 2
 
     @pytest.mark.asyncio
@@ -57,5 +63,7 @@ class TestFactChecker:
     async def test_category_preserved(self, db):
         """Category should be stored correctly."""
         result = await check_and_store_fact(db, "Prefers dark mode", category="preference")
-        row = await db.fetch_one("SELECT category FROM user_facts WHERE id = ?", (result["fact_id"],))
-        assert row["category"] == "preference"
+        row = await db.fetch_one(
+            "SELECT source_type FROM memories WHERE id = ?", (result["fact_id"],)
+        )
+        assert row["source_type"] == "preference"

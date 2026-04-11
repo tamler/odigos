@@ -26,10 +26,10 @@ def sections_dir():
 def test_load_all_sections(sections_dir):
     registry = SectionRegistry(sections_dir)
     sections = registry.load_all()
-    assert len(sections) == 3
+    # load_all only returns always_include=True sections
+    assert len(sections) == 2
     assert sections[0].name == "identity"
     assert sections[1].name == "voice"
-    assert sections[2].name == "optional"
 
 
 def test_section_content_strips_frontmatter(sections_dir):
@@ -45,7 +45,8 @@ def test_section_properties(sections_dir):
     sections = registry.load_all()
     assert sections[0].priority == 10
     assert sections[0].always_include is True
-    assert sections[2].always_include is False
+    assert sections[1].priority == 20
+    assert sections[1].always_include is True
 
 
 def test_caching_by_mtime(sections_dir):

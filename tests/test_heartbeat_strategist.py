@@ -51,6 +51,13 @@ async def test_tick_runs_strategist_when_should_run():
     heartbeat._email_config = None
     heartbeat._background_model = ""
     heartbeat._plan_fail_count = 0
+    heartbeat._brain_lint_counter = 0
+    heartbeat._ws_port = 8001
+    heartbeat.current_phase = None
+    heartbeat.current_activity = None
+    heartbeat.current_plan = None
+    heartbeat.tool_registry = None
+    heartbeat.message_bus = None
 
     with (
         patch("odigos.core.heartbeat.scheduled.maybe_send_briefing", new_callable=AsyncMock),
@@ -75,6 +82,20 @@ async def test_tick_runs_strategist_when_should_run():
             return_value=False,
         ),
         patch(
+            "odigos.core.heartbeat.background.poll_pending_tasks",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            "odigos.core.heartbeat.brain_maintenance.run_brain_maintenance",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            "odigos.core.heartbeat.brain_maintenance.run_brain_lint",
+            new_callable=AsyncMock,
+        ),
+        patch(
             "odigos.core.heartbeat.maintenance.run_cron_jobs",
             new_callable=AsyncMock,
             return_value=False,
@@ -94,7 +115,7 @@ async def test_tick_runs_strategist_when_should_run():
             new_callable=AsyncMock,
             return_value=False,
         ),
-        patch("odigos.core.heartbeat.idle.idle_think", new_callable=AsyncMock),
+        patch("odigos.core.heartbeat.proactive.run_proactive", new_callable=AsyncMock),
         patch("odigos.core.heartbeat.profiling.dream_analyze_user", new_callable=AsyncMock),
         patch("odigos.core.heartbeat.profiling.extract_experiences", new_callable=AsyncMock),
         patch("odigos.core.heartbeat.profiling.evaluate_plan_outcomes", new_callable=AsyncMock),

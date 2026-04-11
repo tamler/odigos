@@ -63,8 +63,8 @@ async def test_announce_new_peer(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_announce_unknown_peer_rejected():
-    """Announce from an unknown agent is rejected with 403."""
+async def test_announce_unknown_peer_accepted():
+    """Announce from any authenticated agent is accepted (open registration)."""
     app = _make_app(known_peer=False)
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -79,7 +79,7 @@ async def test_announce_unknown_peer_rejected():
                 "ws_host": "100.64.0.9",
             },
         )
-    assert resp.status_code == 403
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio

@@ -40,7 +40,7 @@ def test_upload_file(tmp_path):
     assert data["filename"] == "test.txt"
     assert data["size"] == 11
     assert "id" in data
-    assert os.path.exists(os.path.join(tmp_path, data["id"] + "_test.txt"))
+    assert os.path.exists(os.path.join(tmp_path, "test_" + data["id"] + ".txt"))
 
 
 def test_upload_no_file(tmp_path):

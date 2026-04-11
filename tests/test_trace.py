@@ -89,7 +89,7 @@ class TestTracer:
         trace_id = await tracer.emit("response", "conv-1", {})
 
         row = await db.fetch_one("SELECT * FROM traces WHERE id = ?", (trace_id,))
-        assert row["timestamp"] is not None
+        assert row["created_at"] is not None
 
     async def test_action_log_table_dropped(self, db):
         row = await db.fetch_one(
@@ -418,13 +418,13 @@ class TestTracerInReflector:
         data = json.loads(rows[0]["data_json"])
         assert data["category"] == "accuracy"
 
-    async def test_entity_extracted_traced(self, db):
+    async def test_entity_extracted_not_traced_without_provider(self, db):
+        """Entity extraction requires _extraction_provider; without it, no trace is emitted."""
         await _seed_conversation(db, "conv-1")
         tracer = Tracer(db)
         reflector = Reflector(db, tracer=tracer)
 
-        entities = [{"name": "Alice", "type": "person", "relationship": "friend", "detail": ""}]
-        content = f"Response.\n<!--entities\n{json.dumps(entities)}\n-->"
+        content = "Response about Alice."
         response = LLMResponse(
             content=content, model="test", tokens_in=10, tokens_out=5, cost_usd=0.001,
         )
@@ -433,9 +433,7 @@ class TestTracerInReflector:
         rows = await db.fetch_all(
             "SELECT * FROM traces WHERE event_type = 'entity_extracted'"
         )
-        assert len(rows) == 1
-        data = json.loads(rows[0]["data_json"])
-        assert data["count"] == 1
+        assert len(rows) == 0
 
 
 class TestTracerSubscribers:

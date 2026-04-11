@@ -194,9 +194,6 @@ class Bootstrapper:
             self.container.embeddings = await asyncio.to_thread(EmbeddingProvider)
             logger.info("Using local embedding model")
 
-        # Pre-load CrossEncoder reranker in background
-        from odigos.memory.manager import _get_reranker
-        asyncio.create_task(asyncio.to_thread(_get_reranker))
 
     # ------------------------------------------------------------------
     # Phase 4: Memory subsystem

@@ -162,6 +162,7 @@ class TestExecutor:
         mock_tool.parameters_schema = {"type": "object", "properties": {"query": {"type": "string"}}}
         mock_tool.contract = ToolContract()
         mock_tool.execute.return_value = ToolResult(success=True, data="## Results\n1. Python docs")
+        mock_tool.format_for_context = lambda result: result.data
 
         registry = ToolRegistry()
         registry.register(mock_tool)
@@ -234,6 +235,7 @@ class TestExecutor:
         mock_tool.execute.return_value = ToolResult(
             success=True, data="## Page: Example\n\nThe article content."
         )
+        mock_tool.format_for_context = lambda result: result.data
 
         registry = ToolRegistry()
         registry.register(mock_tool)
@@ -290,7 +292,7 @@ class TestReflector:
 
 class TestReflectorWithMemory:
     async def test_parses_entity_block(self, db: Database):
-        """Reflector parses <!--entities--> block from response and strips it."""
+        """Reflector stores response content and passes extracted data to memory manager."""
         mock_memory = AsyncMock()
         reflector = Reflector(db=db, memory_manager=mock_memory)
 
@@ -320,13 +322,15 @@ class TestReflectorWithMemory:
         mock_memory.store.assert_called_once()
         call_kwargs = mock_memory.store.call_args.kwargs
         extracted = call_kwargs["extracted"]
-        assert len(extracted["entities"]) >= 0  # Extraction depends on provider mock
+        # Extraction now uses a dedicated LLM call (not inline parsing), so
+        # without an extraction provider the entities list is empty
+        assert extracted["entities"] == []
 
-        # Stored message should NOT contain the entities block
+        # Entity blocks are no longer stripped from content (extraction is
+        # done via a separate LLM call now). The raw content is stored as-is.
         msg = await db.fetch_one(
             "SELECT content FROM messages WHERE conversation_id = 'conv-1' AND role = 'assistant'"
         )
-        assert "<!--entities" not in msg["content"]
         assert "Hello! I can help with that." in msg["content"]
 
     async def test_no_entity_block(self, db: Database):
@@ -429,6 +433,7 @@ class TestAgent:
         mock_tool.execute.return_value = ToolResult(
             success=True, data="## Results\n1. Python 3.13 released"
         )
+        mock_tool.format_for_context = lambda result: result.data
 
         registry = ToolRegistry()
         registry.register(mock_tool)
@@ -470,6 +475,7 @@ class TestAgent:
             success=True,
             data="## Page: Example\n\n**URL:** https://example.com/page\n\nPage content here.",
         )
+        mock_tool.format_for_context = lambda result: result.data
 
         registry = ToolRegistry()
         registry.register(mock_tool)
@@ -525,9 +531,11 @@ class TestContextBudget:
         )
         for i in range(10):
             role = "user" if i % 2 == 0 else "assistant"
+            # Use real words to generate enough tokens (repeated x's compress in tiktoken)
+            padding = " ".join(f"word{j}" for j in range(200))
             await db.execute(
                 "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
-                (f"msg-{i}", "conv-budget", role, f"Message {i} " + "x" * 200),
+                (f"msg-{i}", "conv-budget", role, f"Message {i} " + padding),
             )
 
         messages = await assembler.build("conv-budget", "New message", max_tokens=500)
@@ -618,6 +626,7 @@ class TestExecutorDocumentAction:
         mock_doc_tool.execute.return_value = ToolResult(
             success=True, data="# Meeting Notes\n\n- Action items listed"
         )
+        mock_doc_tool.format_for_context = lambda result: result.data
 
         registry = ToolRegistry()
         registry.register(mock_doc_tool)
@@ -661,6 +670,7 @@ class TestExecutorCodeAction:
         }
         mock_code_tool.contract = ToolContract()
         mock_code_tool.execute.return_value = ToolResult(success=True, data="42\n")
+        mock_code_tool.format_for_context = lambda result: result.data
 
         registry = ToolRegistry()
         registry.register(mock_code_tool)
@@ -795,7 +805,7 @@ class TestAgentBudgetEnforcement:
         )
         mock_budget = AsyncMock()
         mock_budget.check_budget = AsyncMock(
-            return_value=AsyncMock(within_budget=True, warning=False)
+            return_value=AsyncMock(within_budget=True, warning=False, circuit_breaker=False)
         )
 
         agent = Agent(db=db, provider=mock_provider, agent_name="TestBot", budget_tracker=mock_budget)
@@ -815,7 +825,7 @@ class TestAgentBudgetEnforcement:
 
 class TestSkillCatalogInContext:
     async def test_skill_catalog_in_system_prompt(self, db: Database):
-        """Skill catalog appears in system prompt when skills are loaded."""
+        """Skill catalog is NOT injected into system prompt (skills are discovered via find_tools JIT)."""
         skill_registry = SkillRegistry()
         skill_registry._skills = {
             "research": Skill(
@@ -845,13 +855,8 @@ class TestSkillCatalogInContext:
         messages = await assembler.build("conv-1", "Hello")
 
         system_content = messages[0]["content"]
-        assert "Available skills" in system_content
-        assert "research" in system_content
-        assert "In-depth web research" in system_content
-        assert "chat" in system_content
-        assert "General conversation" in system_content
-        # Full body should NOT be in catalog
-        assert "Do research." not in system_content
+        # Skills are now discovered via find_tools (JIT), not listed in system prompt
+        assert "Available skills" not in system_content
 
     async def test_no_skill_registry_still_works(self, db: Database):
         """Without skill_registry, context assembler works as before."""
@@ -929,16 +934,17 @@ class TestEmbeddingFailureResilience:
         from unittest.mock import AsyncMock
         from odigos.memory.manager import MemoryManager
 
-        vector_memory = AsyncMock()
-        vector_memory.store.side_effect = RuntimeError("Embedding model crashed")
+        memory_store = AsyncMock()
+        memory_store.store.side_effect = RuntimeError("Embedding model crashed")
+        memory_recall = AsyncMock()
         graph = AsyncMock()
         resolver = AsyncMock()
         resolver.resolve.return_value = AsyncMock(entity_id="e1")
         summarizer = AsyncMock()
 
         mm = MemoryManager(
-            vector_memory=vector_memory, graph=graph,
-            resolver=resolver, summarizer=summarizer,
+            memory_store=memory_store, memory_recall=memory_recall,
+            graph=graph, resolver=resolver, summarizer=summarizer,
         )
 
         # Should NOT raise
@@ -981,7 +987,7 @@ class TestTransactionSafety:
         from unittest.mock import AsyncMock
         from odigos.memory.ingester import DocumentIngester
 
-        vector_memory = AsyncMock()
+        memory_store = AsyncMock()
         store_count = 0
         async def store_then_fail(**kwargs):
             nonlocal store_count
@@ -989,12 +995,12 @@ class TestTransactionSafety:
             if store_count >= 3:
                 raise RuntimeError("Embedding failed")
             return "vec-id"
-        vector_memory.store.side_effect = store_then_fail
+        memory_store.store.side_effect = store_then_fail
 
         from odigos.memory.chunking import ChunkingService
 
         chunking = ChunkingService()
-        ingester = DocumentIngester(db=db, vector_memory=vector_memory, chunking_service=chunking)
+        ingester = DocumentIngester(db=db, memory_store=memory_store, chunking_service=chunking)
         # Build a text long enough to produce multiple chunks (over 500 tokens)
         text = ("Paragraph about topic A. " * 80 + "\n\n") * 5
 
@@ -1022,17 +1028,18 @@ class TestChunkingIntegration:
         from odigos.memory.chunking import ChunkingService
         from odigos.memory.manager import MemoryManager
 
-        vector_memory = AsyncMock()
-        vector_memory.store.return_value = "vec-id"
-        vector_memory.search.return_value = []
+        memory_store = AsyncMock()
+        memory_store.store.return_value = "vec-id"
+        memory_recall = AsyncMock()
+        memory_recall.search.return_value = []
         graph = AsyncMock()
         resolver = AsyncMock()
         summarizer = AsyncMock()
         chunking = ChunkingService()
 
         mm = MemoryManager(
-            vector_memory=vector_memory, graph=graph,
-            resolver=resolver, summarizer=summarizer,
+            memory_store=memory_store, memory_recall=memory_recall,
+            graph=graph, resolver=resolver, summarizer=summarizer,
             chunking_service=chunking,
         )
 
@@ -1040,4 +1047,4 @@ class TestChunkingIntegration:
         await mm.store("c1", long_msg, "response", [])
 
         # Should have been called multiple times (once per chunk)
-        assert vector_memory.store.call_count > 1
+        assert memory_store.store.call_count > 1

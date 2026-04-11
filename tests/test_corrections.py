@@ -7,7 +7,6 @@ import pytest
 from odigos.core.reflector import Reflector
 from odigos.db import Database
 from odigos.memory.corrections import CorrectionsManager
-from odigos.memory.vectors import MemoryResult
 from odigos.providers.base import LLMResponse
 
 
@@ -45,16 +44,14 @@ class TestCorrectionsMigration:
         assert row["context"] == "some context"
         assert row["category"] == "accuracy"
         assert row["applied_count"] == 0
-        assert row["timestamp"] is not None
+        assert row["created_at"] is not None
 
 
 class TestCorrectionsManager:
-    async def test_store_inserts_row_and_embeds(self, db):
-        """store() inserts a DB row and calls VectorMemory.store()."""
+    async def test_store_inserts_row(self, db):
+        """store() inserts a DB row."""
         await _seed_conversation(db, "conv-1")
-        mock_vector = MagicMock()
-        mock_vector.store = AsyncMock(return_value="vec-123")
-        manager = CorrectionsManager(db, mock_vector)
+        manager = CorrectionsManager(db)
 
         correction_id = await manager.store(
             conversation_id="conv-1",
@@ -64,94 +61,34 @@ class TestCorrectionsManager:
             category="accuracy",
         )
 
-        # Verify DB row
         row = await db.fetch_one("SELECT * FROM corrections WHERE id = ?", (correction_id,))
         assert row is not None
         assert row["conversation_id"] == "conv-1"
         assert row["original_response"] == "I said X"
         assert row["correction"] == "Actually Y"
 
-        # Verify VectorMemory.store was called
-        mock_vector.store.assert_called_once_with(
-            "some context: Actually Y", "correction", correction_id
-        )
-
-    async def test_store_includes_correction_in_embedding_text(self, db):
-        """The embedded text contains both context and correction."""
-        await _seed_conversation(db, "conv-2")
-        mock_vector = MagicMock()
-        mock_vector.store = AsyncMock(return_value="vec-123")
-        manager = CorrectionsManager(db, mock_vector)
+    async def test_relevant_returns_formatted_corrections(self, db):
+        """relevant() returns formatted output when unconsolidated corrections exist."""
+        await _seed_conversation(db, "conv-1")
+        manager = CorrectionsManager(db)
 
         await manager.store(
-            conversation_id="conv-2",
+            conversation_id="conv-1",
             original_response="I said X",
             correction="Actually Y",
-            context="during scheduling",
-            category="preference",
+            context="some context",
+            category="accuracy",
         )
-
-        embedded_text = mock_vector.store.call_args[0][0]
-        assert "during scheduling" in embedded_text
-        assert "Actually Y" in embedded_text
-
-    async def test_relevant_returns_formatted_corrections(self, db):
-        """relevant() returns formatted output when matching corrections found."""
-        await _seed_conversation(db, "conv-1")
-        correction_id = str(uuid.uuid4())
-        await db.execute(
-            "INSERT INTO corrections (id, conversation_id, original_response, correction, context, category) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (correction_id, "conv-1", "I said X", "Actually Y", "some context", "accuracy"),
-        )
-
-        # Mock vector search returning a match
-        mock_vector = MagicMock()
-        mock_vector.search = AsyncMock(
-            return_value=[
-                MemoryResult(
-                    content_preview="some context: Actually Y",
-                    source_type="correction",
-                    source_id=correction_id,
-                    distance=0.1,
-                ),
-            ]
-        )
-        manager = CorrectionsManager(db, mock_vector)
 
         result = await manager.relevant("scheduling query")
 
-        assert "## Learned corrections" in result
-        assert "Apply these lessons from past feedback:" in result
-        assert "[accuracy] Actually Y (context: some context)" in result
+        assert "## Recent corrections" in result
+        assert "Actually Y" in result
 
-    async def test_relevant_returns_empty_when_no_matches(self, db):
-        """relevant() returns empty string when no matches found."""
-        mock_vector = MagicMock()
-        mock_vector.search = AsyncMock(return_value=[])
-        manager = CorrectionsManager(db, mock_vector)
-
+    async def test_relevant_returns_empty_when_no_corrections(self, db):
+        """relevant() returns empty string when no corrections exist."""
+        manager = CorrectionsManager(db)
         result = await manager.relevant("some query")
-
-        assert result == ""
-
-    async def test_relevant_filters_non_correction_results(self, db):
-        """relevant() ignores results with source_type != 'correction'."""
-        mock_vector = MagicMock()
-        mock_vector.search = AsyncMock(
-            return_value=[
-                MemoryResult(
-                    content_preview="some entity info",
-                    source_type="entity",
-                    source_id="ent-1",
-                    distance=0.1,
-                ),
-            ]
-        )
-        manager = CorrectionsManager(db, mock_vector)
-
-        result = await manager.relevant("some query")
-
         assert result == ""
 
 
@@ -255,13 +192,9 @@ class TestCorrectionsEndToEnd:
     async def test_correction_stored_and_retrieved_in_context(self, db):
         """Full flow: store a correction, then verify it appears in relevant() output."""
         await _seed_conversation(db, "conv-1")
-        mock_vector = MagicMock()
-        mock_vector.store = AsyncMock(return_value="vec-1")
+        manager = CorrectionsManager(db)
 
-        manager = CorrectionsManager(db, mock_vector)
-
-        # Store a correction
-        correction_id = await manager.store(
+        await manager.store(
             conversation_id="conv-1",
             original_response="I scheduled for 8am",
             correction="Never schedule before 10am",
@@ -269,22 +202,9 @@ class TestCorrectionsEndToEnd:
             category="preference",
         )
 
-        # Simulate vector search returning this correction
-        mock_vector.search = AsyncMock(
-            return_value=[
-                MemoryResult(
-                    content_preview="morning scheduling: Never schedule before 10am",
-                    source_type="correction",
-                    source_id=correction_id,
-                    distance=0.1,
-                ),
-            ]
-        )
-
-        # Retrieve relevant corrections
         result = await manager.relevant("schedule meeting at 9am")
 
-        assert "## Learned corrections" in result
+        assert "## Recent corrections" in result
         assert "Never schedule before 10am" in result
         assert "preference" in result
         assert "morning scheduling" in result

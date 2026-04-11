@@ -298,17 +298,21 @@ async def test_rebuild_from_brain(tmp_path: Path):
             )
         """)
         await conn.execute("""
-            CREATE TABLE user_facts (
+            CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY,
-                fact TEXT NOT NULL,
-                category TEXT DEFAULT 'general',
-                source TEXT DEFAULT 'extracted',
-                source_type TEXT,
-                source_id TEXT,
-                content_hash TEXT,
+                content TEXT NOT NULL,
+                memory_type TEXT NOT NULL,
+                keywords_json TEXT DEFAULT '[]',
+                tags_json TEXT DEFAULT '[]',
+                context_description TEXT,
+                source_type TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                conversation_id TEXT,
                 confidence REAL DEFAULT 0.8,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                status TEXT DEFAULT 'active',
+                superseded_by TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
             )
         """)
         await conn.execute("""
@@ -331,7 +335,7 @@ async def test_rebuild_from_brain(tmp_path: Path):
         assert stats["entities"] == 3  # 1 from page + 2 from topic (stub doesn't count)
 
         # 2 facts from Jacob's page
-        facts = await db.fetch_all("SELECT * FROM user_facts")
+        facts = await db.fetch_all("SELECT * FROM memories WHERE memory_type = 'fact'")
         assert len(facts) == 2
         assert stats["facts"] == 2
 

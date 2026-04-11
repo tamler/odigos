@@ -1,10 +1,17 @@
+import httpx
 import pytest
 from odigos.tools.image_gen import GenerateImageTool
 from odigos.config import ImageGenerationConfig
 
 
+def _make_tool(**overrides):
+    defaults = dict(http=httpx.AsyncClient(), api_key="test")
+    defaults.update(overrides)
+    return GenerateImageTool(**defaults)
+
+
 def test_tool_metadata():
-    tool = GenerateImageTool(api_key="test")
+    tool = _make_tool()
     assert tool.name == "generate_image"
     assert "prompt" in tool.parameters_schema["properties"]
     assert "aspect_ratio" in tool.parameters_schema["properties"]
@@ -12,7 +19,7 @@ def test_tool_metadata():
 
 @pytest.mark.asyncio
 async def test_empty_prompt():
-    tool = GenerateImageTool(api_key="test")
+    tool = _make_tool()
     result = await tool.execute({"prompt": ""})
     assert not result.success
     assert "No prompt" in result.error
@@ -20,7 +27,7 @@ async def test_empty_prompt():
 
 @pytest.mark.asyncio
 async def test_prompt_truncation():
-    tool = GenerateImageTool(api_key="test")
+    tool = _make_tool()
     long_prompt = "a " * 600  # > 1000 chars
     # Won't actually call API (bad key), but shouldn't crash
     result = await tool.execute({"prompt": long_prompt})
@@ -29,9 +36,7 @@ async def test_prompt_truncation():
 
 
 def test_invalid_ratio_defaults():
-    tool = GenerateImageTool(
-        api_key="test", default_ratio="4:3"
-    )
+    tool = _make_tool(default_ratio="4:3")
     # The tool should use default if invalid ratio given
     assert tool._default_ratio == "4:3"
 

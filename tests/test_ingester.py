@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -17,23 +17,23 @@ class TestDocumentIngester:
         return db
 
     @pytest.fixture
-    def mock_vector_memory(self):
-        vm = AsyncMock()
-        vm.store = AsyncMock(return_value=str(uuid.uuid4()))
-        return vm
+    def mock_memory_store(self):
+        ms = AsyncMock()
+        ms.store = AsyncMock(return_value=str(uuid.uuid4()))
+        return ms
 
     @pytest.fixture
-    def ingester(self, mock_db, mock_vector_memory):
-        return DocumentIngester(db=mock_db, vector_memory=mock_vector_memory)
+    def ingester(self, mock_db, mock_memory_store):
+        return DocumentIngester(db=mock_db, memory_store=mock_memory_store)
 
-    async def test_ingest_stores_chunks(self, ingester, mock_vector_memory):
+    async def test_ingest_stores_chunks(self, ingester, mock_memory_store):
         text = "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
         doc_id = await ingester.ingest(text=text, filename="test.txt")
 
         assert doc_id is not None
-        assert mock_vector_memory.store.call_count > 0
-        for call in mock_vector_memory.store.call_args_list:
-            assert (call.kwargs.get("source_type") or call.args[1]) == "document_chunk"
+        assert mock_memory_store.store.call_count > 0
+        for call in mock_memory_store.store.call_args_list:
+            assert call.kwargs.get("source_type") == "document"
 
     async def test_ingest_creates_document_record(self, ingester, mock_db):
         await ingester.ingest(text="Some content.", filename="doc.pdf")
@@ -87,25 +87,29 @@ class TestDocumentIngester:
         doc_id = await ingester.ingest(text="", filename="empty.txt")
         assert doc_id is not None
 
-    async def test_delete_document(self, ingester, mock_db, mock_vector_memory):
+    async def test_delete_document(self, ingester, mock_db):
         mock_db.fetch_one = AsyncMock(return_value={"chunk_count": 2})
 
         await ingester.delete("doc-123")
 
-        # Vector chunks deleted via vector_memory
-        mock_vector_memory.delete_by_source.assert_called_once_with("document_chunk", "doc-123")
+        # Memories deleted via db.execute
+        memory_delete_calls = [
+            c for c in mock_db.execute.call_args_list
+            if "DELETE" in str(c) and "memories" in str(c)
+        ]
+        assert len(memory_delete_calls) == 1
 
         # Document record deleted via db
-        delete_calls = [
+        doc_delete_calls = [
             c for c in mock_db.execute.call_args_list
-            if "DELETE" in str(c)
+            if "DELETE" in str(c) and "documents" in str(c)
         ]
-        assert len(delete_calls) == 1
+        assert len(doc_delete_calls) == 1
 
-    async def test_ingest_code_file_uses_code_content_type(self, ingester, mock_vector_memory):
+    async def test_ingest_code_file_uses_code_content_type(self, ingester, mock_memory_store):
         """Code files should be detected by extension and chunked as code."""
         text = "def hello():\n    print('hello world')\n"
         doc_id = await ingester.ingest(text=text, filename="main.py")
         assert doc_id is not None
         # Should store at least one chunk
-        assert mock_vector_memory.store.call_count >= 1
+        assert mock_memory_store.store.call_count >= 1

@@ -82,17 +82,24 @@ class Reflector:
 
         # Store the clean assistant message
         msg_id = message_id or uuid.uuid4().hex
-        await self.message_bus.publish(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=content,
-            channel=channel,
-            model_used=response.model,
-            tokens_in=response.tokens_in,
-            tokens_out=response.tokens_out,
-            cost_usd=response.cost_usd,
-            message_id=msg_id,
-        )
+        if self.message_bus:
+            await self.message_bus.publish(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                channel=channel,
+                model_used=response.model,
+                tokens_in=response.tokens_in,
+                tokens_out=response.tokens_out,
+                cost_usd=response.cost_usd,
+                message_id=msg_id,
+            )
+        else:
+            await self.db.execute(
+                "INSERT INTO messages (id, conversation_id, role, content, channel) "
+                "VALUES (?, ?, 'assistant', ?, ?)",
+                (msg_id, conversation_id, content, channel),
+            )
 
         # Spawn async cost backfill if applicable
         if response.generation_id and self._cost_fetcher:

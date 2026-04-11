@@ -69,6 +69,7 @@ async def heartbeat(db, mock_agent, channel_registry, store, mock_provider):
         provider=mock_provider,
         interval=0.1,
         idle_think_interval=0,
+        scheduler=None,
     )
 
 
@@ -196,69 +197,62 @@ async def test_recurring_every_ns_pattern(heartbeat, store, db):
 
 
 @pytest.mark.asyncio
-async def test_idle_think_creates_todo(heartbeat, store, mock_provider, db):
-    """Idle-think creates a todo when LLM responds with a todo."""
+async def test_proactive_scans_active_goals(heartbeat, store, mock_provider, db):
+    """Proactive pipeline scans active goals for opportunities."""
+    from unittest.mock import patch
+    from odigos.core.heartbeat.proactive import scan_active_goals
+
     await store.create_goal("Learn Spanish")
-    mock_provider.complete = AsyncMock(
-        return_value=LLMResponse(
-            content='{"todo": "Find Spanish learning resources"}',
-            model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
-        )
-    )
-    await heartbeat._tick()
-    todos = await store.list_todos()
-    assert len(todos) == 1
-    assert todos[0]["description"] == "Find Spanish learning resources"
-    assert todos[0]["created_by"] == "agent"
+    opportunities = await scan_active_goals(heartbeat)
+    assert len(opportunities) == 1
+    assert "Learn Spanish" in opportunities[0].title
 
 
 @pytest.mark.asyncio
-async def test_idle_think_updates_goal_progress(heartbeat, store, mock_provider, db):
-    """Idle-think updates a goal's progress_note."""
-    gid = await store.create_goal("Read more books")
-    short_id = gid[:8]
-    mock_provider.complete = AsyncMock(
-        return_value=LLMResponse(
-            content=f'{{"note": "{short_id}", "progress": "Started reading list"}}',
-            model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
-        )
-    )
-    await heartbeat._tick()
-    row = await db.fetch_one("SELECT * FROM goals WHERE id = ?", (gid,))
-    assert row["progress_note"] == "Started reading list"
-    assert row["reviewed_at"] is not None
+async def test_proactive_skips_when_no_goals(heartbeat, store, mock_provider, db):
+    """Proactive pipeline finds no opportunities when no active goals."""
+    from odigos.core.heartbeat.proactive import scan_active_goals
+
+    opportunities = await scan_active_goals(heartbeat)
+    assert len(opportunities) == 0
 
 
 @pytest.mark.asyncio
-async def test_idle_think_skips_when_todos_ran(heartbeat, store, mock_provider):
-    """Idle-think does NOT fire when todos ran in the same tick."""
+async def test_proactive_skips_when_todos_ran(heartbeat, store, mock_provider):
+    """Proactive pipeline does NOT fire when todos ran in the same tick."""
+    from unittest.mock import patch
+
     await store.create_goal("Some goal")
     await store.create_todo("Do something")
-    await heartbeat._tick()
-    mock_provider.complete.assert_not_called()
+    with patch("odigos.core.heartbeat.proactive.run_proactive", new_callable=AsyncMock) as mock_proactive:
+        await heartbeat._tick()
+        mock_proactive.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_idle_think_noop_on_idle_response(heartbeat, store, mock_provider, db):
-    """Idle-think does nothing when LLM says idle."""
-    await store.create_goal("Some goal")
-    # mock_provider already returns {"idle": true} by default
-    await heartbeat._tick()
+async def test_proactive_noop_when_no_opportunities(heartbeat, store, mock_provider, db):
+    """Proactive pipeline does nothing when no opportunities are found."""
+    from unittest.mock import patch
+
+    with patch(
+        "odigos.core.heartbeat.proactive.SIGNAL_SOURCES",
+        [AsyncMock(return_value=[])],
+    ):
+        await heartbeat._tick()
     todos = await store.list_todos()
     assert len(todos) == 0
 
 
 @pytest.mark.asyncio
-async def test_idle_think_handles_markdown_wrapped_json(heartbeat, store, mock_provider, db):
-    """Idle-think extracts JSON from markdown code blocks."""
-    await store.create_goal("Learn Spanish")
-    mock_provider.complete = AsyncMock(
-        return_value=LLMResponse(
-            content='```json\n{"todo": "Practice vocabulary"}\n```',
-            model="test", tokens_in=10, tokens_out=10, cost_usd=0.001,
-        )
-    )
-    await heartbeat._tick()
-    todos = await store.list_todos()
-    assert len(todos) == 1
-    assert todos[0]["description"] == "Practice vocabulary"
+async def test_proactive_prioritizes_highest_hint(heartbeat, store, mock_provider, db):
+    """Proactive prioritizer picks the opportunity with the highest priority hint."""
+    from odigos.core.heartbeat.proactive import Opportunity, prioritize
+
+    opps = [
+        Opportunity(source="test", title="Low priority", context="ctx", priority_hint=0.2),
+        Opportunity(source="test", title="High priority", context="ctx", priority_hint=0.9),
+        Opportunity(source="test", title="Mid priority", context="ctx", priority_hint=0.5),
+    ]
+    result = await prioritize(heartbeat, opps)
+    assert result is not None
+    assert result.title == "High priority"

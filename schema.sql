@@ -843,6 +843,8 @@ CREATE TABLE IF NOT EXISTS user_profile (
     relationship_stage TEXT DEFAULT 'new'
 );
 
+INSERT OR IGNORE INTO user_profile (id) VALUES ('owner');
+
 CREATE TABLE IF NOT EXISTS user_profile_v2 (
     id TEXT PRIMARY KEY,
     profile_json TEXT NOT NULL DEFAULT '{}',

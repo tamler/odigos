@@ -35,7 +35,7 @@ async def peer_announce(
     request: Request,
 ):
     """Register a peer agent's WebSocket coordinates for future communication."""
-    db = request.app.state.db
+    db = request.app.state.container.db
     now = datetime.now(timezone.utc).isoformat()
 
     existing = await db.fetch_one(
