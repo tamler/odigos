@@ -38,6 +38,20 @@ def validate_settings(settings: Settings) -> list[str]:
         warnings.append(
             "budget.monthly_limit_usd is <= 0."
         )
+
+    # Budget cost tracking: warn if using safety-net defaults
+    has_budget = settings.budget.daily_limit_usd > 0 or settings.budget.monthly_limit_usd > 0
+    has_cost_rate = (
+        settings.llm.cost_per_million_tokens > 0
+        or settings.llm.cost_per_million_input > 0
+        or settings.llm.cost_per_million_output > 0
+    )
+    if has_budget and not has_cost_rate:
+        warnings.append(
+            "llm.cost_per_million_input/output not configured -- using "
+            "safety-net defaults ($1/$3 per million). Set explicit rates "
+            "in config.yaml for accurate cost tracking."
+        )
     if (
         settings.budget.daily_limit_usd
         > settings.budget.monthly_limit_usd

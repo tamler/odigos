@@ -16,7 +16,10 @@ def _settings(**overrides) -> Settings:
 
 def test_valid_config_no_warnings(tmp_path):
     db_path = tmp_path / "odigos.db"
-    s = _settings(database={"path": str(db_path)})
+    s = _settings(
+        database={"path": str(db_path)},
+        llm={"cost_per_million_input": 1.0, "cost_per_million_output": 3.0},
+    )
     warnings = validate_settings(s)
     assert warnings == []
 

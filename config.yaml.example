@@ -67,7 +67,9 @@ llm:
   temperature: 0.7
   request_timeout_seconds: 60.0     # Timeout for LLM API requests
   connect_timeout_seconds: 10.0     # Timeout for establishing LLM API connection
-  # cost_per_million_tokens: 0.0     # Fallback cost estimate when provider doesn't report cost (0 = trust provider)
+  # cost_per_million_tokens: 0.0     # Single rate for both input/output (legacy, use input/output instead)
+  cost_per_million_input: 1.0        # REQUIRED for budget enforcement. Cost per million input tokens.
+  cost_per_million_output: 3.0       # REQUIRED for budget enforcement. Cost per million output tokens.
 
 # Budget limits (USD)
 budget:

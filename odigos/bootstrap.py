@@ -142,6 +142,8 @@ class Bootstrapper:
             request_timeout=s.llm.request_timeout_seconds,
             connect_timeout=s.llm.connect_timeout_seconds,
             cost_per_million_tokens=s.llm.cost_per_million_tokens,
+            cost_per_million_input=s.llm.cost_per_million_input,
+            cost_per_million_output=s.llm.cost_per_million_output,
         )
         logger.info("Starting Odigos agent: %s", s.agent.name)
 

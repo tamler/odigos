@@ -9,6 +9,13 @@ from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
 logger = logging.getLogger(__name__)
 
+# Safety-net pricing: used when no provider cost is reported AND no explicit
+# rates are configured. Set to the most expensive model we commonly use
+# (Kimi K2 on Groq) so the budget tracker always has a conservative estimate.
+# This ensures budget enforcement works even if config is incomplete.
+_DEFAULT_COST_INPUT = 1.0   # $/million input tokens
+_DEFAULT_COST_OUTPUT = 3.0  # $/million output tokens
+
 
 class LLMClient(LLMProvider):
     """OpenAI-compatible LLM provider with fallback support.
@@ -28,6 +35,8 @@ class LLMClient(LLMProvider):
         request_timeout: float = 60.0,
         connect_timeout: float = 10.0,
         cost_per_million_tokens: float = 0.0,
+        cost_per_million_input: float = 0.0,
+        cost_per_million_output: float = 0.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
@@ -36,6 +45,8 @@ class LLMClient(LLMProvider):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self._cost_per_million = cost_per_million_tokens
+        self._cost_per_million_input = cost_per_million_input or cost_per_million_tokens
+        self._cost_per_million_output = cost_per_million_output or cost_per_million_tokens
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(request_timeout, connect=connect_timeout),
             headers={
@@ -120,10 +131,15 @@ class LLMClient(LLMProvider):
         cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
         if not cached:
             cached = usage.get("cache_read_input_tokens", 0)
-        # Use provider-reported cost if available; fall back to configured rate
+        # Use provider-reported cost if available; fall back to configured or default rate
         cost = usage.get("cost") or 0.0
-        if not cost and self._cost_per_million and (tokens_in or tokens_out):
-            cost = (tokens_in + tokens_out) * self._cost_per_million / 1_000_000
+        if not cost:
+            rate_in = self._cost_per_million_input or _DEFAULT_COST_INPUT
+            rate_out = self._cost_per_million_output or _DEFAULT_COST_OUTPUT
+            cost = (
+                tokens_in * rate_in / 1_000_000
+                + tokens_out * rate_out / 1_000_000
+            )
 
         return LLMResponse(
             content=message.get("content") or "",
@@ -247,8 +263,13 @@ class LLMClient(LLMProvider):
                         ))
 
                 cost = provider_cost
-                if not cost and self._cost_per_million and (tokens_in or tokens_out):
-                    cost = (tokens_in + tokens_out) * self._cost_per_million / 1_000_000
+                if not cost:
+                    rate_in = self._cost_per_million_input or _DEFAULT_COST_INPUT
+                    rate_out = self._cost_per_million_output or _DEFAULT_COST_OUTPUT
+                    cost = (
+                        tokens_in * rate_in / 1_000_000
+                        + tokens_out * rate_out / 1_000_000
+                    )
                 final = LLMResponse(
                     content=full_content,
                     model=response_model,
