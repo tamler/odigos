@@ -103,7 +103,7 @@ export function ChatInputArea({
                   </div>
                 </div>
                 {!p.uploading && (
-                  <button onClick={() => removeFile(p.file)} aria-label="Remove file" className="shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-sm hover:bg-background transition-colors absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100">
+                  <button onClick={() => removeFile(p.file)} aria-label="Remove file" className="shrink-0 text-muted-foreground hover:text-foreground p-1 rounded-sm hover:bg-background transition-colors absolute right-1.5 top-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
                     <X className="h-3 w-3" />
                   </button>
                 )}

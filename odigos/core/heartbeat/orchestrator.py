@@ -161,6 +161,30 @@ class Heartbeat:
             except Exception:
                 pass
 
+        # Idle gate: throttle LLM-heavy phases when no recent user activity.
+        # Only briefing, scheduled tasks, reminders, and peer maintenance run
+        # at full speed. Everything else (plans, proactive, evolution, profiling)
+        # is suppressed until a user actually talks to the agent.
+        _idle = False
+        try:
+            last_user_msg = await self.db.fetch_one(
+                "SELECT created_at FROM messages WHERE role = 'user' AND channel = 'web' "
+                "ORDER BY created_at DESC LIMIT 1"
+            )
+            if last_user_msg:
+                from datetime import datetime, timezone
+                last_ts = datetime.fromisoformat(
+                    last_user_msg["created_at"].replace("Z", "+00:00")
+                )
+                if last_ts.tzinfo is None:
+                    last_ts = last_ts.replace(tzinfo=timezone.utc)
+                idle_minutes = (datetime.now(timezone.utc) - last_ts).total_seconds() / 60
+                _idle = idle_minutes > 30
+            else:
+                _idle = True  # No user messages at all
+        except Exception:
+            pass
+
         did_work = False
 
         # Phase 0: Morning briefing (once per day)
@@ -173,8 +197,8 @@ class Heartbeat:
         # Phase 1b: Fire legacy reminders (old table, for backward compat)
         did_work |= await scheduled.fire_reminders(self)
 
-        # Phase 2: Work on pending todos (LLM calls)
-        if not _over_budget:
+        # Phase 2: Work on pending todos (LLM calls — only when user is active)
+        if not _over_budget and not _idle:
             did_work |= await todos.work_todos(self)
 
         # Phase 3: Deliver subagent results
@@ -242,32 +266,32 @@ class Heartbeat:
             self._followup_tick_counter = 0
             did_work |= await maintenance.check_followups(self)
 
-        # Phase 4e: Proactive plan execution (LLM calls)
-        if not did_work and not _over_budget:
+        # Phase 4e: Proactive plan execution (LLM calls — only when user is active)
+        if not did_work and not _over_budget and not _idle:
             did_work |= await plans.work_in_progress_plans(self)
 
         # Phase 5: Proactive pipeline (scan → prioritize → execute → publish)
-        if not did_work and not _over_budget:
+        if not did_work and not _over_budget and not _idle:
             from odigos.core.heartbeat import proactive
             await proactive.run_proactive(self)
 
-        # Phase 6: Self-improvement cycle (LLM calls)
-        if not did_work and not _over_budget and self.evolution_engine:
+        # Phase 6: Self-improvement cycle (LLM calls — only when user is active)
+        if not did_work and not _over_budget and not _idle and self.evolution_engine:
             await maintenance.run_evolution(self)
 
         # Phase 7: Peer announce + stale check
         if self.agent_client:
             await peers.peer_maintenance(self)
 
-        # Phase 8: User profile dreaming (LLM calls, idle only)
-        if not did_work and not _over_budget:
+        # Phase 8: User profile dreaming (LLM calls — only when user is active)
+        if not did_work and not _over_budget and not _idle:
             self._dream_tick_counter += 1
             if self._dream_tick_counter >= self._dream_interval_ticks:
                 self._dream_tick_counter = 0
                 await profiling.dream_analyze_user(self)
 
-        # Phase 9: Experience extraction (LLM calls, idle only)
-        if not did_work and not _over_budget:
+        # Phase 9: Experience extraction (LLM calls — only when user is active)
+        if not did_work and not _over_budget and not _idle:
             self._experience_tick_counter += 1
             if self._experience_tick_counter >= self._experience_interval_ticks:
                 self._experience_tick_counter = 0
@@ -280,7 +304,7 @@ class Heartbeat:
                     self.current_activity = None
 
         # Phase 9.5: Memory evolution (refine + consolidate structured memories)
-        if not did_work and not _over_budget:
+        if not did_work and not _over_budget and not _idle:
             if hasattr(self, "memory_evolution") and self.memory_evolution:
                 try:
                     self.current_phase = "memory_evolution"
@@ -298,8 +322,8 @@ class Heartbeat:
                     self.current_phase = None
                     self.current_activity = None
 
-        # Phase 9.6: Notebook review
-        if getattr(self, "notes_review_enabled", False):
+        # Phase 9.6: Notebook review (LLM calls — only when user is active)
+        if getattr(self, "notes_review_enabled", False) and not _idle:
             try:
                 self.current_phase = "notebook_review"
                 self.current_activity = "Reviewing shared notebooks"
@@ -313,8 +337,8 @@ class Heartbeat:
                 self.current_phase = None
                 self.current_activity = None
 
-        # Phase 10: Outcome evaluation (LLM calls, idle only)
-        if not did_work and not _over_budget:
+        # Phase 10: Outcome evaluation (LLM calls — only when user is active)
+        if not did_work and not _over_budget and not _idle:
             self._outcome_tick_counter += 1
             if self._outcome_tick_counter >= self._outcome_interval_ticks:
                 self._outcome_tick_counter = 0

@@ -61,6 +61,14 @@ async def channel_registry(mock_telegram):
 
 @pytest_asyncio.fixture
 async def heartbeat(db, mock_agent, channel_registry, store, mock_provider):
+    # Seed a recent user message so the idle gate doesn't suppress LLM phases
+    await db.execute(
+        "INSERT INTO conversations (id, channel) VALUES ('test-conv', 'web')"
+    )
+    await db.execute(
+        "INSERT INTO messages (id, conversation_id, role, content, channel, created_at) "
+        "VALUES ('seed-msg', 'test-conv', 'user', 'hello', 'web', datetime('now'))"
+    )
     return Heartbeat(
         db=db,
         agent=mock_agent,
