@@ -301,6 +301,58 @@ async def _execute_and_publish(hb: Heartbeat, opportunity: Opportunity) -> None:
         )
 
 
+async def _propose_opportunity(hb: Heartbeat, opportunity: Opportunity) -> None:
+    """Propose an opportunity to the user via notification. No LLM call.
+
+    The user can approve (thumbs_up) to trigger execution, or dismiss.
+    Only one pending proposal at a time — skip if one is already waiting.
+    """
+    if not hb.db:
+        return
+
+    # Check if there's already a pending proposal
+    existing = await hb.db.fetch_one(
+        "SELECT id FROM notifications WHERE type = 'proposal' "
+        "AND reaction IS NULL AND created_at > datetime('now', '-24 hours') "
+        "LIMIT 1"
+    )
+    if existing:
+        logger.debug("Proactive: skipping proposal, one already pending")
+        return
+
+    # Check if we already proposed this exact topic recently
+    recent = await hb.db.fetch_one(
+        "SELECT id FROM notifications WHERE type = 'proposal' "
+        "AND title = ? AND created_at > datetime('now', '-7 days') LIMIT 1",
+        (opportunity.title,),
+    )
+    if recent:
+        return
+
+    import uuid
+    from datetime import datetime, timezone
+
+    notification_id = uuid.uuid4().hex
+    now = datetime.now(timezone.utc).isoformat()
+    await hb.db.execute(
+        "INSERT INTO notifications (id, type, title, body, source, conversation_id, created_at) "
+        "VALUES (?, 'proposal', ?, ?, ?, ?, ?)",
+        (notification_id, opportunity.title, opportunity.context,
+         opportunity.source, opportunity.conversation_id or "", now),
+    )
+
+    if hb.notifier:
+        await hb.notifier.notify(
+            title=f"Suggestion: {opportunity.title}",
+            body=opportunity.context,
+            type="proposal",
+            source=opportunity.source,
+            conversation_id=opportunity.conversation_id,
+        )
+
+    logger.info("Proactive: proposed '%s' (awaiting user approval)", opportunity.title)
+
+
 # --- Main entry point ---
 
 async def run_proactive(hb: Heartbeat) -> None:
@@ -348,5 +400,7 @@ async def run_proactive(hb: Heartbeat) -> None:
         selected.title, len(all_opportunities),
     )
 
-    # Stages 3+4: Execute + Publish (async, doesn't block tick)
-    asyncio.create_task(_execute_and_publish(hb, selected))
+    # Propose to user instead of executing immediately.
+    # The user can approve via notification reaction, which triggers execution.
+    # This prevents unsupervised LLM burn on speculative work.
+    await _propose_opportunity(hb, selected)

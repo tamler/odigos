@@ -322,7 +322,8 @@ CREATE TABLE IF NOT EXISTS task_plans (
     updated_at TEXT NOT NULL,
     sprint_contract TEXT,
     goal TEXT,
-    status TEXT DEFAULT 'in_progress'
+    status TEXT DEFAULT 'in_progress',
+    origin TEXT DEFAULT 'user'
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_plans_conv ON task_plans(conversation_id);

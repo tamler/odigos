@@ -95,6 +95,7 @@ async def work_in_progress_plans(hb: "Heartbeat") -> bool:
         row = await hb.db.fetch_one(
             "SELECT id, conversation_id, steps, goal, updated_at FROM task_plans "
             "WHERE status = 'in_progress' "
+            "AND (origin IS NULL OR origin IN ('user', 'approved')) "
             "ORDER BY updated_at ASC LIMIT 1",
         )
         if not row:
