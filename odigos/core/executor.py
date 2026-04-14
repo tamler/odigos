@@ -322,6 +322,7 @@ class Executor:
         # Aggregate token/cost tracking
         total_tokens_in = 0
         total_tokens_out = 0
+        total_cached_tokens = 0
         total_cost = 0.0
         last_response: LLMResponse | None = None
         budget_warning: BudgetStatus | None = None
@@ -423,8 +424,27 @@ class Executor:
                 break
             total_tokens_in += response.tokens_in
             total_tokens_out += response.tokens_out
+            total_cached_tokens += response.cached_tokens or 0
             total_cost += response.cost_usd
             last_response = response
+
+            # Cache visibility — per-turn hit rate, logged so operators can
+            # verify auto-caching is actually firing on DeepSeek / GPT-5-nano.
+            if response.tokens_in > 0:
+                hit_pct = (response.cached_tokens or 0) * 100 / response.tokens_in
+                logger.info(
+                    "LLM cache: model=%s tokens_in=%d cached=%d (%.1f%% hit) cost=$%.5f",
+                    response.model, response.tokens_in,
+                    response.cached_tokens or 0, hit_pct, response.cost_usd,
+                )
+                if self.tracer:
+                    await self.tracer.emit("cache_hit", conversation_id, {
+                        "model": response.model,
+                        "tokens_in": response.tokens_in,
+                        "cached_tokens": response.cached_tokens or 0,
+                        "hit_pct": round(hit_pct, 1),
+                        "cost_usd": response.cost_usd,
+                    })
 
             # If no tool calls, we're done
             if not response.tool_calls:
@@ -634,6 +654,15 @@ class Executor:
         except Exception:
             pass
 
+        # Session-level cache hit summary for observability
+        if total_tokens_in > 0:
+            session_hit_pct = total_cached_tokens * 100 / total_tokens_in
+            logger.info(
+                "LLM session: tokens_in=%d cached=%d (%.1f%% hit) tokens_out=%d cost=$%.5f",
+                total_tokens_in, total_cached_tokens, session_hit_pct,
+                total_tokens_out, total_cost,
+            )
+
         aggregated = LLMResponse(
             content=content,
             model=last_response.model,
@@ -642,6 +671,7 @@ class Executor:
             cost_usd=total_cost,
             generation_id=last_response.generation_id,
             tool_calls=last_response.tool_calls,
+            cached_tokens=total_cached_tokens,
         )
 
         return ExecuteResult(

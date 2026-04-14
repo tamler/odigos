@@ -101,3 +101,73 @@ class TestCompleteWithModelKwarg:
         assert client.fallback_model == "fallback-model"
         assert client.resolve("smart").id == "smart-model-id"
         assert client.resolve("background").id == "default-model"
+
+
+class TestAnthropicCacheControl:
+    """Explicit cache_control breakpoints should only fire for Claude-family models."""
+
+    def _build_client_for(self, model_id: str, base_url: str) -> LLMClient:
+        return LLMClient(
+            providers={"p": ProviderConfig(base_url=base_url, api_key="k")},
+            models={"m": ModelConfig(provider="p", id=model_id)},
+            routing={"fast": "m"},
+        )
+
+    def test_noop_for_openai(self):
+        from odigos.providers.llm import _apply_anthropic_cache_control
+        client = self._build_client_for("gpt-5-nano", "https://api.openai.com/v1")
+        messages = [
+            {"role": "system", "content": "you are helpful"},
+            {"role": "user", "content": "hi"},
+        ]
+        out = _apply_anthropic_cache_control(messages, client._models["m"], client._providers["p"])
+        assert out == messages  # unchanged, plain string content
+
+    def test_noop_for_deepseek(self):
+        from odigos.providers.llm import _apply_anthropic_cache_control
+        client = self._build_client_for("deepseek/deepseek-v3.2", "https://openrouter.ai/api/v1")
+        messages = [
+            {"role": "system", "content": "prompt"},
+            {"role": "user", "content": "hi"},
+        ]
+        out = _apply_anthropic_cache_control(messages, client._models["m"], client._providers["p"])
+        assert out == messages
+
+    def test_wraps_last_system_for_claude_by_model_id(self):
+        from odigos.providers.llm import _apply_anthropic_cache_control
+        client = self._build_client_for("anthropic/claude-3.5-sonnet", "https://openrouter.ai/api/v1")
+        messages = [
+            {"role": "system", "content": "stable prefix"},
+            {"role": "system", "content": "plan context"},
+            {"role": "user", "content": "hi"},
+        ]
+        out = _apply_anthropic_cache_control(messages, client._models["m"], client._providers["p"])
+        # The LAST system message should be wrapped in a content block with cache_control
+        assert out[0] == messages[0]  # earlier system messages stay plain
+        assert out[1]["role"] == "system"
+        assert isinstance(out[1]["content"], list)
+        block = out[1]["content"][0]
+        assert block["type"] == "text"
+        assert block["text"] == "plan context"
+        assert block["cache_control"] == {"type": "ephemeral"}
+        # User message untouched
+        assert out[2] == messages[2]
+
+    def test_wraps_for_anthropic_direct_by_base_url(self):
+        from odigos.providers.llm import _apply_anthropic_cache_control
+        # Model id has no "claude" substring but base_url does
+        client = self._build_client_for("custom-model", "https://api.anthropic.com/v1")
+        messages = [
+            {"role": "system", "content": "system"},
+            {"role": "user", "content": "hi"},
+        ]
+        out = _apply_anthropic_cache_control(messages, client._models["m"], client._providers["p"])
+        assert isinstance(out[0]["content"], list)
+        assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+
+    def test_no_system_messages_is_noop(self):
+        from odigos.providers.llm import _apply_anthropic_cache_control
+        client = self._build_client_for("claude-3-opus", "https://api.anthropic.com/v1")
+        messages = [{"role": "user", "content": "hi"}]
+        out = _apply_anthropic_cache_control(messages, client._models["m"], client._providers["p"])
+        assert out == messages

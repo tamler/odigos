@@ -41,8 +41,8 @@ agent:
   description: ""                   # Optional description shown in UI
   # parent: ""                      # Parent agent name (for child agents)
   # allow_external_evaluation: false
-  max_tool_turns: 25                # Max tool calls per conversation turn
-  run_timeout_seconds: 300          # Timeout for a single agent run
+  max_tool_turns: 15                # Max tool calls per conversation turn (Starter tier; raise to 25 for power users)
+  run_timeout_seconds: 180          # Timeout for a single agent run
   cite_sources: true                # Include source citations in responses
   concise_mode: false               # Shorter responses when true
 
@@ -105,16 +105,18 @@ llm:
   smart: deepseek-v3.2      # Reasoning-heavy work (planning, document queries)
   background: scout         # Heartbeat / background loops (defaults to fast)
   fallback: gpt-5-nano      # Safety net if primary fails
-  max_tokens: 4096
+  max_tokens: 2048          # Starter default — raise to 4096 for power users
   temperature: 0.7
   request_timeout_seconds: 60
   connect_timeout_seconds: 10
   auto_route: true          # Let the classifier pick the tier automatically
 
-# Budget limits (USD)
+# Budget limits — tuned for Starter-tier hosted use. Personal users running
+# locally can loosen these freely; hosted operators should keep them tight
+# because the agent will auto-downgrade to the `background` tier near the cap.
 budget:
-  daily_limit_usd: 1.00
-  monthly_limit_usd: 20.00
+  daily_limit_usd: 0.50
+  monthly_limit_usd: 10.00
   warn_threshold: 0.80              # Warn at 80% of budget consumed
 
 # Web server
@@ -127,13 +129,24 @@ server:
 # BACKGROUND PROCESSING
 # =============================================================================
 
-# Heartbeat (autonomous background loop)
+# Heartbeat (autonomous background loop) — Starter defaults favor quieter,
+# cheaper background work. Raise for heavy personal use.
 heartbeat:
-  interval_seconds: 30              # Seconds between heartbeat ticks
-  max_todos_per_tick: 3             # Max todo items processed per tick
-  idle_think_interval: 900          # Seconds of idle before agent thinks autonomously
+  interval_seconds: 60              # Seconds between heartbeat ticks
+  max_todos_per_tick: 2             # Max todo items processed per tick
+  idle_think_interval: 0            # 0 = disable idle autonomous thinking (cheapest)
   announce_interval_seconds: 60     # Seconds between status announcements
-  morning_briefing: true            # Send a morning briefing summary
+  morning_briefing: false           # Disabled by default — opt in per tier
+
+# Proactive autonomous research — OFF by default on Starter. When enabled,
+# the agent scans brain gaps / recent conversations and proposes research
+# opportunities for the user to approve. Big value for Pro tier, expensive
+# for Starter.
+proactive:
+  enabled: false
+  interval_seconds: 900
+  max_cycles_per_hour: 4
+  max_per_cycle: 1
 
 # =============================================================================
 # EMBEDDINGS

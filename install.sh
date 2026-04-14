@@ -244,7 +244,7 @@ llm:
   smart: deepseek-v3.2
   background: scout
   fallback: gpt-5-nano
-  max_tokens: 4096
+  max_tokens: 2048
   temperature: 0.7
   auto_route: true
 EOF
@@ -279,7 +279,7 @@ llm:
   smart: gpt-4o
   background: gpt-4o-mini
   fallback: gpt-4o-mini
-  max_tokens: 4096
+  max_tokens: 2048
   temperature: 0.7
   auto_route: true
 EOF
@@ -308,7 +308,7 @@ llm:
   smart: local
   background: local
   fallback: local
-  max_tokens: 4096
+  max_tokens: 2048
   temperature: 0.7
   auto_route: false
 EOF
@@ -337,7 +337,7 @@ llm:
   smart: local
   background: local
   fallback: local
-  max_tokens: 4096
+  max_tokens: 2048
   temperature: 0.7
   auto_route: false
 EOF
@@ -370,25 +370,35 @@ llm:
   smart: primary
   background: primary
   fallback: primary
-  max_tokens: 4096
+  max_tokens: 2048
   temperature: 0.7
   auto_route: false
 EOF
             ;;
     esac
 
-    # Remaining sections (budget, heartbeat, voice, auto_update, server)
+    # Remaining sections — Starter-tier defaults tuned for the $15/mo hosted
+    # tier. Personal users can loosen them in the dashboard or by editing
+    # config.yaml directly.
     cat >> config.yaml << EOF
 
+agent:
+  max_tool_turns: 15
+  run_timeout_seconds: 180
+
 budget:
-  daily_limit_usd: 1.00
-  monthly_limit_usd: 20.00
+  daily_limit_usd: 0.50
+  monthly_limit_usd: 10.00
   warn_threshold: 0.80
 
 heartbeat:
-  interval_seconds: 30
-  max_todos_per_tick: 3
-  morning_briefing: true
+  interval_seconds: 60
+  max_todos_per_tick: 2
+  idle_think_interval: 0
+  morning_briefing: false
+
+proactive:
+  enabled: false
 
 voice:
   stt_provider: "${voice_stt}"

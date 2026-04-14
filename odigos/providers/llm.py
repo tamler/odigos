@@ -24,6 +24,63 @@ logger = logging.getLogger(__name__)
 INTELLIGENCE_TIERS = ("fast", "smart", "background", "fallback")
 
 
+def _is_anthropic_family(model_cfg, provider_cfg) -> bool:
+    """True if the model should use Anthropic-style explicit cache breakpoints."""
+    model_lc = (getattr(model_cfg, "id", "") or "").lower()
+    url_lc = (getattr(provider_cfg, "base_url", "") or "").lower()
+    return "claude" in model_lc or "anthropic" in url_lc
+
+
+def _apply_anthropic_cache_control(
+    messages: list[dict], model_cfg, provider_cfg,
+) -> list[dict]:
+    """Inject cache_control: ephemeral onto the last system message for Claude.
+
+    For non-Claude providers this is a no-op — DeepSeek, OpenAI, and Meta all
+    auto-cache stable prefixes without explicit breakpoints. For Claude-family
+    models routed through OpenRouter or direct Anthropic, we need to mark the
+    content block with cache_control so the system prompt is cacheable.
+
+    Rewrites messages into Anthropic-style content blocks only for the system
+    prompt(s) at the start; user/assistant messages stay in plain string form.
+    """
+    if not _is_anthropic_family(model_cfg, provider_cfg):
+        return messages
+    if not messages:
+        return messages
+
+    # Find the index of the last system-role message at the start of the list.
+    last_system_idx = -1
+    for i, m in enumerate(messages):
+        if m.get("role") == "system":
+            last_system_idx = i
+        else:
+            break
+    if last_system_idx < 0:
+        return messages
+
+    rewritten: list[dict] = []
+    for i, m in enumerate(messages):
+        if i == last_system_idx:
+            content = m.get("content", "")
+            if isinstance(content, str):
+                rewritten.append({
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": content,
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                    ],
+                })
+            else:
+                rewritten.append(m)
+        else:
+            rewritten.append(m)
+    return rewritten
+
+
 class LLMClient(LLMProvider):
     """Multi-provider LLM client with intelligence-tier routing.
 
@@ -182,9 +239,15 @@ class LLMClient(LLMProvider):
         provider = self._providers[model_cfg.provider]
         client = self._clients[model_cfg.provider]
 
+        # For Anthropic-family models (Claude via direct or OpenRouter), add
+        # explicit cache_control breakpoints. DeepSeek, OpenAI, and most other
+        # providers auto-cache stable prefixes without needing breakpoints, so
+        # this is Anthropic-only extra work.
+        out_messages = _apply_anthropic_cache_control(messages, model_cfg, provider)
+
         payload: dict = {
             "model": model_cfg.id,
-            "messages": messages,
+            "messages": out_messages,
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             "temperature": kwargs.get("temperature", self.temperature),
         }
@@ -279,9 +342,11 @@ class LLMClient(LLMProvider):
         provider = self._providers[model_cfg.provider]
         client = self._clients[model_cfg.provider]
 
+        out_messages = _apply_anthropic_cache_control(messages, model_cfg, provider)
+
         payload: dict = {
             "model": model_cfg.id,
-            "messages": messages,
+            "messages": out_messages,
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             "temperature": kwargs.get("temperature", self.temperature),
             "stream": True,

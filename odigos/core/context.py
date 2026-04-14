@@ -721,25 +721,32 @@ class ContextAssembler:
         parts: list[str] = []
         budget = max_prompt_tokens
 
-        # Static sections first (maximise prefix caching)
+        # ── Cache-friendly ordering ────────────────────────────────────
+        # Sections are appended in order of stability. DeepSeek + GPT-5-nano
+        # auto-cache the longest stable token prefix across requests, so
+        # putting truly invariant content FIRST maximises cache hit rate.
+        # Anything that changes per turn (plan-dependent, RAG, turn-specific)
+        # goes later so the cache boundary lands as far into the prompt as
+        # possible.
+        #
+        # Order:
+        #   [1] identity                  — invariant per agent
+        #   [2] tool instruction          — invariant
+        #   [3] critical facts            — always loaded, stable
+        #   [4] response style            — plan-dependent (may vary)
+        #   [5] active skill              — plan-dependent
+        #   [6] experiences / user state  — plan-dependent
+        #   [7] RAG / recent context      — turn-dependent (cache miss)
+        #   [8] history                   — append-only
+
+        # [1] identity
         identity = self._load_identity()
         parts.append(identity)
+        # [2] tool instruction
         parts.append(_TOOL_INSTRUCTION)
         budget -= _estimate_section_tokens(identity + _TOOL_INSTRUCTION)
 
-        # Response style (static per session)
-        style_text = _RESPONSE_STYLES.get(plan.response_style, "")
-        if style_text:
-            parts.append(style_text)
-
-        # Auto-activate skill if classifier recommended one
-        if plan.skill_hint and self.skill_registry:
-            skill = self.skill_registry.get(plan.skill_hint)
-            if skill and skill.system_prompt:
-                parts.append(f"## Active Skill: {skill.name}\n\n{skill.system_prompt}")
-                budget -= _estimate_section_tokens(skill.system_prompt)
-
-        # L0/L1 wake-up context — critical facts always loaded (not gated by plan.needs)
+        # [3] critical facts (always loaded — must stay stable and early)
         try:
             critical_facts = await self.db.fetch_all(
                 "SELECT content as fact FROM memories WHERE memory_type = 'fact' AND status = 'active' "
@@ -754,7 +761,19 @@ class ContextAssembler:
         except Exception:
             pass
 
-        # Dynamic sections (change every turn)
+        # [4] response style (plan-dependent — cache boundary likely lands here)
+        style_text = _RESPONSE_STYLES.get(plan.response_style, "")
+        if style_text:
+            parts.append(style_text)
+
+        # [5] active skill
+        if plan.skill_hint and self.skill_registry:
+            skill = self.skill_registry.get(plan.skill_hint)
+            if skill and skill.system_prompt:
+                parts.append(f"## Active Skill: {skill.name}\n\n{skill.system_prompt}")
+                budget -= _estimate_section_tokens(skill.system_prompt)
+
+        # [6] experiences / user state — all plan-dependent
         if plan.needs.experiences and budget > 0:
             exp = await self._load_experiences_for_plan(plan.tool_hint)
             if exp:
@@ -973,7 +992,13 @@ class ContextAssembler:
         step_description: str,
         plan_context: str = "",
     ) -> list[dict]:
-        """Build minimal context for headless heartbeat execution."""
+        """Build minimal context for headless heartbeat execution.
+
+        The stable system prompt (identity + tools + critical facts) stays at
+        messages[0] untouched so it auto-caches across every headless call;
+        the per-step plan context is injected as a second system message so
+        it varies without breaking the cache prefix.
+        """
         plan = QueryPlan(
             classification="standard",
             confidence=1.0,
@@ -983,11 +1008,14 @@ class ContextAssembler:
         messages, _tools = await self.build_planned(
             "headless", step_description, plan=plan,
         )
-        # Prepend plan context if provided
         if plan_context and messages:
-            system = messages[0]
-            if system["role"] == "system":
-                system["content"] = plan_context + "\n\n" + system["content"]
+            messages.insert(
+                1,
+                {
+                    "role": "system",
+                    "content": f"## Plan context\n\n{plan_context}",
+                },
+            )
         return messages
 
     def _trim_to_budget(self, messages: list[dict], max_tokens: int) -> list[dict]:
