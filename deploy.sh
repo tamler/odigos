@@ -31,7 +31,6 @@ UXRLS="root@100.89.147.103"
 # Format: "directory:service_name:service_user"
 BARE_METAL=(
   "/opt/odigos:odigos:odigos_agent"
-  "/opt/odigos-honey:odigos-honey:odigos_agent"
   "/opt/odigos-rachel:odigos-rachel:odigos_agent"
   "/opt/odigos-sales:odigos-sales:odigos_sales"
 )
@@ -149,13 +148,14 @@ ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" "$FRESH" "${OPENROUTER_API_KEY:
   fi
   git reset --hard origin/main
 
-  # Fresh-install mode: per-tester wipe + regenerate before container recreate
+  # Fresh-install mode: wipe + regenerate. The main /opt/odigos container
+  # uses this directory's own config.yaml + .env; the testers each live in
+  # their own subdirectory with bind-mounted configs.
   if [ "$FRESH" = "true" ]; then
-    for user in florence jessica jason klint; do
+    OPENROUTER_API_KEY="$OR_KEY" bash "$DIR/scripts/fresh-install.sh" "$DIR"
+    for user in florence jessica; do
       TDIR="/opt/odigos/testers/$user"
       [ -d "$TDIR" ] || continue
-      # fresh-install.sh lives in the repo, not in the tester dir — invoke by
-      # absolute path with the tester dir as the working directory argument.
       OPENROUTER_API_KEY="$OR_KEY" bash "$DIR/scripts/fresh-install.sh" "$TDIR"
     done
   fi
@@ -176,7 +176,7 @@ ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" "$FRESH" "${OPENROUTER_API_KEY:
   sleep 5
 
   # Recreate user containers with new image
-  for user in florence jessica jason klint; do
+  for user in florence jessica; do
     CONTAINER="odigos-$user"
     if docker inspect "$CONTAINER" &>/dev/null; then
       PORT=$(docker inspect "$CONTAINER" --format '{{(index (index .NetworkSettings.Ports "8000/tcp") 0).HostPort}}' 2>/dev/null || echo "")
@@ -228,7 +228,7 @@ while IFS= read -r line; do
     echo -e "  ${RED}$line${NC}"
     FAILURES=$((FAILURES + 1))
   fi
-done < <(ssh "$ODIGOS_ONE" 'for s in odigos odigos-honey odigos-rachel odigos-sales; do
+done < <(ssh "$ODIGOS_ONE" 'for s in odigos odigos-rachel odigos-sales; do
   printf "%-20s %s\n" "$s" "$(systemctl is-active $s)"
 done')
 
