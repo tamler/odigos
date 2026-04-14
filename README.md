@@ -36,10 +36,10 @@ A personal AI agent that runs on your machine. It remembers your conversations, 
 
 ## Requirements
 
-- **LLM API key** from [OpenRouter](https://openrouter.ai/keys), OpenAI, Groq, Ollama, or any OpenAI-compatible provider
+- **LLM API key** from [OpenRouter](https://openrouter.ai/keys) (recommended — one key gives you Scout, DeepSeek, GPT-5 nano, Claude, and everything else Odigos routes between), or any OpenAI-compatible provider you want to mix in via the BYOK dashboard
 - **Docker** (recommended) or **Python 3.12+** with `uv` package manager
 - **Node.js 20+** (for building the dashboard)
-- **1 CPU, 1GB RAM** for a single agent. Odigos is designed to be light — a Raspberry Pi or a tiny VPS is enough for one person.
+- **1 CPU, 1GB RAM** for a single agent. Odigos is designed to be light — a Raspberry Pi or a tiny VPS is enough for one person. A $40/mo VPS comfortably hosts 30-50 agents side-by-side.
 
 ## Installation
 
@@ -126,16 +126,16 @@ llm:                                    # Intelligence-tier routing
 
 agent:
   name: Bob                    # Your agent's name
-  max_tool_turns: 8            # Max tool calls per response
-  run_timeout_seconds: 120     # Max time per response
+  max_tool_turns: 15           # Max tool calls per response (Starter default)
+  run_timeout_seconds: 180     # Max time per response
 
 budget:
-  daily_limit_usd: 5.0         # Daily spending cap
-  monthly_limit_usd: 50.0      # Monthly spending cap
+  daily_limit_usd: 0.50        # Daily spending cap — Starter default; personal users can raise freely
+  monthly_limit_usd: 10.00     # Monthly spending cap
 
 proactive:
-  enabled: true                # Agent researches topics when idle
-  max_cycles_per_hour: 4       # How often it looks for opportunities
+  enabled: false               # Autonomous idle research — off by default, opt in per agent
+  max_cycles_per_hour: 4       # How often it looks for opportunities when enabled
 
 email:                         # BYO SMTP/IMAP -- connect your own email
   address: you@gmail.com
@@ -150,11 +150,13 @@ calendar:                      # BYO CalDAV -- connect your own calendar
   password: app-specific-password
 ```
 
-All settings are configurable from the web dashboard under Settings. Changes take effect immediately.
+All settings are configurable from the web dashboard under Settings — including the full **BYOK** flow where you add providers, register models with their costs, and assign each model to a routing tier. Changes take effect immediately.
 
 | Section | What it controls |
 |---------|-----------------|
-| `llm` | Models, temperature, base URL, token limits |
+| `providers` | Named OpenAI-compatible endpoints (base URL + API key) |
+| `models` | Model definitions (id, provider, per-M costs, vision, context window) |
+| `llm` | Tier routing (fast / smart / background / fallback), max tokens, temperature, auto-routing toggle |
 | `budget` | Daily/monthly spending caps |
 | `agent` | Name, tool turn limits, timeouts |
 | `proactive` | Proactive research toggle and frequency |
@@ -167,6 +169,45 @@ All settings are configurable from the web dashboard under Settings. Changes tak
 | `auto_update` | Automatic code updates from git |
 | `image_generation` | Image creation API |
 | `storage` | Per-agent storage quota |
+
+## Cost and performance
+
+Odigos splits LLM work across **four intelligence tiers** routed through OpenRouter (or any mix of providers you wire up). The classifier auto-routes each query based on complexity, and stable message prefixes trigger native prompt caching on DeepSeek and OpenAI.
+
+**Default routing (Starter):**
+
+| Tier | Model | $/M input | $/M output | Used for |
+|---|---|---|---|---|
+| `fast` | Llama 4 Scout | $0.08 | $0.30 | 70-85% of conversation turns, vision inputs, background heartbeat |
+| `smart` | DeepSeek V3.2 | $0.27 | $1.10 | Planning, document queries, complex classifications |
+| `background` | Llama 4 Scout | $0.08 | $0.30 | Heartbeat tasks, entity extraction, summarization |
+| `fallback` | GPT-5 nano | $0.05 | $0.40 | Safety net on primary failure |
+
+**Typical monthly cost per user** (on OpenRouter, with prompt caching enabled):
+
+| Profile | Messages/day | LLM cost/month |
+|---|---|---|
+| Light (casual chat, few tool calls) | ~50 | **~$1.50** |
+| Heavy (daily work, multi-step tool chains) | ~300 | **~$15-18** |
+| Power (research-heavy, proactive enabled) | ~600 | **~$50-70** |
+
+Prompt caching on DeepSeek cuts repeated-prefix input cost by ~74%, and auto-routing keeps ~70% of traffic on Scout. Both are on by default.
+
+**Budget controls:** the agent enforces `budget.daily_limit_usd` and `monthly_limit_usd` at the executor level. Near the cap it auto-downgrades to the background tier; at the cap it refuses turns with a clear message instead of crashing. Watch `LLM cache: ...` lines in the logs to confirm caching is actually firing in your setup.
+
+## Hosting Odigos for others
+
+Odigos is designed for self-hosting but runs cleanly as a small multi-tenant service. The installer seeds **Starter-tier defaults** ($0.50/day, $10/mo, `max_tool_turns: 15`, proactive off, morning briefing off, `max_tokens: 2048`) that are tuned for a $15/month subscription tier. Raise the caps per tier as you need.
+
+Suggested tier structure:
+
+| Tier | Price | LLM budget | Proactive | Image/music | Heartbeat |
+|---|---|---|---|---|---|
+| **Starter** | ~$15/mo | $8/mo cap | off | off | 60s |
+| **Pro** | ~$35/mo | $22/mo cap | on | on (capped) | 30s |
+| **Bring your own key** | ~$10/mo | unlimited (user pays OpenRouter) | on | on | 30s |
+
+The **BYOK tier** is the cleanest margin: user enters their own OpenRouter/OpenAI/Anthropic key in the dashboard providers panel, you charge for infrastructure only, and they pay for exactly their usage. The dashboard BYOK flow is fully built — add/edit/delete providers and models from the UI, with masked key handling and replace semantics.
 
 ## Usage
 
@@ -329,6 +370,15 @@ The notebook review system scans shared notebooks during idle time and adds anch
 50+ tools organized in a type hierarchy: `APITool` (HTTP APIs with polling and retry), `CLITool` (subprocess with input hardening), and local tools. The smart tool registry uses JIT schema injection -- only relevant tools are loaded per query, not all 50+.
 
 Includes: web search, code execution, file I/O, image generation, music generation, Marp slide rendering, scraping, MCP bridge, email, calendar, kanban, notebook, sub-agent dispatch.
+
+### Multi-provider LLM routing (BYOK)
+
+A three-layer LLM config separates **providers** (endpoints + keys), **models** (id + provider + costs + capabilities), and **routing** (which model handles each intelligence tier).
+
+- **Add any OpenAI-compatible provider** from the dashboard — OpenRouter, OpenAI, Groq, DeepSeek direct, Anthropic, Ollama, LM Studio. One yaml block per provider. Each API key either lives in `.env` and is referenced via `${OPENROUTER_API_KEY}` interpolation, or can be entered directly through the masked dashboard UI.
+- **Intelligence-tier routing** (`fast` / `smart` / `background` / `fallback`) assigns each tier a model alias. The executor auto-routes based on query classification: simple questions stay on the cheap fast tier, planning and document queries jump to the smart tier, background heartbeat tasks run on background, and the fallback tier catches any primary failure with automatic retry.
+- **Costs travel with the model**, not the routing layer, so switching your fast tier from Scout to something cheaper is one dropdown change — no cost rates to re-enter, no risk of drift.
+- **Prompt caching** is wired through the context assembler. Static content (agent identity, tool instructions, key facts) is ordered first so DeepSeek and OpenAI auto-cache the longest stable prefix across turns. For Claude-family models an explicit `cache_control: ephemeral` breakpoint is added on the last system message. Cache hit rate is logged per turn and surfaced via tracer events; typical savings on repeated-topic conversations land at 50-75% on DeepSeek.
 
 ### Security
 
