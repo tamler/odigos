@@ -29,9 +29,8 @@ async def maybe_send_briefing(hb: "Heartbeat") -> None:
             return
 
         logger.info("Composing morning briefing")
-        model = hb._background_model or ""
         content = await compose_briefing(
-            hb.db, hb.provider, settings=hb.settings, model=model,
+            hb.db, hb.provider, settings=hb.settings, intelligence="background",
         )
 
         if hb.notifier:

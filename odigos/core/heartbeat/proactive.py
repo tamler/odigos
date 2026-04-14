@@ -197,7 +197,7 @@ async def prioritize(
         resp = await call_llm(
             hb.provider, [{"role": "user", "content": prompt}],
             max_tokens=10, temperature=0.1,
-            model=getattr(hb, "_background_model", None),
+            intelligence="background",
         )
         if resp and resp.content.strip().isdigit():
             idx = int(resp.content.strip()) - 1
@@ -232,11 +232,8 @@ async def _execute_and_publish(hb: Heartbeat, opportunity: Opportunity) -> None:
             metadata={"conversation_id": opportunity.conversation_id or ""},
         )
 
-        # Execute via headless agent
-        result = await hb.agent.handle_message(
-            msg, headless=True,
-            background_model=getattr(hb, "_background_model", ""),
-        )
+        # Execute via headless agent — headless defaults to background tier
+        result = await hb.agent.handle_message(msg, headless=True)
 
         if not result or len(result.strip()) < 20:
             logger.info(

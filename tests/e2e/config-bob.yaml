@@ -19,10 +19,22 @@ feed:
 database:
   path: "data/odigos.db"
 
+providers:
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"
+
+models:
+  deepseek-v3.2:
+    provider: openrouter
+    id: "deepseek/deepseek-v3.2"
+    cost_in_per_mtok: 0.27
+    cost_out_per_mtok: 1.10
+
 llm:
-  base_url: "https://openrouter.ai/api/v1"
-  default_model: "deepseek/deepseek-v3.2"
-  fallback_model: "deepseek/deepseek-v3.2"
+  fast: deepseek-v3.2
+  smart: deepseek-v3.2
+  fallback: deepseek-v3.2
 
 budget:
   daily_limit_usd: 1.00

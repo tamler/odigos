@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
+from odigos.config import ModelConfig, ProviderConfig
 from odigos.providers.base import LLMResponse
 from odigos.providers.llm import LLMClient
 
@@ -10,10 +11,12 @@ from odigos.providers.llm import LLMClient
 @pytest.fixture
 def provider() -> LLMClient:
     return LLMClient(
-        base_url="https://api.example.com/v1",
-        api_key="test-key",
-        default_model="test/model",
-        fallback_model="test/fallback",
+        providers={"test": ProviderConfig(base_url="https://api.example.com/v1", api_key="test-key")},
+        models={
+            "primary": ModelConfig(provider="test", id="test/model"),
+            "fallback": ModelConfig(provider="test", id="test/fallback"),
+        },
+        routing={"fast": "primary", "fallback": "fallback"},
         max_tokens=100,
         temperature=0.5,
     )
@@ -31,7 +34,7 @@ async def test_complete_success(provider: LLMClient):
     """Successful completion returns LLMResponse."""
     mock_resp = httpx.Response(200, json=_mock_response())
 
-    with patch.object(provider._client, "post", new_callable=AsyncMock, return_value=mock_resp):
+    with patch.object(provider._clients["test"], "post", new_callable=AsyncMock, return_value=mock_resp):
         result = await provider.complete([{"role": "user", "content": "Hi"}])
 
     assert isinstance(result, LLMResponse)
@@ -42,7 +45,7 @@ async def test_complete_success(provider: LLMClient):
 
 
 async def test_complete_falls_back_on_error(provider: LLMClient):
-    """Falls back to fallback model on primary model failure."""
+    """Falls back to the `fallback` tier when primary errors."""
     error_resp = httpx.Response(500, json={"error": "internal"})
     success_resp = httpx.Response(200, json=_mock_response("Fallback!", "test/fallback"))
 
@@ -55,7 +58,7 @@ async def test_complete_falls_back_on_error(provider: LLMClient):
             return error_resp
         return success_resp
 
-    with patch.object(provider._client, "post", side_effect=mock_post):
+    with patch.object(provider._clients["test"], "post", side_effect=mock_post):
         result = await provider.complete([{"role": "user", "content": "Hi"}])
 
     assert result.content == "Fallback!"
@@ -66,6 +69,6 @@ async def test_complete_raises_on_total_failure(provider: LLMClient):
     """Raises when both primary and fallback fail."""
     error_resp = httpx.Response(500, json={"error": "internal"})
 
-    with patch.object(provider._client, "post", new_callable=AsyncMock, return_value=error_resp):
+    with patch.object(provider._clients["test"], "post", new_callable=AsyncMock, return_value=error_resp):
         with pytest.raises(RuntimeError, match="All LLM providers failed"):
             await provider.complete([{"role": "user", "content": "Hi"}])

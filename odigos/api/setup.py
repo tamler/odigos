@@ -9,6 +9,11 @@ router = APIRouter(prefix="/api")
 
 @router.get("/setup-status")
 async def setup_status(settings=Depends(get_settings)):
-    """Return whether the system has been configured with an LLM key."""
-    configured = bool(settings.llm_api_key and settings.llm_api_key != "your-api-key")
+    """Return whether the system has been configured with at least one provider."""
+    configured = bool(
+        settings.providers
+        and any(p.api_key for p in settings.providers.values())
+        and settings.models
+        and settings.llm.fast
+    )
     return {"configured": configured}

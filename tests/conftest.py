@@ -158,18 +158,44 @@ if Settings is not None:
     def test_settings(tmp_db_path: str) -> Settings:
         return Settings(
             telegram_bot_token="test-token",
-            llm_api_key="test-key",
             searxng_url="https://search.example.com",
             searxng_username="testuser",
             searxng_password="testpass",
             agent={"name": "TestAgent"},
             database={"path": tmp_db_path},
+            providers={
+                "test": {
+                    "base_url": "https://api.example.com/v1",
+                    "api_key": "test-key",
+                },
+            },
+            models={
+                "test-fast": {"provider": "test", "id": "test/model"},
+                "test-fallback": {"provider": "test", "id": "test/fallback"},
+            },
             llm={
-                "default_model": "test/model",
-                "fallback_model": "test/fallback",
+                "fast": "test-fast",
+                "fallback": "test-fallback",
                 "max_tokens": 100,
                 "temperature": 0.5,
             },
             telegram={"mode": "polling", "webhook_url": ""},
             server={"host": "127.0.0.1", "port": 8000},
         )
+
+
+def make_test_settings(**overrides):
+    """Helper for tests that need a minimal Settings with provider/model plumbing."""
+    from odigos.config import Settings
+    defaults = {
+        "providers": {
+            "test": {"base_url": "https://api.example.com/v1", "api_key": "test-key"},
+        },
+        "models": {
+            "test-fast": {"provider": "test", "id": "test/model"},
+            "test-fallback": {"provider": "test", "id": "test/fallback"},
+        },
+        "llm": {"fast": "test-fast", "fallback": "test-fallback"},
+    }
+    defaults.update(overrides)
+    return Settings(**defaults)

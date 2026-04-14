@@ -116,7 +116,7 @@ async def dream_analyze_user(hb: "Heartbeat") -> None:
                 "conversations": "\n\n".join(conv_texts[:10]),
             },
             _PROFILE_PROMPT_FALLBACK,
-            model=hb._background_model or None,
+            intelligence="background",
             max_tokens=800,
             temperature=0.3,
         )
@@ -247,7 +247,7 @@ async def extract_experiences(hb: "Heartbeat") -> None:
                 "existing": existing_text,
             },
             _EXPERIENCE_FALLBACK,
-            model=hb._background_model or None,
+            intelligence="background",
             max_tokens=600,
             temperature=0.3,
         )
@@ -363,7 +363,7 @@ async def evaluate_plan_outcomes(hb: "Heartbeat") -> None:
                     "Plan steps:\n{steps}\n\nConversation excerpt:\n{conversation}\n\n"
                     'Respond ONLY with valid JSON: {{"score": 0.0-1.0, "achieved": true/false, "summary": "one sentence"}}'
                 ),
-                model=hb._background_model or None,
+                intelligence="background",
                 max_tokens=200,
                 temperature=0.2,
             )

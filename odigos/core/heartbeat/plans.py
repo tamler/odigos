@@ -186,7 +186,6 @@ async def work_in_progress_plans(hb: "Heartbeat") -> bool:
 
         # Build plan summary for headless context
         plan_summary = await build_plan_summary(hb.db, plan_id)
-        bg_model = getattr(hb, "background_model", "")
 
         hb.current_phase = "plans"
         hb.current_activity = f"Executing step {step_num}: {step_desc[:80]}"
@@ -202,7 +201,6 @@ async def work_in_progress_plans(hb: "Heartbeat") -> bool:
                 message,
                 headless=True,
                 plan_context=plan_summary,
-                background_model=bg_model,
             )
         finally:
             hb.current_phase = None

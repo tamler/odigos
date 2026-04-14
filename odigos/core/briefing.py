@@ -193,7 +193,7 @@ async def compose_briefing(
     db: Database,
     provider: LLMProvider,
     settings=None,
-    model: str = "",
+    intelligence: str = "background",
 ) -> str:
     """Gather data and compose an LLM-written morning briefing."""
     data = await gather_briefing_data(db, settings=settings)
@@ -206,7 +206,7 @@ async def compose_briefing(
         response = await call_llm(
             provider,
             [{"role": "user", "content": prompt}],
-            model=model,
+            intelligence=intelligence,
             log_name="briefing",
         )
         if response is None:

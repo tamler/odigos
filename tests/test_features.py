@@ -91,29 +91,58 @@ def _make_app(
 
 
 def _settings(**overrides):
+    provider_stub = SimpleNamespace(
+        base_url="https://api.example.com/v1",
+        api_key="sk-test",
+        model_dump=lambda: {
+            "base_url": "https://api.example.com/v1",
+            "api_key": "sk-test",
+        },
+    )
+    model_stub = SimpleNamespace(
+        provider="openrouter",
+        id="test/model",
+        cost_in_per_mtok=0.0,
+        cost_out_per_mtok=0.0,
+        vision=False,
+        context_window=0,
+        notes="",
+        model_dump=lambda: {
+            "provider": "openrouter",
+            "id": "test/model",
+            "cost_in_per_mtok": 0.0,
+            "cost_out_per_mtok": 0.0,
+            "vision": False,
+            "context_window": 0,
+            "notes": "",
+        },
+    )
     defaults = dict(
         api_key="test-key",
-        llm_api_key="sk-test",
         services={},
         service_key=lambda name: "",
+        providers={"openrouter": provider_stub},
+        models={"scout": model_stub},
         llm=SimpleNamespace(
-            base_url="https://api.example.com",
-            default_model="test/model",
-            fallback_model="test/fallback",
-            background_model="",
+            fast="scout",
+            smart="scout",
+            background="",
+            fallback="",
             max_tokens=4096,
             temperature=0.7,
             request_timeout_seconds=60.0,
             connect_timeout_seconds=10.0,
+            auto_route=True,
             model_dump=lambda: {
-                "base_url": "https://api.example.com",
-                "default_model": "test/model",
-                "fallback_model": "test/fallback",
-                "background_model": "",
+                "fast": "scout",
+                "smart": "scout",
+                "background": "",
+                "fallback": "",
                 "max_tokens": 4096,
                 "temperature": 0.7,
                 "request_timeout_seconds": 60.0,
                 "connect_timeout_seconds": 10.0,
+                "auto_route": True,
             },
         ),
         agent=SimpleNamespace(
@@ -418,9 +447,10 @@ class TestSettings:
         resp = client.get("/api/settings", headers=AUTH)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["llm_api_key"] == "****"
+        assert data["providers"]["openrouter"]["api_key"] == "****"
         assert data["api_key"] == "****"
-        assert data["llm"]["default_model"] == "test/model"
+        assert data["llm"]["fast"] == "scout"
+        assert data["models"]["scout"]["id"] == "test/model"
 
     def test_update_settings_writes_config(self, db, tmp_path):
         config_path = str(tmp_path / "config.yaml")
@@ -444,7 +474,7 @@ class TestSettings:
         # Verify in-memory hot-reload
         assert settings.agent.name == "NewName"
 
-    def test_update_llm_model_hot_reloads(self, db, tmp_path):
+    def test_update_llm_routing_hot_reloads(self, db, tmp_path):
         config_path = str(tmp_path / "config.yaml")
         env_path = str(tmp_path / ".env")
         settings = _settings()
@@ -452,44 +482,10 @@ class TestSettings:
         client = TestClient(app)
 
         resp = client.post("/api/settings", headers=AUTH, json={
-            "llm": {"default_model": "anthropic/claude-opus-4"},
+            "llm": {"fast": "gpt-5-nano"},
         })
         assert resp.status_code == 200
-        assert settings.llm.default_model == "anthropic/claude-opus-4"
-
-    def test_update_llm_api_key_writes_env(self, db, tmp_path):
-        config_path = str(tmp_path / "config.yaml")
-        env_path = str(tmp_path / ".env")
-        settings = _settings()
-        app = _make_app(db, settings, config_path=config_path, env_path=env_path)
-        client = TestClient(app)
-
-        resp = client.post("/api/settings", headers=AUTH, json={
-            "llm_api_key": "sk-new-key-12345",
-        })
-        assert resp.status_code == 200
-
-        # Verify .env file
-        env_contents = Path(env_path).read_text()
-        assert "LLM_API_KEY=sk-new-key-12345" in env_contents
-
-        # Verify in-memory
-        assert settings.llm_api_key == "sk-new-key-12345"
-
-    def test_masked_key_not_overwritten(self, db, tmp_path):
-        config_path = str(tmp_path / "config.yaml")
-        env_path = str(tmp_path / ".env")
-        Path(env_path).write_text("LLM_API_KEY=sk-original\n")
-        settings = _settings()
-        app = _make_app(db, settings, config_path=config_path, env_path=env_path)
-        client = TestClient(app)
-
-        # Sending "****" should NOT overwrite
-        resp = client.post("/api/settings", headers=AUTH, json={
-            "llm_api_key": "****",
-        })
-        assert resp.status_code == 200
-        assert "sk-original" in Path(env_path).read_text()
+        assert settings.llm.fast == "gpt-5-nano"
 
 
 # ===========================================================================

@@ -14,14 +14,20 @@ from odigos.config import (
 
 
 def test_settings_from_env_and_yaml():
-    """Settings load from .env vars + config.yaml."""
+    """Settings load a yaml config and expand ${ENV_VAR} in string values."""
     config = {
         "agent": {"name": "TestBot"},
         "database": {"path": "data/test.db"},
+        "providers": {
+            "test": {"base_url": "https://api.example.com/v1", "api_key": "${TEST_KEY}"},
+        },
+        "models": {
+            "mini": {"provider": "test", "id": "test/model"},
+            "backup": {"provider": "test", "id": "test/fallback"},
+        },
         "llm": {
-            "base_url": "https://api.example.com/v1",
-            "default_model": "test/model",
-            "fallback_model": "test/fallback",
+            "fast": "mini",
+            "fallback": "backup",
             "max_tokens": 512,
             "temperature": 0.5,
         },
@@ -35,47 +41,47 @@ def test_settings_from_env_and_yaml():
         config_path = f.name
 
     try:
-        os.environ["LLM_API_KEY"] = "test-key-456"
-
+        os.environ["TEST_KEY"] = "resolved-secret-abc"
         settings = load_settings(config_path)
 
         assert settings.telegram_bot_token == "test-token-123"
         assert settings.service_key("telegram") == "test-token-123"
-        assert settings.llm_api_key == "test-key-456"
+        assert settings.providers["test"].api_key == "resolved-secret-abc"
+        assert settings.providers["test"].base_url == "https://api.example.com/v1"
+        assert settings.models["mini"].id == "test/model"
+        assert settings.llm.fast == "mini"
+        assert settings.llm.fallback == "backup"
         assert settings.agent.name == "TestBot"
         assert settings.database.path == "data/test.db"
-        assert settings.llm.default_model == "test/model"
         assert settings.llm.max_tokens == 512
-        assert settings.llm.base_url == "https://api.example.com/v1"
         assert settings.telegram.mode == "polling"
         assert settings.server.port == 9000
     finally:
-        os.environ.pop("LLM_API_KEY", None)
+        os.environ.pop("TEST_KEY", None)
         os.unlink(config_path)
 
 
 def test_settings_defaults():
-    """Settings have sensible defaults from config.yaml.example."""
+    """Settings with only routing aliases still validate and expose defaults."""
     settings = Settings(
         services={"telegram": "tok"},
-        llm_api_key="key",
+        providers={"x": {"base_url": "https://a.example/v1", "api_key": "k"}},
+        models={"m": {"provider": "x", "id": "id/x"}},
+        llm={"fast": "m"},
     )
     assert settings.agent.name == "Odigos"
     assert settings.database.path == "data/odigos.db"
     assert settings.llm.max_tokens == 4096
-    assert settings.llm.base_url == "https://openrouter.ai/api/v1"
+    assert settings.llm.fast == "m"
     assert settings.telegram.mode == "polling"
     assert settings.server.port == 8000
 
 
 def test_searxng_config_from_env(monkeypatch):
     """SearXNG config reads URL, username, password from env vars."""
-    monkeypatch.setenv("LLM_API_KEY", "test-key")
     monkeypatch.setenv("SEARXNG_URL", "https://search.example.com")
     monkeypatch.setenv("SEARXNG_USERNAME", "nimda")
     monkeypatch.setenv("SEARXNG_PASSWORD", "secret123")
-
-    from odigos.config import Settings
 
     settings = Settings(services={"telegram": "test-token"})
     assert settings.searxng_url == "https://search.example.com"
@@ -94,10 +100,7 @@ class TestNewConfigSections:
         assert cfg.path == "skills"
 
     def test_settings_includes_new_sections(self):
-        settings = Settings(
-            services={"telegram": "test"},
-            llm_api_key="test",
-        )
+        settings = Settings(services={"telegram": "test"})
         assert settings.budget.daily_limit_usd == 1.00
         assert settings.skills.path == "skills"
 

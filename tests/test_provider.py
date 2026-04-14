@@ -4,6 +4,18 @@ from unittest.mock import AsyncMock, patch
 
 from odigos.providers.base import LLMResponse, ToolCall
 from odigos.providers.llm import LLMClient
+from odigos.config import ProviderConfig, ModelConfig
+
+
+def _make_test_client():
+    return LLMClient(
+        providers={"test": ProviderConfig(base_url="https://api.example.com/v1", api_key="test-key")},
+        models={
+            "primary": ModelConfig(provider="test", id="test/model"),
+            "fallback": ModelConfig(provider="test", id="test/fallback"),
+        },
+        routing={"fast": "primary", "fallback": "fallback"},
+    )
 from odigos.tools.base import BaseTool, ToolResult
 from odigos.tools.goals import CreateReminderTool, CreateTodoTool, CreateGoalTool
 from odigos.tools.registry import ToolRegistry
@@ -150,8 +162,8 @@ class TestLLMClientToolCalling:
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
             "model": "test/model", "id": "gen-123",
         })
-        provider = LLMClient(base_url="https://api.example.com/v1", api_key="test-key", default_model="test/model", fallback_model="test/fallback")
-        with patch.object(provider._client, "post", new_callable=AsyncMock, return_value=mock_response) as mock_post:
+        provider = _make_test_client()
+        with patch.object(provider._clients["test"], "post", new_callable=AsyncMock, return_value=mock_response) as mock_post:
             await provider.complete([{"role": "user", "content": "Hello"}], tools=tools)
             call_payload = mock_post.call_args.kwargs["json"]
             assert "tools" in call_payload
@@ -165,8 +177,8 @@ class TestLLMClientToolCalling:
             "usage": {"prompt_tokens": 10, "completion_tokens": 15},
             "model": "test/model", "id": "gen-456",
         })
-        provider = LLMClient(base_url="https://api.example.com/v1", api_key="test-key", default_model="test/model", fallback_model="test/fallback")
-        with patch.object(provider._client, "post", new_callable=AsyncMock, return_value=mock_response):
+        provider = _make_test_client()
+        with patch.object(provider._clients["test"], "post", new_callable=AsyncMock, return_value=mock_response):
             result = await provider.complete(
                 [{"role": "user", "content": "Search"}],
                 tools=[{"type": "function", "function": {"name": "web_search", "description": "test", "parameters": {}}}],
@@ -184,8 +196,8 @@ class TestLLMClientToolCalling:
             "usage": {"prompt_tokens": 10, "completion_tokens": 5},
             "model": "test/model", "id": "gen-789",
         })
-        provider = LLMClient(base_url="https://api.example.com/v1", api_key="test-key", default_model="test/model", fallback_model="test/fallback")
-        with patch.object(provider._client, "post", new_callable=AsyncMock, return_value=mock_response):
+        provider = _make_test_client()
+        with patch.object(provider._clients["test"], "post", new_callable=AsyncMock, return_value=mock_response):
             result = await provider.complete([{"role": "user", "content": "Hello"}])
             assert result.tool_calls is None
         await provider.close()

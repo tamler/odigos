@@ -53,7 +53,7 @@ class Agent:
         tracer: Tracer | None = None,
         approval_gate: ApprovalGate | None = None,
         classifier: QueryClassifier | None = None,
-        reasoning_model: str = "",
+        auto_route: bool = True,
         settings=None,
         entity_graph=None,
     ) -> None:
@@ -92,7 +92,7 @@ class Agent:
             budget_tracker=budget_tracker,
             tracer=tracer,
             approval_gate=approval_gate,
-            reasoning_model=reasoning_model,
+            auto_route=auto_route,
         )
         self.reflector = Reflector(
             db,
@@ -111,10 +111,14 @@ class Agent:
         abort_event: asyncio.Event | None = None,
         headless: bool = False,
         plan_context: str = "",
-        background_model: str = "",
+        intelligence: str = "",
         recent_turns: list[dict] | None = None,
     ) -> str:
-        """Process an incoming message through the ReAct loop."""
+        """Process an incoming message through the ReAct loop.
+
+        `intelligence` overrides auto-routing: pass "fast"|"smart"|"background"
+        to pin the tier. Empty string (default) lets the classifier decide.
+        """
         conversation_id = await self._get_or_create_conversation(message)
 
         # Extract context_metadata from message metadata (set by ws.py)
@@ -132,7 +136,7 @@ class Agent:
                 abort_event=abort_event,
                 headless=headless,
                 plan_context=plan_context,
-                background_model=background_model,
+                intelligence=intelligence,
                 recent_turns=recent_turns,
                 streaming_msg_id=streaming_msg_id,
             )
@@ -148,7 +152,7 @@ class Agent:
         abort_event: asyncio.Event | None = None,
         headless: bool = False,
         plan_context: str = "",
-        background_model: str = "",
+        intelligence: str = "",
         recent_turns: list[dict] | None = None,
         streaming_msg_id: str | None = None,
     ) -> str:
@@ -191,12 +195,11 @@ class Agent:
                     "Use /status to see current budget usage."
                 )
             if status.circuit_breaker:
-                # Degraded mode: force fallback model, reduce tool turns
-                background_model = background_model or getattr(
-                    self.provider, "fallback_model", ""
-                )
+                # Degraded mode: pin to background tier (cheapest) to finish the turn
+                if not intelligence:
+                    intelligence = "background"
                 if not headless:
-                    logger.info("Budget circuit breaker: using fallback model")
+                    logger.info("Budget circuit breaker: pinning to background tier")
 
         # Classify the query
         analysis = None
@@ -224,6 +227,12 @@ class Agent:
             except Exception:
                 logger.warning("Headless context build failed, falling back to normal mode", exc_info=True)
 
+        # Headless (heartbeat/plan/todo) runs default to background tier if the
+        # caller didn't pin one — these are self-prompts, not user chat.
+        effective_intelligence = intelligence
+        if headless and not effective_intelligence:
+            effective_intelligence = "background"
+
         try:
             result = await asyncio.wait_for(
                 self.executor.execute(
@@ -236,7 +245,7 @@ class Agent:
                     context_metadata=context_metadata,
                     stream_callback=stream_callback,
                     headless_messages=headless_messages,
-                    override_model=background_model,
+                    intelligence=effective_intelligence,
                 ),
                 timeout=self._run_timeout,
             )

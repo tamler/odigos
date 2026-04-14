@@ -5,10 +5,25 @@ from odigos.config_validator import validate_settings
 
 
 def _settings(**overrides) -> Settings:
-    """Build a Settings object with safe defaults."""
+    """Build a Settings object with a minimal valid provider/model set."""
     defaults: dict = {
-        "llm_api_key": "sk-test-key",
         "services": {"groq": "gsk-test-key"},
+        "providers": {
+            "openrouter": {
+                "base_url": "https://openrouter.ai/api/v1",
+                "api_key": "sk-test-key",
+            },
+        },
+        "models": {
+            "scout": {
+                "provider": "openrouter",
+                "id": "meta-llama/llama-4-scout",
+                "cost_in_per_mtok": 0.08,
+                "cost_out_per_mtok": 0.30,
+            },
+        },
+        # Leave smart/background/fallback empty so they fall through to `fast`
+        "llm": {"fast": "scout", "smart": "", "background": "", "fallback": ""},
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -16,18 +31,30 @@ def _settings(**overrides) -> Settings:
 
 def test_valid_config_no_warnings(tmp_path):
     db_path = tmp_path / "odigos.db"
-    s = _settings(
-        database={"path": str(db_path)},
-        llm={"cost_per_million_input": 1.0, "cost_per_million_output": 3.0},
-    )
+    s = _settings(database={"path": str(db_path)})
     warnings = validate_settings(s)
     assert warnings == []
 
 
-def test_missing_llm_key():
-    s = _settings(llm_api_key="")
+def test_missing_provider_key():
+    """A provider without an api_key surfaces a warning."""
+    s = _settings(
+        providers={
+            "openrouter": {
+                "base_url": "https://openrouter.ai/api/v1",
+                "api_key": "",
+            },
+        },
+    )
     warnings = validate_settings(s)
-    assert any("llm_api_key" in w for w in warnings)
+    assert any("api_key" in w for w in warnings)
+
+
+def test_missing_providers_block():
+    """No providers at all surfaces a warning."""
+    s = Settings()
+    warnings = validate_settings(s)
+    assert any("providers" in w.lower() for w in warnings)
 
 
 def test_negative_budget():

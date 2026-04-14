@@ -251,8 +251,7 @@ class Executor:
         budget_tracker: BudgetTracker | None = None,
         tracer: Tracer | None = None,
         approval_gate: ApprovalGate | None = None,
-        reasoning_model: str = "",
-        background_model: str = "",
+        auto_route: bool = True,
     ) -> None:
         self.provider = provider
         self.context_assembler = context_assembler
@@ -263,8 +262,7 @@ class Executor:
         self.budget_tracker = budget_tracker
         self.tracer = tracer
         self.approval_gate = approval_gate
-        self._reasoning_model = reasoning_model
-        self._background_model = background_model
+        self._auto_route = auto_route
         self.evaluator: Evaluator | None = None
         self._active_skill_name: str | None = None
         self._active_skill_tools: set[str] = set()
@@ -284,7 +282,7 @@ class Executor:
         context_metadata: dict | None = None,
         stream_callback: Callable[[str], Awaitable[None]] | None = None,
         headless_messages: list[dict] | None = None,
-        override_model: str = "",
+        intelligence: str = "",
     ) -> ExecuteResult:
         start_time = time.monotonic()
         tools_used: set[str] = set()
@@ -377,15 +375,23 @@ class Executor:
             # Strip internal tags before sending to LLM
             clean_messages = [{k: v for k, v in m.items() if not k.startswith("_")} for m in messages]
 
-            # Call LLM -- use reasoning model for complex queries, downgrade on budget warning
+            # Call LLM — intelligence-tier routing:
+            #   1) explicit `intelligence` from caller wins
+            #   2) budget throttled → background tier (cheapest)
+            #   3) complex / document / planning classification → smart tier
+            #   4) otherwise → fast (default)
             model_kwargs: dict = {}
-            if override_model:
-                model_kwargs["model"] = override_model
-            elif budget_throttled and self._background_model:
-                model_kwargs["model"] = self._background_model
-            elif query_analysis and query_analysis.classification in ("document_query", "complex", "planning"):
-                if self._reasoning_model:
-                    model_kwargs["model"] = self._reasoning_model
+            tier = intelligence
+            if not tier:
+                if budget_throttled:
+                    tier = "background"
+                elif self._auto_route and query_analysis:
+                    if query_analysis.classification in ("document_query", "complex", "planning"):
+                        tier = "smart"
+                    elif getattr(query_analysis, "tier", 1) >= 3:
+                        tier = "smart"
+            if tier:
+                model_kwargs["intelligence"] = tier
             try:
                 # Use streaming when a stream_callback is provided
                 if stream_callback and hasattr(self.provider, "stream_complete"):

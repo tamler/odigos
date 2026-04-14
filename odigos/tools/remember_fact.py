@@ -42,11 +42,10 @@ class RememberFactTool(BaseTool):
         "required": ["fact"],
     }
 
-    def __init__(self, db: Database, provider=None, embedder=None, background_model: str = "") -> None:
+    def __init__(self, db: Database, provider=None, embedder=None) -> None:
         self.db = db
         self.provider = provider
         self.embedder = embedder
-        self._background_model = background_model
 
     async def execute(self, params: dict) -> ToolResult:
         fact = params.get("fact", "").strip()
@@ -65,7 +64,6 @@ class RememberFactTool(BaseTool):
                 confidence=1.0,
                 provider=self.provider,
                 embedder=self.embedder,
-                model=self._background_model,
             )
 
             # Backup user data to disk

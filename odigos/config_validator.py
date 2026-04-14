@@ -19,15 +19,48 @@ def validate_settings(settings: Settings) -> list[str]:
     """
     warnings: list[str] = []
 
-    # LLM configuration
-    if not settings.llm_api_key:
+    # LLM configuration — providers, models, routing
+    if not settings.providers:
         warnings.append(
-            "llm_api_key is empty -- LLM calls will fail."
+            "No providers configured — add a `providers:` block to config.yaml."
         )
-    if not settings.llm.base_url:
+    if not settings.models:
         warnings.append(
-            "llm.base_url is empty -- LLM calls will fail."
+            "No models configured — add a `models:` block to config.yaml."
         )
+    for name, provider in settings.providers.items():
+        if not provider.base_url:
+            warnings.append(f"Provider '{name}' has no base_url.")
+        # Local endpoints (Ollama, LM Studio, localhost) legitimately don't need keys.
+        is_local = any(
+            marker in provider.base_url.lower()
+            for marker in ("localhost", "host.docker.internal", "127.0.0.1")
+        )
+        if not provider.api_key and not is_local:
+            warnings.append(
+                f"Provider '{name}' has no api_key — calls will fail. "
+                "Use ${ENV_VAR} to pull from .env."
+            )
+    for alias, model in settings.models.items():
+        if model.provider not in settings.providers:
+            warnings.append(
+                f"Model '{alias}' references unknown provider '{model.provider}'."
+            )
+        if not model.id:
+            warnings.append(f"Model '{alias}' has no id.")
+
+    # Routing — `fast` is mandatory, others fall back to it
+    if not settings.llm.fast:
+        warnings.append(
+            "llm.fast is empty — at least one routing tier is required."
+        )
+    else:
+        for tier in ("fast", "smart", "background", "fallback"):
+            alias = getattr(settings.llm, tier, "") or ""
+            if alias and alias not in settings.models:
+                warnings.append(
+                    f"llm.{tier} references unknown model alias '{alias}'."
+                )
 
     # Budget sanity
     if settings.budget.daily_limit_usd <= 0:
@@ -39,19 +72,23 @@ def validate_settings(settings: Settings) -> list[str]:
             "budget.monthly_limit_usd is <= 0."
         )
 
-    # Budget cost tracking: warn if using safety-net defaults
+    # Cost tracking: warn when a budgeted model on a remote provider has no rates.
+    # Local models (Ollama / LM Studio / localhost) are free by definition.
     has_budget = settings.budget.daily_limit_usd > 0 or settings.budget.monthly_limit_usd > 0
-    has_cost_rate = (
-        settings.llm.cost_per_million_tokens > 0
-        or settings.llm.cost_per_million_input > 0
-        or settings.llm.cost_per_million_output > 0
-    )
-    if has_budget and not has_cost_rate:
-        warnings.append(
-            "llm.cost_per_million_input/output not configured -- using "
-            "safety-net defaults ($1/$3 per million). Set explicit rates "
-            "in config.yaml for accurate cost tracking."
-        )
+    if has_budget:
+        for alias, model in settings.models.items():
+            if model.cost_in_per_mtok > 0 or model.cost_out_per_mtok > 0:
+                continue
+            provider = settings.providers.get(model.provider)
+            if provider:
+                base = (provider.base_url or "").lower()
+                if any(m in base for m in ("localhost", "host.docker.internal", "127.0.0.1")):
+                    continue
+            warnings.append(
+                f"Model '{alias}' has no cost rates set — budget tracking "
+                "will rely on provider-reported cost only."
+            )
+            break  # one warning is enough
     if (
         settings.budget.daily_limit_usd
         > settings.budget.monthly_limit_usd

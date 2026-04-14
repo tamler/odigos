@@ -129,64 +129,71 @@ if ! grep -q "^SESSION_SECRET=.\+" .env 2>/dev/null; then
 fi
 
 # ── LLM Configuration ──────────────────────────────────────────────
-if grep -q "^LLM_API_KEY=.\+" .env && ! grep -q "your-api-key" .env; then
-    info "LLM_API_KEY already configured"
+if grep -qE "^(OPENROUTER|OPENAI|ANTHROPIC|GROQ)_API_KEY=.\S" .env 2>/dev/null; then
+    info "LLM provider key already configured"
 else
     echo ""
     bold "LLM Provider Setup"
     echo ""
-    echo "  Odigos works with any OpenAI-compatible API."
+    echo "  Odigos uses named providers + models + intelligence routing."
+    echo "  The installer seeds sensible defaults — you can add more from the dashboard later."
     echo ""
-    echo "  Common providers:"
-    echo "    1) OpenRouter  (https://openrouter.ai/api/v1) — multi-model, recommended"
-    echo "    2) OpenAI      (https://api.openai.com/v1)"
-    echo "    3) Ollama      (http://localhost:11434/v1) — free, local models"
-    echo "    4) LM Studio   (http://localhost:1234/v1) — free, local models"
-    echo "    5) Custom URL"
+    echo "  Choose your primary provider:"
+    echo "    1) OpenRouter  — recommended, multi-model, Scout + DeepSeek + nano routing"
+    echo "    2) OpenAI      — gpt-4o + gpt-4o-mini routing"
+    echo "    3) Ollama      — local models on host"
+    echo "    4) LM Studio   — local models on host"
+    echo "    5) Custom      — single OpenAI-compatible endpoint"
     echo ""
 
     read -rp "  Choose provider [1-5] (default: 1): " provider_choice
     provider_choice=${provider_choice:-1}
 
     case $provider_choice in
-        1) base_url="https://openrouter.ai/api/v1"
-           default_model="deepseek/deepseek-v3.2"
-           fallback_model="google/gemini-2.5-flash" ;;
-        2) base_url="https://api.openai.com/v1"
-           default_model="gpt-4o"
-           fallback_model="gpt-4o-mini" ;;
-        3) base_url="http://localhost:11434/v1"
-           default_model="llama3.2"
-           fallback_model="llama3.2" ;;
-        4) base_url="http://localhost:1234/v1"
-           default_model="default"
-           fallback_model="default" ;;
-        5) read -rp "  Enter base URL: " base_url
-           read -rp "  Enter default model: " default_model
-           read -rp "  Enter fallback model (or same): " fallback_model
-           fallback_model=${fallback_model:-$default_model} ;;
-        *) base_url="https://openrouter.ai/api/v1"
-           default_model="deepseek/deepseek-v3.2"
-           fallback_model="google/gemini-2.5-flash" ;;
+        1) provider_kind="openrouter" ;;
+        2) provider_kind="openai" ;;
+        3) provider_kind="ollama" ;;
+        4) provider_kind="lmstudio" ;;
+        5) provider_kind="custom" ;;
+        *) provider_kind="openrouter" ;;
     esac
 
     echo ""
-    if [[ "$base_url" == *"localhost"* ]]; then
-        read -rp "  Enter LLM API key (press Enter to skip for local models): " llm_key
-        llm_key=${llm_key:-no-key-needed}
-    else
-        read -rp "  Enter LLM API key: " llm_key
-        while [ -z "$llm_key" ]; do
-            warn "LLM API key is required for remote providers."
-            read -rp "  Enter LLM API key: " llm_key
-        done
-    fi
+    case $provider_kind in
+        openrouter)
+            key_var="OPENROUTER_API_KEY"
+            read -rp "  Enter OpenRouter API key: " llm_key
+            while [ -z "$llm_key" ]; do
+                warn "An OpenRouter API key is required."
+                read -rp "  Enter OpenRouter API key: " llm_key
+            done
+            ;;
+        openai)
+            key_var="OPENAI_API_KEY"
+            read -rp "  Enter OpenAI API key: " llm_key
+            while [ -z "$llm_key" ]; do
+                warn "An OpenAI API key is required."
+                read -rp "  Enter OpenAI API key: " llm_key
+            done
+            ;;
+        ollama|lmstudio)
+            key_var=""
+            llm_key=""
+            ;;
+        custom)
+            read -rp "  Provider name (e.g. groq, anthropic): " custom_name
+            custom_name=${custom_name:-custom}
+            read -rp "  Base URL: " custom_url
+            read -rp "  Model id (e.g. moonshotai/kimi-k2): " custom_model
+            read -rp "  API key (press Enter if the endpoint doesn't need one): " llm_key
+            key_var="$(echo "$custom_name" | tr '[:lower:]' '[:upper:]')_API_KEY"
+            ;;
+    esac
 
-    set_env "LLM_API_KEY" "$llm_key"
-    set_env "LLM_BASE_URL" "$base_url"
-    set_env "LLM_DEFAULT_MODEL" "$default_model"
-    set_env "LLM_FALLBACK_MODEL" "$fallback_model"
-    info "Updated .env with LLM settings"
+    if [ -n "$key_var" ] && [ -n "$llm_key" ]; then
+        set_env "$key_var" "$llm_key"
+        info "Saved $key_var to .env"
+    fi
 
     # ── Agent Name ────────────────────────────────────────────────────
     echo ""
@@ -235,12 +242,181 @@ api_key: "${dashboard_key}"
 agent:
   name: "${agent_name}"
 
+EOF
+
+    case $provider_kind in
+        openrouter)
+            cat >> config.yaml << 'EOF'
+providers:
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"
+
+models:
+  scout:
+    provider: openrouter
+    id: "meta-llama/llama-4-scout"
+    cost_in_per_mtok: 0.08
+    cost_out_per_mtok: 0.30
+    vision: true
+    context_window: 131072
+    notes: "Cheap + vision default"
+  deepseek-v3.2:
+    provider: openrouter
+    id: "deepseek/deepseek-v3.2"
+    cost_in_per_mtok: 0.27
+    cost_out_per_mtok: 1.10
+    vision: false
+    context_window: 163840
+    notes: "Reasoning tier"
+  gpt-5-nano:
+    provider: openrouter
+    id: "openai/gpt-5-nano"
+    cost_in_per_mtok: 0.05
+    cost_out_per_mtok: 0.40
+    vision: false
+    context_window: 128000
+    notes: "Fallback safety net"
+
 llm:
-  base_url: "${base_url}"
-  default_model: "${default_model}"
-  fallback_model: "${fallback_model}"
+  fast: scout
+  smart: deepseek-v3.2
+  background: scout
+  fallback: gpt-5-nano
   max_tokens: 4096
   temperature: 0.7
+  auto_route: true
+EOF
+            ;;
+        openai)
+            cat >> config.yaml << 'EOF'
+providers:
+  openai:
+    base_url: "https://api.openai.com/v1"
+    api_key: "${OPENAI_API_KEY}"
+
+models:
+  gpt-4o-mini:
+    provider: openai
+    id: "gpt-4o-mini"
+    cost_in_per_mtok: 0.15
+    cost_out_per_mtok: 0.60
+    vision: true
+    context_window: 128000
+    notes: "Cheap + vision default"
+  gpt-4o:
+    provider: openai
+    id: "gpt-4o"
+    cost_in_per_mtok: 2.50
+    cost_out_per_mtok: 10.00
+    vision: true
+    context_window: 128000
+    notes: "Reasoning tier"
+
+llm:
+  fast: gpt-4o-mini
+  smart: gpt-4o
+  background: gpt-4o-mini
+  fallback: gpt-4o-mini
+  max_tokens: 4096
+  temperature: 0.7
+  auto_route: true
+EOF
+            ;;
+        ollama)
+            read -rp "  Local model id (default: llama3.2): " local_model
+            local_model=${local_model:-llama3.2}
+            cat >> config.yaml << EOF
+providers:
+  ollama:
+    base_url: "http://localhost:11434/v1"
+    api_key: ""
+
+models:
+  local:
+    provider: ollama
+    id: "${local_model}"
+    cost_in_per_mtok: 0.0
+    cost_out_per_mtok: 0.0
+    vision: false
+    context_window: 8192
+    notes: "Local Ollama model"
+
+llm:
+  fast: local
+  smart: local
+  background: local
+  fallback: local
+  max_tokens: 4096
+  temperature: 0.7
+  auto_route: false
+EOF
+            ;;
+        lmstudio)
+            read -rp "  Local model id (default: default): " local_model
+            local_model=${local_model:-default}
+            cat >> config.yaml << EOF
+providers:
+  lmstudio:
+    base_url: "http://localhost:1234/v1"
+    api_key: ""
+
+models:
+  local:
+    provider: lmstudio
+    id: "${local_model}"
+    cost_in_per_mtok: 0.0
+    cost_out_per_mtok: 0.0
+    vision: false
+    context_window: 8192
+    notes: "Local LM Studio model"
+
+llm:
+  fast: local
+  smart: local
+  background: local
+  fallback: local
+  max_tokens: 4096
+  temperature: 0.7
+  auto_route: false
+EOF
+            ;;
+        custom)
+            api_key_yaml=""
+            if [ -n "$key_var" ] && [ -n "$llm_key" ]; then
+                api_key_yaml="\"\${${key_var}}\""
+            else
+                api_key_yaml='""'
+            fi
+            cat >> config.yaml << EOF
+providers:
+  ${custom_name}:
+    base_url: "${custom_url}"
+    api_key: ${api_key_yaml}
+
+models:
+  primary:
+    provider: ${custom_name}
+    id: "${custom_model}"
+    cost_in_per_mtok: 0.0
+    cost_out_per_mtok: 0.0
+    vision: false
+    context_window: 0
+    notes: "Configured during install"
+
+llm:
+  fast: primary
+  smart: primary
+  background: primary
+  fallback: primary
+  max_tokens: 4096
+  temperature: 0.7
+  auto_route: false
+EOF
+            ;;
+    esac
+
+    cat >> config.yaml << EOF
 
 budget:
   daily_limit_usd: 1.00
@@ -257,7 +433,6 @@ voice:
   tts_provider: "${voice_tts}"
 EOF
 
-    # Add tts_voice only when voice is enabled
     if [ -n "$voice_tts_voice" ]; then
         echo "  tts_voice: \"${voice_tts_voice}\"" >> config.yaml
     fi

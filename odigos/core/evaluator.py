@@ -437,7 +437,7 @@ class Evaluator:
                 "feedback": f"{feedback:.1f}",
             },
             _RUBRIC_FALLBACK,
-            model=getattr(self.provider, "fallback_model", None),
+            intelligence="background",
             max_tokens=300,
             temperature=0.2,
         )
@@ -455,7 +455,7 @@ class Evaluator:
                 "feedback": f"{feedback:.1f}",
             },
             _SCORING_FALLBACK,
-            model=getattr(self.provider, "fallback_model", None),
+            intelligence="background",
             max_tokens=300,
             temperature=0.2,
         )
@@ -628,9 +628,7 @@ class Evaluator:
             "sprint_contract.md",
             {"goal": goal, "steps": steps_text},
             self._SPRINT_CONTRACT_FALLBACK,
-            model=getattr(
-                self.provider, "fallback_model", None
-            ),
+            intelligence="background",
             max_tokens=500,
             temperature=0.2,
         )

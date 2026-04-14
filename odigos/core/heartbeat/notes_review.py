@@ -52,13 +52,12 @@ async def review_notebooks(hb: "Heartbeat") -> int:
 
         # Build review prompt
         prompt = await _build_review_prompt(user_content, active_notes)
-        model = getattr(hb, "background_model", None) or "test/model"
 
         response = await hb.llm_provider.complete(
             messages=[{"role": "system", "content": prompt}],
             temperature=0.4,
             max_tokens=1500,
-            model=model,
+            intelligence="background",
         )
 
         parsed = _parse_observations(response.content)

@@ -128,22 +128,41 @@ class Bootstrapper:
     # Phase 2: LLM provider
     # ------------------------------------------------------------------
     async def init_llm(self) -> None:
-        """Phase 2: LLM provider setup."""
+        """Phase 2: LLM provider setup — multi-provider with tiered routing."""
         from odigos.providers.llm import LLMClient
 
         s = self.settings
+
+        if not s.providers:
+            raise RuntimeError(
+                "No LLM providers configured. Add a `providers:` block to config.yaml "
+                "with at least one OpenAI-compatible endpoint."
+            )
+        if not s.models:
+            raise RuntimeError(
+                "No models configured. Add a `models:` block to config.yaml."
+            )
+
+        # Routing table: resolve empty tiers to the `fast` default.
+        routing = {
+            "fast": s.llm.fast,
+            "smart": s.llm.smart or s.llm.fast,
+            "background": s.llm.background or s.llm.fast,
+            "fallback": s.llm.fallback or s.llm.fast,
+        }
+
         self.container.llm_provider = LLMClient(
-            base_url=s.llm.base_url,
-            api_key=s.llm_api_key,
-            default_model=s.llm.default_model,
-            fallback_model=s.llm.fallback_model,
+            providers=s.providers,
+            models=s.models,
+            routing=routing,
             max_tokens=s.llm.max_tokens,
             temperature=s.llm.temperature,
             request_timeout=s.llm.request_timeout_seconds,
             connect_timeout=s.llm.connect_timeout_seconds,
-            cost_per_million_tokens=s.llm.cost_per_million_tokens,
-            cost_per_million_input=s.llm.cost_per_million_input,
-            cost_per_million_output=s.llm.cost_per_million_output,
+        )
+        logger.info(
+            "LLM provider initialized: fast=%s smart=%s background=%s fallback=%s",
+            routing["fast"], routing["smart"], routing["background"], routing["fallback"],
         )
         logger.info("Starting Odigos agent: %s", s.agent.name)
 
@@ -387,7 +406,6 @@ class Bootstrapper:
         _embedder = memory_store._embedder if memory_store else None
         registry.register(RememberFactTool(
             db=db, provider=provider, embedder=_embedder,
-            background_model=settings.llm.background_model,
         ))
         logger.info("Remember fact tool registered")
 
@@ -796,7 +814,7 @@ class Bootstrapper:
             tracer=self.container.tracer,
             approval_gate=approval_gate,
             classifier=classifier,
-            reasoning_model=s.llm.reasoning_model,
+            auto_route=s.llm.auto_route,
             settings=s,
         )
         self.container.agent = agent
@@ -843,9 +861,8 @@ class Bootstrapper:
         self.container.agent.message_bus = self.container.message_bus
         self.container.agent.reflector.message_bus = self.container.message_bus
         self.container.agent.reflector._extraction_provider = self.container.llm_provider
-        self.container.agent.reflector._extraction_model = (
-            getattr(self.settings.llm, 'background_model', '') or ''
-        )
+        # Reflector extracts entities using the background tier — cheapest model.
+        self.container.agent.reflector._extraction_intelligence = "background"
 
         # Wire subagent manager tracer
         if hasattr(self, "_subagent_manager"):
@@ -975,7 +992,6 @@ class Bootstrapper:
             agent_role=s.agent.role,
             agent_description=s.agent.description,
             announce_interval=s.heartbeat.announce_interval_seconds,
-            background_model=s.llm.background_model,
             cron_manager=self.container.cron_manager,
             notifier=self.container.notifier,
             scheduler=self.container.scheduler,

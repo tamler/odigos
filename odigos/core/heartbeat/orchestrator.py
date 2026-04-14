@@ -45,7 +45,6 @@ class Heartbeat:
         agent_role: str = "",
         agent_description: str = "",
         announce_interval: int = 60,
-        background_model: str = "",
         cron_manager: CronManager | None = None,
         notifier: Notifier | None = None,
         scheduler: Scheduler | None = None,
@@ -63,7 +62,6 @@ class Heartbeat:
         self.channel_registry = channel_registry
         self.goal_store = goal_store
         self.provider = provider
-        self._background_model = background_model
         self._interval = interval
         self._max_todos_per_tick = max_todos_per_tick
         self._idle_think_interval = idle_think_interval

@@ -223,7 +223,7 @@ class Strategist:
             "strategist.md",
             prompt_vars,
             _STRATEGIST_FALLBACK,
-            model=getattr(self.provider, "fallback_model", None),
+            intelligence="smart",
             max_tokens=800,
             temperature=0.4,
         )

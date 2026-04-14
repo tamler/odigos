@@ -26,7 +26,7 @@ ALLOWED_KEYS = [
     "heartbeat.morning_briefing",
 ]
 
-BLOCKED_PREFIXES = ["api_key", "llm_api_key", "budget", "llm"]
+BLOCKED_PREFIXES = ["api_key", "providers", "models", "llm", "budget"]
 
 
 class ManageSettingsTool(BaseTool):

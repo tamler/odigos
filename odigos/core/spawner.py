@@ -63,7 +63,12 @@ class Spawner:
         description: str,
         specialty: str | None = None,
     ) -> dict:
-        """Generate a config.yaml structure for a new specialist agent."""
+        """Generate a config.yaml structure for a new specialist agent.
+
+        Inherits providers/models from the parent so the child agent can
+        reach the same LLM endpoints out of the box. Operator can override
+        per-child later by editing the generated config.
+        """
         llm = self.llm_config
         ws_port = self.server_config.ws_port if self.server_config else 8001
         return {
@@ -75,9 +80,11 @@ class Spawner:
                 "allow_external_evaluation": False,
             },
             "llm": {
-                "base_url": llm.base_url if llm else "https://openrouter.ai/api/v1",
-                "default_model": llm.default_model if llm else "deepseek/deepseek-v3.2",
-                "fallback_model": llm.fallback_model if llm else "google/gemini-2.5-flash",
+                "fast": llm.fast if llm else "scout",
+                "smart": (llm.smart if llm else "deepseek-v3.2"),
+                "background": llm.background if llm else "",
+                "fallback": llm.fallback if llm else "",
+                "auto_route": llm.auto_route if llm else True,
             },
             "peers": [
                 {

@@ -5,20 +5,40 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { get, post } from '@/lib/api'
 import { toast } from 'sonner'
-import { Sun, Moon, Monitor } from 'lucide-react'
+import { Sun, Moon, Monitor, Plus, Trash2 } from 'lucide-react'
 
-const PROVIDERS = [
-  { id: 'openrouter', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4', fallback: 'google/gemini-2.0-flash-001' },
-  { id: 'openai', name: 'OpenAI', url: 'https://api.openai.com/v1', model: 'gpt-4o', fallback: 'gpt-4o-mini' },
-  { id: 'ollama', name: 'Ollama', url: 'http://host.docker.internal:11434/v1', model: 'llama3.2', fallback: 'llama3.2' },
-  { id: 'lmstudio', name: 'LM Studio', url: 'http://host.docker.internal:1234/v1', model: 'default', fallback: 'default' },
-  { id: 'custom', name: 'Custom', url: '', model: '', fallback: '' },
-]
+interface ProviderEntry {
+  base_url: string
+  api_key: string // "****" when masked, empty string to delete, new value to replace
+}
+
+interface ModelEntry {
+  provider: string
+  id: string
+  cost_in_per_mtok: number
+  cost_out_per_mtok: number
+  vision: boolean
+  context_window: number
+  notes?: string
+}
+
+interface LLMRouting {
+  fast: string
+  smart: string
+  background: string
+  fallback: string
+  max_tokens: number
+  temperature: number
+  request_timeout_seconds: number
+  connect_timeout_seconds: number
+  auto_route: boolean
+}
 
 interface SettingsData {
-  llm_api_key: string
   api_key: string
-  llm: { base_url: string; default_model: string; fallback_model: string; background_model: string; max_tokens: number; temperature: number }
+  providers: Record<string, ProviderEntry>
+  models: Record<string, ModelEntry>
+  llm: LLMRouting
   agent: { name: string; profile?: string; max_tool_turns: number; run_timeout_seconds: number }
   budget: { daily_limit_usd: number; monthly_limit_usd: number; warn_threshold: number }
   heartbeat: { interval_seconds: number; max_todos_per_tick: number; idle_think_interval: number }
@@ -56,7 +76,6 @@ export default function GeneralSettings({ active }: Props) {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [saving, setSaving] = useState(false)
   const [applyingProfile, setApplyingProfile] = useState<string | null>(null)
-  const [selectedProvider, setSelectedProvider] = useState<string | null>(null)
   const [chatTextSize, setChatTextSize] = useState(() => localStorage.getItem('chat-text-size') || 'medium')
   const { theme, setTheme } = useTheme()
 
@@ -87,19 +106,69 @@ export default function GeneralSettings({ active }: Props) {
     }
   }
 
-  function selectProvider(id: string) {
-    const p = PROVIDERS.find((p) => p.id === id)
-    if (!p || !settings) return
-    setSelectedProvider(id)
-    setSettings({
-      ...settings,
-      llm: { ...settings.llm, base_url: p.url, default_model: p.model, fallback_model: p.fallback },
-    })
-  }
-
   function update(section: string, field: string, value: string | number | boolean) {
     if (!settings) return
     setSettings({ ...settings, [section]: { ...(settings as any)[section], [field]: value } })
+  }
+
+  function updateProvider(name: string, patch: Partial<ProviderEntry>) {
+    if (!settings) return
+    const next = { ...settings.providers }
+    next[name] = { ...(next[name] || { base_url: '', api_key: '' }), ...patch }
+    setSettings({ ...settings, providers: next })
+  }
+
+  function addProvider() {
+    if (!settings) return
+    let name = 'new_provider'
+    let i = 2
+    while (settings.providers[name]) { name = `new_provider_${i++}` }
+    setSettings({
+      ...settings,
+      providers: { ...settings.providers, [name]: { base_url: '', api_key: '' } },
+    })
+  }
+
+  function deleteProvider(name: string) {
+    if (!settings) return
+    const { [name]: _, ...rest } = settings.providers
+    setSettings({ ...settings, providers: rest })
+  }
+
+  function updateModel(alias: string, patch: Partial<ModelEntry>) {
+    if (!settings) return
+    const next = { ...settings.models }
+    next[alias] = { ...(next[alias] || { provider: '', id: '', cost_in_per_mtok: 0, cost_out_per_mtok: 0, vision: false, context_window: 0 }), ...patch }
+    setSettings({ ...settings, models: next })
+  }
+
+  function addModel() {
+    if (!settings) return
+    const providerNames = Object.keys(settings.providers)
+    const defaultProvider = providerNames[0] || ''
+    let alias = 'new_model'
+    let i = 2
+    while (settings.models[alias]) { alias = `new_model_${i++}` }
+    setSettings({
+      ...settings,
+      models: {
+        ...settings.models,
+        [alias]: {
+          provider: defaultProvider,
+          id: '',
+          cost_in_per_mtok: 0,
+          cost_out_per_mtok: 0,
+          vision: false,
+          context_window: 0,
+        },
+      },
+    })
+  }
+
+  function deleteModel(alias: string) {
+    if (!settings) return
+    const { [alias]: _, ...rest } = settings.models
+    setSettings({ ...settings, models: rest })
   }
 
   async function save() {
@@ -177,56 +246,212 @@ export default function GeneralSettings({ active }: Props) {
         </div>
       </SectionCard>
 
-      {/* LLM Provider */}
-      <SectionCard title="LLM Provider">
-        <div className="flex flex-wrap gap-2">
-          {PROVIDERS.map((p) => (
-            <Button
-              key={p.id}
-              variant={selectedProvider === p.id ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => selectProvider(p.id)}
-            >
-              {p.name}
-            </Button>
+      {/* Providers — BYOK: one entry per LLM endpoint */}
+      <SectionCard title="LLM Providers">
+        <p className="text-xs text-muted-foreground">
+          Each provider is an OpenAI-compatible endpoint. The api_key lives here OR as
+          <code className="mx-1 px-1 py-0.5 rounded bg-muted">${'{ENV_VAR}'}</code>
+          referencing a secret from <code className="px-1 py-0.5 rounded bg-muted">.env</code>.
+        </p>
+        <div className="space-y-3">
+          {Object.entries(settings.providers).map(([name, p]) => (
+            <div key={name} className="rounded-md border border-border/40 bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Input
+                  value={name}
+                  onChange={(e) => {
+                    if (!settings) return
+                    const newName = e.target.value
+                    if (!newName || newName === name) return
+                    const { [name]: val, ...rest } = settings.providers
+                    setSettings({ ...settings, providers: { ...rest, [newName]: val } })
+                  }}
+                  className="w-40 font-mono text-xs bg-card border-border/40"
+                />
+                <Button variant="ghost" size="sm" onClick={() => deleteProvider(name)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <Input
+                placeholder="https://openrouter.ai/api/v1"
+                value={p.base_url}
+                onChange={(e) => updateProvider(name, { base_url: e.target.value })}
+                className="bg-card border-border/40 text-xs font-mono"
+              />
+              <Input
+                type="password"
+                placeholder={p.api_key === '****' ? '**** (unchanged)' : 'sk-… or ${ENV_VAR}'}
+                onChange={(e) => updateProvider(name, { api_key: e.target.value })}
+                className="bg-card border-border/40 text-xs font-mono"
+              />
+            </div>
+          ))}
+          <Button variant="outline" size="sm" onClick={addProvider} className="gap-2">
+            <Plus className="h-4 w-4" /> Add Provider
+          </Button>
+        </div>
+      </SectionCard>
+
+      {/* Models — reference a provider and declare id + cost + capabilities */}
+      <SectionCard title="Models">
+        <p className="text-xs text-muted-foreground">
+          Each model has a nickname (alias), a provider, an id, and costs. Costs travel with
+          the model so switching is one click.
+        </p>
+        <div className="space-y-3">
+          {Object.entries(settings.models).map(([alias, m]) => (
+            <div key={alias} className="rounded-md border border-border/40 bg-muted/20 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Input
+                  value={alias}
+                  onChange={(e) => {
+                    if (!settings) return
+                    const newAlias = e.target.value
+                    if (!newAlias || newAlias === alias) return
+                    const { [alias]: val, ...rest } = settings.models
+                    setSettings({ ...settings, models: { ...rest, [newAlias]: val } })
+                  }}
+                  className="w-40 font-mono text-xs bg-card border-border/40"
+                />
+                <Button variant="ghost" size="sm" onClick={() => deleteModel(alias)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px] text-muted-foreground uppercase">Provider</Label>
+                  <select
+                    value={m.provider}
+                    onChange={(e) => updateModel(alias, { provider: e.target.value })}
+                    className="w-full bg-card border border-border/40 rounded-md px-2 py-1.5 text-xs"
+                  >
+                    {Object.keys(settings.providers).map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-[10px] text-muted-foreground uppercase">Model ID</Label>
+                  <Input
+                    value={m.id}
+                    placeholder="meta-llama/llama-4-scout"
+                    onChange={(e) => updateModel(alias, { id: e.target.value })}
+                    className="bg-card border-border/40 text-xs font-mono"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px] text-muted-foreground uppercase">$/M input</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={m.cost_in_per_mtok}
+                    onChange={(e) => updateModel(alias, { cost_in_per_mtok: parseFloat(e.target.value) || 0 })}
+                    className="bg-card border-border/40 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-muted-foreground uppercase">$/M output</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={m.cost_out_per_mtok}
+                    onChange={(e) => updateModel(alias, { cost_out_per_mtok: parseFloat(e.target.value) || 0 })}
+                    className="bg-card border-border/40 text-xs"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-4 pt-1">
+                <label className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={m.vision}
+                    onChange={(e) => updateModel(alias, { vision: e.target.checked })}
+                  />
+                  Vision
+                </label>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <Label className="text-[10px] text-muted-foreground uppercase">Ctx</Label>
+                  <Input
+                    type="number"
+                    value={m.context_window}
+                    onChange={(e) => updateModel(alias, { context_window: parseInt(e.target.value) || 0 })}
+                    className="w-24 bg-card border-border/40 text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          <Button variant="outline" size="sm" onClick={addModel} className="gap-2">
+            <Plus className="h-4 w-4" /> Add Model
+          </Button>
+        </div>
+      </SectionCard>
+
+      {/* Routing — assign a model alias to each intelligence tier */}
+      <SectionCard title="Intelligence Routing">
+        <p className="text-xs text-muted-foreground">
+          Assign a model alias to each tier. The classifier auto-routes between Fast and Smart
+          based on query complexity when <b>auto-route</b> is enabled.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {(['fast', 'smart', 'background', 'fallback'] as const).map((tier) => (
+            <div key={tier} className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground uppercase">
+                {tier === 'fast' && 'Fast (default)'}
+                {tier === 'smart' && 'Smart (reasoning)'}
+                {tier === 'background' && 'Background (cheap)'}
+                {tier === 'fallback' && 'Fallback (safety net)'}
+              </Label>
+              <select
+                value={settings.llm[tier] || ''}
+                onChange={(e) => update('llm', tier, e.target.value)}
+                className="w-full bg-muted/50 border border-border/40 rounded-md px-2 py-1.5 text-sm"
+              >
+                <option value="">(use fast)</option>
+                {Object.keys(settings.models).map((alias) => (
+                  <option key={alias} value={alias}>{alias}</option>
+                ))}
+              </select>
+            </div>
           ))}
         </div>
-        <div className="grid gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Base URL</Label>
-            <Input value={settings.llm.base_url} onChange={(e) => update('llm', 'base_url', e.target.value)} className="bg-muted/50 border-border/40" />
+        <div className="flex items-center justify-between pt-2">
+          <div>
+            <Label className="text-sm">Auto-route by classifier tier</Label>
+            <p className="text-xs text-muted-foreground">
+              When on, complex / planning queries automatically use Smart; simple queries use Fast.
+            </p>
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">API Key</Label>
-            <Input type="password" placeholder="****" onChange={(e) => setSettings(s => s ? { ...s, llm_api_key: e.target.value } : s)} className="bg-muted/50 border-border/40" />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Default Model</Label>
-            <Input value={settings.llm.default_model} onChange={(e) => update('llm', 'default_model', e.target.value)} className="bg-muted/50 border-border/40" />
-            <p className="text-xs text-muted-foreground">Used for chat, evaluation, strategy, and all primary tasks.</p>
-          </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Fallback Model</Label>
-            <Input value={settings.llm.fallback_model} onChange={(e) => update('llm', 'fallback_model', e.target.value)} className="bg-muted/50 border-border/40" />
-            <p className="text-xs text-muted-foreground">Used when default model fails.</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Background Model</Label>
-            <Input value={settings.llm.background_model} onChange={(e) => update('llm', 'background_model', e.target.value)} placeholder={settings.llm.default_model} className="bg-muted/50 border-border/40" />
-            <p className="text-xs text-muted-foreground">Optional cheaper model for idle thinking. Defaults to default model.</p>
-          </div>
+          <Button
+            variant={settings.llm.auto_route ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => update('llm', 'auto_route', !settings.llm.auto_route)}
+          >
+            {settings.llm.auto_route ? 'On' : 'Off'}
+          </Button>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Max Tokens</Label>
-            <Input type="number" value={settings.llm.max_tokens} onChange={(e) => update('llm', 'max_tokens', parseInt(e.target.value))} className="bg-muted/50 border-border/40" />
+            <Input
+              type="number"
+              value={settings.llm.max_tokens}
+              onChange={(e) => update('llm', 'max_tokens', parseInt(e.target.value))}
+              className="bg-muted/50 border-border/40"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Temperature</Label>
-            <Input type="number" step="0.1" value={settings.llm.temperature} onChange={(e) => update('llm', 'temperature', parseFloat(e.target.value))} className="bg-muted/50 border-border/40" />
+            <Input
+              type="number"
+              step="0.1"
+              value={settings.llm.temperature}
+              onChange={(e) => update('llm', 'temperature', parseFloat(e.target.value))}
+              className="bg-muted/50 border-border/40"
+            />
           </div>
-        </div>
         </div>
       </SectionCard>
 

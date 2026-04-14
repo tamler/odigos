@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from odigos.core.llm_prompt import run_prompt
+from odigos.core.llm_prompt import call_llm
 
 if TYPE_CHECKING:
     from odigos.db import Database
@@ -99,7 +99,6 @@ async def check_and_store_fact(
     confidence: float = 1.0,
     provider: LLMProvider | None = None,
     embedder: EmbeddingProvider | None = None,
-    model: str = "",
 ) -> dict:
     """Store a fact, checking for contradictions with existing facts.
 
@@ -138,8 +137,17 @@ async def check_and_store_fact(
         for s in similar:
             try:
                 prompt = _CONTRADICTION_PROMPT.format(existing=s["fact"], new=fact)
-                response = await run_prompt(provider, prompt, model=model)
-                verdict = response.content.strip().upper() if hasattr(response, 'content') else str(response).strip().upper()
+                response = await call_llm(
+                    provider,
+                    [{"role": "user", "content": prompt}],
+                    intelligence="background",
+                    max_tokens=20,
+                    temperature=0.1,
+                    log_name="fact_checker:contradiction",
+                )
+                if response is None:
+                    continue
+                verdict = (response.content or "").strip().upper()
 
                 if verdict in ("CONTRADICTS", "UPDATES"):
                     old_fact = s["fact"]

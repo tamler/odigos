@@ -9,8 +9,8 @@
 # API key for authenticating dashboard and API requests.
 # api_key: "your-secret-api-key-here"
 
-# LLM provider API key (required for cloud providers like OpenRouter)
-# llm_api_key: "sk-or-..."
+# LLM provider API keys live in the `providers:` block below — either as
+# literal values or as ${ENV_VAR} references pulled from .env at load time.
 
 # Session secret for web auth (auto-generated if not set)
 # session_secret: ""
@@ -50,26 +50,66 @@ agent:
 database:
   path: "data/odigos.db"
 
-# LLM provider (any OpenAI-compatible API)
-# Examples:
+# =============================================================================
+# LLM: providers, models, and routing
+# =============================================================================
+#
+# Define each provider once. Define each model once with its provider, id, cost,
+# and capabilities. Route intelligence tiers (fast/smart/background/fallback)
+# to models by alias.
+#
+# Adding a second provider is one yaml block. Switching your default model is
+# one line in the `llm` block. Costs travel with the model definition so they
+# never drift from the model they describe.
+#
+# Examples of provider base_urls:
 #   OpenRouter:  https://openrouter.ai/api/v1
 #   OpenAI:      https://api.openai.com/v1
+#   Groq:        https://api.groq.com/openai/v1
 #   Ollama:      http://localhost:11434/v1
 #   LM Studio:   http://localhost:1234/v1
-#   vLLM:        http://localhost:8000/v1
+
+providers:
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"   # ${ENV_VAR} resolved from .env
+
+models:
+  scout:
+    provider: openrouter
+    id: "meta-llama/llama-4-scout"
+    cost_in_per_mtok: 0.08
+    cost_out_per_mtok: 0.30
+    vision: true
+    context_window: 131072
+    notes: "Cheap + vision default"
+  deepseek-v3.2:
+    provider: openrouter
+    id: "deepseek/deepseek-v3.2"
+    cost_in_per_mtok: 0.27
+    cost_out_per_mtok: 1.10
+    vision: false
+    context_window: 163840
+    notes: "Reasoning tier"
+  gpt-5-nano:
+    provider: openrouter
+    id: "openai/gpt-5-nano"
+    cost_in_per_mtok: 0.05
+    cost_out_per_mtok: 0.40
+    vision: false
+    context_window: 128000
+    notes: "Emergency fallback"
+
 llm:
-  base_url: "https://openrouter.ai/api/v1"
-  default_model: "deepseek/deepseek-v3.2"
-  fallback_model: "google/gemini-2.5-flash"
-  # background_model: ""            # Model for background tasks (falls back to default_model)
-  # reasoning_model: ""             # Model for document_query and complex classifications (falls back to default_model)
+  fast: scout               # Default for most actions
+  smart: deepseek-v3.2      # Reasoning-heavy work (planning, document queries)
+  background: scout         # Heartbeat / background loops (defaults to fast)
+  fallback: gpt-5-nano      # Safety net if primary fails
   max_tokens: 4096
   temperature: 0.7
-  request_timeout_seconds: 60.0     # Timeout for LLM API requests
-  connect_timeout_seconds: 10.0     # Timeout for establishing LLM API connection
-  # cost_per_million_tokens: 0.0     # Single rate for both input/output (legacy, use input/output instead)
-  cost_per_million_input: 1.0        # REQUIRED for budget enforcement. Cost per million input tokens.
-  cost_per_million_output: 3.0       # REQUIRED for budget enforcement. Cost per million output tokens.
+  request_timeout_seconds: 60
+  connect_timeout_seconds: 10
+  auto_route: true          # Let the classifier pick the tier automatically
 
 # Budget limits (USD)
 budget:

@@ -18,6 +18,7 @@ async def call_llm(
     messages: list[dict],
     *,
     model: str | None = None,
+    intelligence: str = "background",
     max_tokens: int = 800,
     temperature: float = 0.4,
     log_name: str = "llm_call",
@@ -26,13 +27,16 @@ async def call_llm(
 ):
     """Standard LLM call with retry on transient errors and logging.
 
-    Returns LLMResponse or None on failure.
+    Helper calls default to the `background` tier (cheapest) unless a caller
+    explicitly pins `intelligence` or passes a literal `model`.
     """
-    use_model = model or getattr(provider, "background_model", None) or getattr(provider, "fallback_model", None)
-
     for attempt in range(retries + 1):
         try:
-            kwargs = {"model": use_model, "max_tokens": max_tokens, "temperature": temperature}
+            kwargs: dict = {"max_tokens": max_tokens, "temperature": temperature}
+            if model:
+                kwargs["model"] = model
+            else:
+                kwargs["intelligence"] = intelligence
             if response_format:
                 kwargs["response_format"] = response_format
             response = await provider.complete(messages, **kwargs)
@@ -61,14 +65,12 @@ async def run_prompt(
     *,
     base_dir: str = "data/prompts",
     model: str | None = None,
+    intelligence: str = "background",
     max_tokens: int = 800,
     temperature: float = 0.4,
     response_format=None,
 ) -> dict | None:
-    """Load a prompt template, format it, call the LLM, parse JSON response.
-
-    Returns parsed dict or None on any failure.
-    """
+    """Load a prompt template, format it, call the LLM, parse JSON response."""
     template = load_prompt(prompt_name, fallback, base_dir=base_dir)
     try:
         prompt_text = template.format(**variables)
@@ -78,7 +80,8 @@ async def run_prompt(
 
     response = await call_llm(
         provider, [{"role": "user", "content": prompt_text}],
-        model=model, max_tokens=max_tokens, temperature=temperature,
+        model=model, intelligence=intelligence,
+        max_tokens=max_tokens, temperature=temperature,
         log_name=f"prompt:{prompt_name}", response_format=response_format,
     )
     if response is None:

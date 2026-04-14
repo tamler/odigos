@@ -1,81 +1,189 @@
+"""Multi-provider OpenAI-compatible LLM client with intelligence-tier routing.
+
+The client holds a registry of providers and models, and a routing table that
+maps intelligence tiers (fast/smart/background/fallback) to model aliases.
+Callers pass `intelligence="smart"` (or accept the default) and the client
+dispatches to the correct provider, URL, key, and cost table automatically.
+"""
 from __future__ import annotations
 
 import json as json_module
 import logging
+from typing import TYPE_CHECKING
 
 import httpx
 
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
+if TYPE_CHECKING:
+    from odigos.config import ModelConfig, ProviderConfig
+
 logger = logging.getLogger(__name__)
 
-# Safety-net pricing: used when no provider cost is reported AND no explicit
-# rates are configured. Set to the most expensive model we commonly use
-# (Kimi K2 on Groq) so the budget tracker always has a conservative estimate.
-# This ensures budget enforcement works even if config is incomplete.
-_DEFAULT_COST_INPUT = 1.0   # $/million input tokens
-_DEFAULT_COST_OUTPUT = 3.0  # $/million output tokens
+
+INTELLIGENCE_TIERS = ("fast", "smart", "background", "fallback")
 
 
 class LLMClient(LLMProvider):
-    """OpenAI-compatible LLM provider with fallback support.
+    """Multi-provider LLM client with intelligence-tier routing.
 
-    Works with any OpenAI-compatible API: OpenRouter, Ollama, LM Studio,
-    vLLM, OpenAI, and others.
+    Pass `intelligence="fast"|"smart"|"background"|"fallback"` to `.complete()`
+    and the client picks the right model/provider/key/cost automatically.
+    Unknown tiers fall back to `fast`.
     """
 
     def __init__(
         self,
-        base_url: str,
-        api_key: str,
-        default_model: str,
-        fallback_model: str,
+        providers: dict[str, ProviderConfig],
+        models: dict[str, ModelConfig],
+        routing: dict[str, str],
         max_tokens: int = 4096,
         temperature: float = 0.7,
         request_timeout: float = 60.0,
         connect_timeout: float = 10.0,
-        cost_per_million_tokens: float = 0.0,
-        cost_per_million_input: float = 0.0,
-        cost_per_million_output: float = 0.0,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
-        self.default_model = default_model
-        self.fallback_model = fallback_model
+        if not providers:
+            raise ValueError("LLMClient requires at least one provider")
+        if not models:
+            raise ValueError("LLMClient requires at least one model")
+        if "fast" not in routing or not routing["fast"]:
+            raise ValueError("LLMClient routing must define a 'fast' tier")
+
+        self._providers = dict(providers)
+        self._models = dict(models)
+        self._routing = dict(routing)
         self.max_tokens = max_tokens
         self.temperature = temperature
-        self._cost_per_million = cost_per_million_tokens
-        self._cost_per_million_input = cost_per_million_input or cost_per_million_tokens
-        self._cost_per_million_output = cost_per_million_output or cost_per_million_tokens
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(request_timeout, connect=connect_timeout),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-        )
 
+        # One httpx client per provider — separate base_url and auth headers.
+        self._clients: dict[str, httpx.AsyncClient] = {}
+        for name, p in providers.items():
+            headers = {"Content-Type": "application/json"}
+            if p.api_key:
+                headers["Authorization"] = f"Bearer {p.api_key}"
+            self._clients[name] = httpx.AsyncClient(
+                timeout=httpx.Timeout(request_timeout, connect=connect_timeout),
+                headers=headers,
+            )
+
+        self._validate_routing()
+
+    def _validate_routing(self) -> None:
+        """Fail fast if a routing tier points at a missing model or provider."""
+        for tier, alias in self._routing.items():
+            if not alias:
+                continue
+            if alias not in self._models:
+                raise ValueError(
+                    f"Routing tier '{tier}' references unknown model '{alias}'"
+                )
+            provider_name = self._models[alias].provider
+            if provider_name not in self._providers:
+                raise ValueError(
+                    f"Model '{alias}' references unknown provider '{provider_name}'"
+                )
+
+    # ------------------------------------------------------------------
+    # Resolution helpers
+    # ------------------------------------------------------------------
+    def resolve(self, intelligence: str = "fast") -> ModelConfig:
+        """Return the ModelConfig bound to a given intelligence tier.
+
+        Unknown or empty tiers fall back to 'fast'. If the tier has no explicit
+        alias, falls through to 'fast'.
+        """
+        alias = self._routing.get(intelligence) or self._routing.get("fast")
+        if alias not in self._models:
+            raise RuntimeError(f"Routing points at missing model alias '{alias}'")
+        return self._models[alias]
+
+    def _find_model_by_id(self, model_id: str) -> ModelConfig | None:
+        """Look up a ModelConfig by either its alias or its literal id."""
+        if model_id in self._models:
+            return self._models[model_id]
+        for m in self._models.values():
+            if m.id == model_id:
+                return m
+        return None
+
+    @property
+    def default_model(self) -> str:
+        """Resolved id of the `fast` tier — used by callers that log/introspect."""
+        return self.resolve("fast").id
+
+    @property
+    def fallback_model(self) -> str:
+        """Resolved id of the `fallback` tier, or empty if none configured."""
+        alias = self._routing.get("fallback")
+        if not alias or alias not in self._models:
+            return ""
+        return self._models[alias].id
+
+    @property
+    def supports_explicit_cache(self) -> bool:
+        """Does the `fast` tier's provider need explicit cache_control breakpoints?"""
+        model_cfg = self.resolve("fast")
+        provider = self._providers.get(model_cfg.provider)
+        model_lc = (model_cfg.id or "").lower()
+        url_lc = (provider.base_url if provider else "").lower()
+        return "claude" in model_lc or "anthropic" in url_lc
+
+    # ------------------------------------------------------------------
+    # Public API: complete / stream_complete / complete_json
+    # ------------------------------------------------------------------
     async def complete(self, messages: list[dict], **kwargs) -> LLMResponse:
-        """Try default model, fall back to fallback model on failure."""
-        model = kwargs.pop("model", self.default_model)
-        models_to_try = [model]
-        if model != self.fallback_model:
-            models_to_try.append(self.fallback_model)
+        """Dispatch a completion by intelligence tier.
+
+        Accepts either `intelligence="fast"|"smart"|"background"|"fallback"`
+        or a literal `model="..."` kwarg (model id or alias). On failure, retries
+        with the `fallback` tier if one is configured and distinct.
+        """
+        intelligence = kwargs.pop("intelligence", "fast")
+        literal_model = kwargs.pop("model", None)
+
+        if literal_model:
+            primary = self._find_model_by_id(literal_model)
+            if primary is None:
+                # Unknown literal — treat as passthrough with no cost tracking.
+                primary = self._synthesize_model(literal_model)
+        else:
+            primary = self.resolve(intelligence)
+
+        models_to_try = [primary]
+        fb_alias = self._routing.get("fallback")
+        if intelligence != "fallback" and fb_alias and fb_alias in self._models:
+            fb = self._models[fb_alias]
+            if fb.id != primary.id:
+                models_to_try.append(fb)
 
         last_error: Exception | None = None
-        for try_model in models_to_try:
+        for model_cfg in models_to_try:
             try:
-                return await self._call(messages, try_model, **kwargs)
+                return await self._call(messages, model_cfg, **kwargs)
             except Exception as e:
-                logger.warning("Model %s failed: %s", try_model, e)
+                logger.warning("Model %s failed: %s", model_cfg.id, e)
                 last_error = e
 
         raise RuntimeError(f"All LLM providers failed. Last error: {last_error}")
 
-    async def _call(self, messages: list[dict], model: str, **kwargs) -> LLMResponse:
-        """Make a single API call to the OpenAI-compatible endpoint."""
-        payload = {
-            "model": model,
+    def _synthesize_model(self, model_id: str) -> ModelConfig:
+        """Build an ephemeral ModelConfig for a literal passthrough id.
+
+        Uses the first configured provider as the destination. Cost falls back
+        to the safety rates in _call() since rates are 0.
+        """
+        from odigos.config import ModelConfig
+        first_provider = next(iter(self._providers.keys()))
+        return ModelConfig(provider=first_provider, id=model_id)
+
+    async def _call(
+        self, messages: list[dict], model_cfg: ModelConfig, **kwargs,
+    ) -> LLMResponse:
+        provider = self._providers[model_cfg.provider]
+        client = self._clients[model_cfg.provider]
+
+        payload: dict = {
+            "model": model_cfg.id,
             "messages": messages,
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             "temperature": kwargs.get("temperature", self.temperature),
@@ -91,12 +199,13 @@ class LLMClient(LLMProvider):
             payload["response_format"] = response_format
 
         logger.info(
-            "LLM request: model=%s, tools=%d, messages=%d, tool_choice=%s",
-            model, len(tools) if tools else 0, len(messages), tool_choice,
+            "LLM request: provider=%s model=%s tools=%d messages=%d",
+            model_cfg.provider, model_cfg.id,
+            len(tools) if tools else 0, len(messages),
         )
 
-        url = f"{self.base_url}/chat/completions"
-        response = await self._client.post(url, json=payload)
+        url = f"{provider.base_url.rstrip('/')}/chat/completions"
+        response = await client.post(url, json=payload)
 
         if response.status_code != 200:
             raise RuntimeError(f"LLM API error {response.status_code}: {response.text}")
@@ -104,13 +213,6 @@ class LLMClient(LLMProvider):
         data = response.json()
         usage = data.get("usage", {})
         message = data["choices"][0]["message"]
-
-        logger.info(
-            "LLM response: model=%s, has_tool_calls=%s, content_preview=%s",
-            model,
-            bool(message.get("tool_calls")),
-            (message.get("content") or "")[:80],
-        )
 
         tool_calls = None
         raw_tool_calls = message.get("tool_calls")
@@ -131,19 +233,14 @@ class LLMClient(LLMProvider):
         cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
         if not cached:
             cached = usage.get("cache_read_input_tokens", 0)
-        # Use provider-reported cost if available; fall back to configured or default rate
+
         cost = usage.get("cost") or 0.0
         if not cost:
-            rate_in = self._cost_per_million_input or _DEFAULT_COST_INPUT
-            rate_out = self._cost_per_million_output or _DEFAULT_COST_OUTPUT
-            cost = (
-                tokens_in * rate_in / 1_000_000
-                + tokens_out * rate_out / 1_000_000
-            )
+            cost = self._compute_cost(model_cfg, tokens_in, tokens_out)
 
         return LLMResponse(
             content=message.get("content") or "",
-            model=data.get("model", model),
+            model=data.get("model", model_cfg.id),
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             cost_usd=cost,
@@ -152,16 +249,38 @@ class LLMClient(LLMProvider):
             cached_tokens=cached,
         )
 
+    def _compute_cost(
+        self, model_cfg: ModelConfig, tokens_in: int, tokens_out: int,
+    ) -> float:
+        """Fall-back cost computation using the model's declared rates.
+
+        If a model has zero declared rates, we don't invent a number — the
+        budget tracker can still enforce limits using provider-reported cost
+        when the API supplies one.
+        """
+        rate_in = model_cfg.cost_in_per_mtok
+        rate_out = model_cfg.cost_out_per_mtok
+        return (tokens_in * rate_in / 1_000_000) + (tokens_out * rate_out / 1_000_000)
+
     async def stream_complete(self, messages: list[dict], **kwargs):
         """Stream response tokens from the OpenAI-compatible API.
 
         Yields (chunk_text, None) for content, then (None, LLMResponse) at the end.
-        Falls back to non-streaming if the model returns tool_calls (can't stream tools).
+        Falls back to non-streaming if the model returns tool_calls.
         """
-        model = kwargs.pop("model", self.default_model)
+        intelligence = kwargs.pop("intelligence", "fast")
+        literal_model = kwargs.pop("model", None)
 
-        payload = {
-            "model": model,
+        if literal_model:
+            model_cfg = self._find_model_by_id(literal_model) or self._synthesize_model(literal_model)
+        else:
+            model_cfg = self.resolve(intelligence)
+
+        provider = self._providers[model_cfg.provider]
+        client = self._clients[model_cfg.provider]
+
+        payload: dict = {
+            "model": model_cfg.id,
             "messages": messages,
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
             "temperature": kwargs.get("temperature", self.temperature),
@@ -174,22 +293,22 @@ class LLMClient(LLMProvider):
         if tool_choice and tools:
             payload["tool_choice"] = tool_choice
 
-        url = f"{self.base_url}/chat/completions"
+        url = f"{provider.base_url.rstrip('/')}/chat/completions"
         try:
-            async with self._client.stream("POST", url, json=payload) as response:
+            async with client.stream("POST", url, json=payload) as response:
                 if response.status_code != 200:
-                    # Fall back to non-streaming on error
-                    resp = await self.complete(messages, model=model, **kwargs)
+                    resp = await self.complete(messages, model=model_cfg.id, **kwargs)
                     yield resp.content, resp
                     return
 
                 full_content = ""
-                response_model = model
+                response_model = model_cfg.id
                 generation_id = None
                 tool_calls_data: list = []
                 tokens_in = 0
                 tokens_out = 0
                 provider_cost = 0.0
+                usage: dict = {}
 
                 async for line in response.aiter_lines():
                     if not line.startswith("data: "):
@@ -212,13 +331,11 @@ class LLMClient(LLMProvider):
                         continue
                     delta = choices[0].get("delta", {})
 
-                    # Content chunk
                     content = delta.get("content")
                     if content:
                         full_content += content
                         yield content, None
 
-                    # Tool call chunks (accumulate, don't stream)
                     if delta.get("tool_calls"):
                         for tc_delta in delta["tool_calls"]:
                             idx = tc_delta.get("index", 0)
@@ -232,7 +349,6 @@ class LLMClient(LLMProvider):
                             if fn.get("arguments"):
                                 tool_calls_data[idx]["arguments"] += fn["arguments"]
 
-                    # Usage in final chunk (some providers include cost here)
                     usage = chunk.get("usage") or choices[0].get("usage", {})
                     if usage:
                         tokens_in = usage.get("prompt_tokens", 0)
@@ -241,13 +357,10 @@ class LLMClient(LLMProvider):
 
                 cached = 0
                 if usage:
-                    cached = (usage.get("prompt_tokens_details") or {}).get(
-                        "cached_tokens", 0
-                    )
+                    cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
                     if not cached:
                         cached = usage.get("cache_read_input_tokens", 0)
 
-                # Build tool calls if present
                 parsed_tool_calls = None
                 if tool_calls_data:
                     parsed_tool_calls = []
@@ -262,14 +375,7 @@ class LLMClient(LLMProvider):
                             id=tc["id"], name=tc["name"], arguments=args,
                         ))
 
-                cost = provider_cost
-                if not cost:
-                    rate_in = self._cost_per_million_input or _DEFAULT_COST_INPUT
-                    rate_out = self._cost_per_million_output or _DEFAULT_COST_OUTPUT
-                    cost = (
-                        tokens_in * rate_in / 1_000_000
-                        + tokens_out * rate_out / 1_000_000
-                    )
+                cost = provider_cost or self._compute_cost(model_cfg, tokens_in, tokens_out)
                 final = LLMResponse(
                     content=full_content,
                     model=response_model,
@@ -284,15 +390,8 @@ class LLMClient(LLMProvider):
 
         except Exception as e:
             logger.warning("Streaming failed, falling back to non-streaming: %s", e)
-            resp = await self.complete(messages, model=model, **kwargs)
+            resp = await self.complete(messages, model=model_cfg.id, **kwargs)
             yield resp.content, resp
-
-    @property
-    def supports_explicit_cache(self) -> bool:
-        """Does this provider need explicit cache_control breakpoints?"""
-        model = (self.default_model or "").lower()
-        url = (self.base_url or "").lower()
-        return "claude" in model or "anthropic" in url
 
     async def complete_json(
         self,
@@ -305,7 +404,6 @@ class LLMClient(LLMProvider):
 
         from odigos.core.json_utils import parse_json_response
 
-        # Tier 1: json_schema (if schema provided)
         if schema:
             try:
                 resp = await self.complete(
@@ -319,9 +417,8 @@ class LLMClient(LLMProvider):
                 parsed = _json.loads(resp.content)
                 return parsed, True
             except Exception:
-                pass  # Fall through to tier 2
+                pass
 
-        # Tier 2: json_object
         try:
             resp = await self.complete(
                 messages,
@@ -341,9 +438,8 @@ class LLMClient(LLMProvider):
                     return {}, False
             return parsed, True
         except Exception:
-            pass  # Fall through to tier 3
+            pass
 
-        # Tier 3: regex extraction from freeform text
         try:
             resp = await self.complete(messages, **kwargs)
             parsed = parse_json_response(resp.content)
@@ -356,19 +452,14 @@ class LLMClient(LLMProvider):
                     except ImportError:
                         pass
                     except Exception as e:
-                        logger.warning(
-                            "JSON schema validation failed (tier 3): %s", str(e)[:100]
-                        )
+                        logger.warning("JSON schema validation failed (tier 3): %s", str(e)[:100])
                         return {}, False
                 return parsed, True
         except Exception:
             pass
 
-        logger.error(
-            "complete_json: all 3 tiers failed for %d-char prompt",
-            sum(len(m.get("content", "")) for m in messages),
-        )
         return {}, False
 
     async def close(self) -> None:
-        await self._client.aclose()
+        for client in self._clients.values():
+            await client.aclose()

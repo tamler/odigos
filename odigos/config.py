@@ -1,10 +1,26 @@
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
+
+
+_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
+
+
+def _expand_env(value):
+    """Recursively expand ${ENV_VAR} references in strings. Missing vars → empty string."""
+    if isinstance(value, str):
+        return _ENV_VAR_PATTERN.sub(lambda m: os.environ.get(m.group(1), ""), value)
+    if isinstance(value, dict):
+        return {k: _expand_env(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env(v) for v in value]
+    return value
 
 
 class AgentConfig(BaseModel):
@@ -28,19 +44,37 @@ class EmbeddingsConfig(BaseModel):
     remote_url: str = "http://localhost:9000"
 
 
+class ProviderConfig(BaseModel):
+    """An OpenAI-compatible LLM provider endpoint. Defined once, referenced by models."""
+    base_url: str
+    api_key: str = ""  # Supports ${ENV_VAR} interpolation
+
+
+class ModelConfig(BaseModel):
+    """A model entry. Owns everything about the model — provider, id, cost, capabilities."""
+    provider: str  # Key into Settings.providers
+    id: str  # Actual model identifier sent to the API (e.g. "meta-llama/llama-4-scout")
+    cost_in_per_mtok: float = 0.0  # $/million input tokens
+    cost_out_per_mtok: float = 0.0  # $/million output tokens
+    vision: bool = False
+    context_window: int = 0
+    notes: str = ""  # Free-form, shown in UI
+
+
 class LLMConfig(BaseModel):
-    base_url: str = "https://openrouter.ai/api/v1"
-    default_model: str = "deepseek/deepseek-v3.2"
-    fallback_model: str = "google/gemini-2.5-flash"
-    background_model: str = ""
-    reasoning_model: str = ""  # Used for document_query and complex classifications. Falls back to default_model if empty.
+    """Routing — which model alias handles each intelligence tier.
+
+    Values are aliases into Settings.models. Empty fields fall back to `fast`.
+    """
+    fast: str = "scout"  # Cheap default for most actions. Should support vision if possible.
+    smart: str = "deepseek-v3.2"  # Reasoning-heavy work (planning, doc queries, hard classifications).
+    background: str = ""  # Heartbeat / entity extraction / background loops. Defaults to fast.
+    fallback: str = ""  # Safety net on primary failure. Defaults to fast.
     max_tokens: int = 4096
     temperature: float = 0.7
     request_timeout_seconds: float = 60.0
     connect_timeout_seconds: float = 10.0
-    cost_per_million_tokens: float = 0.0  # Legacy single rate (used if input/output not set)
-    cost_per_million_input: float = 0.0  # Per-million input token cost
-    cost_per_million_output: float = 0.0  # Per-million output token cost
+    auto_route: bool = True  # If True, classifier tier drives intelligence automatically.
 
 
 class TelegramConfig(BaseModel):
@@ -256,8 +290,11 @@ class Settings(BaseSettings):
     #   notebooklm  → NotebookLM integration
     #   searxng     → SearxNG search (value = URL, auth via searxng_username/password)
 
-    # --- Core credentials (not per-service) ---
-    llm_api_key: str = ""
+    # --- LLM providers and models (the new unified config) ---
+    providers: dict[str, ProviderConfig] = {}
+    models: dict[str, ModelConfig] = {}
+
+    # --- Core credentials ---
     api_key: str = ""  # Dashboard auth key
     session_secret: str = ""
     search_provider: str = ""
@@ -325,13 +362,26 @@ class Settings(BaseSettings):
 
 
 def load_settings(config_path: str = "config.yaml") -> Settings:
-    """Load settings from environment variables and a YAML config file."""
+    """Load settings from environment variables and a YAML config file.
+
+    Supports ${ENV_VAR} interpolation in any string value — used primarily to
+    keep provider API keys in .env while referencing them from config.yaml.
+    Loads .env into the process environment first so interpolation works even
+    when the process wasn't started via the expected launcher.
+    """
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(override=False)
+    except ImportError:
+        pass
+
     yaml_config: dict = {}
     path = Path(config_path)
     if path.exists():
         with open(path) as f:
             yaml_config = yaml.safe_load(f) or {}
 
+    yaml_config = _expand_env(yaml_config)
     return Settings(**yaml_config)
 
 

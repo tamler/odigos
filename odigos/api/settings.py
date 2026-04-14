@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ValidationError
 
 from odigos import aio
-from odigos.api.deps import get_config_path, get_env_path, get_settings, require_auth
+from odigos.api.deps import get_config_path, get_settings, require_auth
 
 router = APIRouter(
     prefix="/api",
@@ -20,12 +20,13 @@ router = APIRouter(
 
 
 class SettingsUpdate(BaseModel):
-    llm_api_key: str | None = None
     api_key: str | None = None
     current_api_key: str | None = None  # Required when changing api_key
     telegram_bot_token: str | None = None  # Legacy — prefer services.telegram
     services: dict[str, str] | None = None
-    llm: dict | None = None
+    providers: dict[str, dict] | None = None  # {name: {base_url, api_key}}
+    models: dict[str, dict] | None = None     # {alias: {provider, id, cost_*, vision, context_window, notes}}
+    llm: dict | None = None                   # {fast, smart, background, fallback, max_tokens, temperature, auto_route, ...}
     agent: dict | None = None
     budget: dict | None = None
     heartbeat: dict | None = None
@@ -56,11 +57,20 @@ async def get_settings_endpoint(settings=Depends(get_settings)):
     calendar_data = settings.calendar.model_dump()
     if calendar_data.get("password"):
         calendar_data["password"] = "****"
+
+    providers_masked = {}
+    for name, p in settings.providers.items():
+        providers_masked[name] = {
+            "base_url": p.base_url,
+            "api_key": _mask_key(p.api_key),
+        }
+
     return {
-        "llm_api_key": _mask_key(settings.llm_api_key),
         "api_key": _mask_key(settings.api_key),
         "services": {name: _mask_key(key) for name, key in settings.services.items()},
         "telegram_configured": bool(settings.service_key("telegram")),
+        "providers": providers_masked,
+        "models": {alias: m.model_dump() for alias, m in settings.models.items()},
         "llm": settings.llm.model_dump(),
         "agent": settings.agent.model_dump(),
         "budget": settings.budget.model_dump(),
@@ -142,11 +152,13 @@ async def update_settings_endpoint(
     update: SettingsUpdate,
     settings=Depends(get_settings),
     config_path_str: str = Depends(get_config_path),
-    env_path_str: str = Depends(get_env_path),
 ):
-    """Update settings, writing to config.yaml and .env, then hot-reload in-memory."""
+    """Update settings, writing to config.yaml and hot-reloading in-memory.
+
+    API keys live in config.yaml's `providers` block — either as literal values
+    or as `${ENV_VAR}` interpolations resolved at load time.
+    """
     config_path = Path(config_path_str)
-    env_path = Path(env_path_str)
 
     # Load existing config.yaml
     yaml_config: dict = {}
@@ -183,10 +195,48 @@ async def update_settings_endpoint(
         yaml_config["services"]["telegram"] = update.telegram_bot_token
         settings.services["telegram"] = update.telegram_bot_token
 
-    # Update LLM API key in .env (ignore masked placeholder)
-    if update.llm_api_key is not None and update.llm_api_key != "****":
-        await _update_env_file(env_path, "LLM_API_KEY", update.llm_api_key)
-        object.__setattr__(settings, "llm_api_key", update.llm_api_key)
+    # Update providers (BYOK: dashboard-editable). REPLACE semantics — the
+    # incoming dict is authoritative, so deleting a provider in the UI actually
+    # removes it. For each incoming provider, a masked api_key ("****") or a
+    # missing/None api_key preserves whatever is currently stored; a new
+    # non-empty value overwrites; an explicit empty string clears it.
+    if update.providers is not None:
+        previous = dict(yaml_config.get("providers") or {})
+        new_providers: dict = {}
+        for name, patch in update.providers.items():
+            if patch is None:
+                continue  # Explicit null also deletes
+            existing = previous.get(name) or {}
+            merged: dict = {}
+            # Copy forward every incoming field except api_key, which has
+            # masked-value handling.
+            for k, v in patch.items():
+                if k == "api_key":
+                    continue
+                if v is not None:
+                    merged[k] = v
+            incoming_key = patch.get("api_key")
+            if incoming_key is None or incoming_key == "****":
+                # Preserve stored key (installer-written or prior value)
+                if existing.get("api_key"):
+                    merged["api_key"] = existing["api_key"]
+            elif incoming_key == "":
+                # Explicit clear
+                pass
+            else:
+                merged["api_key"] = incoming_key
+            new_providers[name] = merged
+        yaml_config["providers"] = new_providers
+
+    # Update models dict — REPLACE semantics, same reasoning. Models carry no
+    # secrets so there's no masked-value wrinkle.
+    if update.models is not None:
+        new_models: dict = {}
+        for alias, patch in update.models.items():
+            if patch is None:
+                continue
+            new_models[alias] = {k: v for k, v in patch.items() if v is not None}
+        yaml_config["models"] = new_models
 
     # Update dashboard API key (requires current key confirmation)
     if update.api_key is not None and update.api_key != "****":
@@ -214,6 +264,34 @@ async def update_settings_endpoint(
                     detail=f"Invalid settings for '{section}': {exc.errors()}",
                 )
 
+    # Validate providers / models dicts (live-updated above) into their typed shapes
+    validated_providers = None
+    validated_models = None
+    if update.providers is not None:
+        from odigos.config import ProviderConfig
+        try:
+            validated_providers = {
+                name: ProviderConfig(**cfg)
+                for name, cfg in yaml_config.get("providers", {}).items()
+            }
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid provider config: {exc.errors()}",
+            )
+    if update.models is not None:
+        from odigos.config import ModelConfig
+        try:
+            validated_models = {
+                alias: ModelConfig(**cfg)
+                for alias, cfg in yaml_config.get("models", {}).items()
+            }
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid model config: {exc.errors()}",
+            )
+
     # Backup config before writing (keep last 3 versions)
     if config_path.exists():
         import shutil
@@ -230,6 +308,10 @@ async def update_settings_endpoint(
     # Hot-reload in-memory settings from validated objects
     for section, new_obj in validated_sections.items():
         object.__setattr__(settings, section, new_obj)
+    if validated_providers is not None:
+        object.__setattr__(settings, "providers", validated_providers)
+    if validated_models is not None:
+        object.__setattr__(settings, "models", validated_models)
 
     return {"status": "ok"}
 
@@ -317,8 +399,10 @@ async def apply_profile(
 
 
 async def _update_env_file(env_path: Path, key: str, value: str) -> None:
-    """Update or add a key=value pair in an .env file."""
-    # Sanitize: strip newlines to prevent env injection
+    """Update or add a key=value pair in an .env file.
+
+    Still used by the plugin configurator for per-plugin secrets.
+    """
     value = value.replace("\n", "").replace("\r", "")
     lines: list[str] = []
     found = False
