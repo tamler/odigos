@@ -16,6 +16,11 @@ if TYPE_CHECKING:
     from odigos.db import Database
 
 
+INTERNAL_CONVERSATION_CHANNELS: frozenset[str] = frozenset({
+    "heartbeat", "cron", "proactive", "peer",
+})
+
+
 class MessageBus:
     def __init__(self, db: Database, channel_registry: ChannelRegistry):
         self.db = db
@@ -80,7 +85,19 @@ class MessageBus:
             (conversation_id,),
         )
 
-        # 3. Create delivery rows for ALL registered channels, push to reachable ones
+        # 3. Create delivery rows for ALL registered channels, push to reachable ones.
+        # Synthetic conversations owned by the heartbeat (plans, todos, cron,
+        # proactive, peer inbound) are DB-only — their self-prompts and internal
+        # traffic must never fan out to user-facing I/O channels. Identified by
+        # the CONVERSATION's channel, not the publish call's channel, so that
+        # legitimate heartbeat-origin publishes into real user conversations
+        # (e.g. background task completions) still deliver normally.
+        conv_row = await self.db.fetch_one(
+            "SELECT channel FROM conversations WHERE id = ?", (conversation_id,),
+        )
+        if conv_row and conv_row["channel"] in INTERNAL_CONVERSATION_CHANNELS:
+            return msg_id
+
         msg_data = {
             "type": "message",
             "id": msg_id,

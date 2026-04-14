@@ -85,16 +85,17 @@ class WebChannel(Channel):
         await self._send_to_connections(conversation_id, payload)
 
     async def deliver(self, msg_data: dict) -> None:
-        """Push a message to connected WebSocket clients.
+        """Push a message to WebSocket clients subscribed to its conversation.
 
-        Skips the originating conversation — those connections already have
-        the message via direct WebSocket events (streaming chunks, local add).
+        Only fans out to connections registered under the message's own
+        conversation_id (other tabs viewing the same chat). Unrelated
+        conversations are isolated — sidebar/unread updates must use a
+        different payload type (e.g. conversation_updated).
         """
-        origin = msg_data.get("conversation_id")
-        for cid in list(self._connections.keys()):
-            if cid == origin:
-                continue
-            await self._send_to_connections(cid, msg_data)
+        conv_id = msg_data.get("conversation_id")
+        if not conv_id:
+            return
+        await self._send_to_connections(conv_id, msg_data)
 
     def is_reachable(self) -> bool:
         """Is at least one WebSocket client connected?"""

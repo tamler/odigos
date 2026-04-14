@@ -87,7 +87,10 @@ export function useWebSocketHandler(pendingTitles: React.MutableRefObject<Record
           }
         }
         if (msg.type === 'message') {
-          if (msg.conversation_id && activeIdRef.current && msg.conversation_id !== activeIdRef.current) return
+          // Hard isolation: drop any message frame that doesn't belong to the
+          // currently-active conversation. Prevents heartbeat/cron/peer payloads
+          // from leaking into unrelated chats if the backend ever fans out again.
+          if (!msg.conversation_id || msg.conversation_id !== activeIdRef.current) return
           const msgId = msg.id as string
 
           // If this matches the streaming message, finalize it
