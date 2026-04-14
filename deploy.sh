@@ -33,6 +33,7 @@ BARE_METAL=(
   "/opt/odigos:odigos:odigos_agent"
   "/opt/odigos-rachel:odigos-rachel:odigos_agent"
   "/opt/odigos-sales:odigos-sales:odigos_sales"
+  "/opt/odigos-honey:odigos-honey:odigos_agent"
 )
 
 # Docker installs on uxrls.com
@@ -55,9 +56,11 @@ for entry in "${BARE_METAL[@]}"; do
   IFS=':' read -r dir service user <<< "$entry"
   log "  $service ($dir) [user: $user]"
 
-  ssh "$ODIGOS_ONE" bash -s "$dir" "$service" "$SKIP_BUILD" "$user" "$FRESH" "${OPENROUTER_API_KEY:-}" <<'REMOTE'
+  ssh "$ODIGOS_ONE" bash -s "$dir" "$service" "$SKIP_BUILD" "$user" "$FRESH" \
+      "${OPENROUTER_API_KEY:-}" "${GROQ_API_KEY:-}" "${KIE_AI_API_KEY:-}" <<'REMOTE'
     set -euo pipefail
-    DIR="$1"; SVC="$2"; SKIP="$3"; SVC_USER="$4"; FRESH="$5"; OR_KEY="$6"
+    DIR="$1"; SVC="$2"; SKIP="$3"; SVC_USER="$4"; FRESH="$5"
+    OR_KEY="$6"; GROQ_KEY="$7"; KIE_KEY="$8"
     cd "$DIR"
 
     # Pull latest (always — fresh-install runs after so it gets the new script)
@@ -77,7 +80,8 @@ for entry in "${BARE_METAL[@]}"; do
     # Fresh-install mode: wipe config.yaml + .env and regenerate from scratch.
     # Service user owns the result so it can read its own config.
     if [ "$FRESH" = "true" ]; then
-      OPENROUTER_API_KEY="$OR_KEY" sudo -u "$SVC_USER" -E bash scripts/fresh-install.sh .
+      OPENROUTER_API_KEY="$OR_KEY" GROQ_API_KEY="$GROQ_KEY" KIE_AI_API_KEY="$KIE_KEY" \
+        sudo -u "$SVC_USER" -E bash scripts/fresh-install.sh .
     fi
 
     # Sync dependencies (new packages from pyproject.toml)
@@ -135,9 +139,11 @@ done
 
 log "Deploying to uxrls.com (Docker)..."
 
-ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" "$FRESH" "${OPENROUTER_API_KEY:-}" <<'REMOTE'
+ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" "$FRESH" \
+    "${OPENROUTER_API_KEY:-}" "${GROQ_API_KEY:-}" "${KIE_AI_API_KEY:-}" <<'REMOTE'
   set -euo pipefail
-  DIR="$1"; SKIP="$2"; FRESH="$3"; OR_KEY="$4"
+  DIR="$1"; SKIP="$2"; FRESH="$3"
+  OR_KEY="$4"; GROQ_KEY="$5"; KIE_KEY="$6"
   cd "$DIR"
 
   # Pull latest
@@ -154,11 +160,13 @@ ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" "$FRESH" "${OPENROUTER_API_KEY:
   # uses this directory's own config.yaml + .env; the testers each live in
   # their own subdirectory with bind-mounted configs.
   if [ "$FRESH" = "true" ]; then
-    OPENROUTER_API_KEY="$OR_KEY" bash "$DIR/scripts/fresh-install.sh" "$DIR"
+    OPENROUTER_API_KEY="$OR_KEY" GROQ_API_KEY="$GROQ_KEY" KIE_AI_API_KEY="$KIE_KEY" \
+      bash "$DIR/scripts/fresh-install.sh" "$DIR"
     for user in florence jessica; do
       TDIR="/opt/odigos/testers/$user"
       [ -d "$TDIR" ] || continue
-      OPENROUTER_API_KEY="$OR_KEY" bash "$DIR/scripts/fresh-install.sh" "$TDIR"
+      OPENROUTER_API_KEY="$OR_KEY" GROQ_API_KEY="$GROQ_KEY" KIE_AI_API_KEY="$KIE_KEY" \
+        bash "$DIR/scripts/fresh-install.sh" "$TDIR"
     done
   fi
 
@@ -230,7 +238,7 @@ while IFS= read -r line; do
     echo -e "  ${RED}$line${NC}"
     FAILURES=$((FAILURES + 1))
   fi
-done < <(ssh "$ODIGOS_ONE" 'for s in odigos odigos-rachel odigos-sales; do
+done < <(ssh "$ODIGOS_ONE" 'for s in odigos odigos-rachel odigos-sales odigos-honey; do
   printf "%-20s %s\n" "$s" "$(systemctl is-active $s)"
 done')
 

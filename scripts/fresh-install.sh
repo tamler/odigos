@@ -46,12 +46,21 @@ fi
 DASH_KEY="${DASHBOARD_KEY:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')}"
 SESSION_SECRET_VAL=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
 
+# Optional service keys — written to .env if provided, referenced from
+# config.yaml's services block via ${VAR} interpolation. Safe to leave empty;
+# the services dict will resolve to "" and the validator will flag them as
+# optional features that aren't configured yet.
+GROQ_KEY="${GROQ_API_KEY:-}"
+KIE_KEY="${KIE_AI_API_KEY:-}"
+
 # Nuke anything stale
 rm -f config.yaml .env config.yaml.*.bak .env.*.bak
 
 # Write .env
 cat > .env <<ENV
 OPENROUTER_API_KEY=$OPENROUTER_API_KEY
+GROQ_API_KEY=$GROQ_KEY
+KIE_AI_API_KEY=$KIE_KEY
 
 SESSION_SECRET=$SESSION_SECRET_VAL
 ENV
@@ -64,6 +73,12 @@ api_key: "$DASH_KEY"
 
 agent:
   name: "$NAME"
+
+# External service keys — resolved from .env at load time.
+# Empty values just disable the feature until you fill them in.
+services:
+  groq: "\${GROQ_API_KEY}"
+  kie_ai: "\${KIE_AI_API_KEY}"
 
 providers:
   openrouter:
@@ -128,8 +143,21 @@ proactive:
   enabled: false
 
 voice:
-  stt_provider: "disabled"
-  tts_provider: "disabled"
+  stt_provider: "$([ -n "$GROQ_KEY" ] && echo groq || echo disabled)"
+  tts_provider: "$([ -n "$GROQ_KEY" ] && echo edge || echo disabled)"
+  tts_voice: "en-US-AriaNeural"
+  groq_model: "whisper-large-v3-turbo"
+
+# Image generation — kie.ai Z-Image. Auto-enabled when KIE_AI_API_KEY is set.
+image_generation:
+  default_aspect_ratio: "1:1"
+  nsfw_filter: true
+  max_poll_seconds: 120
+
+# Music generation — kie.ai Suno. Auto-enabled when KIE_AI_API_KEY is set.
+music_generation:
+  model: "V5_5"
+  max_poll_seconds: 180
 
 server:
   host: "0.0.0.0"
