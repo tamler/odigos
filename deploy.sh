@@ -89,7 +89,9 @@ for entry in "${BARE_METAL[@]}"; do
 
     # Rebuild dashboard if ANY frontend file changed (auto-detect)
     if [ -d dashboard ]; then
-      FRONTEND_CHANGED=$(git diff "$LOCAL"..HEAD --name-only 2>/dev/null | grep -c '^dashboard/' || echo "0")
+      # awk instead of grep -c: always exits 0, always prints a single integer,
+      # so no "0\n0" artifact from a falling-through `|| echo 0` clause.
+      FRONTEND_CHANGED=$(git diff "$LOCAL"..HEAD --name-only 2>/dev/null | awk '/^dashboard\// {c++} END {print c+0}')
       if [ "$SKIP" = "true" ] && [ "$FRONTEND_CHANGED" -gt 0 ]; then
         echo "  WARNING: --skip-build but $FRONTEND_CHANGED frontend files changed. Building anyway."
       fi

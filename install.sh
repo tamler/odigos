@@ -444,15 +444,12 @@ start_now=${start_now:-Y}
 
 if [[ "$start_now" =~ ^[Yy]$ ]]; then
     echo ""
-    # Try to pull pre-built image; fall back to local build
-    info "Pulling Docker image..."
-    if docker compose pull --quiet 2>/dev/null; then
-        info "Image pulled"
-    else
-        warn "Pre-built image not available — building locally..."
-        info "This takes a few minutes on first run."
-        docker compose build
-    fi
+    # Always build locally from your working copy. Skipping the ghcr.io pull
+    # because a stale registry image would overwrite fresher local code and
+    # mislead users. First build takes ~5 minutes (embedding model download);
+    # subsequent builds are cached.
+    info "Building Docker image (first build takes ~5 minutes)..."
+    docker compose build odigos
 
     info "Starting Odigos..."
     docker compose up -d
