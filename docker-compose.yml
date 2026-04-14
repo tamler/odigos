@@ -23,8 +23,9 @@ services:
       - ./.env:/app/.env
       - ./skills:/app/skills
       - ./plugins:/app/plugins
+    # LLM provider keys live in the mounted .env (read via python-dotenv).
+    # The `environment:` section is only needed for overrides that aren't in .env.
     environment:
-      - LLM_API_KEY=${LLM_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

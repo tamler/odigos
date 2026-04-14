@@ -83,23 +83,46 @@ Open **http://localhost:8000**, create your account, and start chatting.
 
 Two files control everything:
 
-### `.env` -- Secrets
+### `.env` -- Secrets only
 
 ```env
-LLM_API_KEY=sk-or-v1-your-key-here     # Your LLM provider API key
-SESSION_SECRET=random-string-here        # Generated automatically by install script
+OPENROUTER_API_KEY=sk-or-v1-your-key-here   # Referenced from config.yaml
+SESSION_SECRET=random-string-here            # Generated automatically by install
 ```
+
+Add one env var per LLM provider you want to use (e.g. `OPENAI_API_KEY`,
+`GROQ_API_KEY`). The providers block in `config.yaml` references these by name.
 
 ### `config.yaml` -- Everything else
 
-Copy from `config.yaml.example` and edit. Key sections:
+Copy from `config.yaml.example` and edit. The LLM layer is three parts:
 
 ```yaml
-llm:
-  base_url: https://openrouter.ai/api/v1    # LLM provider URL
-  default_model: anthropic/claude-sonnet-4   # Primary model
-  fallback_model: google/gemini-2.0-flash-001 # Cheaper fallback
-  background_model: google/gemini-2.0-flash-001 # For background tasks
+providers:                              # Each OpenAI-compatible endpoint, one entry
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"    # Resolved from .env at load time
+
+models:                                 # Each model, with its costs + capabilities
+  scout:
+    provider: openrouter
+    id: "meta-llama/llama-4-scout"
+    cost_in_per_mtok: 0.08
+    cost_out_per_mtok: 0.30
+    vision: true
+    context_window: 131072
+  deepseek-v3.2:
+    provider: openrouter
+    id: "deepseek/deepseek-v3.2"
+    cost_in_per_mtok: 0.27
+    cost_out_per_mtok: 1.10
+
+llm:                                    # Intelligence-tier routing
+  fast: scout                           # Default — most tasks
+  smart: deepseek-v3.2                  # Reasoning / planning / document queries
+  background: scout                     # Heartbeat / background loops
+  fallback: scout                       # Safety net on primary failure
+  auto_route: true                      # Classifier picks fast vs smart by task
 
 agent:
   name: Bob                    # Your agent's name

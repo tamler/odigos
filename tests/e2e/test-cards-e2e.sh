@@ -2,7 +2,7 @@
 # End-to-end test for contact cards, feed publisher, mesh, and agent capabilities.
 #
 # Prerequisites:
-#   LLM_API_KEY=your-key docker compose -f docker-compose.test.yml up --build -d
+#   OPENROUTER_API_KEY=your-key docker compose -f docker-compose.test.yml up --build -d
 #   Wait for both agents to be healthy:
 #   docker compose -f docker-compose.test.yml ps
 #

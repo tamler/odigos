@@ -43,7 +43,7 @@ Routes:
 /opt/odigos-sales/
   repo/                    # Git clone of odigos (code)
   config.yaml              # Agent config
-  .env                     # LLM_API_KEY + SESSION_SECRET
+  .env                     # OPENROUTER_API_KEY (and any other provider keys) + SESSION_SECRET
   data/
     agent/identity.md      # Sales agent identity prompt
     prompts/               # Infrastructure prompts (from repo)

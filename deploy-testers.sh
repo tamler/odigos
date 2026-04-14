@@ -26,15 +26,15 @@ else
     cd "$BASE_DIR/repo" && git pull && cd -
 fi
 
-# ── Step 2: Check LLM key ────────────────────────────────────────────
+# ── Step 2: Check LLM provider key ────────────────────────────────────
 ENV_FILE="$BASE_DIR/.env"
-if [ ! -f "$ENV_FILE" ] || ! grep -q "^LLM_API_KEY=.\+" "$ENV_FILE" 2>/dev/null; then
-    echo "ERROR: LLM_API_KEY not configured."
+if [ ! -f "$ENV_FILE" ] || ! grep -q "^OPENROUTER_API_KEY=.\+" "$ENV_FILE" 2>/dev/null; then
+    echo "ERROR: OPENROUTER_API_KEY not configured."
     echo "Create $ENV_FILE first:"
-    echo "  echo 'LLM_API_KEY=sk-or-...' > $ENV_FILE"
+    echo "  echo 'OPENROUTER_API_KEY=sk-or-...' > $ENV_FILE"
     exit 1
 else
-    info "LLM_API_KEY configured"
+    info "OPENROUTER_API_KEY configured"
 fi
 
 # ── Generate SESSION_SECRET if not present ────────────────────────────
@@ -81,13 +81,42 @@ agent:
 database:
   path: "data/odigos.db"
 
+providers:
+  openrouter:
+    base_url: "https://openrouter.ai/api/v1"
+    api_key: "\${OPENROUTER_API_KEY}"
+
+models:
+  scout:
+    provider: openrouter
+    id: "meta-llama/llama-4-scout"
+    cost_in_per_mtok: 0.08
+    cost_out_per_mtok: 0.30
+    vision: true
+    context_window: 131072
+  deepseek-v3.2:
+    provider: openrouter
+    id: "deepseek/deepseek-v3.2"
+    cost_in_per_mtok: 0.27
+    cost_out_per_mtok: 1.10
+    vision: false
+    context_window: 163840
+  gpt-5-nano:
+    provider: openrouter
+    id: "openai/gpt-5-nano"
+    cost_in_per_mtok: 0.05
+    cost_out_per_mtok: 0.40
+    vision: false
+    context_window: 128000
+
 llm:
-  base_url: "https://openrouter.ai/api/v1"
-  default_model: "deepseek/deepseek-v3.2"
-  fallback_model: "inception/mercury-2"
-  background_model: "google/gemini-2.5-flash"
+  fast: scout
+  smart: deepseek-v3.2
+  background: scout
+  fallback: gpt-5-nano
   max_tokens: 4096
   temperature: 0.7
+  auto_route: true
 
 budget:
   daily_limit_usd: 5.00
@@ -143,8 +172,7 @@ for i in "${!TESTERS[@]}"; do
       - ./testers/${name}/data:/app/data
       - ./testers/${name}/skills:/app/skills
       - ./testers/${name}/plugins:/app/plugins
-    environment:
-      - LLM_API_KEY=\${LLM_API_KEY}
+    # Provider keys live in the mounted .env, no environment: override needed.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

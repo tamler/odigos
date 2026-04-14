@@ -6,7 +6,7 @@ from odigos.tools.settings_tool import ManageSettingsTool
 
 @pytest.fixture
 def tool(tmp_path):
-    settings = Settings(api_key="test", llm_api_key="test")
+    settings = Settings(api_key="test")
     config_path = str(tmp_path / "config.yaml")
     return ManageSettingsTool(settings=settings, config_path=config_path)
 

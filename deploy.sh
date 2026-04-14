@@ -2,10 +2,27 @@
 set -euo pipefail
 
 # Deploy latest code to all Odigos installs.
-# Usage: bash deploy.sh [--skip-build]
+# Usage:
+#   bash deploy.sh                        # normal deploy
+#   bash deploy.sh --skip-build           # skip dashboard rebuild
+#   OPENROUTER_API_KEY=sk-... bash deploy.sh --fresh
+#       Wipes config.yaml + .env on every install and writes a fresh one.
+#       Required once after switching to the providers/models config shape.
 
 SKIP_BUILD=false
-[[ "${1:-}" == "--skip-build" ]] && SKIP_BUILD=true
+FRESH=false
+for arg in "$@"; do
+    case "$arg" in
+        --skip-build) SKIP_BUILD=true ;;
+        --fresh) FRESH=true ;;
+    esac
+done
+
+if [ "$FRESH" = "true" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
+    echo "ERROR: --fresh requires OPENROUTER_API_KEY to be exported." >&2
+    echo "  Example: OPENROUTER_API_KEY=sk-or-v1-... bash deploy.sh --fresh" >&2
+    exit 1
+fi
 
 ODIGOS_ONE="root@82.25.91.86"
 UXRLS="root@100.89.147.103"
@@ -39,16 +56,16 @@ for entry in "${BARE_METAL[@]}"; do
   IFS=':' read -r dir service user <<< "$entry"
   log "  $service ($dir) [user: $user]"
 
-  ssh "$ODIGOS_ONE" bash -s "$dir" "$service" "$SKIP_BUILD" "$user" <<'REMOTE'
+  ssh "$ODIGOS_ONE" bash -s "$dir" "$service" "$SKIP_BUILD" "$user" "$FRESH" "${OPENROUTER_API_KEY:-}" <<'REMOTE'
     set -euo pipefail
-    DIR="$1"; SVC="$2"; SKIP="$3"; SVC_USER="$4"
+    DIR="$1"; SVC="$2"; SKIP="$3"; SVC_USER="$4"; FRESH="$5"; OR_KEY="$6"
     cd "$DIR"
 
-    # Pull latest
+    # Pull latest (always — fresh-install runs after so it gets the new script)
     git fetch origin main
     LOCAL=$(git rev-parse HEAD)
     REMOTE=$(git rev-parse origin/main)
-    if [ "$LOCAL" = "$REMOTE" ]; then
+    if [ "$LOCAL" = "$REMOTE" ] && [ "$FRESH" != "true" ]; then
       echo "  Already up to date."
       exit 0
     fi
@@ -57,6 +74,12 @@ for entry in "${BARE_METAL[@]}"; do
     # Fix ownership IMMEDIATELY — git reset as root makes everything root-owned.
     # Must happen before uv sync, npm build, or anything else touches the files.
     chown -R "$SVC_USER:$SVC_USER" . 2>/dev/null || true
+
+    # Fresh-install mode: wipe config.yaml + .env and regenerate from scratch.
+    # Service user owns the result so it can read its own config.
+    if [ "$FRESH" = "true" ]; then
+      OPENROUTER_API_KEY="$OR_KEY" sudo -u "$SVC_USER" -E bash scripts/fresh-install.sh .
+    fi
 
     # Sync dependencies (new packages from pyproject.toml)
     sudo -u "$SVC_USER" uv sync --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
@@ -111,20 +134,31 @@ done
 
 log "Deploying to uxrls.com (Docker)..."
 
-ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" <<'REMOTE'
+ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" "$FRESH" "${OPENROUTER_API_KEY:-}" <<'REMOTE'
   set -euo pipefail
-  DIR="$1"; SKIP="$2"
+  DIR="$1"; SKIP="$2"; FRESH="$3"; OR_KEY="$4"
   cd "$DIR"
 
   # Pull latest
   git fetch origin main
   LOCAL=$(git rev-parse HEAD)
   REMOTE=$(git rev-parse origin/main)
-  if [ "$LOCAL" = "$REMOTE" ]; then
+  if [ "$LOCAL" = "$REMOTE" ] && [ "$FRESH" != "true" ]; then
     echo "  Already up to date."
     exit 0
   fi
   git reset --hard origin/main
+
+  # Fresh-install mode: per-tester wipe + regenerate before container recreate
+  if [ "$FRESH" = "true" ]; then
+    for user in florence jessica jason klint; do
+      TDIR="/opt/odigos/testers/$user"
+      [ -d "$TDIR" ] || continue
+      # fresh-install.sh lives in the repo, not in the tester dir — invoke by
+      # absolute path with the tester dir as the working directory argument.
+      OPENROUTER_API_KEY="$OR_KEY" bash "$DIR/scripts/fresh-install.sh" "$TDIR"
+    done
+  fi
 
   # Clean old images and build cache BEFORE building to prevent disk-full failures.
   # Keeps images used by running containers; prunes everything else.
