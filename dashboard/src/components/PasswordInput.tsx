@@ -8,9 +8,10 @@ interface PasswordInputProps {
   autoFocus?: boolean
   placeholder?: string
   className?: string
+  autoComplete?: string
 }
 
-export function PasswordInput({ value, onChange, autoFocus, placeholder, className }: PasswordInputProps) {
+export function PasswordInput({ value, onChange, autoFocus, placeholder, className, autoComplete }: PasswordInputProps) {
   const [show, setShow] = useState(false)
   return (
     <div className="relative">
@@ -20,6 +21,7 @@ export function PasswordInput({ value, onChange, autoFocus, placeholder, classNa
         onChange={onChange}
         autoFocus={autoFocus}
         placeholder={placeholder}
+        autoComplete={autoComplete}
         className={`pr-10 ${className || ''}`}
       />
       <button
