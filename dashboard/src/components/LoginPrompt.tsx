@@ -26,8 +26,11 @@ function bufferToBase64url(buffer: ArrayBuffer): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
+const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+
 export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth }: Props) {
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
@@ -53,13 +56,21 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
   async function handleSetup(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (!EMAIL_RE.test(email)) {
+      setError('Enter a valid email address')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match')
       return
     }
     setLoading(true)
     try {
-      await setup(username, password)
+      await setup(username, email, password)
       await login(username, password)
       onAuth()
     } catch (err) {
@@ -183,6 +194,17 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
                   value={username}
                   onChange={(e) => { setUsername(e.target.value); setError('') }}
                   autoFocus
+                  autoComplete="username"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setError('') }}
+                  autoComplete="email"
+                  placeholder="you@example.com"
                 />
               </div>
               <div className="space-y-2">
@@ -190,6 +212,7 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
                 <PasswordInput
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError('') }}
+                  autoComplete="new-password"
                 />
               </div>
               <div className="space-y-2">
@@ -197,10 +220,11 @@ export default function LoginPrompt({ setupRequired, mustChangePassword, onAuth 
                 <PasswordInput
                   value={confirmPassword}
                   onChange={(e) => { setConfirmPassword(e.target.value); setError('') }}
+                  autoComplete="new-password"
                 />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={loading || !username || !password || !confirmPassword}>
+              <Button type="submit" className="w-full" disabled={loading || !username || !email || !password || !confirmPassword}>
                 {loading ? 'Creating...' : 'Create Account'}
               </Button>
             </form>

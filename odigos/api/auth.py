@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -16,14 +17,30 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 SESSION_COOKIE = "odigos_session"
 
+# Permissive email regex — good enough to catch typos, not a full RFC 5322 parser.
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
 
 def _check_csrf(request: Request) -> None:
     if not request.headers.get("X-Requested-With"):
         raise HTTPException(status_code=403, detail="Missing CSRF header")
 
 
+def _validate_email(email: str) -> str:
+    """Strip and validate an email address. Raises HTTPException on failure."""
+    addr = (email or "").strip()
+    if not addr:
+        raise HTTPException(status_code=400, detail="Email is required")
+    if len(addr) > 254:
+        raise HTTPException(status_code=400, detail="Email is too long")
+    if not _EMAIL_RE.match(addr):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+    return addr
+
+
 class SetupRequest(BaseModel):
     username: str
+    email: str
     password: str
     display_name: str = ""
 
@@ -34,6 +51,7 @@ class LoginRequest(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
+    current_password: str = ""
     new_password: str
 
 
@@ -128,6 +146,7 @@ async def auth_setup(body: SetupRequest, request: Request, response: Response, d
     username = body.username.strip()
     password = body.password
     display_name = body.display_name
+    email = _validate_email(body.email)
 
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")
@@ -142,9 +161,9 @@ async def auth_setup(body: SetupRequest, request: Request, response: Response, d
     password_hash = _hash_password(password)
 
     await db.execute(
-        "INSERT INTO users (id, username, password_hash, display_name, must_change_password, created_at, last_login_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (user_id, username, password_hash, display_name, 0, now, now),
+        "INSERT INTO users (id, username, email, password_hash, display_name, must_change_password, created_at, last_login_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (user_id, username, email, password_hash, display_name, 0, now, now),
     )
 
     secret = settings.session_secret
@@ -206,7 +225,13 @@ async def auth_logout(request: Request, response: Response):
 
 @router.post("/change-password")
 async def auth_change_password(body: ChangePasswordRequest, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
-    """Change password for the authenticated user (session required)."""
+    """Change password for the authenticated user (session required).
+
+    Requires the current password. The exception is when must_change_password
+    is set on the user (operator-provisioned account on first login) — in that
+    case the temp password they used to log in is sufficient and the current
+    password check is skipped.
+    """
     _check_csrf(request)
     secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
@@ -223,9 +248,20 @@ async def auth_change_password(body: ChangePasswordRequest, request: Request, re
 
     user_id = session["user_id"]
 
-    user = await db.fetch_one("SELECT id FROM users WHERE id = ?", (user_id,))
+    user = await db.fetch_one(
+        "SELECT id, password_hash, must_change_password FROM users WHERE id = ?",
+        (user_id,),
+    )
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Verify current password unless the account is in forced-change mode
+    # (first-login flow for operator-seeded accounts).
+    if not user["must_change_password"]:
+        if not body.current_password:
+            raise HTTPException(status_code=400, detail="Current password is required")
+        if not _verify_password(body.current_password, user["password_hash"]):
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
 
     new_hash = _hash_password(new_password)
     await db.execute(
@@ -289,7 +325,7 @@ async def auth_me(request: Request, db=Depends(get_db), settings=Depends(get_set
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     user = await db.fetch_one(
-        "SELECT id, username, display_name, must_change_password, created_at, last_login_at "
+        "SELECT id, username, email, display_name, must_change_password, created_at, last_login_at "
         "FROM users WHERE id = ?",
         (session["user_id"],),
     )
@@ -319,6 +355,7 @@ async def auth_me(request: Request, db=Depends(get_db), settings=Depends(get_set
     return {
         "user_id": user["id"],
         "username": user["username"],
+        "email": user["email"] or "",
         "display_name": user["display_name"],
         "must_change_password": bool(user["must_change_password"]),
         "created_at": user["created_at"],

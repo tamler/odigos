@@ -165,3 +165,16 @@ server:
 CFG
 
 echo "  Fresh install written to $DIR (agent: $NAME, dashboard key: $DASH_KEY)"
+
+# Optional: seed the owner account if username/email/password env vars are set.
+# Used by deploy.sh to pre-provision tester accounts so the "first visitor wins"
+# race condition doesn't apply.
+if [ -n "${ODIGOS_SEED_USERNAME:-}" ] && [ -n "${ODIGOS_SEED_EMAIL:-}" ] && [ -n "${ODIGOS_SEED_PASSWORD:-}" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    bash "$SCRIPT_DIR/seed-account.sh" \
+        "$DIR" \
+        "$ODIGOS_SEED_USERNAME" \
+        "$ODIGOS_SEED_EMAIL" \
+        "$ODIGOS_SEED_PASSWORD" \
+        "${ODIGOS_SEED_DISPLAY_NAME:-$ODIGOS_SEED_USERNAME}"
+fi

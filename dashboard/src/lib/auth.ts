@@ -12,8 +12,8 @@ export async function login(username: string, password: string): Promise<{ must_
   return post('/api/auth/login', { username, password })
 }
 
-export async function setup(username: string, password: string): Promise<void> {
-  await post('/api/auth/setup', { username, password })
+export async function setup(username: string, email: string, password: string): Promise<void> {
+  await post('/api/auth/setup', { username, email, password })
 }
 
 export async function logout(): Promise<void> {

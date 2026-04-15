@@ -1124,7 +1124,17 @@ async def _persist_generated_api_key(config_path: str, api_key: str) -> None:
 
 
 async def _seed_user(db) -> None:
-    """Seed user from data/seed_user.json (for provisioned deploys)."""
+    """Seed user from data/seed_user.json (for provisioned deploys).
+
+    Expected JSON shape:
+        {
+          "username": "jacob",
+          "email": "jacob@example.com",
+          "password": "TempPass123",
+          "display_name": "Jacob",          # optional
+          "must_change_password": true       # optional, default true
+        }
+    """
     import json as _json
 
     _seed_path = Path("data/seed_user.json")
@@ -1141,19 +1151,24 @@ async def _seed_user(db) -> None:
             _user_id = _uuid.uuid4().hex
             _now = datetime.now(timezone.utc).isoformat()
             _must_change = 1 if _seed.get("must_change_password", True) else 0
+            _email = (_seed.get("email") or "").strip()
             await db.execute(
-                "INSERT INTO users (id, username, password_hash, display_name, "
-                "must_change_password, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO users (id, username, email, password_hash, display_name, "
+                "must_change_password, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     _user_id,
                     _seed["username"],
+                    _email,
                     _hash_password(_seed["password"]),
                     _seed.get("display_name", ""),
                     _must_change,
                     _now,
                 ),
             )
-            logger.info("Seed user '%s' created from data/seed_user.json", _seed["username"])
+            logger.info(
+                "Seed user '%s' (%s) created from data/seed_user.json",
+                _seed["username"], _email or "no email",
+            )
             _seed_path.unlink()
             logger.info("Consumed and deleted data/seed_user.json")
         else:

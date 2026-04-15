@@ -60,17 +60,18 @@ class FakeDB:
         sql_lower = sql.lower().strip()
 
         if sql_lower.startswith("insert into users"):
-            # params: (id, username, password_hash, display_name, must_change_password, created_at, last_login_at)
-            # or:     (id, username, password_hash, display_name, must_change_password, created_at)
+            # New layout (post-012_user_email migration):
+            #   (id, username, email, password_hash, display_name, must_change_password, created_at, last_login_at)
             uid = params[0]
             self._users[uid] = {
                 "id": uid,
                 "username": params[1],
-                "password_hash": params[2],
-                "display_name": params[3],
-                "must_change_password": params[4] if len(params) > 4 else 0,
-                "created_at": params[5] if len(params) > 5 else "",
-                "last_login_at": params[6] if len(params) > 6 else None,
+                "email": params[2] if len(params) > 2 else "",
+                "password_hash": params[3] if len(params) > 3 else "",
+                "display_name": params[4] if len(params) > 4 else "",
+                "must_change_password": params[5] if len(params) > 5 else 0,
+                "created_at": params[6] if len(params) > 6 else "",
+                "last_login_at": params[7] if len(params) > 7 else None,
             }
             return
 
@@ -170,24 +171,31 @@ async def test_auth_status_unauthenticated():
     assert data["must_change_password"] is False
 
 
+_VALID_SETUP = {
+    "username": "admin",
+    "email": "admin@example.com",
+    "password": "longpassword123",
+}
+
+
 @pytest.mark.asyncio
 async def test_setup_creates_user_and_sets_cookie():
     db = FakeDB()
     app = _make_auth_app(db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post("/api/auth/setup", json={
-            "username": "admin",
-            "password": "longpassword123",
+            **_VALID_SETUP,
             "display_name": "Admin User",
         }, headers=_CSRF)
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["username"] == "admin"
     assert "user_id" in data
-    # Cookie should be set
     assert SESSION_COOKIE in resp.cookies
-    # DB should have 1 user
     assert len(db._users) == 1
+    # Email is stored
+    stored = next(iter(db._users.values()))
+    assert stored["email"] == "admin@example.com"
 
 
 @pytest.mark.asyncio
@@ -195,12 +203,10 @@ async def test_setup_blocked_when_user_exists():
     db = FakeDB()
     app = _make_auth_app(db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        await c.post("/api/auth/setup", json={
-            "username": "admin",
-            "password": "longpassword123",
-        }, headers=_CSRF)
+        await c.post("/api/auth/setup", json=_VALID_SETUP, headers=_CSRF)
         resp = await c.post("/api/auth/setup", json={
             "username": "admin2",
+            "email": "admin2@example.com",
             "password": "anotherpass123",
         }, headers=_CSRF)
     assert resp.status_code == 409
@@ -212,6 +218,7 @@ async def test_setup_password_too_short():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.post("/api/auth/setup", json={
             "username": "admin",
+            "email": "admin@example.com",
             "password": "short",
         }, headers=_CSRF)
     assert resp.status_code == 400
@@ -219,16 +226,36 @@ async def test_setup_password_too_short():
 
 
 @pytest.mark.asyncio
+async def test_setup_invalid_email():
+    app = _make_auth_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.post("/api/auth/setup", json={
+            "username": "admin",
+            "email": "not-an-email",
+            "password": "longpassword123",
+        }, headers=_CSRF)
+    assert resp.status_code == 400
+    assert "email" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_setup_missing_email():
+    app = _make_auth_app()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.post("/api/auth/setup", json={
+            "username": "admin",
+            "password": "longpassword123",
+        }, headers=_CSRF)
+    # Pydantic field-required validation returns 422
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_login_success():
     db = FakeDB()
     app = _make_auth_app(db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        # Setup first
-        await c.post("/api/auth/setup", json={
-            "username": "admin",
-            "password": "longpassword123",
-        }, headers=_CSRF)
-        # Now login
+        await c.post("/api/auth/setup", json=_VALID_SETUP, headers=_CSRF)
         resp = await c.post("/api/auth/login", json={
             "username": "admin",
             "password": "longpassword123",
@@ -243,10 +270,7 @@ async def test_login_wrong_password():
     db = FakeDB()
     app = _make_auth_app(db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        await c.post("/api/auth/setup", json={
-            "username": "admin",
-            "password": "longpassword123",
-        }, headers=_CSRF)
+        await c.post("/api/auth/setup", json=_VALID_SETUP, headers=_CSRF)
         resp = await c.post("/api/auth/login", json={
             "username": "admin",
             "password": "wrongpassword",
@@ -256,27 +280,25 @@ async def test_login_wrong_password():
 
 @pytest.mark.asyncio
 async def test_change_password_flow():
+    """Normal change-password requires current_password verification."""
     db = FakeDB()
     app = _make_auth_app(db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        # Setup user
-        setup_resp = await c.post("/api/auth/setup", json={
-            "username": "admin",
-            "password": "longpassword123",
-        }, headers=_CSRF)
+        setup_resp = await c.post("/api/auth/setup", json=_VALID_SETUP, headers=_CSRF)
         cookie = setup_resp.cookies.get(SESSION_COOKIE)
 
-        # Change password
         resp = await c.post(
             "/api/auth/change-password",
-            json={"new_password": "newlongpassword456"},
+            json={
+                "current_password": "longpassword123",
+                "new_password": "newlongpassword456",
+            },
             cookies={SESSION_COOKIE: cookie},
             headers=_CSRF,
         )
-    assert resp.status_code == 200
+    assert resp.status_code == 200, resp.text
     assert resp.json()["status"] == "ok"
 
-    # Verify old password no longer works, new one does
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp_old = await c.post("/api/auth/login", json={
             "username": "admin",
@@ -291,18 +313,38 @@ async def test_change_password_flow():
 
 
 @pytest.mark.asyncio
+async def test_change_password_wrong_current():
+    """Submitting the wrong current_password is rejected with 401."""
+    db = FakeDB()
+    app = _make_auth_app(db)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        setup_resp = await c.post("/api/auth/setup", json=_VALID_SETUP, headers=_CSRF)
+        cookie = setup_resp.cookies.get(SESSION_COOKIE)
+        resp = await c.post(
+            "/api/auth/change-password",
+            json={
+                "current_password": "wrong-current",
+                "new_password": "newlongpassword456",
+            },
+            cookies={SESSION_COOKIE: cookie},
+            headers=_CSRF,
+        )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_change_password_too_short():
     db = FakeDB()
     app = _make_auth_app(db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        setup_resp = await c.post("/api/auth/setup", json={
-            "username": "admin",
-            "password": "longpassword123",
-        }, headers=_CSRF)
+        setup_resp = await c.post("/api/auth/setup", json=_VALID_SETUP, headers=_CSRF)
         cookie = setup_resp.cookies.get(SESSION_COOKIE)
         resp = await c.post(
             "/api/auth/change-password",
-            json={"new_password": "short"},
+            json={
+                "current_password": "longpassword123",
+                "new_password": "short",
+            },
             cookies={SESSION_COOKIE: cookie},
             headers=_CSRF,
         )
@@ -315,8 +357,7 @@ async def test_me_endpoint():
     app = _make_auth_app(db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         setup_resp = await c.post("/api/auth/setup", json={
-            "username": "admin",
-            "password": "longpassword123",
+            **_VALID_SETUP,
             "display_name": "The Admin",
         }, headers=_CSRF)
         cookie = setup_resp.cookies.get(SESSION_COOKIE)
@@ -324,6 +365,7 @@ async def test_me_endpoint():
     assert resp.status_code == 200
     data = resp.json()
     assert data["username"] == "admin"
+    assert data["email"] == "admin@example.com"
     assert data["display_name"] == "The Admin"
 
 

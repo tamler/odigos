@@ -432,17 +432,26 @@ if [[ "$create_account" =~ ^[Yy]$ ]]; then
     while [ -z "$owner_username" ]; do
         read -rp "  Username: " owner_username
     done
+    read -rp "  Email: " owner_email
+    while ! echo "$owner_email" | grep -qE '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'; do
+        read -rp "  Invalid email. Try again: " owner_email
+    done
     read -srp "  Password (min 8 chars): " owner_password
     echo ""
     while [ ${#owner_password} -lt 8 ]; do
         read -srp "  Password too short. Try again (min 8 chars): " owner_password
         echo ""
     done
-    mkdir -p data
-    cat > data/seed_user.json << SEEDEOF
-{"username": "$owner_username", "password": "$owner_password", "must_change_password": false}
-SEEDEOF
-    info "Account will be created on first startup"
+    bash scripts/seed-account.sh . "$owner_username" "$owner_email" "$owner_password" "$owner_username" >/dev/null
+    info "Account will be created on first startup (will not require password change)"
+    # Override the must_change_password flag for self-install case
+    python3 -c "
+import json
+with open('data/seed_user.json', 'r+') as f:
+    d = json.load(f)
+    d['must_change_password'] = False
+    f.seek(0); json.dump(d, f); f.truncate()
+"
     warn "Note: data/seed_user.json contains your password in plaintext."
     warn "It will be consumed and deleted on first startup."
 fi
