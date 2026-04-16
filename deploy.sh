@@ -34,6 +34,7 @@ BARE_METAL=(
   "/opt/odigos-rachel:odigos-rachel:odigos_agent"
   "/opt/odigos-sales:odigos-sales:odigos_sales"
   "/opt/odigos-honey:odigos-honey:odigos_agent"
+  "/opt/odigos-homerun:odigos-homerun:odigos_agent"
 )
 
 # Docker installs on uxrls.com
@@ -238,7 +239,7 @@ while IFS= read -r line; do
     echo -e "  ${RED}$line${NC}"
     FAILURES=$((FAILURES + 1))
   fi
-done < <(ssh "$ODIGOS_ONE" 'for s in odigos odigos-rachel odigos-sales odigos-honey; do
+done < <(ssh "$ODIGOS_ONE" 'for s in odigos odigos-rachel odigos-sales odigos-honey odigos-homerun; do
   printf "%-20s %s\n" "$s" "$(systemctl is-active $s)"
 done')
 
