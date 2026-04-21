@@ -3,12 +3,17 @@
 # scratch. Not a migration. Not idempotent. Destructive by design.
 #
 # Usage:
-#   OPENROUTER_API_KEY=sk-or-v1-... bash scripts/fresh-install.sh [install_dir] [agent_name]
+#   bash scripts/fresh-install.sh [install_dir] [agent_name]
 #
 # Environment:
-#   OPENROUTER_API_KEY  (required) key written into .env
+#   OPENROUTER_API_KEY  (optional) written to .env if set
+#   GROQ_API_KEY        (optional) written to .env if set
+#   KIE_AI_API_KEY      (optional) written to .env if set
 #   AGENT_NAME          (optional) overrides the derived agent name
 #   DASHBOARD_KEY       (optional) pre-set dashboard auth key; otherwise random
+#
+# At least one provider key should be set, otherwise the LLM won't work —
+# but that's a warning the agent will surface at startup, not a hard gate here.
 #
 # Agent name derivation when AGENT_NAME is unset:
 #   /opt/odigos           → Odigos
@@ -21,9 +26,9 @@ DIR="${1:-.}"
 CLI_NAME="${2:-}"
 cd "$DIR"
 
-if [ -z "${OPENROUTER_API_KEY:-}" ]; then
-    echo "ERROR: OPENROUTER_API_KEY must be set in the environment." >&2
-    exit 1
+if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${GROQ_API_KEY:-}" ]; then
+    echo "WARNING: No provider key set (OPENROUTER_API_KEY / GROQ_API_KEY)." >&2
+    echo "         Writing empty placeholders — fill them in before starting the agent." >&2
 fi
 
 # Agent name: CLI arg > env var > derived from directory
@@ -58,7 +63,7 @@ rm -f config.yaml .env config.yaml.*.bak .env.*.bak
 
 # Write .env
 cat > .env <<ENV
-OPENROUTER_API_KEY=$OPENROUTER_API_KEY
+OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
 GROQ_API_KEY=$GROQ_KEY
 KIE_AI_API_KEY=$KIE_KEY
 

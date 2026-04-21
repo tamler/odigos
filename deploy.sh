@@ -18,9 +18,10 @@ for arg in "$@"; do
     esac
 done
 
-if [ "$FRESH" = "true" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
-    echo "ERROR: --fresh requires OPENROUTER_API_KEY to be exported." >&2
+if [ "$FRESH" = "true" ] && [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${GROQ_API_KEY:-}" ]; then
+    echo "ERROR: --fresh requires at least one provider key (OPENROUTER_API_KEY or GROQ_API_KEY)." >&2
     echo "  Example: OPENROUTER_API_KEY=sk-or-v1-... bash deploy.sh --fresh" >&2
+    echo "           GROQ_API_KEY=gsk_... bash deploy.sh --fresh" >&2
     exit 1
 fi
 
