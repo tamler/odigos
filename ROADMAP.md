@@ -50,9 +50,10 @@ image+music story only works reliably with both.
 
 ## Pre-launch polish
 
-- ⏭️ Pin Sales' `api_key` across `deploy.sh --fresh` runs (Express's
-  `ODIGOS_AGENT_KEY` depends on it — rotation silently breaks odigos.one
-  public chat until manually re-synced)
+- ✅ Sales `api_key` / Express coupling (2026-04-23) — Express now reads
+  Sales's `api_key` directly from `/opt/odigos-sales/config.yaml` at
+  startup (no more `ODIGOS_AGENT_KEY` env var). `deploy.sh --fresh`
+  auto-restarts `odigos-site` so the new key takes effect in one pass.
 - ⏭️ Rate limiting per-user at the API layer (messages/hour cap on
   `/api/message` so a runaway client can't exhaust the daily budget in
   a single minute)
@@ -67,9 +68,6 @@ image+music story only works reliably with both.
 - 💭 Per-capability sub-caps in budget (`image_monthly_cap_usd`) —
   YAGNI until a Pro user asks, or a test shows tier separation is
   needed
-- 💭 Stable Sales `DASHBOARD_KEY` in `fresh-install.sh` to keep Express's
-  `ODIGOS_AGENT_KEY` consistent across rotations — alternative is
-  auto-sync logic in `deploy.sh`
 
 ## Future / nice-to-have
 

@@ -137,6 +137,14 @@ REMOTE
   fi
 done
 
+# On --fresh, Sales's api_key rotated. Express (odigos-site) reads that key
+# from /opt/odigos-sales/config.yaml at startup, so it needs a restart to
+# pick up the new value. Cheap + idempotent; always safe to run after fresh.
+if [ "$FRESH" = "true" ]; then
+  log "Restarting odigos-site (picks up new Sales api_key)..."
+  ssh "$ODIGOS_ONE" 'systemctl restart odigos-site && systemctl is-active odigos-site'
+fi
+
 # ── uxrls.com: docker ───────────────────────────────────────────────
 
 log "Deploying to uxrls.com (Docker)..."
