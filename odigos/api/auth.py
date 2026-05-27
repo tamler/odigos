@@ -143,7 +143,7 @@ async def auth_setup(body: SetupRequest, request: Request, response: Response, d
     if row and row["count"] > 0:
         raise HTTPException(status_code=409, detail="Setup already completed")
 
-    username = body.username.strip()
+    username = body.username.strip().lower()
     password = body.password
     display_name = body.display_name
     email = _validate_email(body.email)
@@ -181,7 +181,7 @@ async def auth_setup(body: SetupRequest, request: Request, response: Response, d
 async def auth_login(body: LoginRequest, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
     """Validate credentials and set session cookie."""
     _check_csrf(request)
-    username = body.username.strip()
+    username = body.username.strip().lower()
     password = body.password
 
     if not username or not password:
@@ -292,7 +292,7 @@ async def auth_reset_password(body: ResetPasswordRequest, request: Request, db=D
     if not hmac.compare_digest(token.encode(), settings.api_key.encode()):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
-    username = body.username.strip()
+    username = body.username.strip().lower()
     new_password = body.new_password
 
     if not username:
