@@ -92,15 +92,15 @@ function BudgetCard({ budget, error }: { budget: BudgetStatus | null; error: str
         Budget Today
       </div>
       <SegmentedProgressBar
-        value={budget.total_spent_today}
-        max={budget.daily_budget}
+        value={budget.daily_spend}
+        max={budget.daily_limit}
         segments={10}
       />
       <div className="text-xs text-muted-foreground mt-2 tabular-nums">
-        ${budget.total_spent_today.toFixed(2)} / ${budget.daily_budget.toFixed(2)}
+        ${budget.daily_spend.toFixed(2)} / ${budget.daily_limit.toFixed(2)}
       </div>
       <div className="text-xs text-muted-foreground tabular-nums">
-        Remaining: ${budget.remaining.toFixed(2)}
+        Remaining: ${Math.max(0, budget.daily_limit - budget.daily_spend).toFixed(2)}
       </div>
     </div>
   )

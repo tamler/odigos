@@ -13,10 +13,13 @@ export interface AgentState {
 }
 
 export interface BudgetStatus {
-  total_spent_today: number
-  daily_budget: number
-  remaining: number
-  percent_used: number
+  daily_spend: number
+  monthly_spend: number
+  daily_limit: number
+  monthly_limit: number
+  within_budget: boolean
+  warning: boolean
+  circuit_breaker?: boolean
 }
 
 export interface Goal {
