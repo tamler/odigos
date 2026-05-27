@@ -110,7 +110,7 @@ export default function AppLayout() {
   }, [])
 
   useEffect(() => {
-    if (activeConversationId) loadMessages(activeConversationId)
+    if (activeConversationId && activeConversationId !== 'new') loadMessages(activeConversationId)
     else useChatStore.getState().setMessages([])
   }, [activeConversationId, loadMessages])
 

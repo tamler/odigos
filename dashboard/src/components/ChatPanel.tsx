@@ -120,7 +120,7 @@ export const ChatPanel = memo(({
   // Load conversation messages when switching
   useEffect(() => {
     const cid = searchParams.get('c') || activeConversationId
-    if (!cid) {
+    if (!cid || cid === 'new') {
       if (loadedConvRef.current !== null) {
         setMessages([])
         loadedConvRef.current = null
