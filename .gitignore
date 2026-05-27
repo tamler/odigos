@@ -8,6 +8,9 @@ dist/
 # Environment and config (contain secrets)
 .env
 config.yaml
+docs/vps-cred.md
+*-cred.md
+*-cred.txt
 
 # Data — ignore user data, track system files
 data/*.db
