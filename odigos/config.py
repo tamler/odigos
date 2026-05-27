@@ -308,6 +308,7 @@ class Settings(BaseSettings):
     # Secret is shared with the platform's PLATFORM_AGENT_JWT_SECRET (HS256).
     platform_jwt_secret: str = ""
     platform_audience: str = ""  # Required: this agent's full URL, e.g. "https://jacob.odigos.one"
+    sso_auto_provision: bool = True  # SSO with unknown email auto-creates the local user
 
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()

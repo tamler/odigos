@@ -248,7 +248,26 @@ async def auth_sso(token: str, request: Request, response: Response, db=Depends(
         (email,),
     )
     if not user:
-        raise HTTPException(403, f"No agent account for {email} — sign up locally first")
+        if not settings.sso_auto_provision:
+            raise HTTPException(403, f"No agent account for {email} — sign up locally first")
+        # Auto-provision: derive username from email local-part, dedupe on collision
+        base_username = re.sub(r"[^a-z0-9_]", "", email.split("@")[0].lower()) or "user"
+        username = base_username
+        suffix = 1
+        while await db.fetch_one("SELECT 1 FROM users WHERE username = ?", (username,)):
+            suffix += 1
+            username = f"{base_username}{suffix}"
+        user_id = uuid.uuid4().hex
+        now = datetime.now(timezone.utc).isoformat()
+        # Random password the user never sees — SSO is their only login path
+        password_hash = _hash_password(uuid.uuid4().hex)
+        display_name = (claims.get("name") or "").strip() or username
+        await db.execute(
+            "INSERT INTO users (id, username, email, password_hash, display_name, must_change_password, created_at, last_login_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, username, email, password_hash, display_name, 0, now, now),
+        )
+        user = {"id": user_id, "username": username, "must_change_password": 0}
 
     now = datetime.now(timezone.utc).isoformat()
     await db.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now, user["id"]))
