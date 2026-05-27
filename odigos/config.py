@@ -58,6 +58,7 @@ class ModelConfig(BaseModel):
     cost_out_per_mtok: float = 0.0  # $/million output tokens
     vision: bool = False
     context_window: int = 0
+    max_output_tokens: int = 0  # 0 = use global llm.max_tokens; set per-model when a provider caps lower
     notes: str = ""  # Free-form, shown in UI
 
 
@@ -70,7 +71,7 @@ class LLMConfig(BaseModel):
     smart: str = "deepseek-v3.2"  # Reasoning-heavy work (planning, doc queries, hard classifications).
     background: str = ""  # Heartbeat / entity extraction / background loops. Defaults to fast.
     fallback: str = ""  # Safety net on primary failure. Defaults to fast.
-    max_tokens: int = 4096
+    max_tokens: int = 16384  # Per-model cap via ModelConfig.max_output_tokens still respected
     temperature: float = 0.7
     request_timeout_seconds: float = 60.0
     connect_timeout_seconds: float = 10.0

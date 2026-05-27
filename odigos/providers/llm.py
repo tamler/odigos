@@ -245,10 +245,12 @@ class LLMClient(LLMProvider):
         # this is Anthropic-only extra work.
         out_messages = _apply_anthropic_cache_control(messages, model_cfg, provider)
 
+        requested_max = kwargs.get("max_tokens", self.max_tokens)
+        model_cap = model_cfg.max_output_tokens
         payload: dict = {
             "model": model_cfg.id,
             "messages": out_messages,
-            "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+            "max_tokens": min(requested_max, model_cap) if model_cap > 0 else requested_max,
             "temperature": kwargs.get("temperature", self.temperature),
         }
         tools = kwargs.get("tools")
@@ -344,10 +346,12 @@ class LLMClient(LLMProvider):
 
         out_messages = _apply_anthropic_cache_control(messages, model_cfg, provider)
 
+        requested_max = kwargs.get("max_tokens", self.max_tokens)
+        model_cap = model_cfg.max_output_tokens
         payload: dict = {
             "model": model_cfg.id,
             "messages": out_messages,
-            "max_tokens": kwargs.get("max_tokens", self.max_tokens),
+            "max_tokens": min(requested_max, model_cap) if model_cap > 0 else requested_max,
             "temperature": kwargs.get("temperature", self.temperature),
             "stream": True,
         }
