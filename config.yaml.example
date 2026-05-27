@@ -105,7 +105,7 @@ llm:
   smart: deepseek-v3.2      # Reasoning-heavy work (planning, document queries)
   background: scout         # Heartbeat / background loops (defaults to fast)
   fallback: gpt-5-nano      # Safety net if primary fails
-  max_tokens: 16384         # Global cap on output tokens. Per-model max_output_tokens (in models: block) clamps lower when needed.
+  max_tokens: 32768         # Global cap on output tokens. Per-model max_output_tokens (in models: block) clamps lower when needed.
   temperature: 0.7
   request_timeout_seconds: 60
   connect_timeout_seconds: 10

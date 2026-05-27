@@ -71,7 +71,7 @@ class LLMConfig(BaseModel):
     smart: str = "deepseek-v3.2"  # Reasoning-heavy work (planning, doc queries, hard classifications).
     background: str = ""  # Heartbeat / entity extraction / background loops. Defaults to fast.
     fallback: str = ""  # Safety net on primary failure. Defaults to fast.
-    max_tokens: int = 16384  # Per-model cap via ModelConfig.max_output_tokens still respected
+    max_tokens: int = 32768  # Per-model cap via ModelConfig.max_output_tokens still respected
     temperature: float = 0.7
     request_timeout_seconds: float = 60.0
     connect_timeout_seconds: float = 10.0
