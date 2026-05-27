@@ -303,6 +303,12 @@ class Settings(BaseSettings):
     searxng_username: str = ""
     searxng_password: str = ""
 
+    # --- Platform SSO bridge (Level 1) ---
+    # When set, GET /api/auth/sso?token=<jwt> exchanges a platform JWT for an agent session.
+    # Secret is shared with the platform's PLATFORM_AGENT_JWT_SECRET (HS256).
+    platform_jwt_secret: str = ""
+    platform_audience: str = ""  # Required: this agent's full URL, e.g. "https://jacob.odigos.one"
+
     agent: AgentConfig = AgentConfig()
     database: DatabaseConfig = DatabaseConfig()
     embeddings: EmbeddingsConfig = EmbeddingsConfig()

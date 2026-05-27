@@ -212,6 +212,57 @@ async def auth_login(body: LoginRequest, request: Request, response: Response, d
     return {"must_change_password": must_change}
 
 
+@router.get("/sso")
+async def auth_sso(token: str, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
+    """Exchange a platform-issued JWT for an agent session cookie.
+
+    Verifies the JWT (HS256, shared secret with platform), looks up the agent's
+    local user by the email in the `sub` claim, sets a session cookie, and
+    redirects to the dashboard root.
+    """
+    import jwt as _jwt
+    from datetime import datetime, timezone as _tz
+
+    secret = settings.platform_jwt_secret
+    audience = settings.platform_audience
+    if not secret or not audience:
+        raise HTTPException(503, "Platform SSO not configured on this agent")
+
+    try:
+        claims = _jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            audience=audience,
+            options={"require": ["sub", "exp", "aud", "iat"]},
+        )
+    except _jwt.PyJWTError as e:
+        raise HTTPException(401, f"Invalid SSO token: {type(e).__name__}")
+
+    email = (claims.get("sub") or "").strip().lower()
+    if not email:
+        raise HTTPException(401, "SSO token missing email")
+
+    user = await db.fetch_one(
+        "SELECT id, username, must_change_password FROM users WHERE LOWER(email) = ?",
+        (email,),
+    )
+    if not user:
+        raise HTTPException(403, f"No agent account for {email} — sign up locally first")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now, user["id"]))
+
+    sess_token = _create_session(settings.session_secret, {
+        "user_id": user["id"],
+        "username": user["username"],
+        "must_change_password": bool(user["must_change_password"]),
+    })
+    redirect = RedirectResponse(url="/", status_code=302)
+    _set_session_cookie(redirect, request, sess_token)
+    return redirect
+
+
 @router.post("/logout")
 async def auth_logout(request: Request, response: Response):
     """Clear the session cookie. Redirect to platform if managed."""
