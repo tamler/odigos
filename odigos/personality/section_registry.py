@@ -1,4 +1,31 @@
-"""Registry for dynamic, evolvable prompt sections."""
+"""Registry for dynamic, evolvable prompt sections.
+
+PROMPT-CACHE PRIORITY BANDS (brittleness audit §3.8)
+----------------------------------------------------
+Sections are concatenated into the system prompt in ascending `priority`
+order, so `priority` defines the cache prefix. Anthropic/OpenROUTER prompt
+caching keys on a stable prefix — inserting a section at an existing priority
+shifts every later section and busts the cache for ALL users. To keep the
+prefix stable, new sections slot into a reserved band rather than reusing a
+neighbor's number:
+
+    0-9    security boilerplate (canary, instruction-hierarchy) — rarely changes
+    10     identity (one per agent)
+    11-19  behavioral rules (guardrails first, then operational rules)
+    20-29  voice + style
+    30-49  routing rules + classification heuristics
+    50     capabilities (what the agent can do)
+    51-99  reserved for future sections
+
+Rules:
+  - A new section picks an UNUSED number inside its band. Reusing an existing
+    section's priority is a cache bust for every existing user.
+  - Intentional cache busts are budgeted: 1 per quarter (see spec §3.8).
+    Security fixes override the budget.
+  - Tool descriptions, find_tools output format, and skill `tools:` lists
+    also live in the cached prefix (the tool-definitions block) — the same
+    governance applies to changes there.
+"""
 from __future__ import annotations
 
 import logging
