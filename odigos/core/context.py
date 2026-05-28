@@ -864,15 +864,24 @@ class ContextAssembler:
     # -- Helper methods for build_planned() --
 
     def _load_identity(self) -> str:
-        """Load identity from data/agent/identity.md."""
+        """Load and concatenate all persona sections from data/agent/*.md.
+
+        Returns all always_include sections (identity, capabilities, guardrails, etc.)
+        sorted by priority, joined with blank lines. Previously only returned the
+        single 'identity' section — which silently dropped guardrails and capabilities
+        from the system prompt, causing agents to drift off-role.
+        """
         if hasattr(self, '_cached_identity') and self._cached_identity:
             return self._cached_identity
         try:
             sections = self.fallback_registry.load_all()
-            for s in sections:
-                if s.name == "identity":
-                    self._cached_identity = s.content.replace("{name}", self.agent_name)
-                    return self._cached_identity
+            if sections:
+                parts = [
+                    s.content.replace("{name}", self.agent_name)
+                    for s in sorted(sections, key=lambda x: x.priority)
+                ]
+                self._cached_identity = "\n\n".join(parts)
+                return self._cached_identity
         except Exception:
             pass
         self._cached_identity = f"You are {self.agent_name}."
