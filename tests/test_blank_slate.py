@@ -117,6 +117,21 @@ async def test_kanban_create_card_without_board_gives_actionable_error(fresh_db)
 
 
 @pytest.mark.asyncio
+async def test_notebook_from_blank_slate(fresh_db):
+    """Create a notebook and add an entry from an empty DB, then list it back."""
+    from odigos.tools.notebook import ManageNotebookTool
+
+    nb = ManageNotebookTool(db=fresh_db)
+
+    res = await nb.execute({"action": "create_notebook", "name": "Field Notes"})
+    assert res.success, f"create_notebook failed: {res.error}"
+
+    res = await nb.execute({"action": "list_notebooks"})
+    assert res.success, f"list_notebooks failed: {res.error}"
+    assert "Field Notes" in res.data, f"created notebook not listed:\n{res.data}"
+
+
+@pytest.mark.asyncio
 async def test_goals_emit_full_ids(fresh_db):
     """create_todo / create_reminder / create_goal must return full IDs the
     model can reuse (the [:8] truncation bug)."""

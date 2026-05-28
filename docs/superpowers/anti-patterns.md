@@ -98,6 +98,14 @@ Linked from: [`docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustnes
 - **Annotation:** 🔴 high · `12x` (12 distinct unreachable tools) · `unknown` (latent since find_tools shipped; surfaced by the coverage gate, not production)
 - **Principle:** §3.1 (contract not display — discovery output is contract) + the value of §B.3 (coverage gate)
 
+### 12. Notebook tool: schema advertised actions the dispatch didn't accept
+- **Surface:** `odigos/tools/notebook.py` (`manage_notebook`)
+- **What happened:** The parameter schema's `action` enum advertised `create_notebook` / `list_notebooks` / `rename_notebook` / `delete_notebook`, but `execute()` dispatched on `create` / `list` / `rename` / `delete`. A model following the schema (as it should) got "Unknown action: create_notebook" for 4 of the 6 actions. Only `add_entry` and `list_entries` matched on both sides.
+- **What fixed it:** [`<pending>`] — normalize the documented long-form actions to the short dispatch forms; both now work (backward-compatible alias map).
+- **How it was caught:** the blank-slate smoke test (Phase B.1) when a notebook create→list flow was added — the test infra's second real find.
+- **Annotation:** 🔴 high · `4x` (4 broken actions) · `unknown` (latent; schema and dispatch drifted apart at some point)
+- **Principle:** §3.1 (the parameter schema IS contract — the model calls exactly what it advertises) + §3.5 (blank-slate testing caught it)
+
 ---
 
 ## Append new entries below this line
