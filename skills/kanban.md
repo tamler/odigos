@@ -1,6 +1,14 @@
 ---
 name: kanban
-description: Manage kanban boards — create cards, move tasks through columns, track progress
+description: Manage kanban boards — create boards, create cards, move tasks through columns, track progress
+tools:
+  - kanban_list_boards
+  - kanban_get_board
+  - kanban_create_board
+  - kanban_create_card
+  - kanban_move_card
+  - kanban_update_card
+  - kanban_delete_card
 ---
 
 # Kanban Mode

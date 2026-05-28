@@ -515,11 +515,13 @@ class Bootstrapper:
     def _register_workspace_tools(self, registry, db, skill_registry):
         """Notebooks, kanban, workspace search, skills, artifacts."""
         from odigos.tools.kanban import (
-            KanbanListBoardsTool, KanbanGetBoardTool, KanbanCreateCardTool,
+            KanbanListBoardsTool, KanbanGetBoardTool,
+            KanbanCreateBoardTool, KanbanCreateCardTool,
             KanbanMoveCardTool, KanbanUpdateCardTool, KanbanDeleteCardTool,
         )
         registry.register(KanbanListBoardsTool(db=db))
         registry.register(KanbanGetBoardTool(db=db))
+        registry.register(KanbanCreateBoardTool(db=db))
         registry.register(KanbanCreateCardTool(db=db))
         registry.register(KanbanMoveCardTool(db=db))
         registry.register(KanbanUpdateCardTool(db=db))

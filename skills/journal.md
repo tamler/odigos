@@ -1,6 +1,8 @@
 ---
 name: journal
 description: Guide reflective journaling with prompts, mood tracking, and pattern recognition
+tools:
+  - manage_notebook
 ---
 
 # Journal Mode

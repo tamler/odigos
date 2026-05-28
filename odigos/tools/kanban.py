@@ -93,6 +93,68 @@ class KanbanGetBoardTool(BaseTool):
             return ToolResult(success=False, data="", error=str(e))
 
 
+class KanbanCreateBoardTool(BaseTool):
+    name = "kanban_create_board"
+    category = "productivity"
+    description = (
+        "Create a new kanban board with three default columns (To Do, Doing, Done). "
+        "Returns the new board_id and the three column_ids so you can immediately "
+        "create cards in any column. Use whenever the user asks you to make a board, "
+        "project, task list, or workflow from scratch."
+    )
+    parameters_schema = {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Board title (e.g. 'Credit Card Procedures')"},
+            "description": {"type": "string", "description": "Optional board description"},
+            "columns": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Optional column titles. Defaults to ['To Do', 'Doing', 'Done'] if omitted."
+                ),
+            },
+        },
+        "required": ["title"],
+    }
+
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    async def execute(self, params: dict) -> ToolResult:
+        title = (params.get("title") or "").strip()
+        if not title:
+            return ToolResult(success=False, data="", error="title is required")
+        description = (params.get("description") or "").strip()
+        column_titles = params.get("columns") or ["To Do", "Doing", "Done"]
+        if not isinstance(column_titles, list) or not column_titles:
+            column_titles = ["To Do", "Doing", "Done"]
+
+        try:
+            boards = ResourceStore(self.db, "kanban_boards")
+            cols = ResourceStore(self.db, "kanban_columns")
+            board_id = await boards.create(title=title, description=description)
+            col_results = []
+            for pos, col_title in enumerate(column_titles):
+                col_id = await cols.create(board_id=board_id, title=col_title, position=pos)
+                col_results.append((col_title, col_id))
+
+            cols_summary = ", ".join(f'"{t}" (id: {cid[:8]})' for t, cid in col_results)
+            return ToolResult(
+                success=True,
+                data=(
+                    f"Board created: \"{title}\" (board_id: {board_id})\n"
+                    f"Columns: {cols_summary}\n"
+                    f"Next step: call kanban_create_card(board_id=\"{board_id}\", "
+                    f"column_id=\"<one of the column ids above>\", title=\"...\") "
+                    f"to add cards."
+                ),
+            )
+        except Exception as e:
+            logger.error("kanban_create_board failed: %s", e, exc_info=True)
+            return ToolResult(success=False, data="", error=str(e))
+
+
 class KanbanCreateCardTool(BaseTool):
     name = "kanban_create_card"
     category = "productivity"
@@ -119,8 +181,40 @@ class KanbanCreateCardTool(BaseTool):
         description = params.get("description", "")
         priority = params.get("priority", "medium")
 
+        if not board_id or not column_id or not title:
+            return ToolResult(
+                success=False, data="",
+                error="board_id, column_id, and title are required",
+            )
+
         try:
+            boards = ResourceStore(self.db, "kanban_boards")
+            cols = ResourceStore(self.db, "kanban_columns")
             cards = ResourceStore(self.db, "kanban_cards")
+
+            # Validate up front so failures explain how to proceed instead of
+            # leaking a raw "FOREIGN KEY constraint failed" exception.
+            board = await boards.get(board_id)
+            if not board:
+                return ToolResult(
+                    success=False, data="",
+                    error=(
+                        f"No board exists with id '{board_id}'. "
+                        f"Create one first with kanban_create_board(title=\"...\"), "
+                        f"then use the returned board_id and column_id from its response."
+                    ),
+                )
+            column = await cols.get(column_id)
+            if not column or column.get("board_id") != board_id:
+                return ToolResult(
+                    success=False, data="",
+                    error=(
+                        f"No column '{column_id}' on board '{board_id}'. "
+                        f"Call kanban_get_board(board_id=\"{board_id}\") to see the "
+                        f"available columns and their ids."
+                    ),
+                )
+
             existing = await cards.list(column_id=column_id, order_by="position ASC")
             position = len(existing)
 
