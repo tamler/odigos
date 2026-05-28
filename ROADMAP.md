@@ -15,12 +15,11 @@ Single OVH VPS at `51.81.82.221` (Tailscale-only SSH, public 80/443 for Caddy).
 |---------|------|--------|---------|
 | Bob (Jacob's personal agent) | `/opt/odigos` | `jacob.odigos.one` | Groq scout (fast) + OpenRouter mimo-pro (smart) |
 | Jessica (tester) | `/opt/odigos-jessica` | `jessica.odigos.one` | Same as Bob |
-| Sales (public chat widget) | `/opt/odigos-sales` | `odigos.one/api/sales/*` | Groq llama-3.3-70b-versatile |
 | Site (marketing + auth UI) | `/opt/odigos-site` | `odigos.one` | Node/Express/SSR React |
 | Platform API | `/opt/odigos-platform` | `odigos.one/api/v1/*` | FastAPI + Postgres ([repo](https://github.com/tamler/odigos-platform), private) |
 | Postgres | docker `odigos-postgres` | (internal, 127.0.0.1:5432) | postgres:16-alpine |
 
-Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-metal); old Bob (data wiped); Jessica Docker on uxrls.com.
+Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-metal); old Bob (data wiped); Jessica Docker on uxrls.com. Retired 2026-05-28: Sales (public chat widget) — replaced with static FAQ.
 
 ---
 
@@ -44,8 +43,9 @@ Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-met
 - ✅ `LowerEmail` Annotated type on all platform `EmailStr` fields (auth.py, contacts.py)
 - ✅ **Level 1 SSO bridge** — platform issues HS256 JWT (5-min TTL) via `POST /api/v1/auth/agent-token`; agent verifies + sessions via `GET /api/auth/sso?token=`. Shared `PLATFORM_AGENT_JWT_SECRET`. 5/5 attack-vector tests pass (wrong audience, expired, unknown email, bad signature, no auth).
 - ✅ **Auto-provision** — SSO with unknown email creates the local agent user (config flag `sso_auto_provision: true` default). Username derived from email local-part.
-- ⏭️ Wire up "Open my agent" button on `odigos.one` frontend (single fetch + redirect)
-- ⏭️ Collect `chosen_subdomain` during platform signup so the button knows where to send users
+- ✅ **"Open my agent" button wired** (2026-05-28) — `Dashboard.tsx` instance card calls `/api/v1/auth/agent-token` then redirects through `/api/auth/sso?token=`. Shipped in SSR bundle. Awaits `instances` table seeding to be user-visible.
+- ⏭️ Collect `chosen_subdomain` during platform signup
+- ⏭️ Provisioning automation: `INSERT INTO instances` on signup so the button is visible without a manual seed
 
 ### LLM routing improvements (2026-05-27)
 - ✅ `ModelConfig.max_output_tokens` per-model override — fast-tier providers like Groq scout (8k cap) get clamped while smart-tier mimo-pro (1M ctx) uses the full budget
@@ -67,10 +67,13 @@ Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-met
 
 ## In flight / next up
 
-- ⏭️ **"Open my agent" frontend button** — `/api/v1/auth/agent-token` exists and is verified end-to-end; just needs a button in the platform UI that calls it and redirects. ~1 hour.
-- ⏭️ **Sales identity drift** — llama-3.3-70b respects topic but ignores `first person` and `two-or-three sentences` directives and occasionally fabricates features. Either tighten `identity.md` with explicit DO-NOTs, or accept and move on.
-- ⏭️ **Site/proxy decoupling claim was wrong** — the 2026-04-23 commit said "decouple odigos-site from Sales api_key via env var" but only updated `agent-proxy.js`, not `server.js`. Today we patched the systemd unit with `ODIGOS_AGENT_KEY=`. Either finish decoupling `server.js` too, or document the dual-source reality.
 - ⏭️ **Old VPS wipes** — `82.25.91.86` (old odigos.one bare-metal) and `100.89.147.103` (uxrls.com Jessica Docker) are still running but unused. Cancel contracts at leisure.
+
+---
+
+## Decided against
+
+- 🚫 **Sales agent / public chat widget** (2026-05-28) — Replaced with a static FAQ at `odigos.one/faq`. Open-weights LLMs couldn't reliably stay on-script for product Q&A; a curated FAQ is more trustworthy and faster. Resolved the prior in-flight items "Sales identity drift" and "Site/proxy decoupling claim was wrong" in one move. `odigos-sales` systemd unit stopped + disabled, `agent-proxy.js` middleware deleted, WebSocket upgrade handler removed from `server.js`, Caddy `/api/sales/*` + `/api/agent` routes dropped. `/opt/odigos-sales/data/agent/*.md` retained on disk as the FAQ content source.
 
 ---
 
@@ -79,15 +82,8 @@ Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-met
 These two land together — share the budget-tracker extension, and Pro tier's
 image+music story only works reliably with both.
 
-- 🔧 [Unified capabilities config](docs/superpowers/specs/2026-04-16-unified-capabilities-config-design.md)
-  Extend the `providers` + `models` + routing pattern to image, music,
-  voice STT/TTS, embeddings. One BYOK UI for everything, cost-per-unit
-  declared on each model, per-capability tier routing. ~3 focused days.
-- 🔧 [Unified cost tracking](docs/superpowers/specs/2026-04-16-unified-cost-tracking-note.md)
-  `BudgetTracker.record_tool_cost()` + `tool_costs` table (migration 013).
-  Every paid tool call (Whisper STT, Kie.ai image, Kie.ai music) reports
-  into the same daily/monthly cap the LLM calls already use. Activity
-  page shows per-tool breakdown. Pairs with capabilities config.
+- 🔧 [Unified capabilities config](docs/superpowers/specs/2026-04-16-unified-capabilities-config-design.md) — Extend the `providers` + `models` + routing pattern to image, music, voice STT/TTS, embeddings. One BYOK UI for everything, cost-per-unit declared on each model, per-capability tier routing. ~3 focused days. **Build plan:** [`2026-05-28-unified-capabilities-config.md`](docs/superpowers/plans/2026-05-28-unified-capabilities-config.md)
+- 🔧 [Unified cost tracking](docs/superpowers/specs/2026-04-16-unified-cost-tracking-note.md) — `BudgetTracker.record_tool_cost()` + `tool_costs` table (migration 013). Every paid tool call (Whisper STT, Kie.ai image, Kie.ai music) reports into the same daily/monthly cap the LLM calls already use. Activity page shows per-tool breakdown. **Build plan:** [`2026-05-28-unified-cost-tracking.md`](docs/superpowers/plans/2026-05-28-unified-cost-tracking.md) — ~1 focused day, ships independently or layered on top of the capabilities config.
 
 ## Pre-launch polish
 
