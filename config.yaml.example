@@ -118,6 +118,11 @@ budget:
   daily_limit_usd: 0.50
   monthly_limit_usd: 10.00
   warn_threshold: 0.80              # Warn at 80% of budget consumed
+  # Caps apply across LLM token spend AND paid tools (Whisper STT $0.04/audio-min,
+  # Kie.ai image $0.03/img, Kie.ai music $0.15/track). Activity page shows the
+  # per-source breakdown when at least one paid call has been recorded today.
+  # Per-capability sub-caps (e.g. image_monthly_cap_usd) are not yet implemented;
+  # the combined daily/monthly cap is the only enforcement today.
 
 # Web server
 server:

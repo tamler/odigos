@@ -79,11 +79,16 @@ Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-met
 
 ## Pre-launch blockers (before hosted paid signups)
 
-These two land together — share the budget-tracker extension, and Pro tier's
-image+music story only works reliably with both.
+- 🔧 [Unified capabilities config](docs/superpowers/specs/2026-04-16-unified-capabilities-config-design.md) — Extend the `providers` + `models` + routing pattern to image, music, voice STT/TTS, embeddings. One BYOK UI for everything, cost-per-unit declared on each model, per-capability tier routing. ~3 focused days. **Build plan:** [`2026-05-28-unified-capabilities-config.md`](docs/superpowers/plans/2026-05-28-unified-capabilities-config.md). Cost tracking (the spec's pair) already shipped — this refactor will move per-call costs from hardcoded constants to `ModelConfig.cost_per_unit`.
 
-- 🔧 [Unified capabilities config](docs/superpowers/specs/2026-04-16-unified-capabilities-config-design.md) — Extend the `providers` + `models` + routing pattern to image, music, voice STT/TTS, embeddings. One BYOK UI for everything, cost-per-unit declared on each model, per-capability tier routing. ~3 focused days. **Build plan:** [`2026-05-28-unified-capabilities-config.md`](docs/superpowers/plans/2026-05-28-unified-capabilities-config.md)
-- 🔧 [Unified cost tracking](docs/superpowers/specs/2026-04-16-unified-cost-tracking-note.md) — `BudgetTracker.record_tool_cost()` + `tool_costs` table (migration 013). Every paid tool call (Whisper STT, Kie.ai image, Kie.ai music) reports into the same daily/monthly cap the LLM calls already use. Activity page shows per-tool breakdown. **Build plan:** [`2026-05-28-unified-cost-tracking.md`](docs/superpowers/plans/2026-05-28-unified-cost-tracking.md) — ~1 focused day, ships independently or layered on top of the capabilities config.
+### Cost tracking (2026-05-28) — shipped
+
+- ✅ Migration 013 adds `tool_costs` table; `schema.sql` updated for fresh installs.
+- ✅ `BudgetTracker.record_tool_cost(cost_usd, *, source, conversation_id, tool_name, metadata)` records paid-tool spend; `check_budget()` aggregates LLM + tool spend into the same daily/monthly cap.
+- ✅ Per-tool reporters wired: `GenerateImageTool` ($0.03/img, Kie.ai), `GenerateMusicTool` ($0.15/track, Kie.ai), `GroqSTT` ($0.04/audio-min, Whisper). Failures don't record.
+- ✅ `/api/budget` returns a new `by_source: {llm, whisper, kie_image, kie_music, ...}` map; Activity page renders it as wrapped chips under the Remaining line.
+- ✅ Bootstrap reorder: BudgetTracker now constructs before STT/image/music so tools can be wired with it at registration time.
+- ⏭️ Per-capability sub-caps (`image_monthly_cap_usd: 3.00`) — design stub in `config.yaml.example`; not implemented. YAGNI until a Pro user asks.
 
 ## Pre-launch polish
 
