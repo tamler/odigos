@@ -132,11 +132,17 @@ class FindToolsTool(BaseTool):
                         req_marker = " (required)" if pname in required else " (optional)"
                         pdesc = (pinfo.get("description") or "")[:140]
                         lines.append(f"    - {pname} ({ptype}){req_marker}: {pdesc}")
-                # Concrete next-step example using placeholders
-                example_args = ", ".join(
-                    f"{p}=<{props.get(p, {}).get('type', 'value')}>" for p in sorted(required) if p in props
-                ) or "..."
-                lines.append(f"  Next step: {tool.name}({example_args})")
+                # Tell the model the tool is now callable, without giving a
+                # literal example that small models will emit verbatim.
+                if required:
+                    req_list = ", ".join(sorted(required))
+                    lines.append(
+                        f"  To call: invoke {tool.name} with at least: {req_list} "
+                        f"(use real values from the user's request or prior tool results, "
+                        f"never the parameter names as values)."
+                    )
+                else:
+                    lines.append(f"  To call: invoke {tool.name} with the parameters above as needed.")
 
         return ToolResult(success=True, data="\n".join(lines))
 

@@ -35,7 +35,7 @@ class KanbanListBoardsTool(BaseTool):
             for board in board_list:
                 all_cards = await cards.list(board_id=board["id"])
                 count = len(all_cards)
-                lines.append(f"- {board['title']} (id: {board['id'][:8]}, cards: {count})")
+                lines.append(f"- {board['title']} (board_id: {board['id']}, cards: {count})")
             return ToolResult(success=True, data="\n".join(lines))
         except Exception as e:
             logger.error("kanban_list_boards failed: %s", e, exc_info=True)
@@ -80,7 +80,7 @@ class KanbanGetBoardTool(BaseTool):
                 if card_list:
                     for card in card_list:
                         priority = card.get("priority", "medium")
-                        lines.append(f"  [{priority}] {card['title']} (id: {card['id'][:8]})")
+                        lines.append(f"  [{priority}] {card['title']} (card_id: {card['id']})")
                         if card.get("description"):
                             lines.append(f"    {card['description']}")
                 else:
@@ -139,15 +139,18 @@ class KanbanCreateBoardTool(BaseTool):
                 col_id = await cols.create(board_id=board_id, title=col_title, position=pos)
                 col_results.append((col_title, col_id))
 
-            cols_summary = ", ".join(f'"{t}" (id: {cid[:8]})' for t, cid in col_results)
+            cols_lines = "\n".join(
+                f'  - "{t}" column_id: {cid}' for t, cid in col_results
+            )
+            first_col_title, first_col_id = col_results[0]
             return ToolResult(
                 success=True,
                 data=(
-                    f"Board created: \"{title}\" (board_id: {board_id})\n"
-                    f"Columns: {cols_summary}\n"
-                    f"Next step: call kanban_create_card(board_id=\"{board_id}\", "
-                    f"column_id=\"<one of the column ids above>\", title=\"...\") "
-                    f"to add cards."
+                    f"Board created.\n"
+                    f"board_id: {board_id}\n"
+                    f"Columns:\n{cols_lines}\n"
+                    f"To add a card, call kanban_create_card with board_id={board_id} "
+                    f"and the column_id of the column you want (e.g. {first_col_id} for the \"{first_col_title}\" column)."
                 ),
             )
         except Exception as e:
@@ -226,7 +229,7 @@ class KanbanCreateCardTool(BaseTool):
                 position=position,
                 priority=priority,
             )
-            return ToolResult(success=True, data=f"Card created: {title} (id: {card_id[:8]})")
+            return ToolResult(success=True, data=f"Card created. card_id: {card_id}")
         except Exception as e:
             logger.error("kanban_create_card failed: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=str(e))
@@ -266,7 +269,7 @@ class KanbanMoveCardTool(BaseTool):
             if not updated:
                 return ToolResult(success=False, data="", error=f"Failed to move card: {card_id}")
 
-            return ToolResult(success=True, data=f"Card moved to column {column_id[:8]} (id: {card_id[:8]})")
+            return ToolResult(success=True, data=f"Card moved. card_id: {card_id}, new column_id: {column_id}")
         except Exception as e:
             logger.error("kanban_move_card failed: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=str(e))
@@ -306,7 +309,7 @@ class KanbanUpdateCardTool(BaseTool):
             updated = await cards.update(card_id, **updates)
             if not updated:
                 return ToolResult(success=False, data="", error=f"Card not found: {card_id}")
-            return ToolResult(success=True, data=f"Card updated (id: {card_id[:8]})")
+            return ToolResult(success=True, data=f"Card updated. card_id: {card_id}")
         except Exception as e:
             logger.error("kanban_update_card failed: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=str(e))
@@ -335,7 +338,7 @@ class KanbanDeleteCardTool(BaseTool):
             deleted = await cards.delete(card_id)
             if not deleted:
                 return ToolResult(success=False, data="", error=f"Card not found: {card_id}")
-            return ToolResult(success=True, data=f"Card deleted (id: {card_id[:8]})")
+            return ToolResult(success=True, data=f"Card deleted. card_id: {card_id}")
         except Exception as e:
             logger.error("kanban_delete_card failed: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=str(e))
