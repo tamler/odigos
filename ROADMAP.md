@@ -68,6 +68,8 @@ Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-met
 ## In flight / next up
 
 - ⏭️ **Old VPS wipes** — `82.25.91.86` (old odigos.one bare-metal) and `100.89.147.103` (uxrls.com Jessica Docker) are still running but unused. Cancel contracts at leisure.
+- ⏭️ **Admin dashboard — dedicated Waitlist view** — Today the dashboard shows waitlist signups as duplicate generic rows (one in Recent Inquiries with name "Unknown" + "Waitlist signup for managed-hosting", one in Contacts with empty name + status badge). Replace with: (a) a top-level "Waitlist" section listing email + product (notes field) + signup date + mailto link; (b) stop the double-write in `/api/v1/waitlist` (skip the inquiry insert for waitlist source); (c) sort by recency, optional filter by product. Touches `src/pages/Dashboard.tsx`, `server/routes/pages.js` (apiFetch), and `platform/app/api/contacts.py`.
+- ⏭️ **OVH schema drift fix** — On 2026-05-28 we patched live OVH Postgres with `idx_contacts_email`, `idx_users_email`, and `idx_users_chosen_subdomain` UNIQUE indexes that the platform-team migration didn't carry over. Migration 001 declares these via `email TEXT UNIQUE NOT NULL` but the OVH dump lost them. Either add a `006_index_repair.sql` migration that recreates them idempotently, or add a CI check that compares live schema vs `pg_dump --schema-only` of the migrations folder.
 
 ---
 
