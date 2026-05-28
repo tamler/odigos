@@ -90,6 +90,14 @@ Linked from: [`docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustnes
 - **Annotation:** 🟡 medium · `unknown` (audit find, not production incident) · `>30d`
 - **Principle:** §3.1
 
+### 11. find_tools discovery: sparse keyword scoring + hard top-5 cap hid 12 of 66 tools
+- **Surface:** `odigos/tools/find_tools.py` (scoring + result cap)
+- **What happened:** find_tools scored tools by whitespace-word overlap and returned only the top 5. snake_case names were single opaque tokens, so "generate a qr code" never surfaced `generate_qr` (it lost to generate_image/_music/_mindmap), "check my inbox" never surfaced `check_email`, etc. 12 of 66 tools were undiscoverable — the agent literally could not reach them regardless of model quality.
+- **What fixed it:** [`abbb47f`](https://github.com/tamler/odigos/commit/abbb47f) — split tool names on `_`/`-` into tokens with a 3× boost on exact name-token matches; raised the result cap from 5 to 8. All 66 now discoverable.
+- **How it was caught:** the new find_tools coverage gate (`tests/test_find_tools_coverage.py`, Phase B.3) on its very first run — the audit infrastructure catching a latent bug before it became a support ticket.
+- **Annotation:** 🔴 high · `12x` (12 distinct unreachable tools) · `unknown` (latent since find_tools shipped; surfaced by the coverage gate, not production)
+- **Principle:** §3.1 (contract not display — discovery output is contract) + the value of §B.3 (coverage gate)
+
 ---
 
 ## Append new entries below this line
