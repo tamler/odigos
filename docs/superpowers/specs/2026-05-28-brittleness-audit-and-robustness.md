@@ -1,8 +1,8 @@
 # System Brittleness Audit & Robustness Plan (v2)
 
-**Status:** spec / planning
+**Status:** Phase A + Phase B complete; Phase C pending (gated on hosted launch)
 **Date:** 2026-05-28
-**Revised:** 2026-05-28 (post-review v2)
+**Revised:** 2026-05-28 (post-review v2; Phase B execution log appended §10)
 **Owner:** Jacob (rotating; re-read quarterly — next: 2026-08-28)
 **Living anti-pattern registry:** [`docs/superpowers/anti-patterns.md`](../anti-patterns.md)
 
@@ -324,3 +324,21 @@ When all three hold, this doc moves to `docs/superpowers/specs/archived/` and th
 This is an **operating principle** doc plus a phased work plan plus an exit criterion. Phase A is done. Phase B can be picked up in the next session. Phase C informs the hosted-tier launch gate.
 
 Tags: `hosted-readiness`, `robustness`, `tools-design`, `pre-launch`, `executor-contract`.
+
+---
+
+## 10. Phase B execution log (2026-05-28)
+
+Phase B was executed in one session. Outcome:
+
+- **B.1 — blank-slate smoke test** ✅ `tests/test_blank_slate.py`. Boots a real in-memory Database with full schema, exercises kanban (board→card→get), kanban missing-board error path, goals (todo/goal/reminder full-ID emission), and notebook (create→list). Property-based assertions (full IDs, labeled params, actionable errors) rather than brittle golden strings. `tests/blank_slate_allowlist.json` carries the 90-day-expiry warning policy.
+- **B.2 — skill validation cutover** ✅ Fixed a latent bug (the existing validator logged a nonexistent `skill.tool_name` attribute and would have crashed the first time it fired). Now collects all problems, warns with the full list, and RAISES on/after 2026-08-01.
+- **B.3 — find_tools coverage gate** ✅ `tests/test_find_tools_coverage.py` (marked `slow`). Asserts all registered tools are discoverable; on failure prints exactly which and tells the author to add ≥3 seed queries.
+- **B.4 — prompt-cache priority bands** ✅ Documented in `personality/section_registry.py` module docstring.
+- **B.5 — tool-output schema versioning** ✅ (revised) Per owner decision, dropped the speculative `result_format_version` field and per-tool golden strings (high-maintenance, brittle). Replaced with extending the property-based blank-slate test to more deterministic tools.
+
+**Bugs the new infrastructure caught on first run (both real, both shipped):**
+1. find_tools discoverability — 12 of 66 tools unreachable (registry entry 11, fix `abbb47f`).
+2. notebook schema/dispatch action mismatch — 4 of 6 actions broken for any schema-following model (registry entry 12, fix `7a2b3c4`).
+
+The audit infrastructure paid for itself within the session that built it.
