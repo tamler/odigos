@@ -77,6 +77,8 @@ Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-met
 
 - 🚫 **Sales agent / public chat widget** (2026-05-28) — Replaced with a static FAQ at `odigos.one/faq`. Open-weights LLMs couldn't reliably stay on-script for product Q&A; a curated FAQ is more trustworthy and faster. Resolved the prior in-flight items "Sales identity drift" and "Site/proxy decoupling claim was wrong" in one move. `odigos-sales` systemd unit stopped + disabled, `agent-proxy.js` middleware deleted, WebSocket upgrade handler removed from `server.js`, Caddy `/api/sales/*` + `/api/agent` routes dropped. `/opt/odigos-sales/data/agent/*.md` retained on disk as the FAQ content source.
 
+- 🚫 **Trading product on odigos.one** (2026-05-28) — Trading project spun into a standalone tool. Removed from odigos.one: `src/pages/Trading.tsx`, `platform/app/api/trading.py`, the Dashboard "Trading Overview" section, `trading_api_key` setting, `trading.odigos.one` from `product_subdomains`. Migration `006_drop_trading.sql` drops `trading_positions` and `trading_performance` tables. `TRADING_API_KEY` removed from `odigos-site.service` and `PLATFORM_TRADING_API_KEY` removed from `platform.env`. The `trading.odigos.one` DNS record at the registrar still exists — remove there if desired (Caddy has no handler for it, so it currently 404s).
+
 ---
 
 ## Pre-launch blockers (before hosted paid signups)
