@@ -7,29 +7,70 @@ Legend: ✅ shipped · 🔧 in design · ⏭️ planned · 💭 open question
 
 ---
 
+## Current fleet (2026-05-27)
+
+Single OVH VPS at `51.81.82.221` (Tailscale-only SSH, public 80/443 for Caddy).
+
+| Service | Path | Domain | Backend |
+|---------|------|--------|---------|
+| Bob (Jacob's personal agent) | `/opt/odigos` | `jacob.odigos.one` | Groq scout (fast) + OpenRouter mimo-pro (smart) |
+| Jessica (tester) | `/opt/odigos-jessica` | `jessica.odigos.one` | Same as Bob |
+| Sales (public chat widget) | `/opt/odigos-sales` | `odigos.one/api/sales/*` | Groq llama-3.3-70b-versatile |
+| Site (marketing + auth UI) | `/opt/odigos-site` | `odigos.one` | Node/Express/SSR React |
+| Platform API | `/opt/odigos-platform` | `odigos.one/api/v1/*` | FastAPI + Postgres ([repo](https://github.com/tamler/odigos-platform), private) |
+| Postgres | docker `odigos-postgres` | (internal, 127.0.0.1:5432) | postgres:16-alpine |
+
+Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-metal); old Bob (data wiped); Jessica Docker on uxrls.com.
+
+---
+
 ## Recently shipped
 
-Last updated: 2026-04-16.
+### Infrastructure migration (2026-05-27)
+- ✅ Migrated odigos.one off bare-metal OVH (Ubuntu 24.04, 5 systemd agents) to a new OVH VPS (Ubuntu 26.04, 4 vCPU / 7.6 GB / 72 GB)
+- ✅ Tailscale-only SSH (public port 22 firewalled, key auth only)
+- ✅ Caddy + Let's Encrypt for `odigos.one`, `jacob.odigos.one`, `jessica.odigos.one`
+- ✅ Postgres dump (~90 MB) restored to new VPS; site + platform reconnected
+- ✅ All hand-curated Sales customizations (`data/agent/identity.md`, `capabilities.md`, `guardrails.md`, sources, skills) restored from salvage
+- ✅ `~/odigos-vps-archive/` holds salvage tarballs (manifest, code, postgres dump, systemd units) as offsite backup
 
-### Multi-provider + BYOK + intelligence routing (2026-04-14)
-- ✅ Provider registry + model registry + `llm:` tier routing (`providers` / `models` / `llm`) — one yaml block per provider, costs travel with each model, four intelligence tiers (fast / smart / background / fallback), classifier auto-routing
-- ✅ `${ENV_VAR}` interpolation in `config.yaml` so secrets stay in `.env`
-- ✅ Dashboard BYOK panel — add/edit/delete providers + models + tier routing from the UI with masked-key handling, replace semantics on save
-- ✅ `install.sh` + `install-bare.sh` + `scripts/fresh-install.sh` emit the new shape with per-provider templates (OpenRouter, OpenAI, Ollama, LM Studio, Custom) + Starter-tier defaults ($0.50/day, $10/mo, `max_tool_turns: 15`, `max_tokens: 2048`, proactive off)
-- ✅ Prompt caching wiring — stable prefix ordering in `context.build_planned()`, cache_control helper for Anthropic models, per-turn cache hit logging via `tracer.emit("cache_hit", ...)` and `logger.info("LLM cache: ...")`
-- ✅ `deploy.sh --fresh` flag for multi-agent reset + key-rotation across the fleet
+### Platform repo extracted (2026-05-27)
+- ✅ `/opt/odigos-platform` is now its own private GitHub repo: `tamler/odigos-platform`
+- ✅ Deploy pattern: edit locally → push → rsync to VPS (`platform.env` stays server-only via .gitignore)
+- ⏭️ Future: replace rsync with proper `git pull` on VPS via deploy key
 
-### Account creation + operator pre-provisioning (2026-04-15)
-- ✅ `/api/auth/setup` requires and stores email (migration `012_user_email.sql`)
-- ✅ Dashboard Create Account form collects username + email + password with client-side regex validation
-- ✅ `scripts/seed-account.sh` — operator one-liner pre-provisions `data/seed_user.json`; bootstrap consumes on first boot with `must_change_password: true` forcing change on first login
-- ✅ `/api/auth/change-password` now verifies current password (was a real vulnerability — session-stealer could rotate without knowing the old password)
+### Auth + SSO bridge (2026-05-27)
+- ✅ Case-insensitive auth: email (platform) and username (agent) normalize to lowercase before INSERT/SELECT — fixed silent login failures on mixed-case
+- ✅ `LowerEmail` Annotated type on all platform `EmailStr` fields (auth.py, contacts.py)
+- ✅ **Level 1 SSO bridge** — platform issues HS256 JWT (5-min TTL) via `POST /api/v1/auth/agent-token`; agent verifies + sessions via `GET /api/auth/sso?token=`. Shared `PLATFORM_AGENT_JWT_SECRET`. 5/5 attack-vector tests pass (wrong audience, expired, unknown email, bad signature, no auth).
+- ✅ **Auto-provision** — SSO with unknown email creates the local agent user (config flag `sso_auto_provision: true` default). Username derived from email local-part.
+- ⏭️ Wire up "Open my agent" button on `odigos.one` frontend (single fetch + redirect)
+- ⏭️ Collect `chosen_subdomain` during platform signup so the button knows where to send users
 
-### Fleet deployed on odigos.one + uxrls.com (2026-04-14 → 04-16)
-- ✅ Bob, Rachel, Sales, Honey, HomeRun on odigos.one; Odigos-main + Florence + Jessica on uxrls.com
-- ✅ Sales on Groq dual-tier (Llama-4-Scout-17B fast, Llama-3.3-70B-versatile smart), identity + README + ARCHITECTURE + FAQ ingested, `max_tool_turns: 3` — ~1s on simple Q, ~5s on complex
-- ✅ HomeRun on Groq Scout-17B (vision) + OpenRouter minimax-m2.7 (smart reasoning), `/api/message` verified with both tiers auto-routing, clean install, $15/mo cap
-- ✅ `homerun.odigos.one` Caddy + Let's Encrypt cert provisioned
+### LLM routing improvements (2026-05-27)
+- ✅ `ModelConfig.max_output_tokens` per-model override — fast-tier providers like Groq scout (8k cap) get clamped while smart-tier mimo-pro (1M ctx) uses the full budget
+- ✅ Global `llm.max_tokens` default raised 2048 → 32768
+- ✅ Bob/Jessica routing: `fast=scout (Groq) · smart=mimo-pro (OpenRouter, xiaomi/mimo-v2.5-pro, 1M ctx, ~3× cheaper than kimi-k2)`
+- ✅ Sales on Groq llama-3.3-70b-versatile (after evaluating NVIDIA minimax + stepfun-flash — both too slow + weak instruction following for public chat UX)
+
+### Dashboard fixes (2026-05-27)
+- ✅ `BudgetStatus` field shape aligned with backend (Activity page no longer crashes on `.toFixed()` of undefined)
+- ✅ `'new'` conversation sentinel skipped in message-fetch paths (no more `/api/conversations/new/messages 404` loop in console)
+
+### Earlier (carried forward, still accurate)
+- ✅ Multi-provider + BYOK + intelligence routing (provider registry, model registry, `${ENV_VAR}` interpolation, BYOK dashboard panel)
+- ✅ Account creation + operator pre-provisioning (`/api/auth/setup`, `scripts/seed-account.sh`, current-password check on rotation)
+- ✅ Prompt caching wiring (stable prefix order, per-turn cache hit logging)
+- ✅ `deploy.sh --fresh` flag for multi-agent reset + key-rotation
+
+---
+
+## In flight / next up
+
+- ⏭️ **"Open my agent" frontend button** — `/api/v1/auth/agent-token` exists and is verified end-to-end; just needs a button in the platform UI that calls it and redirects. ~1 hour.
+- ⏭️ **Sales identity drift** — llama-3.3-70b respects topic but ignores `first person` and `two-or-three sentences` directives and occasionally fabricates features. Either tighten `identity.md` with explicit DO-NOTs, or accept and move on.
+- ⏭️ **Site/proxy decoupling claim was wrong** — the 2026-04-23 commit said "decouple odigos-site from Sales api_key via env var" but only updated `agent-proxy.js`, not `server.js`. Today we patched the systemd unit with `ODIGOS_AGENT_KEY=`. Either finish decoupling `server.js` too, or document the dual-source reality.
+- ⏭️ **Old VPS wipes** — `82.25.91.86` (old odigos.one bare-metal) and `100.89.147.103` (uxrls.com Jessica Docker) are still running but unused. Cancel contracts at leisure.
 
 ---
 
@@ -50,15 +91,25 @@ image+music story only works reliably with both.
 
 ## Pre-launch polish
 
-- ✅ Sales `api_key` / Express coupling (2026-04-23) — Express now reads
-  Sales's `api_key` directly from `/opt/odigos-sales/config.yaml` at
-  startup (no more `ODIGOS_AGENT_KEY` env var). `deploy.sh --fresh`
-  auto-restarts `odigos-site` so the new key takes effect in one pass.
 - ⏭️ Rate limiting per-user at the API layer (messages/hour cap on
   `/api/message` so a runaway client can't exhaust the daily budget in
   a single minute)
 - ⏭️ Graceful budget-hit UX copy review — current message is
   functional but not great ("spending limit for this period")
+- ⏭️ Cross-agent cost aggregator script — each agent's `/api/budget` is
+  per-instance; a small script summing across `data/odigos.db` files
+  would give a fleet-wide bill estimate
+
+## Auth unification — future levels
+
+Level 1 SSO bridge (above) is shipped. Higher levels deferred until
+multiple paying users exist:
+
+- ⏭️ **Level 2 — linked accounts**: `platform_user_id` column on agent's
+  `users` table, explicit "connect your odigos.one account" button.
+- ⏭️ **Level 3 — full tenancy**: platform provisions agent instances on
+  signup, subscription tier drives agent's `max_tool_turns` / budget /
+  model allowlist. Multi-tenant or templated-instance model TBD.
 
 ## Active design questions
 
@@ -87,8 +138,6 @@ image+music story only works reliably with both.
 - **`docs/superpowers/specs/`** holds design docs; each pre-launch
   blocker links here
 - **`docs/superpowers/plans/`** holds implementation plans once a spec
-  is ready to build — currently empty for these two specs; will
-  populate when implementation starts
-- Memory tracking (`~/.claude/projects/.../memory/project_next_updates.md`)
-  mirrors this file — session-to-session continuity for the Claude
-  working with Jacob
+  is ready to build
+- **`~/odigos-vps-archive/MANIFEST.md`** (local-only) catalogs the
+  salvage tarballs in case the VPS dies
