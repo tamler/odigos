@@ -27,11 +27,19 @@ class GroqSTT(STTProvider):
 
     name = "groq"
 
+    # Per-audio-minute cost for Groq Whisper (2026-04 pricing).
+    # Future: read from ModelConfig.cost_per_unit once capabilities-config lands.
+    COST_PER_AUDIO_MINUTE_USD = 0.04
+
     def __init__(
-        self, api_key: str, model: str = "whisper-large-v3-turbo"
+        self,
+        api_key: str,
+        model: str = "whisper-large-v3-turbo",
+        budget_tracker=None,
     ):
         self._api_key = api_key
         self._model = model
+        self._budget_tracker = budget_tracker
 
     async def transcribe(
         self, audio_bytes: bytes, filename: str = "audio.webm"
@@ -61,9 +69,26 @@ class GroqSTT(STTProvider):
                 )
 
             text = getattr(transcription, "text", "") or ""
+            duration = getattr(transcription, "duration", 0.0) or 0.0
+            await self._record_cost(duration)
             return text.strip()
         finally:
             os.unlink(temp_path)
+
+    async def _record_cost(self, audio_seconds: float) -> None:
+        """Record one successful Whisper transcription against the budget cap."""
+        if not self._budget_tracker or audio_seconds <= 0:
+            return
+        cost = (audio_seconds / 60.0) * self.COST_PER_AUDIO_MINUTE_USD
+        try:
+            await self._budget_tracker.record_tool_cost(
+                cost,
+                source="whisper",
+                tool_name="voice_stt",
+                metadata={"audio_seconds": audio_seconds, "model": self._model},
+            )
+        except Exception as e:
+            logger.warning("Failed to record Whisper cost: %s", e)
 
 
 class LocalSTT(STTProvider):
@@ -120,6 +145,7 @@ def create_stt_provider(
     voice_config,
     groq_api_key: str = "",
     stt_config=None,
+    budget_tracker=None,
 ) -> STTProvider:
     """Factory function to create the right STT provider."""
     provider_name = voice_config.stt_provider
@@ -133,6 +159,7 @@ def create_stt_provider(
         return GroqSTT(
             api_key=groq_api_key,
             model=voice_config.groq_model,
+            budget_tracker=budget_tracker,
         )
     elif provider_name == "local":
         model = stt_config.model if stt_config else "small"

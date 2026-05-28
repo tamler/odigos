@@ -92,6 +92,10 @@ class GenerateMusicTool(APITool):
     }
     API_DOCS = "https://docs.kie.ai/suno-api/generate-music"
 
+    # Flat per-track cost for Suno V5_5 on Kie.ai (2026-04 pricing).
+    # Future: read from ModelConfig.cost_per_unit once capabilities-config lands.
+    COST_PER_TRACK_USD = 0.15
+
     def __init__(
         self,
         http: httpx.AsyncClient,
@@ -100,6 +104,7 @@ class GenerateMusicTool(APITool):
         max_poll_seconds: int = 180,
         output_dir: str = "",
         db=None,
+        budget_tracker=None,
     ):
         super().__init__(http=http)
         self._api_key = api_key
@@ -108,6 +113,22 @@ class GenerateMusicTool(APITool):
         from odigos.storage import FILES_DIR
         self._output_dir = output_dir or str(FILES_DIR)
         self._db = db
+        self._budget_tracker = budget_tracker
+
+    async def _record_cost(self, conversation_id: str | None) -> None:
+        """Record one successful music generation against the budget cap."""
+        if not self._budget_tracker:
+            return
+        try:
+            await self._budget_tracker.record_tool_cost(
+                self.COST_PER_TRACK_USD,
+                source="kie_music",
+                conversation_id=conversation_id,
+                tool_name=self.name,
+                metadata={"model": self._model},
+            )
+        except Exception as e:
+            logger.warning("Failed to record music cost: %s", e)
 
     async def execute(self, params: dict) -> ToolResult:
         conversation_id = params.pop("_conversation_id", None)
@@ -262,6 +283,10 @@ class GenerateMusicTool(APITool):
                 title_str = f' "{title}"' if title else ""
                 summary_parts.append(f"{title_str}{dur_str}: {art['filename']}")
 
+            # Kie.ai bills per generation request, not per returned track —
+            # one call to record_tool_cost per completion, not per track.
+            await self._record_cost(conversation_id)
+
             return ToolResult(
                 success=True,
                 data="Generated tracks: " + ", ".join(summary_parts),
@@ -342,6 +367,8 @@ class GenerateMusicTool(APITool):
                 title = art.get("title", "")
                 title_str = f' "{title}"' if title else ""
                 summary_parts.append(f"{title_str}{dur_str}: {art['filename']}")
+
+            await self._record_cost(conversation_id)
 
             return ToolResult(
                 success=True,

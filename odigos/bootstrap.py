@@ -107,6 +107,19 @@ class Bootstrapper:
         if self.container.vapid_keys:
             logger.info("VAPID keys loaded for web push notifications")
 
+        # Budget tracker — instantiated early so STT/image/music tools can be wired with it.
+        # The actual budget settings are read from self.settings.budget here; the same field
+        # name is read again at line ~172 below where the redundant init is now removed.
+        from odigos.core.budget import BudgetTracker
+
+        self.container.budget_tracker = BudgetTracker(
+            db=self.container.db,
+            daily_limit=self.settings.budget.daily_limit_usd,
+            monthly_limit=self.settings.budget.monthly_limit_usd,
+            warn_threshold=self.settings.budget.warn_threshold,
+        )
+        logger.info("Budget tracker initialized")
+
         # STT / TTS providers
         from odigos.providers.stt import create_stt_provider
         from odigos.providers.tts import create_tts_provider
@@ -115,6 +128,7 @@ class Bootstrapper:
             voice_config=self.settings.voice,
             groq_api_key=self.settings.service_key("groq"),
             stt_config=self.settings.stt,
+            budget_tracker=self.container.budget_tracker,
         )
         logger.info("STT provider: %s", self.container.stt_provider.name)
 
@@ -166,16 +180,7 @@ class Bootstrapper:
         )
         logger.info("Starting Odigos agent: %s", s.agent.name)
 
-        # Budget tracker
-        from odigos.core.budget import BudgetTracker
-
-        self.container.budget_tracker = BudgetTracker(
-            db=self.container.db,
-            daily_limit=s.budget.daily_limit_usd,
-            monthly_limit=s.budget.monthly_limit_usd,
-            warn_threshold=s.budget.warn_threshold,
-        )
-        logger.info("Budget tracker initialized")
+        # Budget tracker is already instantiated above; intentionally not redundant.
 
     # ------------------------------------------------------------------
     # Phase 3: Embeddings
@@ -607,6 +612,7 @@ class Bootstrapper:
                 nsfw_filter=settings.image_generation.nsfw_filter,
                 max_poll_seconds=settings.image_generation.max_poll_seconds,
                 db=db,
+                budget_tracker=self.container.budget_tracker,
             ))
             logger.info("Image generation tool registered (Z-Image)")
 
@@ -617,6 +623,7 @@ class Bootstrapper:
                 model=settings.music_generation.model,
                 max_poll_seconds=settings.music_generation.max_poll_seconds,
                 db=db,
+                budget_tracker=self.container.budget_tracker,
             ))
             logger.info(
                 "Music generation tool registered (Suno %s)",

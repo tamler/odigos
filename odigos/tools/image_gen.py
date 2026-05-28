@@ -57,6 +57,10 @@ class GenerateImageTool(APITool):
     }
     API_DOCS = "https://docs.kie.ai/api/z-image"
 
+    # Flat per-image cost for Z-Image on Kie.ai (2026-04 pricing).
+    # Future: read from ModelConfig.cost_per_unit once capabilities-config lands.
+    COST_PER_IMAGE_USD = 0.03
+
     def __init__(
         self,
         http: httpx.AsyncClient,
@@ -66,6 +70,7 @@ class GenerateImageTool(APITool):
         max_poll_seconds: int = 120,
         output_dir: str = "",
         db=None,
+        budget_tracker=None,
     ):
         super().__init__(http=http)
         self._api_key = api_key
@@ -75,6 +80,22 @@ class GenerateImageTool(APITool):
         from odigos.storage import FILES_DIR
         self._output_dir = output_dir or str(FILES_DIR)
         self._db = db
+        self._budget_tracker = budget_tracker
+
+    async def _record_cost(self, conversation_id: str | None, ratio: str) -> None:
+        """Record one successful image generation against the budget cap."""
+        if not self._budget_tracker:
+            return
+        try:
+            await self._budget_tracker.record_tool_cost(
+                self.COST_PER_IMAGE_USD,
+                source="kie_image",
+                conversation_id=conversation_id,
+                tool_name=self.name,
+                metadata={"aspect_ratio": ratio},
+            )
+        except Exception as e:
+            logger.warning("Failed to record image cost: %s", e)
 
     async def execute(self, params: dict) -> ToolResult:
         conversation_id = params.pop("_conversation_id", None)
@@ -160,6 +181,8 @@ class GenerateImageTool(APITool):
                     (artifact_id, conversation_id, filename, "image/png", file_size, filepath, now),
                 )
 
+            await self._record_cost(conversation_id, self._default_ratio)
+
             return ToolResult(
                 success=True,
                 data=f"Image generated: {filename} ({file_size} bytes)",
@@ -213,6 +236,8 @@ class GenerateImageTool(APITool):
                     "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (artifact_id, conversation_id, filename, "image/png", file_size, filepath, now),
                 )
+
+            await self._record_cost(conversation_id, self._default_ratio)
 
             return ToolResult(
                 success=True,
