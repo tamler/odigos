@@ -370,6 +370,14 @@ class Settings(BaseSettings):
         return self.service_key("brave")
 
     @property
+    def google_search_api_key(self) -> str:
+        return self.service_key("google_search")
+
+    @property
+    def google_search_cx(self) -> str:
+        return self.service_key("google_search_cx")
+
+    @property
     def notebooklm_cookie(self) -> str:
         return self.service_key("notebooklm")
 
