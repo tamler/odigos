@@ -102,8 +102,26 @@ function BudgetCard({ budget, error }: { budget: BudgetStatus | null; error: str
       <div className="text-xs text-muted-foreground tabular-nums">
         Remaining: ${Math.max(0, budget.daily_limit - budget.daily_spend).toFixed(2)}
       </div>
+      {budget.by_source && Object.keys(budget.by_source).length > 0 && (
+        <div className="flex flex-wrap gap-x-2 gap-y-1 mt-2 text-[10px] text-muted-foreground tabular-nums">
+          {Object.entries(budget.by_source)
+            .sort(([, a], [, b]) => b - a)
+            .map(([source, cost]) => (
+              <span key={source}>
+                {SOURCE_LABELS[source] || source} ${cost.toFixed(2)}
+              </span>
+            ))}
+        </div>
+      )}
     </div>
   )
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  llm: 'LLM',
+  whisper: 'Voice',
+  kie_image: 'Image',
+  kie_music: 'Music',
 }
 
 export function HeroSection({ state, budget, errors }: HeroSectionProps) {

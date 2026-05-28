@@ -20,6 +20,9 @@ export interface BudgetStatus {
   within_budget: boolean
   warning: boolean
   circuit_breaker?: boolean
+  // Per-source spend today. Keys: 'llm', 'whisper', 'kie_image', 'kie_music', etc.
+  // Empty when nothing has been recorded; backend always returns an object.
+  by_source?: Record<string, number>
 }
 
 export interface Goal {
