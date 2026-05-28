@@ -50,6 +50,20 @@ CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
 CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status);
 CREATE INDEX IF NOT EXISTS idx_conversations_parent ON conversations(parent_conversation_id);
 
+-- Per-call cost for paid tools (Whisper STT, Kie.ai image, Kie.ai music, etc.)
+-- Aggregates into the same daily/monthly budget cap as messages.cost_usd.
+CREATE TABLE IF NOT EXISTS tool_costs (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT,
+    source          TEXT NOT NULL,       -- 'whisper', 'kie_image', 'kie_music', etc.
+    tool_name       TEXT,
+    cost_usd        REAL NOT NULL,
+    metadata_json   TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tool_costs_created ON tool_costs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tool_costs_source ON tool_costs(source);
+
 CREATE TABLE IF NOT EXISTS message_deliveries (
     id              TEXT PRIMARY KEY,
     message_id      TEXT NOT NULL REFERENCES messages(id),
