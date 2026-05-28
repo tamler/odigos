@@ -20,9 +20,15 @@ from odigos.tools.base import auto_distill
 # Limit concurrent parallel tool execution to prevent resource exhaustion
 _TOOL_SEMAPHORE = asyncio.Semaphore(5)
 
-# Tool results older than this many turns get compressed to save context tokens
-_PRUNE_AFTER_TURNS = 2
-_PRUNED_MAX_CHARS = 200
+# Tool results older than this many turns get compressed to save context tokens.
+# Bumped from 2 turns / 200 chars (written for tiny-context models) to 4/1500 —
+# every LLM in our routing now has >=128k context, and aggressive pruning was
+# shredding rich find_tools output before the model could act on it (kanban FKs,
+# image gen schemas, etc. were getting cut mid-sentence). With 4 turns of
+# breathing room and 1500-char results, a typical chat keeps its full tool
+# context intact and only multi-step plans (5+ turns) start compressing.
+_PRUNE_AFTER_TURNS = 4
+_PRUNED_MAX_CHARS = 1500
 
 if TYPE_CHECKING:
     from odigos.core.approval import ApprovalGate
