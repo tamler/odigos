@@ -1,0 +1,4 @@
+{
+  "_comment": "Dated allowlist for benign warnings during the blank-slate smoke test. Per docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustness.md Phase B.1, every entry MUST have an 'expires' date within 90 days of when it was added. Expired entries fail the test until re-justified or removed. No permanent allowlist entries.",
+  "allowed_warnings": []
+}

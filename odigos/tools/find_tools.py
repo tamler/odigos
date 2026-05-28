@@ -7,6 +7,7 @@ added to the next turn.
 """
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
@@ -85,6 +86,17 @@ class FindToolsTool(BaseTool):
             text_words = set(text.split())
             overlap = len(query_words & text_words)
 
+            # Tool names are snake_case (generate_qr, check_email). Split them
+            # into tokens so a query word like "qr" or "email" matches the
+            # right tool even when the whole name never appears verbatim in
+            # the user's phrasing. This is the main discoverability fix:
+            # without it, "generate a qr code" loses to generate_image et al.
+            name_tokens = set(re.split(r"[_\-\s]+", tool.name.lower()))
+            name_token_hits = query_words & name_tokens
+            # Strong, near-decisive boost — a query word that IS a name token
+            # is a high-confidence signal this is the intended tool.
+            overlap += 3 * len(name_token_hits)
+
             # Boost exact substring matches in name or category
             if query in tool.name or query in (tool.category or ""):
                 overlap += 5
@@ -97,7 +109,10 @@ class FindToolsTool(BaseTool):
                 matches.append((overlap, tool, None))
 
         matches.sort(key=lambda x: x[0], reverse=True)
-        top = matches[:5]
+        # Top 8 (was 5). With ~66 tools and several near-synonymous families
+        # (generate_*, kanban_*), a hard cap of 5 hid valid tools behind
+        # higher-scoring siblings. 8 widens the funnel without flooding context.
+        top = matches[:8]
 
         if not top:
             return ToolResult(
