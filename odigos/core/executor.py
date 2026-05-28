@@ -296,10 +296,11 @@ class Executor:
         self._pending_background_tasks: list[dict] = []
 
         # Build initial context -- use pre-built headless messages if provided
+        _expose_tools = getattr(getattr(self.context_assembler.settings, "agent", None), "expose_tools_to_llm", True)
         if headless_messages is not None:
             messages = list(headless_messages)
             tools = None
-            if self.tool_registry and self.tool_registry.list():
+            if _expose_tools and self.tool_registry and self.tool_registry.list():
                 tools = self.tool_registry.tool_definitions()
         elif query_plan:
             # New planner-driven path: context + tool selection in one call
@@ -308,13 +309,15 @@ class Executor:
                 plan=query_plan,
                 recent_turns=recent_turns,
             )
+            if not _expose_tools:
+                tools = None
         else:
             # No plan available — minimal context with find_tools only
             messages = [
                 {"role": "system", "content": f"You are {self.context_assembler.agent_name}."},
                 {"role": "user", "content": message_content},
             ]
-            tools = self.tool_registry.tool_definitions() if self.tool_registry else None
+            tools = self.tool_registry.tool_definitions() if (_expose_tools and self.tool_registry) else None
 
         # Count context tokens for efficiency tracking
         context_tokens = sum(estimate_tokens(m.get("content", "")) for m in messages)

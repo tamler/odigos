@@ -33,6 +33,11 @@ class AgentConfig(BaseModel):
     run_timeout_seconds: int = 300
     cite_sources: bool = True
     concise_mode: bool = False
+    # When false, the LLM is never given a `tools` parameter — it MUST answer from
+    # system prompt + history alone. Useful for tightly-scoped Q&A agents (e.g. a
+    # public sales chat) where allowing tool calls leads the model to ignore identity
+    # instructions and invoke tools instead of answering from its knowledge.
+    expose_tools_to_llm: bool = True
 
 
 class DatabaseConfig(BaseModel):
