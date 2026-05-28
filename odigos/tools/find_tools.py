@@ -105,19 +105,38 @@ class FindToolsTool(BaseTool):
                 data="No matching tools or skills found. Try different search terms.",
             )
 
-        lines = [f"Found {len(top)} capability(ies):"]
+        lines = [
+            f"Found {len(top)} capability(ies). They are now available in your tool list — "
+            "call them directly with the arguments shown below. Do NOT call find_tools again "
+            "for this request."
+        ]
         for _, tool, skill in top:
             if skill:
-                tools_str = f" (tools: {', '.join(skill.tools)})" if skill.tools else ""
+                tools_str = f" (uses: {', '.join(skill.tools)})" if skill.tools else ""
+                lines.append("")
                 lines.append(
-                    f"- [SKILL] {skill.name}: {skill.description[:100]}{tools_str}. "
-                    f'Use: activate_skill(name="{skill.name}")'
+                    f"[SKILL] {skill.name} — {skill.description[:160]}{tools_str}"
                 )
+                lines.append(f'  Next step: activate_skill(name="{skill.name}")')
             elif tool:
-                param_names = list(tool.parameters_schema.get("properties", {}).keys())
-                params_str = f" (params: {', '.join(param_names)})" if param_names else ""
+                lines.append("")
                 cat_str = f" [{tool.category}]" if tool.category else ""
-                lines.append(f"- [TOOL] {tool.name}{cat_str}: {tool.description[:100]}{params_str}")
+                lines.append(f"[TOOL] {tool.name}{cat_str} — {tool.description[:160]}")
+                # Full schema with per-param descriptions
+                props = tool.parameters_schema.get("properties", {}) or {}
+                required = set(tool.parameters_schema.get("required", []))
+                if props:
+                    lines.append("  Parameters:")
+                    for pname, pinfo in props.items():
+                        ptype = pinfo.get("type", "string")
+                        req_marker = " (required)" if pname in required else " (optional)"
+                        pdesc = (pinfo.get("description") or "")[:140]
+                        lines.append(f"    - {pname} ({ptype}){req_marker}: {pdesc}")
+                # Concrete next-step example using placeholders
+                example_args = ", ".join(
+                    f"{p}=<{props.get(p, {}).get('type', 'value')}>" for p in sorted(required) if p in props
+                ) or "..."
+                lines.append(f"  Next step: {tool.name}({example_args})")
 
         return ToolResult(success=True, data="\n".join(lines))
 

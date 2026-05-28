@@ -330,6 +330,9 @@ class Executor:
         last_response: LLMResponse | None = None
         budget_warning: BudgetStatus | None = None
         prev_turn_calls: set[str] = set()
+        # Track consecutive turns where every tool call was find_tools — model is
+        # discovering instead of executing. We nudge it out of the loop at 2.
+        consecutive_find_tools_turns = 0
 
         # Budget-aware strategy: throttle when near limits
         effective_max_turns = self._max_tool_turns
@@ -539,6 +542,33 @@ class Executor:
                 })
                 logger.warning("Stuck detection triggered at turn %d", turn)
             prev_turn_calls = current_turn_calls
+
+            # find_tools loop guard: if every tool call this turn was find_tools,
+            # the model is discovering tools but not using them. Nudge after 2.
+            all_find_tools = (
+                response.tool_calls
+                and all(tc.name == "find_tools" for tc in response.tool_calls)
+            )
+            if all_find_tools:
+                consecutive_find_tools_turns += 1
+            else:
+                consecutive_find_tools_turns = 0
+            if consecutive_find_tools_turns >= 2:
+                messages.append({
+                    "role": "system",
+                    "content": (
+                        "STOP calling find_tools. You have already discovered the "
+                        "tools available for this request. Either: (a) call one of "
+                        "the discovered tools directly with real arguments to do "
+                        "what the user asked, or (b) answer the user from what you "
+                        "already know. Do not call find_tools again."
+                    ),
+                })
+                logger.warning(
+                    "find_tools loop guard fired at turn %d (consecutive=%d)",
+                    turn, consecutive_find_tools_turns,
+                )
+                consecutive_find_tools_turns = 0
 
             # Context pruning: compress old tool results to save tokens
             if turn >= _PRUNE_AFTER_TURNS:
