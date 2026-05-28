@@ -128,7 +128,8 @@ class RunParallelSubagentsTool(BaseTool):
             return ToolResult(
                 success=False, data="", error="All dispatches failed: " + "; ".join(errors),
             )
-        msg = f"Dispatched {len(task_ids)} sub-agent task(s): {', '.join(t[:8] for t in task_ids)}"
+        # Emit full task_ids — the model needs them verbatim for subagent_status calls.
+        msg = f"Dispatched {len(task_ids)} sub-agent task(s). task_ids: {', '.join(task_ids)}"
         if errors:
             msg += f" ({len(errors)} failed: {'; '.join(errors)})"
         return ToolResult(success=True, data=msg)
@@ -185,7 +186,10 @@ class SubagentStatusTool(BaseTool):
         if row.get("artifact_path"):
             summary += f"Artifact: {row['artifact_path']}\n"
         if result_text:
-            summary += f"\nResult preview: {result_text[:500]}"
+            # Generous preview window — subagent results often contain structured
+            # findings the parent needs to act on. 500 chars was cutting them mid-list.
+            preview = result_text if len(result_text) <= 3000 else result_text[:3000] + "\n[…truncated; full result in artifact]"
+            summary += f"\nResult:\n{preview}"
 
         return ToolResult(success=True, data=summary)
 

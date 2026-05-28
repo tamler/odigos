@@ -1,7 +1,7 @@
 ---
 name: compliance-check
 description: Analyze documents, websites, or business practices for regulatory compliance (GDPR, CCPA, ADA, PCI-DSS, HIPAA, SOC 2)
-tools: [create_artifact, analyze_text, lookup, web_search, read_page]
+tools: [create_artifact, analyze_text, lookup_fact, web_search, read_page]
 complexity: standard
 ---
 

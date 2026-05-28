@@ -1,7 +1,7 @@
 ---
 name: google-workspace
 description: Interact with Google Workspace (Gmail, Calendar, Drive, Sheets) via the gws CLI
-tools: [run_gws]
+tools: [check_email, read_email, search_email, send_email, check_calendar, create_calendar_event, find_free_time, search_workspace]  # FIXME: skill body still documents a 'run_gws' CLI tool that doesn't exist; real surface is the per-action tools listed here. Rewrite body when time permits.
 complexity: standard
 ---
 You have access to Google Workspace via the `run_gws` tool. Pass gws CLI commands.

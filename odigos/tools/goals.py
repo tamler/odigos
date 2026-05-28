@@ -58,7 +58,7 @@ class CreateReminderTool(BaseTool):
         except Exception as e:
             logger.error("Failed to create reminder: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=f"Failed to create reminder: {e}")
-        return ToolResult(success=True, data=f"Reminder set: {description} (id: {rid[:8]})")
+        return ToolResult(success=True, data=f"Reminder set: {description}. reminder_id: {rid}")
 
 
 class CreateTodoTool(BaseTool):
@@ -91,7 +91,7 @@ class CreateTodoTool(BaseTool):
         except Exception as e:
             logger.error("Failed to create todo: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=f"Failed to create todo: {e}")
-        return ToolResult(success=True, data=f"Todo created: {description} (id: {tid[:8]})")
+        return ToolResult(success=True, data=f"Todo created: {description}. todo_id: {tid}")
 
 
 class CreateGoalTool(BaseTool):
@@ -116,4 +116,4 @@ class CreateGoalTool(BaseTool):
         except Exception as e:
             logger.error("Failed to create goal: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=f"Failed to create goal: {e}")
-        return ToolResult(success=True, data=f"Goal noted: {description} (id: {gid[:8]})")
+        return ToolResult(success=True, data=f"Goal noted: {description}. goal_id: {gid}")
