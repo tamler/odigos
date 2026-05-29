@@ -135,7 +135,7 @@ async def test_notebook_from_blank_slate(fresh_db):
 async def test_goals_emit_full_ids(fresh_db):
     """create_todo / create_reminder / create_goal must return full IDs the
     model can reuse (the [:8] truncation bug)."""
-    from odigos.core.goals import GoalStore
+    from odigos.core.goal_store import GoalStore
     from odigos.tools.goals import CreateGoalTool, CreateReminderTool, CreateTodoTool
 
     store = GoalStore(fresh_db)

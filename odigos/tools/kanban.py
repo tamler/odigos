@@ -229,7 +229,7 @@ class KanbanCreateCardTool(BaseTool):
                 position=position,
                 priority=priority,
             )
-            return ToolResult(success=True, data=f"Card created. card_id: {card_id}")
+            return ToolResult(success=True, data=f'Card created: "{title}". card_id: {card_id}')
         except Exception as e:
             logger.error("kanban_create_card failed: %s", e, exc_info=True)
             return ToolResult(success=False, data="", error=str(e))
