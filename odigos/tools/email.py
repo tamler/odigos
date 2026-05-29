@@ -86,7 +86,7 @@ class SearchEmailTool(BaseTool):
     category = "communication"
     contract = ToolContract(timeout_seconds=30)
     description = (
-"Search emails by sender, subject, keyword, or date range. "
+        "Search emails by sender, subject, keyword, or date range. "
         "Use to find specific emails. Do not use for checking latest unread — use check_email."
     )
     parameters_schema = {
@@ -156,7 +156,7 @@ class ReadEmailTool(BaseTool):
     category = "communication"
     contract = ToolContract(timeout_seconds=30)
     description = (
-"Read the full content of a specific email by its UID. "
+        "Read the full content of a specific email by its UID. "
         "Use after check_email or search_email to read the complete message."
     )
     parameters_schema = {

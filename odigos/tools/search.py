@@ -17,7 +17,7 @@ class SearchTool(BaseTool):
 
     name = "web_search"
     gate = ToolGate.config("search_provider")
-    description ="Search the web for current information on any topic. Use for recent events, news, or queries needing multiple source perspectives. Do not use when a single authoritative source suffices — prefer lookup_fact for encyclopedic facts or read_page when you have a specific URL."
+    description = "Search the web for current information on any topic. Use for recent events, news, or queries needing multiple source perspectives. Do not use when a single authoritative source suffices — prefer lookup_fact for encyclopedic facts or read_page when you have a specific URL."
     category = "search"
     contract = ToolContract(timeout_seconds=30, max_retries={"transient": 3, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     parameters_schema = {
