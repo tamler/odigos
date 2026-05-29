@@ -188,11 +188,16 @@ file_access:
   allowed_paths:
     - "data/files"
 
+# Deployment mode
+deployment:
+  mode: dev          # set to "hosted" in production: forces sandbox isolation, SSRF/CSRF on, rejects insecure overrides
+
 # Code sandbox
 sandbox:
   timeout_seconds: 5
   max_memory_mb: 512
   allow_network: false
+  require_isolation: true   # only bubblewrap-isolated execution is allowed; code tools disabled otherwise
 
 # Skills directory
 skills:
