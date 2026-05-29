@@ -782,9 +782,15 @@ class Bootstrapper:
                 if tool_name in live:
                     continue
                 if tool_name in catalog:
+                    gate = catalog[tool_name]
+                    # For a gated tool, the gate explains why it's inactive. For an
+                    # ALWAYS-gated tool that still isn't live, the gate is NOT the
+                    # reason (it registered conditionally elsewhere or failed to
+                    # register this run) — don't print the contradictory
+                    # "inactive: always available".
+                    reason = gate.describe() if gate.kind != "always" else "not active this run"
                     inactive.append(
-                        f"skill '{skill.name}' uses '{tool_name}' "
-                        f"(inactive: {catalog[tool_name].describe()})"
+                        f"skill '{skill.name}' uses '{tool_name}' ({reason})"
                     )
                 else:
                     hard.append(
