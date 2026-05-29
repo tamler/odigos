@@ -741,6 +741,62 @@ class Bootstrapper:
         except Exception:
             logger.exception("Plugin initialization failed (non-critical, continuing)")
 
+    # Tool names registered by plugins via constructor `tool_name=` rather than a
+    # class attribute, so a static scan of tools/*.py for `name = "..."` misses them.
+    # A skill may legitimately reference these even when the plugin is disabled this
+    # run (the tool exists in code; it's just not active). Keep in sync with
+    # plugins/*/__init__.py when a new constructor-named plugin tool is added.
+    _PLUGIN_PROVIDED_TOOL_NAMES = frozenset({"run_gws", "run_browser"})
+
+    def validate_skill_tools(self) -> None:
+        """Validate every skill's declared tools resolve to a real tool (Phase B.2).
+
+        Runs AFTER plugins load so plugin-registered tools (e.g. run_gws,
+        run_browser) are in the live registry when their plugin is enabled.
+        A skill tool is considered known if it is either:
+          - registered in the live tool registry (active this run), or
+          - a tool a plugin CAN register but isn't active this run (disabled
+            plugin / missing CLI) — a soft note, not an error.
+        Only a tool that exists in neither set is a hard problem. Hard problems
+        WARN until the cutover date, then RAISE.
+
+        Cutover deliberately uses init time so a skill referencing a truly
+        nonexistent tool can't ship silently forever.
+        """
+        from datetime import date, datetime as _dt, timezone as _tz
+
+        skill_registry = getattr(self.container, "skill_registry", None)
+        registry = getattr(self.container, "tool_registry", None)
+        if skill_registry is None or registry is None:
+            return
+
+        _CUTOVER = date(2026, 8, 1)
+        live = {t.name for t in registry.list()}
+        known = live | self._PLUGIN_PROVIDED_TOOL_NAMES
+
+        hard_problems: list[str] = []
+        inactive_notes: list[str] = []
+        for skill in skill_registry.list():
+            for tool_name in skill.tools:
+                if tool_name in live:
+                    continue
+                if tool_name in self._PLUGIN_PROVIDED_TOOL_NAMES:
+                    inactive_notes.append(
+                        f"skill '{skill.name}' uses '{tool_name}' (plugin not active this run)"
+                    )
+                elif tool_name not in known:
+                    hard_problems.append(
+                        f"skill '{skill.name}' references unknown tool '{tool_name}'"
+                    )
+
+        if inactive_notes:
+            logger.info("Skill tool validation (inactive plugin tools): %s", "; ".join(inactive_notes))
+        if hard_problems:
+            msg = "Skill tool validation failed: " + "; ".join(hard_problems)
+            if _dt.now(_tz.utc).date() >= _CUTOVER:
+                raise RuntimeError(msg)
+            logger.warning("%s (becomes a hard startup failure on %s)", msg, _CUTOVER.isoformat())
+
     async def _do_init_plugins(self) -> None:
         from odigos.channels.base import ChannelRegistry
         from odigos.core.plugin_context import PluginContext
@@ -1112,6 +1168,13 @@ class Bootstrapper:
         # Non-critical phases (5-7): catch + log + continue
         await self.init_tools()
         await self.init_plugins()
+        # Validate skills AFTER plugins so plugin-registered tools are present.
+        try:
+            self.validate_skill_tools()
+        except RuntimeError:
+            raise
+        except Exception:
+            logger.exception("Skill tool validation crashed (non-critical, continuing)")
         await self.init_agent()
         await self.init_background()
 

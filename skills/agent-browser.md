@@ -1,7 +1,7 @@
 ---
 name: agent-browser
 description: Browse and interact with web pages using a headless browser (navigate, click, type, extract content, take screenshots)
-tools: []  # FIXME: this skill targets a 'run_browser' tool that does not exist in the current registry. Skill body documents the intended surface. Either build the tool or rewrite this skill to use existing read_page-only flows.
+tools: [run_browser]
 complexity: standard
 ---
 You have access to a headless browser via the `run_browser` tool. Pass agent-browser CLI commands.

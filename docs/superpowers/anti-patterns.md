@@ -62,12 +62,15 @@ Linked from: [`docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustnes
 - **Annotation:** 🔴 high · `1x` (one full failure chain) · `unknown` (shipped without the tool; never tested from a blank slate)
 - **Principle:** §3.2 (surface completeness) + §3.5 (blank-slate testing)
 
-### 7. Skill `tools:` blocks missing or referencing non-existent tools
-- **Surface:** `skills/kanban.md`, `skills/journal.md`, `skills/agent-browser.md`, `skills/compliance-check.md`, `skills/google-workspace.md`, `skills/legal-draft.md`
-- **What happened:** Six skill files either had no `tools:` block (`activate_skill` constrained to empty set, every tool call logged as "Tool mismatch") or declared tools that didn't exist in the registry (`run_browser`, `run_gws`, `lookup`).
-- **What fixed it:** [`d8eee65`](https://github.com/tamler/odigos/commit/d8eee65) + [`89d6a97`](https://github.com/tamler/odigos/commit/89d6a97) — declare real tool lists or `tools: []` with FIXME for genuinely missing surfaces.
-- **Annotation:** 🟡 medium (calls worked, just logged as mismatch) · `6x` distinct files · `>30d`
-- **Principle:** §3.3 (skills declare tools explicitly)
+### 7. Skill `tools:` blocks — two real fixes, and a self-inflicted regression (corrected)
+- **Surface:** `skills/kanban.md`, `skills/journal.md`, `skills/compliance-check.md`, `skills/legal-draft.md` (real fixes); `skills/agent-browser.md`, `skills/google-workspace.md` (regression I caused then reverted)
+- **What was actually wrong (real):**
+  - `kanban.md`, `journal.md` had no `tools:` block → `activate_skill` constrained to an empty set, tool calls logged as "Tool mismatch". Fixed in [`d8eee65`](https://github.com/tamler/odigos/commit/d8eee65) by declaring the real tool lists.
+  - `compliance-check.md`, `legal-draft.md` referenced `lookup` — the real tool is `lookup_fact`. Fixed in [`89d6a97`](https://github.com/tamler/odigos/commit/89d6a97).
+- **What I got WRONG in `89d6a97` (and reverted 2026-05-28):** I flagged `run_gws` (google-workspace) and `run_browser` (agent-browser) as "nonexistent" and rewrote those skills. **They are real tools** — `GWSTool`/`BrowserTool` in `odigos/tools/{gws,browser}.py`, registered by the `plugins/gws/` and `plugins/browser/` plugins when enabled + the CLI is installed. My Phase A audit missed them because their names are set via constructor `tool_name=`, not a class attribute, and they register through plugins rather than bootstrap. The original `tools: [run_gws]` / `tools: [run_browser]` declarations were **correct all along**.
+- **Real fix for my regression:** reverted both skills to their original declarations, and made the Phase B.2 skill validator plugin-aware (`Bootstrapper.validate_skill_tools`, runs AFTER `init_plugins`, treats plugin-provided tool names as known-but-possibly-inactive rather than errors). The validator from the earlier `6177371` commit message never actually existed in the file — that commit only changed `section_registry.py`; B.2 was implemented for real on 2026-05-28.
+- **Annotation:** 🟡 medium (real: 4 skill files) + 🟡 process-failure (my regression: 2 files, plus a commit `6177371` whose message described bootstrap changes it never made) · `>30d` for the real issues, `same-day` for the regression
+- **Principle:** §3.3 (skills declare tools explicitly) + meta: audit tooling must understand ALL the ways a tool can be named/registered (class attr, constructor arg, plugin) before declaring a reference "unknown"; and never commit a message describing work without verifying the diff landed.
 
 ### 8. Activity page crashed on `.toFixed()` of undefined
 - **Surface:** `dashboard/src/components/activity/HeroSection.tsx` + `dashboard/src/hooks/useActivityData.ts`
