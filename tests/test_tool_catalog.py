@@ -29,3 +29,16 @@ def test_basetool_has_default_always_gate():
     from odigos.tools.base import BaseTool
     from odigos.tools.gate import ALWAYS
     assert BaseTool.gate is ALWAYS
+
+
+def test_subprocess_tools_have_class_level_name():
+    # run_gws / run_browser must declare name as a CLASS attr (not just set in
+    # __init__) so the catalog can read it without instantiating (and without
+    # importing the optional CLI deps).
+    from odigos.tools.gws import GWSTool
+    from odigos.tools.browser import BrowserTool
+    assert GWSTool.name == "run_gws"
+    assert BrowserTool.name == "run_browser"
+    from odigos.tools.gate import ToolGate
+    assert GWSTool.gate == ToolGate.plugin("gws")
+    assert BrowserTool.gate == ToolGate.plugin("browser")

@@ -20,13 +20,16 @@ class SubprocessTool(BaseTool):
         self,
         *,
         binary_name: str,
-        tool_name: str,
+        tool_name: str | None = None,
         description: str,
         default_timeout: int,
         allowed_subcommands: set[str],
         install_hint: str = "",
     ) -> None:
-        self.name = tool_name
+        resolved = tool_name or getattr(type(self), "name", None)
+        if not resolved:
+            raise ValueError("SubprocessTool requires tool_name= or a class-level name attr")
+        self.name = resolved
         self.description = description
         self.parameters_schema = {
             "type": "object",

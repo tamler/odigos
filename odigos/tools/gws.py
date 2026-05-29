@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from odigos.tools.gate import ToolGate
 from odigos.tools.subprocess_tool import SubprocessTool
 
 _GWS_ALLOWED_SUBCOMMANDS = {
@@ -11,10 +12,12 @@ _GWS_ALLOWED_SUBCOMMANDS = {
 class GWSTool(SubprocessTool):
     """Execute Google Workspace commands via the gws CLI."""
 
+    name = "run_gws"
+    gate = ToolGate.plugin("gws")
+
     def __init__(self, timeout: int = 30) -> None:
         super().__init__(
             binary_name="gws",
-            tool_name="run_gws",
             description=(
                 "Run a Google Workspace CLI command. Supports Gmail, Calendar, Drive, "
                 "Sheets, and all other Workspace APIs. Pass the gws subcommand and arguments. "

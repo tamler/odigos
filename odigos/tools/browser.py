@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from odigos.tools.gate import ToolGate
 from odigos.tools.subprocess_tool import SubprocessTool
 
 _BROWSER_ALLOWED_SUBCOMMANDS = {
@@ -12,10 +13,12 @@ _BROWSER_ALLOWED_SUBCOMMANDS = {
 class BrowserTool(SubprocessTool):
     """Execute browser automation commands via the agent-browser CLI."""
 
+    name = "run_browser"
+    gate = ToolGate.plugin("browser")
+
     def __init__(self, timeout: int = 120) -> None:
         super().__init__(
             binary_name="agent-browser",
-            tool_name="run_browser",
             description=(
                 "Control a headless browser to interact with web pages. Supports navigating, "
                 "clicking, typing, scrolling, taking screenshots, and extracting page content. "
