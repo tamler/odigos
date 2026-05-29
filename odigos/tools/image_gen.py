@@ -12,6 +12,7 @@ import httpx
 
 from odigos.tools.api_tool import APITool, ToolAPIError
 from odigos.tools.base import ToolContract, ToolResult
+from odigos.tools.gate import ToolGate
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ VALID_RATIOS = {"1:1", "4:3", "3:4", "16:9", "9:16"}
 
 class GenerateImageTool(APITool):
     name = "generate_image"
+    gate = ToolGate.service("kie_ai")
     category = "create"
     contract = ToolContract(
         timeout_seconds=180,

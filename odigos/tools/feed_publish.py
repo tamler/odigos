@@ -6,6 +6,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
+from odigos.tools.gate import ToolGate
 
 if TYPE_CHECKING:
     from odigos.db import Database
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 
 class PublishToFeedTool(BaseTool):
     name = "publish_to_feed"
+    gate = ToolGate.config("feed.enabled")
     category = "communication"
     description = (
         "Publish an entry to your RSS feed. Subscribers with subscribe cards "

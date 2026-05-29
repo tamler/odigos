@@ -4,6 +4,7 @@ import json
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
+from odigos.tools.gate import ToolGate
 
 if TYPE_CHECKING:
     from odigos.core.agent_client import AgentClient
@@ -11,6 +12,7 @@ if TYPE_CHECKING:
 
 class MessagePeerTool(BaseTool):
     name = "message_peer"
+    gate = ToolGate.config("mesh.enabled")
     category = "communication"
     description = (
         "Send a message to a registered peer agent. Use to communicate with an already-registered peer. "

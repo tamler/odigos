@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolContract, ToolResult
+from odigos.tools.gate import ToolGate
 
 if TYPE_CHECKING:
     from odigos.config import CalendarConfig
@@ -25,6 +26,7 @@ def _get_client(config: "CalendarConfig"):
 
 class CheckCalendarTool(BaseTool):
     name = "check_calendar"
+    gate = ToolGate.config("calendar.url")
     category = "communication"
     contract = ToolContract(timeout_seconds=30)
     description = (
@@ -106,6 +108,7 @@ class CheckCalendarTool(BaseTool):
 
 class CreateCalendarEventTool(BaseTool):
     name = "create_calendar_event"
+    gate = ToolGate.config("calendar.url")
     category = "communication"
     contract = ToolContract(timeout_seconds=30)
     description = (
@@ -196,6 +199,7 @@ class CreateCalendarEventTool(BaseTool):
 
 class FindFreeTimeTool(BaseTool):
     name = "find_free_time"
+    gate = ToolGate.config("calendar.url")
     category = "communication"
     contract = ToolContract(timeout_seconds=30)
     description = (

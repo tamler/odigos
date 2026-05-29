@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolContract, ToolResult
 from odigos.tools.content_filter_helper import filter_external_content
+from odigos.tools.gate import ToolGate
 
 if TYPE_CHECKING:
     from odigos.config import EmailConfig
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class CheckEmailTool(BaseTool):
     name = "check_email"
+    gate = ToolGate.config("email.imap_host")
     category = "communication"
     contract = ToolContract(timeout_seconds=30, max_retries={"transient": 2, "input": 0, "permission": 0, "unavailable": 0, "unknown": 1})
     description = (
@@ -80,10 +82,11 @@ class CheckEmailTool(BaseTool):
 
 class SearchEmailTool(BaseTool):
     name = "search_email"
+    gate = ToolGate.config("email.imap_host")
     category = "communication"
     contract = ToolContract(timeout_seconds=30)
     description = (
-        "Search emails by sender, subject, keyword, or date range. "
+"Search emails by sender, subject, keyword, or date range. "
         "Use to find specific emails. Do not use for checking latest unread — use check_email."
     )
     parameters_schema = {
@@ -149,10 +152,11 @@ class SearchEmailTool(BaseTool):
 
 class ReadEmailTool(BaseTool):
     name = "read_email"
+    gate = ToolGate.config("email.imap_host")
     category = "communication"
     contract = ToolContract(timeout_seconds=30)
     description = (
-        "Read the full content of a specific email by its UID. "
+"Read the full content of a specific email by its UID. "
         "Use after check_email or search_email to read the complete message."
     )
     parameters_schema = {
@@ -209,6 +213,7 @@ class ReadEmailTool(BaseTool):
 
 class SendEmailTool(BaseTool):
     name = "send_email"
+    gate = ToolGate.config("email.imap_host")
     category = "communication"
     description = (
         "Send an email with optional CC, BCC, and HTML body. "

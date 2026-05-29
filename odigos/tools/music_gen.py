@@ -10,6 +10,7 @@ import httpx
 
 from odigos.tools.api_tool import APITool, ToolAPIError
 from odigos.tools.base import ToolContract, ToolResult
+from odigos.tools.gate import ToolGate
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ FAILURE_STATES = {
 
 class GenerateMusicTool(APITool):
     name = "generate_music"
+    gate = ToolGate.service("kie_ai")
     category = "create"
     contract = ToolContract(
         timeout_seconds=240,

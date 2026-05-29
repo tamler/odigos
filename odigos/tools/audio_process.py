@@ -11,6 +11,7 @@ from pathlib import Path
 
 from odigos.storage import FILES_DIR
 from odigos.tools.base import BaseTool, ToolContract, ToolResult
+from odigos.tools.gate import ToolGate
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ async def _run_ffmpeg(*args: str) -> tuple[int, str, str]:
 
 class ProcessAudioTool(BaseTool):
     name = "process_audio"
+    gate = ToolGate.config("ffmpeg")
     category = "create"
     contract = ToolContract(timeout_seconds=120)
     description = (

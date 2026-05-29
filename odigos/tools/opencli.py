@@ -6,6 +6,7 @@ import logging
 import shutil
 
 from odigos.tools.base import BaseTool, ToolContract, ToolResult
+from odigos.tools.gate import ToolGate
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ PLATFORMS = [
 
 class WebPlatformTool(BaseTool):
     name = "web_platform"
+    gate = ToolGate.config("opencli")
     category = "search"
     contract = ToolContract(timeout_seconds=30)
     description = (
