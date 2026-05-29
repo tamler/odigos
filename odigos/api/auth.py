@@ -94,6 +94,19 @@ def _validate_session(secret: str, token: str) -> dict | None:
         return None
 
 
+async def _validate_session_with_epoch(secret: str, token: str | None, db) -> dict | None:
+    """Validate a session token and confirm its epoch matches the user's current epoch."""
+    session = _validate_session(secret, token)
+    if not session:
+        return None
+    row = await db.fetch_one(
+        "SELECT session_epoch FROM users WHERE id = ?", (session["user_id"],)
+    )
+    if not row or session.get("epoch", 0) != row["session_epoch"]:
+        return None
+    return session
+
+
 def _set_session_cookie(response: Response, request: Request, token: str) -> None:
     """Set the session cookie. Honors X-Forwarded-Proto behind a TLS proxy."""
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
@@ -125,7 +138,7 @@ async def auth_status(request: Request, db=Depends(get_db), settings=Depends(get
     cookie = request.cookies.get(SESSION_COOKIE)
     if cookie:
         secret = settings.session_secret
-        session = _validate_session(secret, cookie)
+        session = await _validate_session_with_epoch(secret, cookie, db)
         if session:
             authenticated = True
             must_change = session.get("must_change_password", False)
@@ -173,6 +186,7 @@ async def auth_setup(body: SetupRequest, request: Request, response: Response, d
         "user_id": user_id,
         "username": username,
         "must_change_password": False,
+        "epoch": 0,
     })
     _set_session_cookie(response, request, token)
 
@@ -190,7 +204,7 @@ async def auth_login(body: LoginRequest, request: Request, response: Response, d
         raise HTTPException(status_code=400, detail="Username and password are required")
 
     user = await db.fetch_one(
-        "SELECT id, username, password_hash, must_change_password FROM users WHERE username = ?",
+        "SELECT id, username, password_hash, must_change_password, session_epoch FROM users WHERE username = ?",
         (username,),
     )
     if not user or not _verify_password(password, user["password_hash"]):
@@ -208,6 +222,7 @@ async def auth_login(body: LoginRequest, request: Request, response: Response, d
         "user_id": user["id"],
         "username": user["username"],
         "must_change_password": must_change,
+        "epoch": user["session_epoch"],
     })
     _set_session_cookie(response, request, token)
 
@@ -246,7 +261,7 @@ async def auth_sso(token: str, request: Request, response: Response, db=Depends(
         raise HTTPException(401, "SSO token missing email")
 
     user = await db.fetch_one(
-        "SELECT id, username, must_change_password FROM users WHERE LOWER(email) = ?",
+        "SELECT id, username, must_change_password, session_epoch FROM users WHERE LOWER(email) = ?",
         (email,),
     )
     if not user:
@@ -269,7 +284,7 @@ async def auth_sso(token: str, request: Request, response: Response, db=Depends(
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (user_id, username, email, password_hash, display_name, 0, now, now),
         )
-        user = {"id": user_id, "username": username, "must_change_password": 0}
+        user = {"id": user_id, "username": username, "must_change_password": 0, "session_epoch": 0}
 
     now = datetime.now(timezone.utc).isoformat()
     await db.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now, user["id"]))
@@ -278,6 +293,7 @@ async def auth_sso(token: str, request: Request, response: Response, db=Depends(
         "user_id": user["id"],
         "username": user["username"],
         "must_change_password": bool(user["must_change_password"]),
+        "epoch": user["session_epoch"],
     })
     redirect = RedirectResponse(url="/", status_code=302)
     _set_session_cookie(redirect, request, sess_token)
@@ -285,9 +301,16 @@ async def auth_sso(token: str, request: Request, response: Response, db=Depends(
 
 
 @router.post("/logout")
-async def auth_logout(request: Request, response: Response):
+async def auth_logout(request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
     """Clear the session cookie. Redirect to platform if managed."""
     _check_csrf(request)
+    cookie = request.cookies.get(SESSION_COOKIE)
+    session = _validate_session(settings.session_secret, cookie)
+    if session:
+        await db.execute(
+            "UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?",
+            (session["user_id"],),
+        )
     response.delete_cookie(key=SESSION_COOKIE)
     platform_url = os.environ.get("ODIGOS_PLATFORM_URL", "").rstrip("/")
     if platform_url:
@@ -307,7 +330,7 @@ async def auth_change_password(body: ChangePasswordRequest, request: Request, re
     _check_csrf(request)
     secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
-    session = _validate_session(secret, cookie)
+    session = await _validate_session_with_epoch(secret, cookie, db)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -321,7 +344,7 @@ async def auth_change_password(body: ChangePasswordRequest, request: Request, re
     user_id = session["user_id"]
 
     user = await db.fetch_one(
-        "SELECT id, password_hash, must_change_password FROM users WHERE id = ?",
+        "SELECT id, password_hash, must_change_password, session_epoch FROM users WHERE id = ?",
         (user_id,),
     )
     if not user:
@@ -341,11 +364,19 @@ async def auth_change_password(body: ChangePasswordRequest, request: Request, re
         (new_hash, user_id),
     )
 
+    # Invalidate all prior sessions, then reissue with the new epoch
+    await db.execute(
+        "UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?",
+        (user_id,),
+    )
+    new_epoch = user["session_epoch"] + 1
+
     # Reissue session with must_change_password cleared
     token = _create_session(secret, {
         "user_id": session["user_id"],
         "username": session["username"],
         "must_change_password": False,
+        "epoch": new_epoch,
     })
     _set_session_cookie(response, request, token)
 
@@ -381,7 +412,8 @@ async def auth_reset_password(body: ResetPasswordRequest, request: Request, db=D
 
     new_hash = _hash_password(new_password)
     await db.execute(
-        "UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?",
+        "UPDATE users SET password_hash = ?, must_change_password = 1, "
+        "session_epoch = session_epoch + 1 WHERE id = ?",
         (new_hash, user["id"]),
     )
     return {"status": "ok", "must_change_password": True}
@@ -392,7 +424,7 @@ async def auth_me(request: Request, db=Depends(get_db), settings=Depends(get_set
     """Return info about the currently authenticated user (session required)."""
     secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
-    session = _validate_session(secret, cookie)
+    session = await _validate_session_with_epoch(secret, cookie, db)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -441,7 +473,7 @@ async def get_facts(request: Request, db=Depends(get_db), settings=Depends(get_s
     """Return all stored user facts (session required)."""
     secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
-    session = _validate_session(secret, cookie)
+    session = await _validate_session_with_epoch(secret, cookie, db)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -458,7 +490,7 @@ async def delete_fact(fact_id: str, request: Request, db=Depends(get_db), settin
     _check_csrf(request)
     secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
-    session = _validate_session(secret, cookie)
+    session = await _validate_session_with_epoch(secret, cookie, db)
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -483,7 +515,7 @@ async def update_profile(body: ProfileUpdate, request: Request, db=Depends(get_d
     if not cookie:
         raise HTTPException(status_code=401, detail="Not authenticated")
     secret = settings.session_secret
-    session = _validate_session(secret, cookie)
+    session = await _validate_session_with_epoch(secret, cookie, db)
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session")
 

@@ -72,7 +72,14 @@ class FakeDB:
                 "must_change_password": params[5] if len(params) > 5 else 0,
                 "created_at": params[6] if len(params) > 6 else "",
                 "last_login_at": params[7] if len(params) > 7 else None,
+                "session_epoch": 0,
             }
+            return
+
+        if "update users set session_epoch = session_epoch + 1" in sql_lower:
+            uid = params[0]
+            if uid in self._users:
+                self._users[uid]["session_epoch"] = self._users[uid].get("session_epoch", 0) + 1
             return
 
         if "update users set password_hash" in sql_lower:
