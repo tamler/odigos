@@ -453,6 +453,7 @@ async def get_facts(request: Request, db=Depends(get_db), settings=Depends(get_s
 @router.delete("/facts/{fact_id}")
 async def delete_fact(fact_id: str, request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Delete a user fact by ID (session required)."""
+    _check_csrf(request)
     secret = settings.session_secret
     cookie = request.cookies.get(SESSION_COOKIE)
     session = _validate_session(secret, cookie)
@@ -475,6 +476,7 @@ class ProfileUpdate(BaseModel):
 @router.put("/profile")
 async def update_profile(body: ProfileUpdate, request: Request, db=Depends(get_db), settings=Depends(get_settings)):
     """Update the owner's learned profile fields (session required)."""
+    _check_csrf(request)
     cookie = request.cookies.get(SESSION_COOKIE)
     if not cookie:
         raise HTTPException(status_code=401, detail="Not authenticated")
