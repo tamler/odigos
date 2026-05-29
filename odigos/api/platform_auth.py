@@ -1,6 +1,7 @@
 """Platform SSO: optional /auth/callback for odigos.one managed login."""
 
 import os
+import re
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -46,26 +47,31 @@ async def platform_auth_callback(
         return RedirectResponse(f"{PLATFORM_URL}/login")
 
     platform_user = r.json()
-    email = platform_user.get("email", "")
+    email = (platform_user.get("email") or "").strip().lower()
     name = platform_user.get("name", email)
 
     if not email:
         raise HTTPException(400, "Platform did not provide an email")
 
     local_user = await db.fetch_one(
-        "SELECT id, username FROM users WHERE email = ?", (email,)
+        "SELECT id, username FROM users WHERE LOWER(email) = ?", (email,)
     )
 
     if not local_user:
         user_id = uuid.uuid4().hex
         now = datetime.now(timezone.utc).isoformat()
         random_password = _hash_password(secrets.token_hex(32))
+        base_username = re.sub(r"[^a-z0-9_]", "", email.split("@")[0].lower()) or "user"
+        username = base_username
+        suffix = 1
+        while await db.fetch_one("SELECT 1 FROM users WHERE username = ?", (username,)):
+            suffix += 1
+            username = f"{base_username}{suffix}"
         await db.execute(
             "INSERT INTO users (id, username, password_hash, display_name, email, must_change_password, created_at, last_login_at) "
             "VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
-            (user_id, email, random_password, name, email, now, now),
+            (user_id, username, random_password, name, email, now, now),
         )
-        username = email
     else:
         user_id = local_user["id"]
         username = local_user["username"]
