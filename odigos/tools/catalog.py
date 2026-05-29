@@ -32,8 +32,13 @@ def _import_all_tool_modules() -> None:
             continue
         try:
             importlib.import_module(f"odigos.tools.{mod.name}")
-        except Exception as e:  # optional deps in a tool module — skip, log
+        except ImportError as e:  # optional third-party dep absent — expected, skip quietly
             logger.debug("catalog: skipping odigos.tools.%s (%s)", mod.name, e)
+        except Exception as e:  # a real error in the module — surface it, don't hide a missing tool
+            logger.warning(
+                "catalog: unexpected error importing odigos.tools.%s — tool(s) may be missing from the catalog: %s",
+                mod.name, e,
+            )
 
 
 def _walk_subclasses(cls: type) -> list[type]:

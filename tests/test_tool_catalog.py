@@ -79,9 +79,12 @@ def test_build_catalog_rejects_name_collision():
             return ToolResult(success=True, data="")
 
     cat.reset_catalog_cache()
-    with pytest.raises(ValueError, match="dup_collide_xyz"):
-        cat.build_catalog()
-    # Neutralize so later catalog builds in this process aren't poisoned:
-    _Dup1.name = None  # type: ignore[assignment]
-    _Dup2.name = None  # type: ignore[assignment]
-    cat.reset_catalog_cache()
+    try:
+        with pytest.raises(ValueError, match="dup_collide_xyz"):
+            cat.build_catalog()
+    finally:
+        # Neutralize the throwaway dup classes so later catalog builds in this
+        # process aren't poisoned, even if build_catalog raised unexpectedly.
+        _Dup1.name = None  # type: ignore[assignment]
+        _Dup2.name = None  # type: ignore[assignment]
+        cat.reset_catalog_cache()
