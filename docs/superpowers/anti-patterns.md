@@ -71,6 +71,7 @@ Linked from: [`docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustnes
 - **Real fix for my regression:** reverted both skills to their original declarations, and made the Phase B.2 skill validator plugin-aware (`Bootstrapper.validate_skill_tools`, runs AFTER `init_plugins`, treats plugin-provided tool names as known-but-possibly-inactive rather than errors). The validator from the earlier `6177371` commit message never actually existed in the file — that commit only changed `section_registry.py`; B.2 was implemented for real on 2026-05-28.
 - **Annotation:** 🟡 medium (real: 4 skill files) + 🟡 process-failure (my regression: 2 files, plus a commit `6177371` whose message described bootstrap changes it never made) · `>30d` for the real issues, `same-day` for the regression
 - **Principle:** §3.3 (skills declare tools explicitly) + meta: audit tooling must understand ALL the ways a tool can be named/registered (class attr, constructor arg, plugin) before declaring a reference "unknown"; and never commit a message describing work without verifying the diff landed.
+- **Resolved structurally (2026-05-29):** the tool catalog (spec `2026-05-29-tool-catalog-design.md`) replaced the fragile hardcoded allowlist. The validator now distinguishes inactive-but-cataloged tools (soft INFO) from truly-unknown ones (the only hard-fail), so the 2026-08-01 cutover is safe, and a bidirectional drift-guard test enforces gate↔registration consistency. The `run_gws`/`run_browser` references are correct and the catalog sees them via their class-level names.
 
 ### 8. Activity page crashed on `.toFixed()` of undefined
 - **Surface:** `dashboard/src/components/activity/HeroSection.tsx` + `dashboard/src/hooks/useActivityData.ts`
@@ -107,6 +108,14 @@ Linked from: [`docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustnes
 - **The actual lesson (the reason this stays in the registry instead of being deleted):** *Read the tool's real schema and dispatch before writing or "fixing" anything.* A test failure is not proof of a code bug — verify which side is wrong. Writing a registry entry (or commit message) describing a fix you didn't actually make is its own brittleness: the record lies to the next reader.
 - **Annotation:** 🟡 process-failure (no production impact; the tool was always correct) · `1x` · `same-day` (caught same session)
 - **Principle:** meta — "verify against ground truth before asserting as fact"; do not document fixes that weren't made.
+
+### 13. Two tools claimed the same `name` ("create_calendar_event") — silent registry clobber
+- **Surface:** `odigos/tools/ics.py` (`CalendarEventTool`) and `odigos/tools/calendar.py` (`CreateCalendarEventTool`)
+- **What happened:** Both declared `name = "create_calendar_event"`. `CalendarEventTool` (generates a downloadable `.ics` file) registers unconditionally; `CreateCalendarEventTool` (creates an event via CalDAV) registers when `calendar.url` is set. When CalDAV is configured, both register under the same name and one silently clobbers the other in the ToolRegistry (last-write-wins) — a real latent bug, invisible until you happen to have CalDAV configured.
+- **What fixed it:** [`acdd826`](https://github.com/tamler/odigos/commit/acdd826) — `build_catalog()` raises `ValueError` on a duplicate tool name, which surfaced the collision at build time. Renamed the `.ics` tool to `generate_ics_file` (accurate: it produces a file artifact, distinct from the CalDAV creator). Nothing referenced the old name as a hardcoded string (verified), so the rename is safe.
+- **How it was caught:** the catalog's duplicate-name guard, on its first real build during the tool-catalog work (spec 2026-05-29). The catalog infrastructure caught a pre-existing latent bug the moment it existed.
+- **Annotation:** 🔴 high · `1x` (latent, manifests only with CalDAV configured) · `unknown` (both tools predate the catalog work)
+- **Principle:** §3.2 (surface completeness) + the catalog's name-uniqueness invariant as a structural guard
 
 ---
 

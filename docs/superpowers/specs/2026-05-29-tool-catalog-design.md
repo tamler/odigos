@@ -1,6 +1,6 @@
 # Tool Catalog with Gate Metadata — Design
 
-**Status:** spec / pre-implementation (review pass 1 applied 2026-05-29)
+**Status:** implemented 2026-05-29 (review pass 1 applied; plan `docs/superpowers/plans/2026-05-29-tool-catalog.md` executed, full suite green)
 **Date:** 2026-05-29
 **Related:** [`2026-05-28-brittleness-audit-and-robustness.md`](./2026-05-28-brittleness-audit-and-robustness.md) §3.3, [`anti-patterns.md`](../anti-patterns.md) entry 7
 **Motivation:** The skill-tool validator and find_tools coverage gate have no authoritative answer to "does this tool exist in the codebase?" — they only know "what registered this boot." Conditional tools (plugin-gated, service-key-gated, config-gated) are absent from the live registry when their condition isn't met, so the validator can't distinguish "tool doesn't exist" (a real bug) from "tool exists but isn't active this run" (fine). This caused a false hard-fail risk.
