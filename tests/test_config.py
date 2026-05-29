@@ -71,7 +71,9 @@ def test_settings_defaults():
     )
     assert settings.agent.name == "Odigos"
     assert settings.database.path == "data/odigos.db"
-    assert settings.llm.max_tokens == 4096
+    # Default raised 2048 -> 16384 -> 32768 over the LLM-routing work (commit 96bafec);
+    # 128k+ context models make a large default safe. Per-model max_output_tokens clamps down.
+    assert settings.llm.max_tokens == 32768
     assert settings.llm.fast == "m"
     assert settings.telegram.mode == "polling"
     assert settings.server.port == 8000
