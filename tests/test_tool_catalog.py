@@ -88,3 +88,79 @@ def test_build_catalog_rejects_name_collision():
         _Dup1.name = None  # type: ignore[assignment]
         _Dup2.name = None  # type: ignore[assignment]
         cat.reset_catalog_cache()
+
+
+import re
+from pathlib import Path
+
+_REPO = Path(__file__).resolve().parent.parent
+
+
+def _known_services() -> set[str]:
+    """Canonical service vocabulary = every key passed to service_key("...")."""
+    services = set()
+    for base in ("odigos", "plugins"):
+        for py in (_REPO / base).rglob("*.py"):
+            services |= set(re.findall(r'service_key\("([a-z_]+)"\)', py.read_text()))
+    return services
+
+
+def test_gate_keys_resolve():
+    from odigos.tools.catalog import build_catalog
+    catalog = build_catalog()
+    known_services = _known_services()
+    for name, gate in catalog.items():
+        if gate.kind == "plugin":
+            assert (_REPO / "plugins" / gate.key).is_dir(), \
+                f"{name}: plugin '{gate.key}' has no plugins/{gate.key}/ dir"
+        elif gate.kind == "service":
+            assert gate.key in known_services, \
+                f"{name}: service '{gate.key}' not in {sorted(known_services)}"
+        # 'config' keys are free-form condition strings (e.g. 'email.imap_host',
+        # 'ffmpeg', 'opencli') — validated by the drift guard below, not here.
+
+
+# condition substring -> tool NAMES registered under it in bootstrap/plugins.
+# Single source of truth the drift guard checks the catalog against. When you
+# add/remove a guarded registration, update this map AND the tool's gate
+# together — the tests below fail loudly if they drift apart.
+BOOTSTRAP_GUARDED = {
+    "mesh.enabled":     {"message_peer"},
+    "opencli":          {"web_platform"},
+    "ffmpeg":           {"process_audio"},
+    "kie_ai":           {"generate_image", "generate_music"},
+    "feed.enabled":     {"publish_to_feed"},
+    "calendar.url":     {"check_calendar", "create_calendar_event", "find_free_time"},
+    "email.imap_host":  {"check_email", "search_email", "read_email", "send_email"},
+    "search_provider":  {"web_search"},
+    "gws":              {"run_gws"},
+    "browser":          {"run_browser"},
+    "tts":              {"speak"},
+    "stt":              {"transcribe_audio"},
+}
+
+
+def test_every_conditional_tool_is_gated():
+    """Forward drift guard: every tool we KNOW is conditionally registered
+    must carry a non-ALWAYS gate in the catalog."""
+    from odigos.tools.catalog import build_catalog
+    from odigos.tools.gate import ALWAYS
+    catalog = build_catalog()
+    for cond, names in BOOTSTRAP_GUARDED.items():
+        for name in names:
+            assert name in catalog, f"{name} (cond {cond}) missing from catalog"
+            assert catalog[name] is not ALWAYS and catalog[name].kind != "always", \
+                f"{name} is conditionally registered (cond {cond}) but gate=ALWAYS"
+
+
+def test_gated_tools_match_known_conditions():
+    """Reverse drift guard: every non-ALWAYS tool in the catalog must appear
+    in BOOTSTRAP_GUARDED (i.e. there's a real registration guard for it)."""
+    from odigos.tools.catalog import build_catalog
+    catalog = build_catalog()
+    all_guarded_names = set().union(*BOOTSTRAP_GUARDED.values())
+    for name, gate in catalog.items():
+        if gate.kind != "always":
+            assert name in all_guarded_names, \
+                f"{name} has gate {gate} but no entry in BOOTSTRAP_GUARDED — " \
+                f"stale gate, or add it to the map when you add the guard"
