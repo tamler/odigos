@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from odigos.tools.gate import ALWAYS, ToolGate
+
 
 @dataclass
 class ToolContract:
@@ -64,6 +66,7 @@ CATEGORY_MEDIA = "media"           # image processing, translation
 
 class BaseTool(ABC):
     name: str
+    gate: ToolGate = ALWAYS  # declarative enabling condition; see odigos/tools/gate.py
     description: str
     category: str = ""  # One of the CATEGORY_* constants
     parameters_schema: dict = {"type": "object", "properties": {}}

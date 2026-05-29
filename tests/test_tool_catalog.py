@@ -23,3 +23,9 @@ def test_gate_is_frozen_hashable():
     # frozen dataclass -> usable in sets/dicts, equal by value
     s = {ToolGate.plugin("gws"), ToolGate.plugin("gws")}
     assert len(s) == 1
+
+
+def test_basetool_has_default_always_gate():
+    from odigos.tools.base import BaseTool
+    from odigos.tools.gate import ALWAYS
+    assert BaseTool.gate is ALWAYS
