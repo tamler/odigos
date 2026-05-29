@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import platform
 import shutil
 import tempfile
@@ -105,7 +106,13 @@ class SandboxProvider:
                 timed_out=False,
             )
 
-        if self.require_isolation and SandboxProvider._isolation != "bwrap":
+        # Dev escape hatch; hosted mode's startup gate (bootstrap) refuses to boot
+        # if this is set, so hosted is unaffected.
+        if (
+            self.require_isolation
+            and SandboxProvider._isolation != "bwrap"
+            and not os.environ.get("ODIGOS_SANDBOX_ALLOW_INSECURE")
+        ):
             return SandboxResult(
                 stdout="",
                 stderr=(
@@ -217,7 +224,6 @@ class SandboxProvider:
                 if prefix.startswith("/usr/local"):
                     bwrap.extend(["--ro-bind", "/usr/local", "/usr/local"])
             # Also bind /lib and /lib64 if they're real directories (not symlinks)
-            import os
             for libdir in ("/lib", "/lib64"):
                 if os.path.isdir(libdir) and not os.path.islink(libdir):
                     bwrap.extend(["--ro-bind", libdir, libdir])
