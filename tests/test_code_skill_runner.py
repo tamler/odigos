@@ -3,6 +3,13 @@ from pathlib import Path
 from odigos.tools.code_skill_runner import CodeSkillRunner
 
 
+@pytest.fixture(autouse=True)
+def _allow_insecure_sandbox(monkeypatch):
+    # These tests exercise real skill execution mechanics on hosts without
+    # bubblewrap; enable the dev escape hatch so the sandbox does not fail closed.
+    monkeypatch.setenv("ODIGOS_SANDBOX_ALLOW_INSECURE", "1")
+
+
 @pytest.fixture
 def skill_files(tmp_path):
     """Create a simple code skill and its .md file."""
