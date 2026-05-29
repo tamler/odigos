@@ -242,11 +242,18 @@ class QueryClassifier:
         for category in _RULE_ORDER:
             phrases = rules.get(category, [])
             if category == "simple":
-                # Simple uses word-level matching with length check
+                # Simple uses word-level matching with length check.
+                # Guard the TextBlob path: it raises LookupError when NLTK
+                # corpora aren't downloaded (the `is not None` check only covers
+                # TextBlob being uninstalled). Query classification runs on every
+                # message — it must never hard-crash over a missing optional corpus.
+                words = None
                 if TextBlob is not None:
-                    blob = TextBlob(lower)
-                    words = list(blob.words)
-                else:
+                    try:
+                        words = list(TextBlob(lower).words)
+                    except Exception:
+                        words = None
+                if words is None:
                     words = re.findall(r"\w+", lower)
                 if len(words) <= 3 and "?" not in message:
                     simple_words = set(phrases)
