@@ -22,6 +22,11 @@ from odigos.container import Container
 logger = logging.getLogger(__name__)
 
 
+def _skill_validation_today():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).date()
+
+
 class Bootstrapper:
     def __init__(self, settings: Settings, config_path: str = "config.yaml"):
         self.settings = settings
@@ -741,61 +746,60 @@ class Bootstrapper:
         except Exception:
             logger.exception("Plugin initialization failed (non-critical, continuing)")
 
-    # Tool names registered by plugins via constructor `tool_name=` rather than a
-    # class attribute, so a static scan of tools/*.py for `name = "..."` misses them.
-    # A skill may legitimately reference these even when the plugin is disabled this
-    # run (the tool exists in code; it's just not active). Keep in sync with
-    # plugins/*/__init__.py when a new constructor-named plugin tool is added.
-    _PLUGIN_PROVIDED_TOOL_NAMES = frozenset({"run_gws", "run_browser"})
-
     def validate_skill_tools(self) -> None:
-        """Validate every skill's declared tools resolve to a real tool (Phase B.2).
+        """Validate every skill's declared tools against the tool catalog
+        (spec 2026-05-29). A tool is OK if it's live OR in the catalog
+        (exists but inactive this run). A tool in neither is a hard problem:
+        WARN before the cutover, RAISE on/after it. Env ODIGOS_TOOL_VALIDATION
+        overrides: 'warn' = never raise, 'off' = skip entirely."""
+        import os
+        from datetime import date
 
-        Runs AFTER plugins load so plugin-registered tools (e.g. run_gws,
-        run_browser) are in the live registry when their plugin is enabled.
-        A skill tool is considered known if it is either:
-          - registered in the live tool registry (active this run), or
-          - a tool a plugin CAN register but isn't active this run (disabled
-            plugin / missing CLI) — a soft note, not an error.
-        Only a tool that exists in neither set is a hard problem. Hard problems
-        WARN until the cutover date, then RAISE.
-
-        Cutover deliberately uses init time so a skill referencing a truly
-        nonexistent tool can't ship silently forever.
-        """
-        from datetime import date, datetime as _dt, timezone as _tz
+        mode = os.environ.get("ODIGOS_TOOL_VALIDATION", "auto").lower()
+        if mode == "off":
+            return
 
         skill_registry = getattr(self.container, "skill_registry", None)
         registry = getattr(self.container, "tool_registry", None)
         if skill_registry is None or registry is None:
             return
 
-        _CUTOVER = date(2026, 8, 1)
-        live = {t.name for t in registry.list()}
-        known = live | self._PLUGIN_PROVIDED_TOOL_NAMES
+        try:
+            from odigos.tools.catalog import build_catalog
+            catalog = build_catalog()
+        except Exception:
+            logger.warning("Skill validation skipped: tool catalog unavailable", exc_info=True)
+            return
+        if not catalog:
+            logger.warning("Skill validation skipped: tool catalog empty")
+            return
 
-        hard_problems: list[str] = []
-        inactive_notes: list[str] = []
+        live = {t.name for t in registry.list()}
+        _CUTOVER = date(2026, 8, 1)
+        hard: list[str] = []
+        inactive: list[str] = []
         for skill in skill_registry.list():
             for tool_name in skill.tools:
                 if tool_name in live:
                     continue
-                if tool_name in self._PLUGIN_PROVIDED_TOOL_NAMES:
-                    inactive_notes.append(
-                        f"skill '{skill.name}' uses '{tool_name}' (plugin not active this run)"
+                if tool_name in catalog:
+                    inactive.append(
+                        f"skill '{skill.name}' uses '{tool_name}' "
+                        f"(inactive: {catalog[tool_name].describe()})"
                     )
-                elif tool_name not in known:
-                    hard_problems.append(
+                else:
+                    hard.append(
                         f"skill '{skill.name}' references unknown tool '{tool_name}'"
                     )
 
-        if inactive_notes:
-            logger.info("Skill tool validation (inactive plugin tools): %s", "; ".join(inactive_notes))
-        if hard_problems:
-            msg = "Skill tool validation failed: " + "; ".join(hard_problems)
-            if _dt.now(_tz.utc).date() >= _CUTOVER:
+        if inactive:
+            logger.info("Skill tool validation (inactive): %s", "; ".join(inactive))
+        if hard:
+            msg = "Skill tool validation failed: " + "; ".join(hard)
+            if mode != "warn" and _skill_validation_today() >= _CUTOVER:
                 raise RuntimeError(msg)
-            logger.warning("%s (becomes a hard startup failure on %s)", msg, _CUTOVER.isoformat())
+            logger.warning("%s (hard failure on/after %s unless ODIGOS_TOOL_VALIDATION=warn)",
+                           msg, _CUTOVER.isoformat())
 
     async def _do_init_plugins(self) -> None:
         from odigos.channels.base import ChannelRegistry
