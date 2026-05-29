@@ -337,8 +337,9 @@ Phase B was executed in one session. Outcome:
 - **B.4 — prompt-cache priority bands** ✅ Documented in `personality/section_registry.py` module docstring.
 - **B.5 — tool-output schema versioning** ✅ (revised) Per owner decision, dropped the speculative `result_format_version` field and per-tool golden strings (high-maintenance, brittle). Replaced with extending the property-based blank-slate test to more deterministic tools.
 
-**Bugs the new infrastructure caught on first run (both real, both shipped):**
-1. find_tools discoverability — 12 of 66 tools unreachable (registry entry 11, fix `abbb47f`).
-2. notebook schema/dispatch action mismatch — 4 of 6 actions broken for any schema-following model (registry entry 12, fix `7a2b3c4`).
+**Bugs the new infrastructure caught on first run:**
+1. find_tools discoverability — 12 of 66 tools unreachable (registry entry 11, fixed in `bc95946`). Real production bug.
 
-The audit infrastructure paid for itself within the session that built it.
+**Correction (2026-05-28):** an earlier version of this log and registry entry 12 claimed the blank-slate test also found a "notebook schema/dispatch mismatch" fixed by commit `7a2b3c4`. That was a **misdiagnosis** — the notebook tool was always correct; the *test* was written against an imagined API and was the thing that needed fixing. Entry 12 is retracted with the real lesson recorded. No `7a2b3c4` commit exists. See registry entry 12.
+
+The audit infrastructure still paid for itself (the find_tools bug was real), but the episode is itself a brittleness lesson: a failing test is not proof of a code bug — verify which side is wrong before writing the fix or the record.

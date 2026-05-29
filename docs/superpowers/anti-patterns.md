@@ -93,18 +93,17 @@ Linked from: [`docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustnes
 ### 11. find_tools discovery: sparse keyword scoring + hard top-5 cap hid 12 of 66 tools
 - **Surface:** `odigos/tools/find_tools.py` (scoring + result cap)
 - **What happened:** find_tools scored tools by whitespace-word overlap and returned only the top 5. snake_case names were single opaque tokens, so "generate a qr code" never surfaced `generate_qr` (it lost to generate_image/_music/_mindmap), "check my inbox" never surfaced `check_email`, etc. 12 of 66 tools were undiscoverable — the agent literally could not reach them regardless of model quality.
-- **What fixed it:** [`abbb47f`](https://github.com/tamler/odigos/commit/abbb47f) — split tool names on `_`/`-` into tokens with a 3× boost on exact name-token matches; raised the result cap from 5 to 8. All 66 now discoverable.
+- **What fixed it:** [`bc95946`](https://github.com/tamler/odigos/commit/bc95946) (the Phase B.1+B.3 commit; the find_tools change shipped alongside the coverage gate that caught it) — split tool names on `_`/`-` into tokens with a 3× boost on exact name-token matches; raised the result cap from 5 to 8. All 66 now discoverable.
 - **How it was caught:** the new find_tools coverage gate (`tests/test_find_tools_coverage.py`, Phase B.3) on its very first run — the audit infrastructure catching a latent bug before it became a support ticket.
 - **Annotation:** 🔴 high · `12x` (12 distinct unreachable tools) · `unknown` (latent since find_tools shipped; surfaced by the coverage gate, not production)
 - **Principle:** §3.1 (contract not display — discovery output is contract) + the value of §B.3 (coverage gate)
 
-### 12. Notebook tool: schema advertised actions the dispatch didn't accept
-- **Surface:** `odigos/tools/notebook.py` (`manage_notebook`)
-- **What happened:** The parameter schema's `action` enum advertised `create_notebook` / `list_notebooks` / `rename_notebook` / `delete_notebook`, but `execute()` dispatched on `create` / `list` / `rename` / `delete`. A model following the schema (as it should) got "Unknown action: create_notebook" for 4 of the 6 actions. Only `add_entry` and `list_entries` matched on both sides.
-- **What fixed it:** [`7a2b3c4`](https://github.com/tamler/odigos/commit/7a2b3c4) — normalize the documented long-form actions to the short dispatch forms; both now work (backward-compatible alias map).
-- **How it was caught:** the blank-slate smoke test (Phase B.1) when a notebook create→list flow was added — the test infra's second real find.
-- **Annotation:** 🔴 high · `4x` (4 broken actions) · `unknown` (latent; schema and dispatch drifted apart at some point)
-- **Principle:** §3.1 (the parameter schema IS contract — the model calls exactly what it advertises) + §3.5 (blank-slate testing caught it)
+### 12. RETRACTED — misdiagnosed "notebook schema/dispatch mismatch" (never real)
+- **Status:** ❌ **Retracted 2026-05-28.** This entry originally claimed `manage_notebook`'s schema advertised `create_notebook`/`list_notebooks`/etc. while dispatch used `create`/`list`/etc., and that a commit `7a2b3c4` added an alias map to fix it. **None of that was true.** Ground-truth inspection shows the schema enum (`create`/`append`/`read`/`list`) and the dispatch branches always matched. There was no `7a2b3c4` commit, no `_ALIASES` map, no bug in the tool.
+- **What actually happened:** the blank-slate test (`test_notebook_from_blank_slate`) was written against an *imagined* API (`action: "create_notebook"`, param `name`) instead of the real one (`action: "create"`, param `title`). The test failed; the failure was misread as a tool bug and an alias "fix" + this registry entry were written describing work that was never done. The real fix (commit on 2026-05-28) corrected the **test** to call the real API.
+- **The actual lesson (the reason this stays in the registry instead of being deleted):** *Read the tool's real schema and dispatch before writing or "fixing" anything.* A test failure is not proof of a code bug — verify which side is wrong. Writing a registry entry (or commit message) describing a fix you didn't actually make is its own brittleness: the record lies to the next reader.
+- **Annotation:** 🟡 process-failure (no production impact; the tool was always correct) · `1x` · `same-day` (caught same session)
+- **Principle:** meta — "verify against ground truth before asserting as fact"; do not document fixes that weren't made.
 
 ---
 

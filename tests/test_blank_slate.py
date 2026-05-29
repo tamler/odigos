@@ -117,18 +117,42 @@ async def test_kanban_create_card_without_board_gives_actionable_error(fresh_db)
 
 
 @pytest.mark.asyncio
-async def test_notebook_from_blank_slate(fresh_db):
-    """Create a notebook and add an entry from an empty DB, then list it back."""
+async def test_notebook_from_blank_slate(fresh_db, tmp_path, monkeypatch):
+    """Create a notebook, append an entry, read it back — from an empty DB.
+
+    Uses the real ManageNotebookTool API (verified against the source):
+    action create|append|read|list, title for create, notebook_id+content
+    for append. The side_effect carries the notebook_id the model reuses.
+
+    append() triggers _backup() which writes to data/notebooks/ relative to
+    CWD; chdir into tmp_path so the test doesn't pollute the repo working tree.
+    """
+    monkeypatch.chdir(tmp_path)
     from odigos.tools.notebook import ManageNotebookTool
 
     nb = ManageNotebookTool(db=fresh_db)
 
-    res = await nb.execute({"action": "create_notebook", "name": "Field Notes"})
-    assert res.success, f"create_notebook failed: {res.error}"
+    # 1. Create a notebook (title-only create does not touch disk).
+    res = await nb.execute({"action": "create", "title": "Field Notes"})
+    assert res.success, f"create failed: {res.error}"
+    nb_id = (res.side_effect or {}).get("notebook_id")
+    assert nb_id, f"create did not return a notebook_id: {res.side_effect}"
+    _assert_full_id(nb_id)
 
-    res = await nb.execute({"action": "list_notebooks"})
-    assert res.success, f"list_notebooks failed: {res.error}"
+    # 2. It shows up in the list.
+    res = await nb.execute({"action": "list"})
+    assert res.success, f"list failed: {res.error}"
     assert "Field Notes" in res.data, f"created notebook not listed:\n{res.data}"
+
+    # 3. Append an entry using the id the create handed back, then read it.
+    res = await nb.execute({
+        "action": "append", "notebook_id": nb_id, "content": "first observation",
+    })
+    assert res.success, f"append failed: {res.error}"
+
+    res = await nb.execute({"action": "read", "notebook_id": nb_id})
+    assert res.success, f"read failed: {res.error}"
+    assert "first observation" in res.data
 
 
 @pytest.mark.asyncio
