@@ -31,6 +31,7 @@ PUBLIC: set[tuple[str, str]] = {
     ("POST", "/api/auth/setup"),  # first-run bootstrap, no user exists yet
     ("POST", "/api/auth/login"),  # password login, issues session cookie
     ("POST", "/api/auth/logout"),  # clears the session cookie
+    ("POST", "/api/auth/sso"),  # platform JWT exchange; the signed token is the credential
     # -- Self-validating inline (cookie + _validate_session_with_epoch + _check_csrf) --
     ("POST", "/api/auth/change-password"),  # self-validates inline (session + CSRF)
     ("DELETE", "/api/auth/facts/{fact_id}"),  # self-validates inline (session + CSRF)

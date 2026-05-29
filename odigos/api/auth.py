@@ -1,6 +1,7 @@
 """Auth API: setup, login, logout, change-password, status, me."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 import uuid
@@ -14,6 +15,8 @@ from pydantic import BaseModel
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+logger = logging.getLogger(__name__)
 
 SESSION_COOKIE = "odigos_session"
 
@@ -233,13 +236,13 @@ async def auth_login(body: LoginRequest, request: Request, response: Response, d
     return {"must_change_password": must_change}
 
 
-@router.get("/sso")
-async def auth_sso(token: str, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
-    """Exchange a platform-issued JWT for an agent session cookie.
+async def _exchange_sso_token(token: str, request: Request, db, settings) -> RedirectResponse:
+    """Verify a platform JWT and mint an agent session cookie on a redirect.
 
-    Verifies the JWT (HS256, shared secret with platform), looks up the agent's
-    local user by the email in the `sub` claim, sets a session cookie, and
-    redirects to the dashboard root.
+    Shared by both the POST (preferred) and legacy GET SSO channels. Verifies
+    the JWT (HS256, shared secret with platform), looks up the agent's local
+    user by the email in the `sub` claim, sets a session cookie, and returns a
+    302 redirect to the dashboard root. Raises HTTPException on any failure.
     """
     import jwt as _jwt
     from datetime import datetime
@@ -302,6 +305,48 @@ async def auth_sso(token: str, request: Request, response: Response, db=Depends(
     redirect = RedirectResponse(url="/", status_code=302)
     _set_session_cookie(redirect, request, sess_token, force_secure=(settings.deployment.mode == "hosted"))
     return redirect
+
+
+class SsoTokenRequest(BaseModel):
+    token: str = ""
+
+
+@router.post("/sso")
+async def auth_sso_post(body: SsoTokenRequest, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
+    """Exchange a platform-issued JWT for an agent session cookie.
+
+    Preferred SSO channel: the token is read from the JSON body (`token`) or an
+    `Authorization: Bearer <jwt>` header, keeping it out of URLs/logs/history.
+    """
+    token = body.token or request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(400, "Missing SSO token")
+    return await _exchange_sso_token(token, request, db, settings)
+
+
+# Legacy query-param SSO channel. The token rides in the URL, so it leaks into
+# proxy logs, browser history, and Referer headers — prefer POST /sso above.
+# Gated by env var ODIGOS_SSO_ALLOW_QUERY_TOKEN: unset/"1"/"true" keep it enabled
+# (default, for rollout); "0"/"false" returns 410 Gone. The platform repo
+# (tamler/odigos-platform) must switch to POST before this is disabled.
+def _query_sso_enabled() -> bool:
+    val = os.environ.get("ODIGOS_SSO_ALLOW_QUERY_TOKEN", "").strip().lower()
+    return val not in ("0", "false")
+
+
+@router.get("/sso")
+async def auth_sso(token: str, request: Request, response: Response, db=Depends(get_db), settings=Depends(get_settings)):
+    """Deprecated: exchange a platform JWT passed as a query param for a session.
+
+    Kept behind a deprecation flag for rollout. Use POST /api/auth/sso instead.
+    """
+    if not _query_sso_enabled():
+        raise HTTPException(410, "Query-param SSO is disabled; use POST /api/auth/sso")
+    logger.warning(
+        "Deprecated query-param SSO used (GET /api/auth/sso?token=...); "
+        "platform must migrate to POST /api/auth/sso"
+    )
+    return await _exchange_sso_token(token, request, db, settings)
 
 
 @router.post("/logout")
