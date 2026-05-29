@@ -1,6 +1,16 @@
 """Tests for XSkill experience store: retrieval, feedback, pruning."""
 import json
+from datetime import datetime, timedelta, timezone
+
 import pytest
+
+
+def _days_ago(n: int) -> str:
+    """ISO timestamp n days before now (UTC). Used instead of hardcoded
+    absolute dates so pruning tests don't rot as real time passes — the
+    original test seeded a 'fresh' row at a fixed 2026-04-03 which silently
+    aged past the 30-day prune threshold."""
+    return (datetime.now(timezone.utc) - timedelta(days=n)).isoformat()
 
 
 class TestGetLikelyTools:
@@ -167,14 +177,14 @@ class TestExperiencePruning:
             "(id, tool_name, situation, outcome, lesson, success, times_applied, confidence, applicability, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             ("old", "search_web", "test", "test", "Old tip", 1, 0, 0.5, "sometimes",
-             "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
+             _days_ago(60), _days_ago(60)),
         )
         await fake_db.execute(
             "INSERT INTO agent_experiences "
             "(id, tool_name, situation, outcome, lesson, success, times_applied, confidence, applicability, created_at, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             ("fresh", "search_web", "test", "test", "Fresh tip", 1, 0, 0.8, "always",
-             "2026-04-03T00:00:00", "2026-04-03T00:00:00"),
+             _days_ago(5), _days_ago(5)),
         )
         from odigos.core.heartbeat.profiling import prune_stale_experiences
         await prune_stale_experiences(fake_db)

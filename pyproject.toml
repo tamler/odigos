@@ -68,6 +68,10 @@ odigos = "odigos.main:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: tests that boot heavy subsystems (deselect with '-m \"not slow\"')",
+    "network: tests that make live network calls (deselect with '-m \"not network\"')",
+]
 
 [tool.uv]
 # Force CPU-only PyTorch — no GPU servers, no CUDA needed
