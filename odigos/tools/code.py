@@ -56,6 +56,14 @@ class CodeTool(BaseTool):
                 error=f"Code execution timed out. stderr: {result.stderr}",
             )
 
+        if result.exit_code == -1 and "disabled" in result.stderr.lower():
+            return ToolResult(
+                success=False,
+                data="",
+                error=result.stderr,
+                failure_category="unavailable",
+            )
+
         if result.exit_code != 0:
             return ToolResult(
                 success=False,
