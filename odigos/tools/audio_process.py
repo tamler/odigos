@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import secrets
 import shutil
 import tempfile
@@ -25,6 +26,13 @@ AUDIO_EXTENSIONS = {
     "m4a": "audio/mp4",
     "flac": "audio/flac",
 }
+
+
+_TIME_RE = re.compile(r"^(\d+(\.\d+)?|\d{1,2}:\d{2}(:\d{2})?(\.\d+)?)$")
+
+
+def _valid_time(v: str) -> bool:
+    return bool(_TIME_RE.match(v or ""))
 
 
 def _safe_path(path: str, base: str | None = None) -> str:
@@ -234,6 +242,13 @@ class ProcessAudioTool(BaseTool):
                 success=False, data="",
                 error="At least one of start_time or end_time is required for trim",
             )
+
+        for label, val in (("start_time", start_time), ("end_time", end_time)):
+            if val and not _valid_time(val):
+                return ToolResult(
+                    success=False, data="",
+                    error=f"Invalid {label}: must be seconds (e.g. 12.5) or HH:MM:SS",
+                )
 
         resolved_in = self._resolve_input(input_file)
         err = self._validate_input(resolved_in)
