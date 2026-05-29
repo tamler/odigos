@@ -1,4 +1,5 @@
 """Tests for the tool gate model and catalog (spec 2026-05-29)."""
+import pytest
 from odigos.tools.gate import ALWAYS, ToolGate
 
 
@@ -53,6 +54,7 @@ def test_build_catalog_includes_core_and_conditional_tools():
     assert "check_email" in catalog
     assert "run_gws" in catalog
     assert "run_browser" in catalog
+    assert "generate_ics_file" in catalog  # renamed from create_calendar_event to resolve a name collision
     # Reasonable lower bound (66 static + 2 subprocess = 68; allow growth):
     assert len(catalog) >= 60
 
@@ -164,3 +166,36 @@ def test_gated_tools_match_known_conditions():
             assert name in all_guarded_names, \
                 f"{name} has gate {gate} but no entry in BOOTSTRAP_GUARDED — " \
                 f"stale gate, or add it to the map when you add the guard"
+
+
+# Exact (kind, key) expected for every conditional tool — guards against a gate
+# being changed to the wrong KIND (the drift guards only check always-vs-not).
+EXPECTED_GATES = {
+    "message_peer":          ("config", "mesh.enabled"),
+    "web_platform":          ("config", "opencli"),
+    "process_audio":         ("config", "ffmpeg"),
+    "generate_image":        ("service", "kie_ai"),
+    "generate_music":        ("service", "kie_ai"),
+    "publish_to_feed":       ("config", "feed.enabled"),
+    "check_calendar":        ("config", "calendar.url"),
+    "create_calendar_event": ("config", "calendar.url"),
+    "find_free_time":        ("config", "calendar.url"),
+    "check_email":           ("config", "email.imap_host"),
+    "search_email":          ("config", "email.imap_host"),
+    "read_email":            ("config", "email.imap_host"),
+    "send_email":            ("config", "email.imap_host"),
+    "web_search":            ("config", "search_provider"),
+    "run_gws":               ("plugin", "gws"),
+    "run_browser":           ("plugin", "browser"),
+    "speak":                 ("plugin", "tts"),
+    "transcribe_audio":      ("plugin", "stt"),
+}
+
+
+@pytest.mark.parametrize("tool_name,expected", list(EXPECTED_GATES.items()))
+def test_conditional_tool_exact_gate(tool_name, expected):
+    from odigos.tools.catalog import build_catalog
+    catalog = build_catalog()
+    assert tool_name in catalog, f"{tool_name} missing from catalog"
+    gate = catalog[tool_name]
+    assert (gate.kind, gate.key) == expected, f"{tool_name}: ({gate.kind},{gate.key}) != {expected}"

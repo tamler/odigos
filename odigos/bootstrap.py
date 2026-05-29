@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 
 def _skill_validation_today():
-    from datetime import datetime, timezone
     return datetime.now(timezone.utc).date()
 
 
