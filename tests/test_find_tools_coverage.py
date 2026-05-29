@@ -110,25 +110,31 @@ async def test_every_tool_is_discoverable(booted_registry):
     registry = container.tool_registry
     from odigos.tools.find_tools import FindToolsTool
 
-    all_tools = {t.name for t in registry.list()}
-    assert all_tools, "no tools registered — bootstrap problem"
+    from odigos.tools.catalog import build_catalog
+    live_names = {t.name for t in registry.list()}
+    assert live_names, "no tools registered — bootstrap problem"
+    catalog_names = set(build_catalog().keys())
+    # Every cataloged tool is known to the system; catalog must cover live:
+    assert catalog_names >= live_names, (
+        f"live tools missing from catalog: {sorted(live_names - catalog_names)}"
+    )
 
     finder = FindToolsTool(
         registry=registry,
         skill_registry=getattr(container, "skill_registry", None),
     )
 
-    covered: set[str] = set()
+    # Discoverability is asserted for tools that are actually active this run:
+    covered = set()
     for q in QUERIES:
         res = await finder.execute({"query": q})
         if not res.success:
             continue
-        for name in all_tools:
+        for name in live_names:
             if name in res.data:
                 covered.add(name)
-
-    uncovered = sorted(all_tools - covered)
+    uncovered = sorted(live_names - covered)
     assert not uncovered, (
-        f"{len(uncovered)} tool(s) not discoverable via find_tools: {uncovered}. "
+        f"{len(uncovered)} active tool(s) not discoverable via find_tools: {uncovered}. "
         "Add >=3 seed queries for each to QUERIES in this file."
     )

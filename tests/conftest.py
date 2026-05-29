@@ -195,7 +195,12 @@ def make_test_settings(**overrides):
             "test-fast": {"provider": "test", "id": "test/model"},
             "test-fallback": {"provider": "test", "id": "test/fallback"},
         },
-        "llm": {"fast": "test-fast", "fallback": "test-fallback"},
+        "llm": {
+            "fast": "test-fast",
+            "smart": "test-fast",
+            "background": "test-fast",
+            "fallback": "test-fallback",
+        },
     }
     defaults.update(overrides)
     return Settings(**defaults)
