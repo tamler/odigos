@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
+from odigos.tools.gate import ToolGate
 from odigos.storage import FILES_DIR
 
 if TYPE_CHECKING:
@@ -24,6 +25,7 @@ class TranscribeAudioTool(BaseTool):
     """Transcribe an audio file to text using local STT."""
 
     name = "transcribe_audio"
+    gate = ToolGate.plugin("stt")
     category = "analysis"
     description = (
         "Transcribe an audio file (WAV, MP3, OGG, M4A, FLAC, WebM) to text. "

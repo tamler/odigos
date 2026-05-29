@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from odigos.tools.base import BaseTool, ToolResult
+from odigos.tools.gate import ToolGate
 
 if TYPE_CHECKING:
     from plugins.tts.provider import PocketTTSProvider
@@ -17,6 +18,7 @@ class SpeakTool(BaseTool):
     """Generate speech audio from text using local TTS."""
 
     name = "speak"
+    gate = ToolGate.plugin("tts")
     category = "communication"
     description = (
         "Convert text to speech audio. Returns a WAV file path and duration. "
