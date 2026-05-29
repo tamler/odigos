@@ -833,7 +833,7 @@ class TestSandboxIsolation:
     async def test_code_runs_in_temp_dir(self):
         from odigos.providers.sandbox import SandboxProvider
 
-        sandbox = SandboxProvider(timeout=5)
+        sandbox = SandboxProvider(timeout=5, require_isolation=False)
         result = await sandbox.execute("import os; print(os.getcwd())", language="python")
         assert result.exit_code == 0
         assert "/app" not in result.stdout
@@ -842,7 +842,7 @@ class TestSandboxIsolation:
     async def test_code_cannot_see_env_vars(self):
         from odigos.providers.sandbox import SandboxProvider
 
-        sandbox = SandboxProvider(timeout=5)
+        sandbox = SandboxProvider(timeout=5, require_isolation=False)
         result = await sandbox.execute(
             "import os; print(os.environ.get('HOME', 'none'))",
             language="python",
@@ -854,7 +854,7 @@ class TestSandboxIsolation:
     async def test_shell_runs_in_temp_dir(self):
         from odigos.providers.sandbox import SandboxProvider
 
-        sandbox = SandboxProvider(timeout=5)
+        sandbox = SandboxProvider(timeout=5, require_isolation=False)
         result = await sandbox.execute("pwd", language="shell")
         assert result.exit_code == 0
         assert "odigos_sandbox_" in result.stdout
@@ -862,7 +862,7 @@ class TestSandboxIsolation:
     async def test_timeout_kills_process(self):
         from odigos.providers.sandbox import SandboxProvider
 
-        sandbox = SandboxProvider(timeout=1)
+        sandbox = SandboxProvider(timeout=1, require_isolation=False)
         result = await sandbox.execute(
             "import time; time.sleep(30)", language="python"
         )

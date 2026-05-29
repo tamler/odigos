@@ -470,6 +470,10 @@ class Bootstrapper:
             timeout=settings.sandbox.timeout_seconds,
             max_memory_mb=settings.sandbox.max_memory_mb,
             allow_network=settings.sandbox.allow_network,
+            require_isolation=(
+                settings.sandbox.require_isolation
+                or settings.deployment.mode == "hosted"
+            ),
         )
         registry.register(CodeTool(sandbox=sandbox, db=db))
         logger.info("Code tool initialized (sandbox)")

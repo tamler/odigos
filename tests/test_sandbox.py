@@ -5,7 +5,7 @@ from odigos.providers.sandbox import SandboxProvider, SandboxResult
 
 @pytest_asyncio.fixture
 async def sandbox():
-    return SandboxProvider(timeout=5, max_memory_mb=512, allow_network=False)
+    return SandboxProvider(timeout=5, max_memory_mb=512, allow_network=False, require_isolation=False)
 
 
 @pytest.mark.asyncio
@@ -38,7 +38,7 @@ async def test_python_syntax_error(sandbox):
 
 @pytest.mark.asyncio
 async def test_timeout_kills_process(sandbox):
-    sb = SandboxProvider(timeout=1, max_memory_mb=512)
+    sb = SandboxProvider(timeout=1, max_memory_mb=512, require_isolation=False)
     result = await sb.execute("import time; time.sleep(10); print('done')", language="python")
     assert result.timed_out is True
     assert result.exit_code != 0
@@ -46,7 +46,7 @@ async def test_timeout_kills_process(sandbox):
 
 @pytest.mark.asyncio
 async def test_output_truncation(sandbox):
-    sb = SandboxProvider(timeout=5, max_memory_mb=512, max_output_chars=50)
+    sb = SandboxProvider(timeout=5, max_memory_mb=512, max_output_chars=50, require_isolation=False)
     result = await sb.execute("print('x' * 200)", language="python")
     assert len(result.stdout) <= 80  # 50 + truncation notice
 

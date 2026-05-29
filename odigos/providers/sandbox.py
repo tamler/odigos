@@ -37,11 +37,13 @@ class SandboxProvider:
         max_memory_mb: int = 512,
         allow_network: bool = False,
         max_output_chars: int = 4000,
+        require_isolation: bool = True,
     ) -> None:
         self.timeout = timeout
         self.max_memory_mb = max_memory_mb
         self.allow_network = allow_network
         self.max_output_chars = max_output_chars
+        self.require_isolation = require_isolation
         if SandboxProvider._isolation is None:
             SandboxProvider._isolation = self._detect_isolation()
 
@@ -100,6 +102,17 @@ class SandboxProvider:
                 stdout="",
                 stderr=f"Unsupported language: {language}",
                 exit_code=1,
+                timed_out=False,
+            )
+
+        if self.require_isolation and SandboxProvider._isolation != "bwrap":
+            return SandboxResult(
+                stdout="",
+                stderr=(
+                    "Code execution disabled: filesystem isolation (bubblewrap) "
+                    "is required but unavailable."
+                ),
+                exit_code=-1,
                 timed_out=False,
             )
 
