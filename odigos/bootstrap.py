@@ -22,6 +22,36 @@ from odigos.container import Container
 logger = logging.getLogger(__name__)
 
 
+def _enforce_hosted_security(settings, bwrap_present: bool | None = None) -> None:
+    """In hosted mode, refuse insecure dev overrides and require bubblewrap."""
+    if settings.deployment.mode != "hosted":
+        return
+    if os.environ.get("ODIGOS_SANDBOX_ALLOW_INSECURE"):
+        raise RuntimeError(
+            "ODIGOS_SANDBOX_ALLOW_INSECURE is set but deployment.mode=hosted; "
+            "refusing to start."
+        )
+    present = shutil.which("bwrap") is not None if bwrap_present is None else bwrap_present
+    if not present:
+        raise RuntimeError(
+            "deployment.mode=hosted requires bubblewrap (bwrap) for sandbox isolation; "
+            "refusing to start."
+        )
+
+
+def startup_security_report(settings) -> None:
+    """Log the resolved security posture at boot."""
+    from odigos.providers.sandbox import SandboxProvider
+    SandboxProvider()  # ensure isolation tier detected
+    logger.info(
+        "security posture: mode=%s isolation=%s require_isolation=%s sso_auto_provision=%s",
+        settings.deployment.mode,
+        SandboxProvider._isolation,
+        settings.sandbox.require_isolation,
+        settings.sso_auto_provision,
+    )
+
+
 def _skill_validation_today():
     return datetime.now(timezone.utc).date()
 
@@ -1188,6 +1218,8 @@ class Bootstrapper:
             raise
         except Exception:
             logger.exception("Skill tool validation crashed (non-critical, continuing)")
+        _enforce_hosted_security(self.settings)
+        startup_security_report(self.settings)
         await self.init_agent()
         await self.init_background()
 
