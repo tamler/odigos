@@ -106,9 +106,13 @@ def _make_auth_app(db: FakeDB | None = None) -> FastAPI:
     app = FastAPI()
     app.include_router(auth_router)
 
+    class _FakeDeployment:
+        mode = "dev"
+
     class _FakeSettings:
         api_key = "test-api-key"
         session_secret = _TEST_SECRET
+        deployment = _FakeDeployment()
 
     app.state.container = Container(
         settings=_FakeSettings(),

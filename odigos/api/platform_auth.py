@@ -82,8 +82,9 @@ async def platform_auth_callback(
     })
 
     response = RedirectResponse("/")
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-    secure = proto == "https"
+    secure = (settings.deployment.mode == "hosted") or (
+        request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    )
     response.set_cookie(
         key=SESSION_COOKIE,
         value=session_token,

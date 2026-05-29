@@ -107,10 +107,14 @@ async def _validate_session_with_epoch(secret: str, token: str | None, db) -> di
     return session
 
 
-def _set_session_cookie(response: Response, request: Request, token: str) -> None:
-    """Set the session cookie. Honors X-Forwarded-Proto behind a TLS proxy."""
+def _set_session_cookie(response: Response, request: Request, token: str, force_secure: bool = False) -> None:
+    """Set the session cookie. Honors X-Forwarded-Proto behind a TLS proxy.
+
+    force_secure pins Secure=True regardless of the (spoofable) header — used in
+    hosted mode where the app is always behind Caddy TLS.
+    """
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-    secure = proto == "https"
+    secure = force_secure or proto == "https"
     response.set_cookie(
         key=SESSION_COOKIE,
         value=token,
@@ -188,7 +192,7 @@ async def auth_setup(body: SetupRequest, request: Request, response: Response, d
         "must_change_password": False,
         "epoch": 0,
     })
-    _set_session_cookie(response, request, token)
+    _set_session_cookie(response, request, token, force_secure=(settings.deployment.mode == "hosted"))
 
     return {"user_id": user_id, "username": username}
 
@@ -224,7 +228,7 @@ async def auth_login(body: LoginRequest, request: Request, response: Response, d
         "must_change_password": must_change,
         "epoch": user["session_epoch"],
     })
-    _set_session_cookie(response, request, token)
+    _set_session_cookie(response, request, token, force_secure=(settings.deployment.mode == "hosted"))
 
     return {"must_change_password": must_change}
 
@@ -238,7 +242,7 @@ async def auth_sso(token: str, request: Request, response: Response, db=Depends(
     redirects to the dashboard root.
     """
     import jwt as _jwt
-    from datetime import datetime, timezone as _tz
+    from datetime import datetime
 
     secret = settings.platform_jwt_secret
     audience = settings.platform_audience
@@ -296,7 +300,7 @@ async def auth_sso(token: str, request: Request, response: Response, db=Depends(
         "epoch": user["session_epoch"],
     })
     redirect = RedirectResponse(url="/", status_code=302)
-    _set_session_cookie(redirect, request, sess_token)
+    _set_session_cookie(redirect, request, sess_token, force_secure=(settings.deployment.mode == "hosted"))
     return redirect
 
 
@@ -378,7 +382,7 @@ async def auth_change_password(body: ChangePasswordRequest, request: Request, re
         "must_change_password": False,
         "epoch": new_epoch,
     })
-    _set_session_cookie(response, request, token)
+    _set_session_cookie(response, request, token, force_secure=(settings.deployment.mode == "hosted"))
 
     return {"status": "ok"}
 

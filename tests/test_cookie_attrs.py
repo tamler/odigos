@@ -30,3 +30,9 @@ def test_secure_direct_https():
     resp = Response()
     auth._set_session_cookie(resp, _req(scheme="https", xfp=None), "tok")
     assert "Secure" in resp.headers.get("set-cookie", "")
+
+
+def test_hosted_forces_secure_even_on_http():
+    resp = Response()
+    auth._set_session_cookie(resp, _req(scheme="http", xfp="http"), "tok", force_secure=True)
+    assert "Secure" in resp.headers.get("set-cookie", "")
