@@ -55,12 +55,21 @@ def _parse_agent_name(filename: str) -> str:
 
 
 def _tokenize(text: str) -> set[str]:
-    """Split text into lowercase keyword tokens."""
+    """Split text into lowercase keyword tokens.
+
+    Prefers TextBlob's word tokenizer when available, but degrades to a
+    regex tokenizer if TextBlob is uninstalled OR its NLTK corpora aren't
+    downloaded (TextBlob(text).words raises LookupError/MissingCorpusError
+    in that case). Template matching must never hard-crash just because an
+    optional NLP corpus is absent — the regex fallback is good enough for
+    keyword overlap scoring.
+    """
     if TextBlob is not None:
-        return set(
-            str(w).lower() for w in TextBlob(text).words
-        )
-    # Fallback when textblob is not installed
+        try:
+            return set(str(w).lower() for w in TextBlob(text).words)
+        except Exception:
+            # Missing punkt/corpora or any tokenizer error — fall through.
+            pass
     import re as _re
     return set(_re.findall(r"[a-z]+", text.lower()))
 

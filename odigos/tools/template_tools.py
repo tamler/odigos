@@ -5,11 +5,6 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
-try:
-    from textblob import TextBlob
-except ImportError:  # pragma: no cover
-    TextBlob = None  # type: ignore[assignment,misc]
-
 from odigos.tools.base import BaseTool, ToolResult
 
 if TYPE_CHECKING:
@@ -67,33 +62,16 @@ class BrowseTemplates(BaseTool):
         templates = await self._index.list_templates(division=division)
 
         if search:
-            if TextBlob is not None:
-                tokens = set(
-                    str(w).lower()
-                    for w in TextBlob(search).words
-                )
-                templates = [
-                    t for t in templates
-                    if tokens & set(
-                        str(w).lower()
-                        for w in TextBlob(
-                            f"{t['name']} {t['division']}"
-                        ).words
-                    )
-                ]
-            else:
-                tokens = set(
-                    re.findall(r"[a-z]+", search.lower())
-                )
-                templates = [
-                    t for t in templates
-                    if tokens & set(
-                        re.findall(
-                            r"[a-z]+",
-                            f"{t['name']} {t['division']}".lower(),
-                        )
-                    )
-                ]
+            # Use the shared, corpus-safe tokenizer from template_index rather than
+            # calling TextBlob(...).words directly — the direct call hard-crashes with
+            # LookupError when NLTK corpora aren't downloaded (the `if TextBlob is not
+            # None` guard only covers TextBlob being uninstalled, not missing corpora).
+            from odigos.core.template_index import _tokenize
+            tokens = _tokenize(search)
+            templates = [
+                t for t in templates
+                if tokens & _tokenize(f"{t['name']} {t['division']}")
+            ]
 
         if not templates:
             return ToolResult(
