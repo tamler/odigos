@@ -82,13 +82,15 @@ async def platform_auth_callback(
     })
 
     response = RedirectResponse("/")
-    secure = request.url.scheme == "https"
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    secure = proto == "https"
     response.set_cookie(
         key=SESSION_COOKIE,
         value=session_token,
         httponly=True,
         secure=secure,
         samesite="lax",
+        path="/",
         max_age=_SESSION_MAX_AGE,
     )
     return response

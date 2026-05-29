@@ -95,14 +95,16 @@ def _validate_session(secret: str, token: str) -> dict | None:
 
 
 def _set_session_cookie(response: Response, request: Request, token: str) -> None:
-    """Set the session cookie on a response."""
-    secure = request.url.scheme == "https"
+    """Set the session cookie. Honors X-Forwarded-Proto behind a TLS proxy."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    secure = proto == "https"
     response.set_cookie(
         key=SESSION_COOKIE,
         value=token,
         httponly=True,
         secure=secure,
         samesite="lax",
+        path="/",
         max_age=_SESSION_MAX_AGE,
     )
 
