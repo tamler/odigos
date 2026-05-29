@@ -66,7 +66,17 @@ class WebPlatformTool(BaseTool):
         if platform not in PLATFORMS:
             return ToolResult(success=False, data="", error=f"Unknown platform: {platform}")
 
-        args = command.split()
+        import shlex
+
+        from odigos.tools.arg_guard import ArgGuardError, reject_dangerous_args
+        try:
+            args = shlex.split(command)
+        except ValueError as exc:
+            return ToolResult(success=False, data="", error=f"Invalid command syntax: {exc}")
+        try:
+            reject_dangerous_args(args)
+        except ArgGuardError as exc:
+            return ToolResult(success=False, data="", error=str(exc))
         # Always request JSON for structured output
         if "--format" not in args:
             args.extend(["--format", "json"])

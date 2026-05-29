@@ -8,8 +8,6 @@ from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
-_DANGEROUS_PATTERNS = ("--output", "../", "..\\")
-
 
 class SubprocessTool(BaseTool):
     """Base class for tools that wrap a CLI binary with subcommand validation."""
@@ -69,12 +67,11 @@ class SubprocessTool(BaseTool):
                        f"Allowed: {', '.join(sorted(self._allowed_subcommands))}",
             )
 
-        for arg in args:
-            if any(pat in arg for pat in _DANGEROUS_PATTERNS):
-                return ToolResult(
-                    success=False, data="",
-                    error=f"Blocked dangerous argument: {arg}",
-                )
+        from odigos.tools.arg_guard import ArgGuardError, reject_dangerous_args
+        try:
+            reject_dangerous_args(args)
+        except ArgGuardError as exc:
+            return ToolResult(success=False, data="", error=str(exc))
 
         try:
             proc = await asyncio.create_subprocess_exec(
