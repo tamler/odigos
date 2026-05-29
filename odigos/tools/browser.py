@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import shlex
+
+from odigos.tools.base import ToolResult
 from odigos.tools.gate import ToolGate
 from odigos.tools.subprocess_tool import SubprocessTool
+from odigos.tools.url_guard import is_blocked_url
 
 _BROWSER_ALLOWED_SUBCOMMANDS = {
     "navigate", "click", "type", "screenshot", "extract",
@@ -29,3 +33,24 @@ class BrowserTool(SubprocessTool):
             allowed_subcommands=_BROWSER_ALLOWED_SUBCOMMANDS,
             install_hint="npm install -g @anthropic-ai/agent-browser",
         )
+
+    async def execute(self, params: dict) -> ToolResult:
+        command = (params.get("command") or "").strip()
+        try:
+            args = shlex.split(command)
+        except ValueError as exc:
+            return ToolResult(success=False, data="", error=f"Invalid command syntax: {exc}")
+        for i, tok in enumerate(args):
+            candidate = None
+            if tok in ("--url", "-u") and i + 1 < len(args):
+                candidate = args[i + 1]
+            elif tok.startswith("--url="):
+                candidate = tok.split("=", 1)[1]
+            elif "://" in tok:
+                candidate = tok
+            if candidate and is_blocked_url(candidate):
+                return ToolResult(
+                    success=False, data="",
+                    error=f"Blocked URL (private/internal): {candidate}",
+                )
+        return await super().execute(params)
