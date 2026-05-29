@@ -13,6 +13,22 @@ logger = logging.getLogger(__name__)
 _IS_LINUX = platform.system() == "Linux"
 
 
+def _usr_local_has_secrets() -> bool:
+    """Best-effort guard: refuse to mount /usr/local if it holds obvious secrets."""
+    suspicious = (".env", "config.yaml", "credentials", "id_rsa", ".pem")
+    try:
+        for root, _dirs, files in os.walk("/usr/local"):
+            depth = root[len("/usr/local"):].count(os.sep)
+            if depth > 3:
+                continue
+            for f in files:
+                if any(s in f for s in suspicious):
+                    return True
+    except OSError:
+        return True
+    return False
+
+
 @dataclass
 class SandboxResult:
     stdout: str
@@ -62,7 +78,10 @@ class SandboxProvider:
                     "--ro-bind", "/usr", "/usr",
                     "--ro-bind", "/bin", "/bin",
                     "--symlink", "/usr/lib", "/lib",
-                    "--proc", "/proc", "--dev", "/dev",
+                    "--proc", "/proc",
+                    "--dev-bind", "/dev/null", "/dev/null",
+                    "--dev-bind", "/dev/zero", "/dev/zero",
+                    "--dev-bind", "/dev/urandom", "/dev/urandom",
                     "--tmpfs", "/tmp", "--unshare-all",
                     "true",
                 ]
@@ -208,7 +227,9 @@ class SandboxProvider:
                 "--symlink", "/usr/lib", "/lib",
                 "--symlink", "/usr/lib64", "/lib64",
                 "--proc", "/proc",
-                "--dev", "/dev",
+                "--dev-bind", "/dev/null", "/dev/null",
+                "--dev-bind", "/dev/zero", "/dev/zero",
+                "--dev-bind", "/dev/urandom", "/dev/urandom",
                 "--tmpfs", "/tmp",
                 "--bind", tmpdir, "/sandbox",
                 "--chdir", "/sandbox",
@@ -221,7 +242,7 @@ class SandboxProvider:
             if shutil.which("python3"):
                 import sys
                 prefix = sys.prefix
-                if prefix.startswith("/usr/local"):
+                if prefix.startswith("/usr/local") and not _usr_local_has_secrets():
                     bwrap.extend(["--ro-bind", "/usr/local", "/usr/local"])
             # Also bind /lib and /lib64 if they're real directories (not symlinks)
             for libdir in ("/lib", "/lib64"):
