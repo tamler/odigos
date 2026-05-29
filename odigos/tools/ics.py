@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class CalendarEventTool(BaseTool):
     """Generate downloadable .ics calendar event files."""
 
-    name = "create_calendar_event"
+    name = "generate_ics_file"
     category = "create"
     description = (
         "Create a downloadable .ics calendar event file that the user can import "

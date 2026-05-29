@@ -42,3 +42,46 @@ def test_subprocess_tools_have_class_level_name():
     from odigos.tools.gate import ToolGate
     assert GWSTool.gate == ToolGate.plugin("gws")
     assert BrowserTool.gate == ToolGate.plugin("browser")
+
+
+def test_build_catalog_includes_core_and_conditional_tools():
+    from odigos.tools.catalog import build_catalog
+    catalog = build_catalog()
+    # Spot-check always-on, service-gated, config-gated, plugin-gated:
+    assert "read_page" in catalog
+    assert "generate_image" in catalog
+    assert "check_email" in catalog
+    assert "run_gws" in catalog
+    assert "run_browser" in catalog
+    # Reasonable lower bound (66 static + 2 subprocess = 68; allow growth):
+    assert len(catalog) >= 60
+
+
+def test_build_catalog_is_memoized():
+    from odigos.tools.catalog import build_catalog
+    assert build_catalog() is build_catalog()
+
+
+def test_build_catalog_rejects_name_collision():
+    # Two concrete BaseTool subclasses with the same name must raise.
+    import odigos.tools.catalog as cat
+    import pytest
+    from odigos.tools.base import BaseTool, ToolResult
+
+    class _Dup1(BaseTool):
+        name = "dup_collide_xyz"
+        async def execute(self, params: dict) -> ToolResult:  # pragma: no cover
+            return ToolResult(success=True, data="")
+
+    class _Dup2(BaseTool):
+        name = "dup_collide_xyz"
+        async def execute(self, params: dict) -> ToolResult:  # pragma: no cover
+            return ToolResult(success=True, data="")
+
+    cat.reset_catalog_cache()
+    with pytest.raises(ValueError, match="dup_collide_xyz"):
+        cat.build_catalog()
+    # Neutralize so later catalog builds in this process aren't poisoned:
+    _Dup1.name = None  # type: ignore[assignment]
+    _Dup2.name = None  # type: ignore[assignment]
+    cat.reset_catalog_cache()
