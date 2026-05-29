@@ -1,6 +1,6 @@
 # Tool Catalog with Gate Metadata — Design
 
-**Status:** spec / pre-implementation
+**Status:** spec / pre-implementation (review pass 1 applied 2026-05-29)
 **Date:** 2026-05-29
 **Related:** [`2026-05-28-brittleness-audit-and-robustness.md`](./2026-05-28-brittleness-audit-and-robustness.md) §3.3, [`anti-patterns.md`](../anti-patterns.md) entry 7
 **Motivation:** The skill-tool validator and find_tools coverage gate have no authoritative answer to "does this tool exist in the codebase?" — they only know "what registered this boot." Conditional tools (plugin-gated, service-key-gated, config-gated) are absent from the live registry when their condition isn't met, so the validator can't distinguish "tool doesn't exist" (a real bug) from "tool exists but isn't active this run" (fine). This caused a false hard-fail risk.
@@ -107,24 +107,41 @@ def build_catalog() -> dict[str, ToolGate]:
     """
 ```
 
-Recursion handles subclass trees (e.g. `APITool` → `GenerateImageTool`). Abstract intermediates without a `name` are skipped. Import side: the builder imports the tools package so all subclasses are registered with the interpreter before walking `__subclasses__()`.
+Recursion handles subclass trees (e.g. `APITool` → `GenerateImageTool`). Abstract intermediates without a concrete `name` are skipped.
+
+**Import safety (critical).** The builder imports the **core** tools package (`odigos.tools`) so its subclasses register with the interpreter, then walks `BaseTool.__subclasses__()`. It must NOT force-import plugin packages: plugins (`plugins/gws`, `plugins/browser`, …) import optional third-party deps (the gws/agent-browser CLIs' Python shims, etc.) that may not be installed, and force-importing would crash the catalog build. Consequence: a plugin tool's class is only walkable if its module was already imported this run (which happens when the plugin is enabled). For plugin tools that are NOT active this run, the catalog still needs their `(name, gate)` — see §3.5.
+
+**Timing + memoization.** `build_catalog()` is called from a deliberate point (the validator, the find_tools test, future CLI) — not as an import side-effect. Result is memoized per-process (cleared in tests via a reset hook) since walking subclasses + reading attrs is cheap but called from multiple consumers.
+
+### 3.5 Plugin-tool catalog entries without force-import
+
+Core tools (66) are always importable, so always in the catalog. The 2 plugin-gated subprocess tools (`run_gws`, `run_browser`) live in `odigos/tools/` (NOT in the plugin package) — their classes import cleanly without the CLI present (they only shell out at execute time), so `build_catalog()` picks them up from the core scan too. This is already true today and is why §3.3's class-attr normalization is sufficient: the catalog sees all 68 from the core `odigos.tools` import, with no need to import any `plugins/*` package.
+
+If a future plugin defines a tool class *inside its own package* (importing optional deps at module load), that tool would be invisible to the core scan. The forward-compatible answer (not built now, no such tool exists): such a plugin declares its `(name, gate)` via a lightweight manifest the catalog reads without importing the plugin body. Flagged in §8, not implemented.
 
 ## 4. Consumers
 
 ### 4.1 Skill validator (replaces the hardcoded set)
 
-`Bootstrapper.validate_skill_tools` (runs after `init_plugins`):
+`Bootstrapper.validate_skill_tools` (runs after `init_plugins`). Full decision table for each (skill, declared-tool) pair:
 
-```
-catalog = build_catalog()           # all declarable tools
-live    = {t.name for t in registry.list()}   # active this run
-for each skill tool:
-    in live            -> active, OK
-    in catalog only    -> soft INFO: "skill X uses Y (inactive: <gate.describe()>)"
-    in neither         -> hard problem (WARN now, RAISE on 2026-08-01)
-```
+| Condition | Outcome |
+|-----------|---------|
+| tool in **live registry** | OK (active) |
+| tool in **catalog** but not live | OK + INFO note: "skill X uses Y (inactive: `<gate.describe()>`)" |
+| tool in **neither** | hard problem → WARN now, RAISE on/after 2026-08-01 |
+| **catalog build failed/empty** | degrade: WARN once ("skill validation skipped: catalog unavailable"), validate nothing, never RAISE |
 
 This makes the 2026-08-01 hard-fail **safe**: it can only fire on a tool that exists nowhere in the codebase (a genuine typo/deletion), never on a correctly-declared conditional tool.
+
+**Escape hatch.** Env var `ODIGOS_TOOL_VALIDATION` overrides the mode:
+- unset / `auto` (default) — table above (warn pre-cutover, raise post-cutover)
+- `warn` — force warn-only regardless of date (for staging/emergency boots missing an optional plugin where you've accepted the risk)
+- `off` — skip validation entirely
+
+Intended to be rare; the default is the right behavior for production. Documented so an operator with a genuinely broken-but-must-boot environment isn't stuck.
+
+**Gated skills.** A skill that references *only* inactive-but-cataloged tools (e.g. `agent-browser` when the browser plugin is off) produces only INFO notes — never a warning or failure. The skill is simply dormant this run; that's correct, not an error. No special "gated skill" status is needed — the per-tool table already yields the right result.
 
 ### 4.2 find_tools coverage test
 
@@ -133,12 +150,39 @@ This makes the 2026-08-01 hard-fail **safe**: it can only fire on a tool that ex
 ### 4.3 Catalog integrity test (new)
 
 `tests/test_tool_catalog.py`:
-- Every catalog name is unique (no two tools share a name).
-- Every conditional gate's `key` resolves to something real:
+- **Name uniqueness (asserted loudly):** no two `BaseTool` subclasses share a `name`. `build_catalog()` itself raises on a collision rather than silently last-wins; the test asserts the clean build.
+- **Gate key resolves:** every conditional gate's `key` points at something real:
   - `plugin(k)` → `plugins/<k>/` exists
-  - `service(k)` → `k` is a known service name (cross-check against the services the config/`service_key` accepts)
-  - `config(k)` → `k` is a real Settings field
-- Catches gate-drift (a tool declaring `service("kie_ia")` typo, or a plugin folder rename).
+  - `service(k)` → `k` is a known service name (source confirmed in the plan — §8)
+  - `config(k)` → `k` is a real `Settings` field
+- **Bidirectional drift guard (the key anti-drift test).** This is what prevents the recurring "forgot the annotation" bug:
+  - **Forward:** scan `bootstrap.py` for guarded registrations (`if settings.<x> ...: registry.register(SomeTool(...))`) and each `plugins/*/register()`. Any tool registered conditionally MUST have `gate != ALWAYS`. A new config-gated tool that forgets its gate fails this test.
+  - **Reverse:** any catalog tool with `gate != ALWAYS` MUST appear behind a guard in bootstrap or a plugin register(). A stale gate annotation (tool made unconditional but gate left on) fails this test.
+  - This is deliberately a *test*, not runtime magic — it runs in CI, points at the exact tool, and never affects boot. Matches the brittleness principle "make drift a loud failure, not silent."
+
+### 4.4 Worked example
+
+Catalog entries:
+```python
+{
+  "read_page":       ToolGate("always"),
+  "run_browser":     ToolGate("plugin",  "browser"),
+  "run_gws":         ToolGate("plugin",  "gws"),
+  "web_search":      ToolGate("config",  "search_provider"),
+  "generate_image":  ToolGate("service", "kie_ai"),
+}
+```
+Validator on an agent with no browser plugin, no search provider:
+```
+INFO  skill 'agent-browser' uses 'run_browser' (inactive: requires the browser plugin (enabled + its CLI installed))
+INFO  skill 'compliance-check' uses 'web_search' (inactive: requires search_provider to be configured)
+# no WARN, no RAISE — both tools exist in the catalog
+```
+Typo case (`run_broweser` in a skill), browser plugin disabled:
+```
+WARNING  Skill tool validation failed: skill 'agent-browser' references unknown tool 'run_broweser' (becomes a hard startup failure on 2026-08-01)
+# 'run_broweser' is in neither live nor catalog -> real error, even though the plugin is off
+```
 
 ## 5. Scope guardrails (YAGNI)
 
@@ -151,12 +195,27 @@ This makes the 2026-08-01 hard-fail **safe**: it can only fire on a tool that ex
 
 These are deferred until a concrete need appears, per the brittleness spec's own "surface minimalism vs completeness" discipline applied in reverse: don't add machinery nothing consumes.
 
+**Considered in review (2026-05-29) and explicitly rejected as scope creep — recorded so they're not silently re-litigated:**
+- *Version skew / catalog git-SHA / "skill bundle from commit N vs binary N+5":* skills live in the **same git repo** as the code and deploy together (`git pull` + restart). There is no skill-bundle-vs-runtime versioning architecture, so there is no skew to solve. If skills ever become independently distributed, revisit.
+- *Serialized JSON catalog artifact / "catalog service" abstraction:* runtime rebuild by walking subclasses is microseconds and memoized. No artifact or service layer needed.
+- *CLI `odigos tools list` / Web capabilities UI / docs generator / agent-introspection API:* these are the deferred capabilities-UI / agent-self-description features. `find_tools` already IS the agent-facing introspection path. Not building a second one.
+- *Third-party / community plugin ecosystem + optional-package versioning:* all 7 plugins are in-repo. No external ecosystem exists. §3.5 leaves a forward-compatible note (manifest) but builds nothing.
+- *Multi-criteria gate composition (`AndGate`/`OrGate`):* no current tool needs it (each conditional tool has exactly one gate). The `gate` field is left forward-compatible (a future tool could carry a composite) but composition is not built. See §8.
+- *Tool aliases / rename-deprecation windows:* no tool has an alias or a pending rename. YAGNI.
+
 ## 6. Testing
 
-- `test_tool_catalog.py` — builder returns all 68, names unique, gates resolve (§4.3).
+- `test_tool_catalog.py` — builder returns all 68, names unique (raises on collision), gates resolve, bidirectional drift guard (§4.3).
 - `test_find_tools_coverage.py` — extended to iterate the catalog (§4.2).
 - `test_blank_slate.py` / existing bootstrap tests — unchanged, must stay green (validator behavior change is a strict improvement: fewer false positives).
-- Manual: boot Bob (no GWS/browser/search plugins active) → validator logs `run_gws`, `run_browser`, `web_search`, etc. as INFO inactive-notes, zero WARN/RAISE.
+
+**Acceptance tests (pin the intent):**
+1. Browser plugin disabled + validator runs → a skill referencing `run_browser` PASSES (no warn/raise); catalog still contains `run_browser` marked inactive.
+2. Typo `run_broweser` in a skill, browser plugin disabled → validator hard-fails post-cutover (in neither live nor catalog), proving the cutover still catches real typos regardless of plugin state.
+3. `ODIGOS_TOOL_VALIDATION=warn` with a genuinely-unknown tool post-cutover → WARN, no RAISE (escape hatch works).
+4. Two tool classes declaring the same `name` → `build_catalog()` raises; `test_tool_catalog` fails loudly.
+5. A new tool added behind `if settings.foo.enabled:` in bootstrap with `gate=ALWAYS` (forgotten annotation) → drift guard test fails, naming the tool.
+6. Manual: boot Bob (no GWS/browser/search plugins active) → validator logs `run_gws`, `run_browser`, `web_search` as INFO inactive-notes, zero WARN/RAISE.
 
 ## 7. Migration / rollout
 
