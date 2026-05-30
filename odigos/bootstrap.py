@@ -94,11 +94,13 @@ class Bootstrapper:
         if not self.settings.api_key:
             import secrets
             self.settings.api_key = secrets.token_urlsafe(32)
-            await _persist_generated_api_key(self.config_path, self.settings.api_key)
+            await _persist_generated_api_key(
+                self.config_path, self.settings.api_key, env_path=self.container.env_path
+            )
             logger.warning(
                 "No api_key configured -- generated and saved a random key to %s. "
-                "View it with: grep api_key %s",
-                self.config_path, self.config_path,
+                "View it with: grep ODIGOS_API_KEY %s",
+                self.container.env_path, self.container.env_path,
             )
 
         # Migrate old sections directory
@@ -1231,15 +1233,19 @@ class Bootstrapper:
 
 # ---- Helpers ----
 
-async def _persist_generated_api_key(config_path: str, api_key: str) -> None:
-    """Append generated api_key to config.yaml so it survives restarts."""
+async def _persist_generated_api_key(
+    config_path: str, api_key: str, env_path: str = ".env"
+) -> None:
+    """Persist the generated api_key to .env (gitignored) so it survives
+    restarts without landing in the operator-edited config.yaml.
+
+    The env var name matches the alias the Settings layer reads
+    (ODIGOS_API_KEY); see Settings.api_key in odigos/config.py.
+    """
     try:
-        cp = Path(config_path)
-        data = await aio.read_yaml(cp) if cp.exists() else {}
-        data["api_key"] = api_key
-        await aio.write_yaml(cp, data)
+        await aio.append_text(Path(env_path), f"\nODIGOS_API_KEY={api_key}\n")
     except Exception:
-        logger.warning("Could not persist api_key to %s", config_path)
+        logger.warning("Could not persist api_key to %s", env_path)
 
 
 async def _seed_user(db) -> None:

@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 from pydantic_settings import BaseSettings
 
 
@@ -306,7 +306,11 @@ class Settings(BaseSettings):
     models: dict[str, ModelConfig] = {}
 
     # --- Core credentials ---
-    api_key: str = ""  # Dashboard auth key
+    # Reads from ODIGOS_API_KEY (where bootstrap persists an auto-generated key)
+    # or the bare `api_key` name (config.yaml / legacy env). config.yaml still wins.
+    api_key: str = Field(
+        "", validation_alias=AliasChoices("api_key", "ODIGOS_API_KEY")
+    )  # Dashboard auth key
     session_secret: str = ""
     search_provider: str = ""
     searxng_url: str = ""  # Legacy — prefer services.searxng
