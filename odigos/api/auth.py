@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from odigos.api.deps import get_db, get_settings
+from odigos.security.events import log_security_event
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -26,6 +27,7 @@ _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
 
 def _check_csrf(request: Request) -> None:
     if not request.headers.get("X-Requested-With"):
+        log_security_event("csrf_failed", request.url.path)
         raise HTTPException(status_code=403, detail="Missing CSRF header")
 
 

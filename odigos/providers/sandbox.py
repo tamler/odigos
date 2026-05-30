@@ -8,6 +8,8 @@ import shutil
 import tempfile
 from dataclasses import dataclass
 
+from odigos.security.events import log_security_event
+
 logger = logging.getLogger(__name__)
 
 _IS_LINUX = platform.system() == "Linux"
@@ -132,6 +134,7 @@ class SandboxProvider:
             and SandboxProvider._isolation != "bwrap"
             and not os.environ.get("ODIGOS_SANDBOX_ALLOW_INSECURE")
         ):
+            log_security_event("sandbox_disabled", SandboxProvider._isolation or "none")
             return SandboxResult(
                 stdout="",
                 stderr=(

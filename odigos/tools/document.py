@@ -68,8 +68,10 @@ class DocTool(BaseTool):
 
         try:
             if source.startswith(("http://", "https://")):
+                from odigos.security.events import log_security_event
                 from odigos.tools.url_guard import is_blocked_url
                 if is_blocked_url(source):
+                    log_security_event("ssrf_blocked", source)
                     return ToolResult(success=False, data="", error="Cannot fetch private or internal URLs")
                 # MarkItDown follows redirects internally; host egress firewall (C0 checklist) is the backstop.
                 content = await asyncio.to_thread(self.markitdown.convert_url, source)

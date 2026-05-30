@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shlex
 
+from odigos.security.events import log_security_event
 from odigos.tools.base import ToolResult
 from odigos.tools.gate import ToolGate
 from odigos.tools.subprocess_tool import SubprocessTool
@@ -49,6 +50,7 @@ class BrowserTool(SubprocessTool):
             elif "://" in tok:
                 candidate = tok
             if candidate and is_blocked_url(candidate):
+                log_security_event("ssrf_blocked", candidate)
                 return ToolResult(
                     success=False, data="",
                     error=f"Blocked URL (private/internal): {candidate}",

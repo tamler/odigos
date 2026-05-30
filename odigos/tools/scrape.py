@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from odigos.security.events import log_security_event
 from odigos.tools.base import BaseTool, ToolResult
 from odigos.tools.content_filter_helper import filter_external_content
 from odigos.tools.url_guard import is_blocked_url
@@ -38,6 +39,7 @@ class ScrapeTool(BaseTool):
             return ToolResult(success=False, data="", error="No URL provided")
 
         if is_blocked_url(url):
+            log_security_event("ssrf_blocked", url)
             return ToolResult(success=False, data="", error="Cannot scrape private or internal URLs")
 
         # Redirects/subresources are followed inside the fetcher; host egress firewall (C0 checklist) is the backstop.
