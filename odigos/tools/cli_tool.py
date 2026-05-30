@@ -54,13 +54,14 @@ class CLITool(BaseTool):
         stdin: str | None = None,
         timeout: float | None = None,
         env: dict[str, str] | None = None,
+        reject_option_args: bool = False,
     ) -> CLIResult:
         """Execute a CLI command in a subprocess."""
         timeout = timeout or self._timeout
         cmd = [self.COMMAND] + args
 
         for arg in args:
-            _validate_cli_arg(arg)
+            _validate_cli_arg(arg, reject_option_args=reject_option_args)
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -101,12 +102,14 @@ class CLITool(BaseTool):
         return result.data
 
 
-def _validate_cli_arg(arg: str) -> None:
+def _validate_cli_arg(arg: str, *, reject_option_args: bool = False) -> None:
     """Reject dangerous CLI arguments. Agents hallucinate."""
     if ".." in arg and ("/" in arg or "\\" in arg):
         raise CLIToolError(-1, f"Path traversal rejected: {arg}", "input")
     if any(c in arg for c in ("\x00", "\r", "\n", "`", "$(")):
         raise CLIToolError(-1, f"Dangerous characters in argument: {arg!r}", "input")
+    if reject_option_args and (arg.startswith("-") or arg.startswith("/")):
+        raise CLIToolError(-1, f"Option-style/absolute argument rejected: {arg!r}", "input")
 
 
 def _classify_cli_error(result: CLIResult) -> str:
