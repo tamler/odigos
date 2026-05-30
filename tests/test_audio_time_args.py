@@ -1,14 +1,10 @@
 """Validation of start_time/end_time args in ProcessAudioTool trim action."""
 from __future__ import annotations
 
-import asyncio
+import pytest
 
 import odigos.tools.audio_process as audio_mod
 from odigos.tools.audio_process import ProcessAudioTool
-
-
-def _run(coro):
-    return asyncio.run(coro)
 
 
 def _patch_ffmpeg_present(monkeypatch):
@@ -22,7 +18,8 @@ def _patch_input_valid(monkeypatch, tool):
     monkeypatch.setattr(tool, "_validate_input", lambda r: None)
 
 
-def test_trim_rejects_ffmpeg_expression(monkeypatch):
+@pytest.mark.asyncio
+async def test_trim_rejects_ffmpeg_expression(monkeypatch):
     tool = ProcessAudioTool(db=None)
     _patch_ffmpeg_present(monkeypatch)
     _patch_input_valid(monkeypatch, tool)
@@ -33,12 +30,15 @@ def test_trim_rejects_ffmpeg_expression(monkeypatch):
 
     monkeypatch.setattr(audio_mod, "_run_ffmpeg", _boom)
 
-    result = _run(tool.execute({"action": "trim", "input_file": "in.mp3", "start_time": "1*0+0"}))
+    result = await tool.execute(
+        {"action": "trim", "input_file": "in.mp3", "start_time": "1*0+0"}
+    )
     assert result.success is False
     assert "start_time" in (result.error or "")
 
 
-def test_trim_accepts_valid_times(monkeypatch):
+@pytest.mark.asyncio
+async def test_trim_accepts_valid_times(monkeypatch):
     tool = ProcessAudioTool(db=None)
     _patch_ffmpeg_present(monkeypatch)
     _patch_input_valid(monkeypatch, tool)
@@ -52,15 +52,13 @@ def test_trim_accepts_valid_times(monkeypatch):
     monkeypatch.setattr(audio_mod, "_run_ffmpeg", _fake_ffmpeg)
     monkeypatch.setattr(tool, "_register_artifact", lambda *a, **k: _noop())
 
-    result = _run(
-        tool.execute(
-            {
-                "action": "trim",
-                "input_file": "in.mp3",
-                "start_time": "00:01:30",
-                "end_time": "12.5",
-            }
-        )
+    result = await tool.execute(
+        {
+            "action": "trim",
+            "input_file": "in.mp3",
+            "start_time": "00:01:30",
+            "end_time": "12.5",
+        }
     )
     # ffmpeg was reached (validation passed), so failure is not a time-validation error.
     assert "args" in captured
