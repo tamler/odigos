@@ -107,8 +107,9 @@ class GenerateMusicTool(APITool):
         output_dir: str = "",
         db=None,
         budget_tracker=None,
+        callback_secret: str = "",
     ):
-        super().__init__(http=http)
+        super().__init__(http=http, callback_secret=callback_secret)
         self._api_key = api_key
         self._model = model
         self._max_poll = max_poll_seconds

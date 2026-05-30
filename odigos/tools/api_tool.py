@@ -27,8 +27,9 @@ class APITool(BaseTool):
 
     API_DOCS: str = ""
 
-    def __init__(self, http: httpx.AsyncClient, **kwargs):
+    def __init__(self, http: httpx.AsyncClient, callback_secret: str = "", **kwargs):
         self._http = http
+        self._callback_secret = callback_secret
 
     @property
     def http(self) -> httpx.AsyncClient:
@@ -89,18 +90,21 @@ class APITool(BaseTool):
         raise ToolAPIError(0, "Polling timed out")
 
     def callback_url(self, task_id: str) -> str:
-        """Build the callback URL for this task.
+        """Build the HMAC-signed callback URL for this task.
 
-        Returns the public URL that external APIs should POST to when done.
-        Returns empty string if no public domain is configured — the tool
-        should fall back to polling when callback_url is empty.
+        Returns the public URL that external APIs should POST to when done,
+        with a ?sig=<hmac> query param the handler verifies. Returns empty
+        string if no public domain is configured — the tool should fall back
+        to polling when callback_url is empty.
         """
         import os
         domain = os.environ.get("ODIGOS_DOMAIN", "")
         if not domain or domain == "localhost":
             return ""  # No public URL — polling will be used instead
         scheme = "https" if "localhost" not in domain else "http"
-        return f"{scheme}://{domain}/api/callbacks/{task_id}"
+        from odigos.api.callbacks import _callback_sig
+        sig = _callback_sig(self._callback_secret, task_id)
+        return f"{scheme}://{domain}/api/callbacks/{task_id}?sig={sig}"
 
     async def poll_once(
         self,

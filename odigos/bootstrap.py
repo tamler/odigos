@@ -653,6 +653,7 @@ class Bootstrapper:
                 max_poll_seconds=settings.image_generation.max_poll_seconds,
                 db=db,
                 budget_tracker=self.container.budget_tracker,
+                callback_secret=settings.session_secret,
             ))
             logger.info("Image generation tool registered (Z-Image)")
 
@@ -664,6 +665,7 @@ class Bootstrapper:
                 max_poll_seconds=settings.music_generation.max_poll_seconds,
                 db=db,
                 budget_tracker=self.container.budget_tracker,
+                callback_secret=settings.session_secret,
             ))
             logger.info(
                 "Music generation tool registered (Suno %s)",

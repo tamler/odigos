@@ -1,25 +1,50 @@
 """Generic callback endpoint for external API results.
 
 External APIs POST to /api/callbacks/{task_id} when async work completes.
-The task_id is an unguessable UUID from the tasks table. No auth required
-(external APIs can't authenticate with us), but the UUID is the security.
+External APIs can't carry our session/api-key, so this route is public, but
+each callback URL we hand out is HMAC-signed over the task_id (query param
+?sig=...). The signature is verified here before any task processing, so a
+leaked task_id alone is not enough to forge a completion.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api/callbacks", tags=["callbacks"])
 logger = logging.getLogger(__name__)
 
 
+def _callback_sig(secret: str, task_id: str) -> str:
+    """HMAC-SHA256 signature over the task_id, hex-encoded.
+
+    Shared by the URL generator (which appends ?sig=...) and the handler
+    (which verifies it) so the two never drift.
+    """
+    return hmac.new(secret.encode(), task_id.encode(), hashlib.sha256).hexdigest()
+
+
 @router.post("/{task_id}")
 async def handle_callback(task_id: str, request: Request):
     """Receive callback from external API when async task completes."""
-    db = request.app.state.container.db
+    container = request.app.state.container
+
+    # Verify the HMAC signature before touching the body or task. The signature
+    # is computed over the task_id with session_secret; a missing or mismatched
+    # signature is rejected so a leaked task_id can't be used to forge results.
+    secret = container.settings.session_secret if container.settings else ""
+    sig = request.query_params.get("sig", "")
+    expected = _callback_sig(secret, task_id) if secret else ""
+    if not secret or not sig or not hmac.compare_digest(sig, expected):
+        logger.warning("Callback with invalid/missing signature for task %s", task_id[:12])
+        raise HTTPException(status_code=403, detail="Invalid callback signature")
+
+    db = container.db
     if not db:
         return JSONResponse({"error": "not ready"}, status_code=503)
 

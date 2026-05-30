@@ -38,8 +38,8 @@ PUBLIC: set[tuple[str, str]] = {
     ("PUT", "/api/auth/profile"),  # self-validates inline (session + CSRF)
     # -- Self-validating inline (API key + _check_csrf, admin only) --
     ("POST", "/api/auth/reset-password"),  # self-validates inline (Bearer API key + CSRF)
-    # -- External webhook: authenticated by unguessable task UUID in the path --
-    ("POST", "/api/callbacks/{task_id}"),  # external callback, secret UUID path, no session
+    # -- External webhook: authenticated by HMAC-signed callback URL (?sig=...) --
+    ("POST", "/api/callbacks/{task_id}"),  # external callback, HMAC over task_id, no session
     # -- WebAuthn: registration self-validates session inline --
     ("POST", "/api/webauthn/register/begin"),  # self-validates inline (_get_session required)
     ("POST", "/api/webauthn/register/complete"),  # self-validates inline (_get_session required)
