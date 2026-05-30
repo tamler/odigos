@@ -875,6 +875,7 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
     public_key BLOB NOT NULL,
     sign_count INTEGER DEFAULT 0,
     name TEXT DEFAULT 'Passkey',
+    user_id TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
 

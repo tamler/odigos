@@ -213,9 +213,9 @@ async def register_complete(request: Request, db=Depends(get_db), settings=Depen
     row_id = uuid.uuid4().hex
     await db.execute(
         "INSERT INTO webauthn_credentials "
-        "(id, credential_id, public_key, sign_count) "
-        "VALUES (?, ?, ?, ?)",
-        (row_id, cred_id, public_key, sign_count),
+        "(id, credential_id, public_key, sign_count, user_id) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (row_id, cred_id, public_key, sign_count, user_id),
     )
 
     return {"status": "ok", "credential_id": row_id}
@@ -304,7 +304,7 @@ async def login_complete(
     raw_id = credential.raw_id
 
     stored = await db.fetch_one(
-        "SELECT id, credential_id, public_key, sign_count "
+        "SELECT id, credential_id, public_key, sign_count, user_id "
         "FROM webauthn_credentials WHERE credential_id = ?",
         (raw_id,),
     )
@@ -335,9 +335,16 @@ async def login_complete(
         (verification.new_sign_count, stored["id"]),
     )
 
-    # Issue session for the first user (single-user system)
+    # Resolve the user that owns this credential.
+    cred_user_id = stored["user_id"]
+    if not cred_user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Credential is not associated with a user",
+        )
     user = await db.fetch_one(
-        "SELECT id, username FROM users LIMIT 1",
+        "SELECT id, username FROM users WHERE id = ?",
+        (cred_user_id,),
     )
     if not user:
         raise HTTPException(
