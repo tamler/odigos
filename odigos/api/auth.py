@@ -80,6 +80,11 @@ def _verify_password(password: str, password_hash: str) -> bool:
     return _bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
+# Precomputed once at import: used on the no-user login path so an unknown
+# username still incurs a bcrypt verify, preventing timing-based enumeration.
+_DUMMY_HASH = _hash_password("invalid-placeholder")
+
+
 def _create_session(secret: str, payload: dict) -> str:
     """Create a signed session token."""
     s = URLSafeTimedSerializer(secret)
@@ -214,7 +219,12 @@ async def auth_login(body: LoginRequest, request: Request, response: Response, d
         "SELECT id, username, password_hash, must_change_password, session_epoch FROM users WHERE username = ?",
         (username,),
     )
-    if not user or not _verify_password(password, user["password_hash"]):
+    if not user:
+        # Run a dummy verify so a missing username costs the same as a wrong
+        # password — avoids leaking account existence via response timing.
+        _verify_password(password, _DUMMY_HASH)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not _verify_password(password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     now = datetime.now(timezone.utc).isoformat()
