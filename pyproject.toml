@@ -53,9 +53,9 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.9.0",
 ]
-stt = ["moonshine-voice>=0.0.40"]
+stt = ["moonshine-voice>=0.0.52"]
 tts = ["pocket-tts>=0.1.0", "scipy"]
-audio = ["moonshine-voice>=0.0.40", "pocket-tts>=0.1.0", "scipy"]
+audio = ["moonshine-voice>=0.0.52", "pocket-tts>=0.1.0", "scipy"]
 notebooklm = ["notebooklm-py>=0.1.0"]
 
 [build-system]
