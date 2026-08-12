@@ -169,3 +169,72 @@ async def test_login_resolves_user_by_credential_user_id(ctx, client, monkeypatc
     assert session["user_id"] == second_id
     assert session["user_id"] != first_id
     assert session["username"] == "bob"
+
+
+async def test_login_with_orphaned_credential_fails_closed(ctx, client, monkeypatch):
+    """A credential with no user_id must NOT mint a session.
+
+    Migration 015 used to backfill orphaned credentials with
+    `(SELECT id FROM users LIMIT 1)`. That statement was dead (the ALTER before
+    it always raised duplicate-column and aborted the file) and was deleted
+    2026-08-12 rather than allowed to become live, because it would have bound a
+    passkey to an arbitrary account on any install with more than one user --
+    and login trusts credential.user_id to mint the session. Orphans fail closed
+    instead; this pins that behaviour.
+    """
+    db = ctx["db"]
+
+    cred_raw_id = b"orphaned-credential-raw-id"
+    await db.execute(
+        "INSERT INTO webauthn_credentials "
+        "(id, credential_id, public_key, sign_count, user_id) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (uuid.uuid4().hex, cred_raw_id, b"pubkey", 0, None),
+    )
+
+    begin = await client.post("/api/webauthn/login/begin")
+    assert begin.status_code == 200
+
+    import odigos.api.webauthn as wa
+
+    class _FakeVerification:
+        new_sign_count = 1
+
+    monkeypatch.setattr(
+        wa, "verify_authentication_response", lambda **kwargs: _FakeVerification()
+    )
+
+    from webauthn.helpers import bytes_to_base64url, parse_authentication_credential_json
+    from webauthn.helpers.structs import AuthenticationCredential as _AuthCred
+
+    monkeypatch.setattr(
+        _AuthCred,
+        "model_validate",
+        classmethod(
+            lambda cls, data: parse_authentication_credential_json(__import__("json").dumps(data))
+        ),
+        raising=False,
+    )
+
+    raw_id_b64 = bytes_to_base64url(cred_raw_id)
+    resp = await client.post(
+        "/api/webauthn/login/complete",
+        json={"credential": {
+            "id": raw_id_b64,
+            "rawId": raw_id_b64,
+            "type": "public-key",
+            "response": {
+                "clientDataJSON": bytes_to_base64url(b"{}"),
+                "authenticatorData": bytes_to_base64url(b"\x00" * 37),
+                "signature": bytes_to_base64url(b"sig"),
+            },
+            "clientExtensionResults": {},
+        }},
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert "not associated with a user" in resp.text
+
+    from odigos.api.auth import SESSION_COOKIE
+
+    assert client.cookies.get(SESSION_COOKIE) is None, "a session was minted for an orphan"

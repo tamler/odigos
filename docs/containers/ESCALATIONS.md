@@ -62,6 +62,12 @@ delete it and let orphaned credentials fail closed at login (they already raise 
 "Credential is not associated with a user"). Failing closed is the safer default for an
 auth path.
 
-**Decision:**
+**Decision:** RESOLVED 2026-08-12 — delete the backfill, fail closed. Authorised by the
+repo owner; the container did not edit `migrations/` on its own authority or on a peer
+reviewer's request. The `UPDATE` is gone from `015_webauthn_user_id.sql`, replaced by a
+comment recording why. Orphaned credentials now raise 400 at login and the holder
+re-registers the passkey. Pinned by
+`tests/test_webauthn_user.py::test_login_with_orphaned_credential_fails_closed`, which
+asserts no session cookie is issued.
 
 ---

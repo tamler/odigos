@@ -1,2 +1,22 @@
 ALTER TABLE webauthn_credentials ADD COLUMN user_id TEXT;
-UPDATE webauthn_credentials SET user_id = (SELECT id FROM users LIMIT 1) WHERE user_id IS NULL;
+
+-- The backfill that used to live here was deleted 2026-08-12. It read:
+--
+--   UPDATE webauthn_credentials SET user_id = (SELECT id FROM users LIMIT 1)
+--   WHERE user_id IS NULL;
+--
+-- It had never executed anywhere: schema.sql already declares
+-- webauthn_credentials.user_id, and _evolve_schema() adds it before migrations
+-- run, so the ALTER above always raised duplicate-column and the old
+-- executescript() runner aborted the rest of the file. Fixing that runner
+-- (see 01-cleanup.md §0d) would have made this statement live for the first
+-- time on every install.
+--
+-- `SELECT id FROM users LIMIT 1` has no ORDER BY and users is reachable at more
+-- than one row (api/platform_auth.py:71 inserts with no zero-user gate). Since
+-- api/webauthn.py mints a login session from the credential's user_id after
+-- crypto verification, with no ownership check, a mis-assigned row would log a
+-- passkey holder into someone else's account.
+--
+-- Orphaned credentials now fail closed instead: login raises 400 "Credential is
+-- not associated with a user" and the holder re-registers the passkey.
