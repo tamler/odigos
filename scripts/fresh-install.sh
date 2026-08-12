@@ -62,22 +62,26 @@ KIE_KEY="${KIE_AI_API_KEY:-}"
 rm -f config.yaml .env config.yaml.*.bak .env.*.bak
 
 # Write .env
+# The dashboard key lives here, not in config.yaml: operators edit config.yaml
+# and may commit it. Settings.api_key reads ODIGOS_API_KEY via AliasChoices.
 cat > .env <<ENV
 OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
 GROQ_API_KEY=$GROQ_KEY
 KIE_AI_API_KEY=$KIE_KEY
 
 SESSION_SECRET=$SESSION_SECRET_VAL
+ODIGOS_API_KEY=$DASH_KEY
 ENV
 
 # Write config.yaml
+# No api_key here — it is in .env as ODIGOS_API_KEY.
 cat > config.yaml <<CFG
 # Odigos — fresh install $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-api_key: "$DASH_KEY"
-
 agent:
   name: "$NAME"
+  max_tool_turns: 15
+  run_timeout_seconds: 180
 
 # External service keys — resolved from .env at load time.
 # Empty values just disable the feature until you fill them in.
@@ -132,10 +136,6 @@ budget:
   monthly_limit_usd: 10.00
   warn_threshold: 0.80
 
-agent:
-  max_tool_turns: 15
-  run_timeout_seconds: 180
-
 heartbeat:
   interval_seconds: 60
   max_todos_per_tick: 2
@@ -168,6 +168,9 @@ server:
   host: "0.0.0.0"
   port: 8000
 CFG
+
+# Both files hold secrets (or are load-bearing for auth) — owner-only.
+chmod 600 .env config.yaml
 
 echo "  Fresh install written to $DIR (agent: $NAME, dashboard key: $DASH_KEY)"
 
