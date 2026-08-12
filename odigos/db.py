@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,48 @@ logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
 _RETRY_DELAYS = (0.1, 0.2, 0.4)  # seconds
+
+# The one migration failure that is expected rather than broken. schema.sql
+# creates every table in its current form before migrations run, so a migration
+# that adds a column schema.sql already declares will always raise this.
+_BENIGN_MIGRATION_ERRORS = ("duplicate column name",)
+
+
+class MigrationError(RuntimeError):
+    """A migration statement failed for a reason that is not benign."""
+
+
+def _is_benign_migration_error(e: Exception) -> bool:
+    msg = str(e).lower()
+    return any(token in msg for token in _BENIGN_MIGRATION_ERRORS)
+
+
+def _is_comment_only(statement: str) -> bool:
+    for line in statement.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("--"):
+            return False
+    return True
+
+
+def _split_sql_statements(script: str) -> list[str]:
+    """Split a SQL script into individually executable statements.
+
+    Uses sqlite3.complete_statement -- the same check the sqlite3 CLI uses to
+    decide whether to keep reading -- so semicolons inside string literals and
+    inside CREATE TRIGGER ... BEGIN ... END; blocks do not split incorrectly,
+    which a naive split(";") would get wrong.
+    """
+    statements: list[str] = []
+    buf = ""
+    for line in script.splitlines(keepends=True):
+        buf += line
+        if sqlite3.complete_statement(buf):
+            statements.append(buf)
+            buf = ""
+    if buf.strip():
+        statements.append(buf)
+    return [s for s in statements if not _is_comment_only(s)]
 
 
 def _is_busy_error(e: Exception) -> bool:
@@ -238,31 +281,60 @@ class Database:
             if not self._vec_loaded and "vec0" in sql:
                 # Strip vec0 virtual table creation so the rest of the migration runs
                 import re
-                filtered = re.sub(
+                sql = re.sub(
                     r"CREATE\s+VIRTUAL\s+TABLE[^;]*USING\s+vec0\([^)]*\)\s*;",
                     "-- (vec0 table skipped, extension not loaded)",
                     sql,
                     flags=re.IGNORECASE | re.DOTALL,
                 )
-                try:
-                    await self.conn.executescript(filtered)
-                except Exception as e:
-                    logger.warning("Migration %s partially failed: %s", migration_file.name, e)
-            else:
-                try:
-                    await self.conn.executescript(sql)
-                except Exception as e:
-                    # Schema.sql creates all tables in their current form before migrations
-                    # run. Some older migrations will fail because they reference columns
-                    # that no longer exist (schema rewrite) or try to ADD columns that
-                    # schema.sql already created. Log and continue so the migration is
-                    # marked applied and not retried on every start.
-                    logger.warning("Migration %s partially failed (schema evolved): %s", migration_file.name, e)
+            await self._apply_migration(migration_file.name, sql)
             await self.conn.execute(
                 "INSERT INTO _migrations (name) VALUES (?)",
                 (migration_file.name,),
             )
             await self.conn.commit()
+
+    async def _apply_migration(self, name: str, sql: str) -> None:
+        """Apply one migration file, one statement at a time.
+
+        Statement-at-a-time rather than executescript(). schema.sql creates
+        every table in its current form before migrations run, so any migration
+        leading with `ALTER TABLE ... ADD COLUMN` raises "duplicate column name"
+        on a current database. executescript() aborts the entire file at that
+        point, which silently dropped every later statement -- in this repo that
+        is six migrations (005, 008, 009, 010, 012, 015) carrying up to twelve
+        further statements each, including the data backfills in 005 and 015.
+
+        A duplicate-column error is the one expected outcome and is skipped.
+        Anything else is a real failure and is raised rather than logged and
+        marked applied.
+        """
+        await self.conn.execute("SAVEPOINT odigos_migration")
+        try:
+            for statement in _split_sql_statements(sql):
+                try:
+                    # _retry_on_busy so a transient SQLITE_BUSY during startup
+                    # is retried rather than raised as a migration failure.
+                    await _retry_on_busy(lambda s=statement: self.conn.execute(s))
+                except Exception as e:
+                    if _is_benign_migration_error(e):
+                        logger.debug(
+                            "Migration %s: %s -- already present in schema.sql, statement skipped",
+                            name, e,
+                        )
+                        continue
+                    raise MigrationError(
+                        f"Migration {name} failed on statement: {statement.strip()[:150]}"
+                    ) from e
+        except Exception:
+            # All-or-nothing per file: a migration that fails partway is not
+            # recorded as applied, so it will be retried on the next boot.
+            # Without the rollback that retry would replay statements that had
+            # already succeeded.
+            await self.conn.execute("ROLLBACK TO odigos_migration")
+            await self.conn.execute("RELEASE odigos_migration")
+            raise
+        await self.conn.execute("RELEASE odigos_migration")
 
     async def execute(self, sql: str, params: tuple = ()) -> None:
         """Execute a single SQL statement."""
