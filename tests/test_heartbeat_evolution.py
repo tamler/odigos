@@ -95,11 +95,6 @@ async def test_tick_runs_evolution_when_idle():
             new_callable=AsyncMock,
         ),
         patch(
-            "odigos.core.heartbeat.maintenance.run_cron_jobs",
-            new_callable=AsyncMock,
-            return_value=False,
-        ),
-        patch(
             "odigos.core.heartbeat.maintenance.send_nudges",
             new_callable=AsyncMock,
             return_value=False,

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 from odigos.api.deps import (
     get_agent,
     get_budget_tracker,
-    get_cron_manager,
+    get_scheduler,
     get_db,
     get_plugin_manager,
     get_settings,
@@ -77,7 +77,7 @@ async def get_state(
     budget_tracker=Depends(get_budget_tracker),
     skill_registry=Depends(get_skill_registry),
     plugin_manager=Depends(get_plugin_manager),
-    cron_manager=Depends(get_cron_manager),
+    scheduler=Depends(get_scheduler),
 ):
     """Return a comprehensive snapshot of agent internal state."""
 
@@ -212,19 +212,20 @@ async def get_state(
     }
 
     # -- Cron --
+    # Reads the unified Scheduler. This used to read a nonexistent
+    # `cron_manager.entries` through getattr with a [] default, so it always
+    # reported zero; CronManager itself is gone as of 2026-08-12, and
+    # scheduled_tasks is where recurring work has actually lived for a while.
     cron_info = None
-    if cron_manager:
-        # CronManager has no `entries` attribute -- it exposes async list().
-        # The getattr default meant /api/state always reported 0 cron jobs, and
-        # the default is what made it silent.
+    if scheduler:
         try:
-            entries = await cron_manager.list()
+            entries = await scheduler.list_tasks()
         except Exception:
-            logger.debug("Could not list cron entries", exc_info=True)
+            logger.debug("Could not list scheduled tasks", exc_info=True)
             entries = []
         cron_info = {
             "total": len(entries),
-            "enabled": sum(1 for e in entries if getattr(e, "enabled", True)),
+            "enabled": sum(1 for e in entries if e.get("enabled", 1)),
         }
 
     # -- System --

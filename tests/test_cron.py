@@ -1,4 +1,8 @@
-"""Tests for cron scheduler — CronManager and CronExpression."""
+"""Tests for CronExpression parsing.
+
+The CronManager suite was removed with CronManager itself on 2026-08-12;
+recurring tasks live in core/scheduler.py and are covered by its own tests.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -6,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytest_asyncio
 
-from odigos.core.cron import CronEntry, CronExpression, CronManager
+from odigos.core.cron import CronExpression
 from odigos.db import Database
 
 
@@ -19,11 +23,6 @@ async def db(tmp_db_path):
     await d.initialize()
     yield d
     await d.close()
-
-
-@pytest_asyncio.fixture
-async def cron_manager(db):
-    return CronManager(db=db)
 
 
 # -- CronExpression parsing tests --
@@ -112,159 +111,3 @@ class TestCronExpression:
         base = datetime(2026, 3, 14, 10, 2, tzinfo=timezone.utc)
         nxt = expr.next_from(base)
         assert nxt == datetime(2026, 3, 14, 10, 5, tzinfo=timezone.utc)
-
-
-# -- CronManager tests --
-
-
-class TestCronManager:
-    @pytest.mark.asyncio
-    async def test_add_and_list(self, cron_manager):
-        entry = await cron_manager.add(
-            name="Test Job",
-            schedule="*/5 * * * *",
-            action="Check the weather",
-        )
-        assert isinstance(entry, CronEntry)
-        assert entry.name == "Test Job"
-        assert entry.schedule == "*/5 * * * *"
-        assert entry.action == "Check the weather"
-        assert entry.enabled is True
-        assert entry.next_run_at is not None
-
-        entries = await cron_manager.list()
-        assert len(entries) == 1
-        assert entries[0].id == entry.id
-
-    @pytest.mark.asyncio
-    async def test_add_invalid_schedule(self, cron_manager):
-        with pytest.raises(ValueError):
-            await cron_manager.add(
-                name="Bad Job",
-                schedule="not a cron expr",
-                action="something",
-            )
-
-    @pytest.mark.asyncio
-    async def test_remove(self, cron_manager):
-        entry = await cron_manager.add(
-            name="To Remove",
-            schedule="* * * * *",
-            action="test",
-        )
-        await cron_manager.remove(entry.id)
-        entries = await cron_manager.list()
-        assert len(entries) == 0
-
-    @pytest.mark.asyncio
-    async def test_toggle(self, cron_manager):
-        entry = await cron_manager.add(
-            name="Toggle Test",
-            schedule="0 9 * * *",
-            action="test",
-        )
-        assert entry.enabled is True
-
-        await cron_manager.toggle(entry.id, False)
-        entries = await cron_manager.list()
-        assert entries[0].enabled is False
-
-        await cron_manager.toggle(entry.id, True)
-        entries = await cron_manager.list()
-        assert entries[0].enabled is True
-
-    @pytest.mark.asyncio
-    async def test_list_enabled_only(self, cron_manager):
-        await cron_manager.add(name="Enabled", schedule="* * * * *", action="a")
-        entry2 = await cron_manager.add(name="Disabled", schedule="* * * * *", action="b")
-        await cron_manager.toggle(entry2.id, False)
-
-        all_entries = await cron_manager.list(enabled_only=False)
-        assert len(all_entries) == 2
-
-        enabled_entries = await cron_manager.list(enabled_only=True)
-        assert len(enabled_entries) == 1
-        assert enabled_entries[0].name == "Enabled"
-
-    @pytest.mark.asyncio
-    async def test_tick_returns_due_entries(self, cron_manager, db):
-        # Create an entry that should be due (next_run_at in the past)
-        entry = await cron_manager.add(
-            name="Due Job",
-            schedule="* * * * *",
-            action="do something",
-        )
-        # Force next_run_at to the past
-        past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
-        await db.execute(
-            "UPDATE cron_entries SET next_run_at = ? WHERE id = ?",
-            (past, entry.id),
-        )
-
-        due = await cron_manager.tick()
-        assert len(due) == 1
-        assert due[0].id == entry.id
-
-    @pytest.mark.asyncio
-    async def test_tick_skips_future_entries(self, cron_manager, db):
-        entry = await cron_manager.add(
-            name="Future Job",
-            schedule="0 0 1 1 *",  # Jan 1 midnight
-            action="new year task",
-        )
-        # next_run_at is already in the future (next Jan 1)
-        due = await cron_manager.tick()
-        assert len(due) == 0
-
-    @pytest.mark.asyncio
-    async def test_tick_skips_disabled_entries(self, cron_manager, db):
-        entry = await cron_manager.add(
-            name="Disabled Due",
-            schedule="* * * * *",
-            action="test",
-        )
-        past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
-        await db.execute(
-            "UPDATE cron_entries SET next_run_at = ? WHERE id = ?",
-            (past, entry.id),
-        )
-        await cron_manager.toggle(entry.id, False)
-
-        due = await cron_manager.tick()
-        assert len(due) == 0
-
-    @pytest.mark.asyncio
-    async def test_mark_run_updates_timestamps(self, cron_manager, db):
-        entry = await cron_manager.add(
-            name="Run Test",
-            schedule="*/5 * * * *",
-            action="test",
-        )
-
-        # Force next_run_at to the past so mark_run produces a different next_run_at
-        past = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
-        await db.execute(
-            "UPDATE cron_entries SET next_run_at = ? WHERE id = ?",
-            (past, entry.id),
-        )
-
-        await cron_manager.mark_run(entry.id)
-
-        entries = await cron_manager.list()
-        updated = entries[0]
-        assert updated.last_run_at is not None
-        assert updated.next_run_at is not None
-        # next_run_at should now be in the future (after mark_run recomputes it)
-        assert updated.next_run_at > updated.last_run_at
-
-    @pytest.mark.asyncio
-    async def test_add_with_conversation_id(self, cron_manager):
-        entry = await cron_manager.add(
-            name="Conv Job",
-            schedule="0 9 * * *",
-            action="daily report",
-            conversation_id="web:abc123",
-        )
-        assert entry.conversation_id == "web:abc123"
-        entries = await cron_manager.list()
-        assert entries[0].conversation_id == "web:abc123"

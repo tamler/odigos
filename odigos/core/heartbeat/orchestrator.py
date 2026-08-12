@@ -9,7 +9,6 @@ from odigos.core.heartbeat import scheduled, todos, plans, peers, profiling, mai
 if TYPE_CHECKING:
     from odigos.channels.base import ChannelRegistry
     from odigos.core.agent import Agent
-    from odigos.core.cron import CronManager
     from odigos.core.goal_store import GoalStore
     from odigos.core.evolution import EvolutionEngine
     from odigos.core.notifier import Notifier
@@ -45,7 +44,6 @@ class Heartbeat:
         agent_role: str = "",
         agent_description: str = "",
         announce_interval: int = 60,
-        cron_manager: CronManager | None = None,
         notifier: Notifier | None = None,
         scheduler: Scheduler | None = None,
         ws_port: int = 8001,
@@ -77,7 +75,6 @@ class Heartbeat:
         self._agent_description = agent_description
         self._announce_interval = announce_interval
         self._last_announce: float = 0
-        self.cron_manager = cron_manager
         self.notifier = notifier
         self.scheduler = scheduler
         self.message_bus = message_bus
@@ -202,8 +199,11 @@ class Heartbeat:
         # Phase 3: Deliver subagent results
         did_work |= await peers.deliver_subagent_results(self)
 
-        # Phase 3b: Run legacy cron jobs (old table, for backward compat)
-        did_work |= await maintenance.run_cron_jobs(self)
+        # Phase 3b removed 2026-08-12: it replayed the legacy cron_entries table
+        # via CronManager. api/cron.py has served every user-facing cron route
+        # from the unified Scheduler for some time, so nothing could create
+        # those rows any more. Recurring tasks run through Phase 1
+        # (scheduled.process_scheduled_tasks).
 
         # Phase 3c: Poll pending tasks — e.g. background_poll type (HTTP only, no LLM)
         from odigos.core.heartbeat import background

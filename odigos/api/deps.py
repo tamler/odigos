@@ -199,9 +199,6 @@ def get_skill_registry(container: Container = Depends(get_container)):
     return container.skill_registry
 
 
-def get_cron_manager(container: Container = Depends(get_container)):
-    """Get the CronManager instance from the container."""
-    return container.cron_manager
 
 
 def get_scheduler(container: Container = Depends(get_container)):

@@ -75,7 +75,6 @@ def _enter_tick_patches(stack):
         ("odigos.core.heartbeat.scheduled.fire_reminders", {"return_value": False}),
         ("odigos.core.heartbeat.todos.work_todos", {"return_value": False}),
         ("odigos.core.heartbeat.peers.deliver_subagent_results", {"return_value": False}),
-        ("odigos.core.heartbeat.maintenance.run_cron_jobs", {"return_value": False}),
         ("odigos.core.heartbeat.maintenance.send_nudges", {"return_value": False}),
         ("odigos.core.heartbeat.maintenance.check_followups", {"return_value": False}),
         ("odigos.core.heartbeat.plans.work_in_progress_plans", {"return_value": False}),

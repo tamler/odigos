@@ -295,20 +295,20 @@ class Agent:
         except Exception:
             pass
 
-        # Background: entity extraction + correction detection (fire and forget)
+        # Background: correction detection (fire and forget).
+        #
+        # Entity extraction used to run here too, via
+        # post_response.extract_entities_background. Removed 2026-08-12: the
+        # reflector already extracts entities on this same turn
+        # (reflect() at :275 -> memory.extractor.extract_knowledge), and routes
+        # them through memory_manager.store -> EntityResolver.resolve, which
+        # does 4-stage matching before calling graph.create_entity.
+        # extract_entities_background called create_entity directly on a [:500]
+        # slice with no resolution, so it both duplicated an LLM call per turn
+        # and seeded the graph with unresolved duplicates the resolver would
+        # have matched.
         try:
-            from odigos.core.post_response import (
-                extract_entities_background,
-                detect_correction_background,
-            )
-            entity_graph = getattr(self, '_entity_graph', None)
-
-            async def _bg_extract():
-                async with _BACKGROUND_SEMAPHORE:
-                    await extract_entities_background(
-                        self.executor.provider, self.db, entity_graph,
-                        conversation_id, message.content, clean_content,
-                    )
+            from odigos.core.post_response import detect_correction_background
 
             async def _bg_correct():
                 async with _BACKGROUND_SEMAPHORE:
@@ -317,7 +317,6 @@ class Agent:
                         conversation_id, message.content, clean_content,
                     )
 
-            asyncio.create_task(_bg_extract())
             asyncio.create_task(_bg_correct())
         except Exception:
             pass

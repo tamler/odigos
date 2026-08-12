@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from odigos.core.agent_service import AgentService
     from odigos.core.budget import BudgetTracker
     from odigos.core.checkpoint import CheckpointManager
-    from odigos.core.cron import CronManager
     from odigos.core.evolution import EvolutionEngine
     from odigos.core.goal_store import GoalStore
     from odigos.core.heartbeat import Heartbeat
@@ -83,7 +82,6 @@ class Container:
     evolution_engine: EvolutionEngine | None = None
     template_index: AgentTemplateIndex | None = None
     spawner: Spawner | None = None
-    cron_manager: CronManager | None = None
     scheduler: Scheduler | None = None
     notifier: Notifier | None = None
     card_manager: Any = None

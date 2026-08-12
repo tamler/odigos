@@ -11,6 +11,41 @@ STOPS. It does not reach across. Whoever is orchestrating resolves these.
 
 ---
 
+## 2026-08-12 — 01-cleanup — four dead tables need dropping, and schema.sql is outside the fence
+
+**Wants:** drop four tables that no Python code reads or writes, and delete their
+definitions from `schema.sql`:
+
+| Table | Status |
+|---|---|
+| `channel_mappings` | zero references in `odigos/` or `tests/` |
+| `deploy_targets` | zero references |
+| `message_artifacts` | zero references |
+| `cron_entries` | orphaned by this section — `CronManager` is deleted, and `api/cron.py` has served every user-facing cron route from the unified `Scheduler` (`scheduled_tasks`) for some time |
+
+**Blocked by:** the charter's escalation rule. `schema.sql` and `migrations/` are
+outside `odigos/` + `tests/` + `docs/`. Dropping a table also needs a migration, and
+migrations are the subsystem that produced the 015 incident above.
+
+**Case:** the first three are listed in charter §2 and verified to have zero
+references. `cron_entries` is a consequence of §2's own CronManager deletion:
+nothing can create rows in it any more.
+
+**Not urgent, and there is a reason to go slowly.** Unused tables cost almost
+nothing, whereas dropping one is irreversible. `cron_entries` specifically may hold
+rows on an install that predates the Scheduler migration, and Phase 3b — the
+heartbeat phase that replayed them — is now gone, so those rows have already
+stopped firing. Anyone with legacy entries should re-create them through
+`POST /api/cron`, which writes to `scheduled_tasks`. Dropping the table would
+destroy the only record of what they were.
+
+**Recommendation:** leave all four in place for now. If they are dropped later, do
+`cron_entries` last and export its contents first.
+
+**Decision:**
+
+---
+
 ## 2026-08-12 — 01-cleanup — migration 015's WebAuthn backfill becomes live and can bind a passkey to the wrong user
 
 **Wants:** change `migrations/015_webauthn_user_id.sql` before the §0d migration-runner

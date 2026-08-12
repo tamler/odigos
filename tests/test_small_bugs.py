@@ -66,24 +66,24 @@ async def test_mark_stale_peers_returns_a_real_count(db):
     assert row["status"] == "offline"
 
 
-async def test_cron_manager_has_no_entries_attribute(db):
-    """api/state.py read `cron_manager.entries` via getattr with a [] default."""
-    from odigos.core.cron import CronManager
+async def test_scheduler_reports_real_task_counts(db):
+    """api/state.py read `cron_manager.entries` via getattr with a [] default,
+    so it always reported zero. CronManager is gone (charter §2); the endpoint
+    now reads the unified Scheduler, which is where recurring work lives."""
+    from odigos.core.scheduler import Scheduler
 
-    manager = CronManager(db=db)
-    assert not hasattr(manager, "entries"), (
-        "if CronManager grows an `entries` attribute, revisit api/state.py"
+    scheduler = Scheduler(db=db)
+    assert await scheduler.list_tasks() == []
+
+    await scheduler.schedule_recurring(
+        name="nightly",
+        action="do a thing",
+        cron_expression="0 3 * * *",
+        action_type="execute",
     )
-    assert await manager.list() == []
-
-
-async def test_cron_state_counts_real_entries(db):
-    from odigos.core.cron import CronManager
-
-    manager = CronManager(db=db)
-    await manager.add(name="nightly", schedule="0 3 * * *", action="do a thing")
-    entries = await manager.list()
+    entries = await scheduler.list_tasks()
     assert len(entries) == 1, "api/state.py would have reported 0 here"
+    assert sum(1 for e in entries if e.get("enabled", 1)) == 1
 
 
 def test_history_limit_is_a_real_config_field():

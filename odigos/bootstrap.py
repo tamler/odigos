@@ -1053,8 +1053,6 @@ class Bootstrapper:
         logger.info("Spawner initialized")
 
         # Cron manager
-        from odigos.core.cron import CronManager
-        self.container.cron_manager = CronManager(db=db)
         logger.info("Cron manager initialized")
 
         # Scheduler
@@ -1116,7 +1114,6 @@ class Bootstrapper:
             agent_role=s.agent.role,
             agent_description=s.agent.description,
             announce_interval=s.heartbeat.announce_interval_seconds,
-            cron_manager=self.container.cron_manager,
             notifier=self.container.notifier,
             scheduler=self.container.scheduler,
             ws_port=s.server.ws_port,
