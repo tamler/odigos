@@ -13,7 +13,7 @@ Single OVH VPS at `51.81.82.221` (Tailscale-only SSH at `100.80.26.2`, public 80
 
 | Service | Path | Domain | Port | Backend |
 |---------|------|--------|------|---------|
-| Honey (tester) | `/opt/odigos-honey` | `honey.odigos.one` | 8002 | `deployment.mode=hosted`, needs a provider key |
+| Honey (tester) | `/opt/odigos-honey` | `honey.odigos.one` | 8002 | `deployment.mode=hosted` · fast=`qwen/qwen3.7-flash` (vision) · smart=`~deepseek/deepseek-v4-flash-latest` · voice=groq STT + edge TTS · kie.ai image/music |
 | Site (marketing + auth UI) | `/opt/odigos-site` | `odigos.one` | 3000 | Node/Express/SSR React |
 | Platform API | `/opt/odigos-platform` | `odigos.one/api/v1/*` | 8080 | FastAPI + Postgres ([repo](https://github.com/tamler/odigos-platform), private) |
 | Postgres | docker `odigos-postgres` | (internal, 127.0.0.1:5432) | 5432 | postgres:16-alpine |
@@ -32,9 +32,42 @@ Retired during 2026-05-27 migration: Rachel, HomeRun (odigos.one bare-metal); ol
 Jessica Docker on uxrls.com. Retired 2026-05-28: Sales (public chat widget) — replaced with static
 FAQ; unit is disabled but `/opt/odigos-sales` is retained as the FAQ content source.
 
+> ⚠️ **Production is running an unmerged branch.** `odigos-honey` tracks
+> `security/hardening-hosted-launch` (~40 commits ahead of `main`), not `main`. It has to: the
+> `deployment.mode=hosted` gate, `DeploymentConfig`, and the bwrap startup enforcement exist only
+> on that branch. `deploy.sh` pins the branch per install for this reason. The branch has not had
+> a review pass. Until it merges, `main` is not deployable to a hosted install and hotfixes must
+> go to the branch.
+
 ---
 
 ## Recently shipped
+
+### Hosted launch: Honey + C0 isolation (2026-08-12)
+- ✅ First C0-compliant hosted install (`honey.odigos.one`): own `odigos_honey` user, `0700` root,
+  `0600` secrets, hardened unit, `UMask=0077`. Cross-install read denial verified both directions.
+  Unit template: [`docs/deployment/odigos-hosted.service.example`](docs/deployment/odigos-hosted.service.example).
+- 🔴 **The bwrap sandbox was never actually active on Linux.** The probe in `sandbox.py` omitted
+  `--symlink /usr/lib64 /lib64`, which the real exec path always had. On x86_64 the ELF loader lives
+  there, so every binary inside the probe namespace failed with ENOENT, detection fell through to
+  the ulimit tier, and installs ran with **no filesystem isolation** while bubblewrap sat installed
+  and apparently fine. Compounding it, `_enforce_hosted_security` gated on `shutil.which("bwrap")`
+  — binary on PATH, not binary works — so hosted mode booted happily at `isolation=ulimit`.
+  Both fixed; the gate now checks the resolved tier and was negative-tested. **Any earlier claim
+  that agent-run code was sandboxed on a Linux deploy was wrong** — re-verify `isolation=bwrap`
+  on every install as it comes back.
+- ✅ `RestrictAddressFamilies` must include `AF_NETLINK` or `bwrap --unshare-all` cannot bring up
+  loopback and the sandbox silently degrades. The checklist previously prescribed a value that
+  breaks bwrap.
+- ✅ `deploy.sh` retargeted: it pointed at two dead hosts with no entry for the live VPS, and ran
+  four installs as one shared `odigos_agent` user. Now one user per install, enforced by preflight
+  and `tests/test_deploy_install_table.py`, with a post-deploy conformance gate on
+  `mode=hosted isolation=bwrap`.
+- ✅ `fresh-install.sh` emitted two top-level `agent:` keys; YAML last-wins silently discarded
+  `name:`, so every fresh install booted as "Odigos". Also wrote secrets `0644` and put `api_key`
+  in the operator-edited `config.yaml`.
+- ✅ `uv.lock` was missing `pyjwt` despite `pyproject.toml` declaring it — a clean clone left
+  `import jwt` unsatisfied.
 
 ### Infrastructure migration (2026-05-27)
 - ✅ Migrated odigos.one off bare-metal OVH (Ubuntu 24.04, 5 systemd agents) to a new OVH VPS (Ubuntu 26.04, 4 vCPU / 7.6 GB / 72 GB)
@@ -77,6 +110,25 @@ FAQ; unit is disabled but `/opt/odigos-sales` is retained as the FAQ content sou
 ---
 
 ## In flight / next up
+
+- 🔴 **Review + merge `security/hardening-hosted-launch`** — it is in production on Honey unreviewed
+  (see the warning above). Nothing else should ship to a hosted install until this lands.
+- 🔧 **Modality-aware model routing** — `ModelConfig.vision` is declared in `config.py:64` and read
+  by *nothing*. Routing is purely by classification tier (`executor.py:396-407`): a request carrying
+  an image is not steered to a vision-capable model. The practical consequence is that a vision model
+  is unreachable unless it occupies a routing tier, which is why Honey has `qwen3.7-flash` on `fast`
+  rather than as a dedicated vision entry. Either honour `vision` when the payload has an image, or
+  drop the field so it stops implying behaviour it does not have.
+- ⏭️ **Migrations re-add existing columns on a fresh DB** — a brand-new install logs
+  `duplicate column name` warnings for migrations 005, 007, 008, 009, 010, 011, 012, 014 and 015.
+  Benign (the schema evolves correctly) but it makes real migration failures easy to miss in a
+  noisy boot log. `schema.sql` and the migration set overlap; pick one as the source of truth.
+- ⏭️ **Repo-wide lint debt** — `ruff check odigos/ tests/` reports 205 errors on `main`, 159
+  auto-fixable. Not introduced by recent work; worth a single sweep commit so new violations are
+  visible.
+- ⏭️ **Honey's account email is the placeholder `honey@odigos.one`** — direct login is unaffected,
+  but SSO from the platform with her real address would auto-provision a *second* user instead of
+  matching this one. Fix before she is pointed at the "Open my agent" button.
 
 - 🔧 **Brittleness audit + robustness plan** ([spec](docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustness.md)) — Today's session found 8 instances of the same pattern: "simplifications" that backfired against real LLM behavior (truncated IDs the model copied as values, sparse find_tools output, missing skill tool-blocks, missing kanban_create_board tool, opaque FK errors, identity-only persona loading, aggressive context pruning). All 8 fixed live. The spec catalogs the pattern, codifies operating principles ("LLM-facing output is contract, not display"), and lays out a 3-phase plan: audit + remaining fixes → robustness infrastructure (blank-slate smoke tests, skill validation, find_tools coverage, stable prefix order) → ongoing behavioral telemetry.
 - ⏭️ **Old VPS wipes** — `82.25.91.86` (old odigos.one bare-metal) and `100.89.147.103` (uxrls.com Jessica Docker) are dead as of 2026-08-12. `deploy.sh` no longer targets either, and `tests/test_deploy_install_table.py` fails if they reappear. Remaining work is registrar/contract cleanup and removing the stale `odigos-old` / uxrls entries from `~/.ssh/config`.
