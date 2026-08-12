@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from odigos.storage import FILES_DIR
+from odigos.core.capabilities import record_degraded
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,8 @@ class CalendarEventTool(BaseTool):
         try:
             from icalendar import Calendar, Event
             import pytz
-        except ImportError:
+        except ImportError as e:
+            record_degraded("icalendar", e)
             return ToolResult(success=False, data="", error="icalendar library not installed")
 
         try:

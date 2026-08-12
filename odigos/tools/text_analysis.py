@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from odigos.core.capabilities import record_degraded
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,8 @@ class TextAnalysisTool(BaseTool):
                     "python -m textblob.download_corpora lite"
                 ),
             )
-        except ImportError:
+        except ImportError as e:
+            record_degraded("textblob", e)
             return ToolResult(
                 success=False,
                 data="",

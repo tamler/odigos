@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from odigos.core.capabilities import record_degraded
 from odigos.tools.base import BaseTool, ToolContract, ToolResult
 
 if TYPE_CHECKING:
@@ -261,7 +262,8 @@ class DataTableTool(BaseTool):
             import openpyxl
             from openpyxl.styles import Font
             from openpyxl.utils import get_column_letter
-        except ImportError:
+        except ImportError as e:
+            record_degraded("openpyxl", e)
             return ToolResult(success=False, data="", error="openpyxl not installed for export")
 
         columns = json.loads(table["columns"])

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from odigos.core.capabilities import record_degraded
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -68,7 +69,8 @@ class TranslateTool(BaseTool):
             )
 
             return ToolResult(success=True, data=output)
-        except ImportError:
+        except ImportError as e:
+            record_degraded("deep-translator", e)
             return ToolResult(
                 success=False,
                 data="",

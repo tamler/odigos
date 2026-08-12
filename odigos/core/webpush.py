@@ -40,7 +40,13 @@ def get_or_create_vapid_keys() -> dict:
         VAPID_KEYS_PATH.write_text(json.dumps(keys))
         logger.info("Generated new VAPID keys")
         return keys
-    except (ImportError, Exception) as exc:
+    except ImportError as exc:
+        # Was `except (ImportError, Exception)`, which is just `except Exception`
+        # -- the ImportError arm never applied and a missing declared dependency
+        # was reported as a generic warning.
+        record_degraded("py-vapid", exc)
+        return {}
+    except Exception as exc:
         logger.warning(
             "VAPID key generation failed, push notifications disabled: %s",
             exc,

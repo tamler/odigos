@@ -6,6 +6,7 @@ import secrets
 from pathlib import Path
 
 from odigos.storage import FILES_DIR
+from odigos.core.capabilities import record_degraded
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,8 @@ class QRCodeTool(BaseTool):
         try:
             import qrcode
             from PIL import Image
-        except ImportError:
+        except ImportError as e:
+            record_degraded("qrcode", e)
             return ToolResult(success=False, data="", error="qrcode library not installed")
 
         size = min(max(params.get("size", 400), 100), 2000)

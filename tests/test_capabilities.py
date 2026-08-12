@@ -19,59 +19,89 @@ from odigos.core.capabilities import (
 
 SRC = Path(__file__).parent.parent / "odigos"
 
-# The only guarded import in the tree whose package is not declared in
-# pyproject.toml. Absence is legitimate, so it is allowed to stay quiet.
-UNDECLARED_EXEMPT = {"config.py"}
+# tools/catalog.py walks optional plugin modules and already distinguishes
+# "third-party dep absent, skip this plugin" from "the module itself is broken",
+# which is the distinction this rule exists to enforce. See its except clauses.
+EXEMPT = {"catalog.py"}
 
-# Guards a plugin's optional third-party dependency and already distinguishes
-# "module absent" from "module broken" -- see the comments at the except lines.
-CATALOG_EXEMPT = {"catalog.py"}
+# Names that mean "an import failed". ModuleNotFoundError subclasses ImportError,
+# so catching it is the same pattern and must obey the same rule.
+_IMPORT_ERROR_NAMES = {"ImportError", "ModuleNotFoundError"}
+
+
+def _caught_names(node: ast.ExceptHandler) -> set[str]:
+    """Exception names a handler catches, including dotted and aliased forms."""
+    if node.type is None:
+        return {"BareExcept"}
+    exprs = node.type.elts if isinstance(node.type, ast.Tuple) else [node.type]
+    names = set()
+    for e in exprs:
+        if isinstance(e, ast.Name):
+            names.add(e.id)
+        elif isinstance(e, ast.Attribute):
+            names.add(e.attr)
+    return names
 
 
 def _except_import_handlers(path: Path):
-    """Yield ast.ExceptHandler nodes that catch ImportError in `path`."""
-    tree = ast.parse(path.read_text())
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.ExceptHandler) or node.type is None:
-            continue
-        names = []
-        if isinstance(node.type, ast.Name):
-            names = [node.type.id]
-        elif isinstance(node.type, ast.Tuple):
-            names = [e.id for e in node.type.elts if isinstance(e, ast.Name)]
-        if "ImportError" in names:
+    """Yield ExceptHandler nodes catching ImportError/ModuleNotFoundError."""
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.ExceptHandler) and _caught_names(node) & _IMPORT_ERROR_NAMES:
             yield node
 
 
-def _is_silent(handler: ast.ExceptHandler) -> bool:
-    """True if the handler neither logs nor records the exception."""
+def _records_degradation(handler: ast.ExceptHandler) -> bool:
+    """True only if the handler actually calls record_degraded()."""
     for node in ast.walk(handler):
         if isinstance(node, ast.Call):
             fn = node.func
             if isinstance(fn, ast.Name) and fn.id == "record_degraded":
-                return False
-            if isinstance(fn, ast.Attribute) and fn.attr in {
-                "error", "warning", "exception", "debug", "info"
-            }:
-                return False
-        # Handlers that return an error to the caller are the good pattern.
-        if isinstance(node, ast.Return) and node.value is not None:
-            return False
-    return True
+                return True
+            if isinstance(fn, ast.Attribute) and fn.attr == "record_degraded":
+                return True
+    return False
 
 
-def test_no_silent_importerror_handlers():
-    """No `except ImportError` may swallow the failure without a breadcrumb."""
+def test_every_importerror_handler_records_degradation():
+    """`except ImportError` must call record_degraded() -- nothing weaker.
+
+    An earlier version of this test accepted any log call or any non-None
+    return. Adversarial review pointed out that a .debug() line defeats it,
+    which is the exact pattern being outlawed: knowledge.py and webpush.py both
+    logged at debug and were still invisible in practice. Returning a ToolResult
+    to the caller is good and stays, but it tells the LLM, not the operator.
+    """
     offenders = []
     for path in sorted(SRC.rglob("*.py")):
-        if path.name in UNDECLARED_EXEMPT | CATALOG_EXEMPT:
+        if path.name in EXEMPT:
             continue
         for handler in _except_import_handlers(path):
-            if _is_silent(handler):
+            if not _records_degradation(handler):
                 offenders.append(f"{path.relative_to(SRC.parent)}:{handler.lineno}")
     assert not offenders, (
-        "these except-ImportError handlers swallow the failure silently; "
-        "call record_degraded() or return an error to the caller: " + ", ".join(offenders)
+        "these except-ImportError handlers do not call record_degraded(), so a "
+        "declared dependency failing to import is invisible to an operator: "
+        + ", ".join(offenders)
+    )
+
+
+def test_importerror_is_not_paired_with_broad_exception():
+    """`except (ImportError, Exception)` is just `except Exception`.
+
+    webpush.py had exactly this: the ImportError arm never applied and a missing
+    declared dependency surfaced as a generic warning.
+    """
+    offenders = []
+    for path in sorted(SRC.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.ExceptHandler):
+                continue
+            names = _caught_names(node)
+            if names & _IMPORT_ERROR_NAMES and {"Exception", "BaseException"} & names:
+                offenders.append(f"{path.relative_to(SRC.parent)}:{node.lineno}")
+    assert not offenders, (
+        "ImportError paired with Exception in one handler is subsumed by it: "
+        + ", ".join(offenders)
     )
 
 
