@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 
+from odigos.core.capabilities import record_degraded
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -12,8 +13,9 @@ logger = logging.getLogger(__name__)
 try:
     import pytesseract
     _OCR_AVAILABLE = True
-except ImportError:
+except ImportError as _e:
     _OCR_AVAILABLE = False
+    record_degraded("pytesseract", _e)
 
 from odigos.storage import FILES_DIR
 ALLOWED_DIR = os.path.realpath(str(FILES_DIR))

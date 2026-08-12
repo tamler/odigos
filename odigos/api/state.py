@@ -19,6 +19,7 @@ from odigos.api.deps import (
     get_skill_registry,
     require_auth,
 )
+from odigos.core.capabilities import degraded_capabilities
 from odigos.db import Database
 
 logger = logging.getLogger(__name__)
@@ -226,7 +227,13 @@ async def get_state(
         "pid": os.getpid(),
     }
 
+    # Capabilities whose declared dependency failed to import. Empty is healthy.
+    # Without this an operator's only signal is a 404 or a quietly skipped path
+    # -- which is how passkey auth stayed broken for weeks (01-cleanup.md §0f).
+    degraded = degraded_capabilities()
+
     return {
+        "degraded_capabilities": degraded,
         "agent": agent_info,
         "budget": budget_info,
         "memory": aggregates["memory"],

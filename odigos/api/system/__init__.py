@@ -11,11 +11,13 @@ from odigos.api.cron import router as cron_router
 from odigos.api.budget import router as budget_router
 from odigos.api.push import router as push_router
 
-try:
-    from odigos.api.webauthn import router as webauthn_router
-    _HAS_WEBAUTHN = True
-except ImportError:
-    _HAS_WEBAUTHN = False
+# webauthn.py defines `router` at module scope before its own guarded imports,
+# and swallows their ImportError internally, so this import can never fail --
+# the old try/except set _HAS_WEBAUTHN = True unconditionally, including when
+# passkey auth was entirely broken. A guard that asserts nothing is worse than
+# no guard: it reads as a capability check. The real signal is
+# webauthn._WEBAUTHN_AVAILABLE, reported via /api/state.
+from odigos.api.webauthn import router as webauthn_router
 
 router = APIRouter()
 router.include_router(settings_router)
@@ -26,8 +28,7 @@ router.include_router(metrics_router)
 router.include_router(cron_router)
 router.include_router(budget_router)
 router.include_router(push_router)
-if _HAS_WEBAUTHN:
-    router.include_router(webauthn_router)
+router.include_router(webauthn_router)
 if os.environ.get("ODIGOS_PLATFORM_URL"):
     from odigos.api.platform_auth import router as platform_auth_router
     router.include_router(platform_auth_router)

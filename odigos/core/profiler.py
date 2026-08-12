@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 
+from odigos.core.capabilities import TextBlob
+
 logger = logging.getLogger(__name__)
 
 # Exponential moving average decay factor (0-1, higher = more recent weight)
@@ -121,16 +123,21 @@ def analyze_message_signals(
         signals["coding_expertise"] = min(tech_count / 3, 1.0)
 
     # Patience: short frustrated messages via textblob if available
-    try:
-        from textblob import TextBlob
-        blob = TextBlob(message)
-        if blob.sentiment.polarity < -0.3 and word_count < 15:
-            signals["patience_level"] = 0.1
-        elif word_count > 50:
-            signals["patience_level"] = 0.8
-    except ImportError:
-        if word_count > 50:
-            signals["patience_level"] = 0.8
+    # TextBlob comes from the shared probe, which logs once at ERROR if the
+    # declared dependency failed to import. LookupError is still caught here:
+    # TextBlob imports fine but raises at call time without its NLTK corpora.
+    if TextBlob is not None:
+        try:
+            blob = TextBlob(message)
+            if blob.sentiment.polarity < -0.3 and word_count < 15:
+                signals["patience_level"] = 0.1
+            elif word_count > 50:
+                signals["patience_level"] = 0.8
+        except LookupError:
+            if word_count > 50:
+                signals["patience_level"] = 0.8
+    elif word_count > 50:
+        signals["patience_level"] = 0.8
 
     # Correction detection
     correction_starts = [

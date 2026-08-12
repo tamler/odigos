@@ -5,6 +5,8 @@ import json
 import logging
 from pathlib import Path
 
+from odigos.core.capabilities import record_degraded
+
 logger = logging.getLogger(__name__)
 
 from odigos.storage import VAPID_KEYS_PATH
@@ -75,8 +77,10 @@ async def send_push_notification(
             vapid_claims=vapid_claims,
         )
         return True
-    except ImportError:
-        logger.debug("pywebpush not installed")
+    except ImportError as e:
+        # pywebpush is declared in pyproject.toml, so this is a broken install.
+        # At debug level, push notifications simply stopped working in silence.
+        record_degraded("pywebpush", e)
         return False
     except Exception as e:
         logger.warning("Push notification failed: %s", e)

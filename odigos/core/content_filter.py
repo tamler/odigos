@@ -10,10 +10,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
-try:
-    from textblob import TextBlob
-except ImportError:  # pragma: no cover
-    TextBlob = None  # type: ignore[assignment,misc]
+from odigos.core.capabilities import TextBlob
 
 logger = logging.getLogger(__name__)
 

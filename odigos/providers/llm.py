@@ -12,6 +12,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import httpx
+import jsonschema
 
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 
@@ -497,11 +498,7 @@ class LLMClient(LLMProvider):
             parsed = _json.loads(resp.content)
             if schema:
                 try:
-                    import jsonschema
-
                     jsonschema.validate(parsed, schema)
-                except ImportError:
-                    pass
                 except Exception as e:
                     logger.warning("JSON schema validation failed (tier 2): %s", str(e)[:100])
                     return {}, False
@@ -515,11 +512,7 @@ class LLMClient(LLMProvider):
             if parsed is not None:
                 if schema:
                     try:
-                        import jsonschema
-
                         jsonschema.validate(parsed, schema)
-                    except ImportError:
-                        pass
                     except Exception as e:
                         logger.warning("JSON schema validation failed (tier 3): %s", str(e)[:100])
                         return {}, False

@@ -9,10 +9,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
-try:
-    from textblob import TextBlob
-except ImportError:  # pragma: no cover
-    TextBlob = None  # type: ignore[assignment,misc]
+from odigos.core.capabilities import TextBlob
 
 from odigos.core.llm_prompt import run_prompt
 

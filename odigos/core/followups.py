@@ -4,10 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
-try:
-    from textblob import TextBlob
-except ImportError:  # pragma: no cover
-    TextBlob = None  # type: ignore[assignment,misc]
+from odigos.core.capabilities import TextBlob
 
 from odigos.db import Database
 

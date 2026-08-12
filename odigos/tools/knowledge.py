@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from odigos.core.capabilities import record_degraded
 from odigos.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -17,8 +18,8 @@ def _search_grokipedia(query: str) -> dict | None:
             GrokipediaError,
             GrokipediaNotFoundError,
         )
-    except ImportError:
-        logger.debug("grokipedia-api not installed")
+    except ImportError as e:
+        record_degraded("grokipedia-api", e)
         return None
 
     try:
@@ -58,8 +59,8 @@ def _search_wikipedia(query: str) -> dict | None:
     """Search Wikipedia and return page info or None."""
     try:
         import wikipedia
-    except ImportError:
-        logger.debug("wikipedia not installed")
+    except ImportError as e:
+        record_degraded("wikipedia", e)
         return None
 
     try:

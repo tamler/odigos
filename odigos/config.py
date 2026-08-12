@@ -403,8 +403,13 @@ def load_settings(config_path: str = "config.yaml") -> Settings:
     try:
         from dotenv import load_dotenv
         load_dotenv(override=False)
-    except ImportError:
-        pass
+    except ImportError as e:
+        # The one guarded import in the tree whose package is NOT declared in
+        # pyproject.toml, so absence is legitimate rather than a broken install.
+        # declared=False keeps it at debug. If python-dotenv is ever added to
+        # the dependency list, drop this argument.
+        from odigos.core.capabilities import record_degraded
+        record_degraded("python-dotenv", e, declared=False)
 
     yaml_config: dict = {}
     path = Path(config_path)

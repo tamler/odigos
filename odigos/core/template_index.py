@@ -13,10 +13,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-try:
-    from textblob import TextBlob
-except ImportError:  # pragma: no cover
-    TextBlob = None  # type: ignore[assignment,misc]
+from odigos.core.capabilities import TextBlob
 
 import httpx
 

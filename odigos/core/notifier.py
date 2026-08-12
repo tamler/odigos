@@ -5,6 +5,8 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from odigos.core.capabilities import record_degraded
+
 if TYPE_CHECKING:
     from odigos.channels.base import ChannelRegistry
     from odigos.db import Database
@@ -113,7 +115,11 @@ class Notifier:
 
         try:
             from odigos.core.webpush import send_push_notification
-        except ImportError:
+        except ImportError as e:
+            # This imports a first-party module, so a failure here means the
+            # tree is broken, not that an optional extra is absent. Returning
+            # silently made push notifications a no-op with no breadcrumb.
+            record_degraded("odigos.core.webpush", e)
             return
 
         vapid_claims = {"sub": "mailto:noreply@odigos.one"}

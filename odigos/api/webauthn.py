@@ -9,6 +9,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from odigos.api.deps import get_db, get_settings
+from odigos.core.capabilities import record_degraded
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +92,13 @@ try:
         base64url_to_bytes,
     )
     _WEBAUTHN_AVAILABLE = True
-except ImportError:
+except ImportError as _e:
+    # webauthn is declared in pyproject.toml, so this is a broken install, not a
+    # disabled feature. It stayed silent for weeks once before: the package
+    # directory kept its submodules but lost __init__.py, so these five names
+    # vanished, every endpoint 404'd, and nothing said a word.
     _WEBAUTHN_AVAILABLE = False
+    record_degraded("webauthn", _e)
 
 
 def _require_webauthn():

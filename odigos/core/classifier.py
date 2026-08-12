@@ -8,10 +8,7 @@ import struct
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-try:
-    from textblob import TextBlob
-except ImportError:  # pragma: no cover
-    TextBlob = None  # type: ignore[assignment,misc]
+from odigos.core.capabilities import TextBlob
 
 from odigos.core.json_utils import parse_json_response
 from odigos.core.prompt_loader import load_prompt
