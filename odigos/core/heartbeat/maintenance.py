@@ -16,16 +16,25 @@ logger = logging.getLogger(__name__)
 async def run_evolution(hb: "Heartbeat") -> None:
     """Phase 5: Score past actions, manage trials, run strategist, rollup domain perf."""
     try:
-        scored = await hb.evolution_engine.score_past_actions(limit=3)
-        if scored:
-            logger.debug("Evolution: scored %d past actions", scored)
+        # evolution.enabled gates only the self-modifying parts: scoring,
+        # trials and the strategist. Promotion writes LLM text into
+        # data/agent/*.md, so it stays off unless explicitly enabled. Correction
+        # consolidation and skill re-verification below are user-driven features
+        # that happen to share this phase, and keep running either way.
+        _evo = hb.settings.evolution if hb.settings else None
+        _evo_enabled = bool(_evo.enabled) if _evo else False
 
-        result = await hb.evolution_engine.check_active_trial()
-        if result and result != "continue":
-            logger.info("Evolution: trial %s", result)
+        if _evo_enabled:
+            scored = await hb.evolution_engine.score_past_actions(limit=3)
+            if scored:
+                logger.debug("Evolution: scored %d past actions", scored)
 
-        # Domain performance rollup (cheap, runs every evolution cycle)
-        await hb.evolution_engine.rollup_domain_performance()
+            result = await hb.evolution_engine.check_active_trial()
+            if result and result != "continue":
+                logger.info("Evolution: trial %s", result)
+
+            # Domain performance rollup (cheap, runs every evolution cycle)
+            await hb.evolution_engine.rollup_domain_performance()
 
         # Consolidate corrections into prompt sections
         if hasattr(hb, "consolidator") and hb.consolidator:
@@ -48,8 +57,9 @@ async def run_evolution(hb: "Heartbeat") -> None:
             except Exception:
                 logger.debug("Skill re-verification failed", exc_info=True)
 
-        # Run strategist if enough new evaluations
-        if hb.strategist:
+        # Run strategist if enough new evaluations. Gated: the strategist's whole
+        # output is new trials, which is the thing evolution.enabled turns off.
+        if _evo_enabled and hb.strategist:
             if await hb.strategist.should_run():
                 analysis = await hb.strategist.analyze()
                 if analysis:

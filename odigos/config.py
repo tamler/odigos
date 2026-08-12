@@ -191,6 +191,14 @@ class ApprovalConfig(BaseModel):
 
 
 class EvolutionConfig(BaseModel):
+    # Off by default. When on, the heartbeat scores past actions, runs trials,
+    # and auto-promotes winning trials -- and promotion writes LLM-generated
+    # text into data/agent/*.md, including identity.md and guardrails.md.
+    # Those trials are scored against a treatment that is never actually
+    # applied (checkpoint_manager.get_working_sections() is only reached from
+    # the unreachable ContextAssembler.build(); see charter §3), so the engine
+    # currently promotes on noise. Opt in deliberately, not by default.
+    enabled: bool = False
     trial_duration_hours: int = 48
     min_evaluations: int = 5
     promote_threshold: float = 0.5

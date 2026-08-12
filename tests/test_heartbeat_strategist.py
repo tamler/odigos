@@ -1,4 +1,5 @@
 """Test that heartbeat Phase 6 runs the strategist."""
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -45,7 +46,19 @@ async def test_tick_runs_strategist_when_should_run():
     heartbeat._followup_interval_ticks = 30
     heartbeat._update_tick_counter = 0
     heartbeat._email_tick_counter = 0
-    heartbeat.settings = None
+    # The strategist is part of the evolution cycle, which is now off by default
+    # (charter §1 -- trial promotion writes LLM text into data/agent/*.md). This
+    # test exercises the strategist path, so it opts in explicitly. With
+    # settings=None the cycle correctly does not run; see
+    # tests/test_evolution_disabled_by_default.py.
+    from odigos.config import EvolutionConfig
+
+    heartbeat.settings = SimpleNamespace(
+        evolution=EvolutionConfig(enabled=True),
+        auto_update=None,
+        storage=None,
+        heartbeat=None,
+    )
     heartbeat._budget_tracker = None
     heartbeat._quota_tick_counter = 0
     heartbeat._email_config = None

@@ -218,6 +218,9 @@ approval:
 
 # Self-improvement through prompt/behavior trials
 evolution:
+  # Off by default. Promotion writes LLM-generated text into data/agent/*.md,
+  # including identity.md and guardrails.md. Turn on deliberately.
+  enabled: false
   trial_duration_hours: 48
   min_evaluations: 5
   promote_threshold: 0.5
