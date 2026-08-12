@@ -1,0 +1,62 @@
+# Hardened systemd unit for a hosted Odigos install.
+#
+# This is the C0 template. It is the unit odigos-honey actually runs, with the
+# install name parameterised. To add an install, replace <NAME> throughout
+# (e.g. honey, jacob, jessica), install as /etc/systemd/system/odigos-<NAME>.service,
+# and add a matching row to deploy.sh's INSTALLS array.
+#
+# Prerequisites, in order:
+#   useradd --system --home-dir /opt/odigos-<NAME> --shell /usr/sbin/nologin \
+#           --user-group odigos_<NAME>
+#   install -d -o odigos_<NAME> -g odigos_<NAME> -m 700 /opt/odigos-<NAME>
+#   sudo -u odigos_<NAME> git clone <repo> /opt/odigos-<NAME>
+#   sudo -u odigos_<NAME> env HOME=/opt/odigos-<NAME> uv sync --frozen
+#   sudo -u odigos_<NAME> env HOME=/opt/odigos-<NAME> AGENT_NAME=<Name> \
+#           bash scripts/fresh-install.sh /opt/odigos-<NAME>
+#   set `deployment.mode: "hosted"` and a unique `server.port` in config.yaml
+#   chmod 600 .env config.yaml
+#
+# After starting, confirm the posture line reads isolation=bwrap. "active" is
+# not sufficient -- a hosted install that fell back to the ulimit tier has no
+# filesystem isolation:
+#   journalctl -u odigos-<NAME> | grep "security posture"
+
+[Unit]
+Description=Odigos AI Agent (<NAME> — <NAME>.odigos.one)
+After=network.target
+
+[Service]
+Type=simple
+User=odigos_<NAME>
+Group=odigos_<NAME>
+WorkingDirectory=/opt/odigos-<NAME>
+EnvironmentFile=/opt/odigos-<NAME>/.env
+# HOME is the install root, so caches never land in a shared location.
+Environment=HOME=/opt/odigos-<NAME>
+Environment=XDG_CACHE_HOME=/opt/odigos-<NAME>/cache
+Environment=HF_HOME=/opt/odigos-<NAME>/cache/huggingface
+# Call the venv interpreter directly rather than `uv run`: ProtectSystem=strict
+# makes the install root read-only, and uv would try to mutate the venv.
+ExecStart=/opt/odigos-<NAME>/.venv/bin/python -m odigos.main
+Restart=on-failure
+RestartSec=5
+
+# ── C0 isolation (2026-05-29-os-isolation-checklist.md) ──
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+UMask=0077
+# Only this install's own writable paths. `skills` is writable because the
+# agent creates skills at runtime; `cache` holds the embedding model.
+ReadWritePaths=/opt/odigos-<NAME>/data /opt/odigos-<NAME>/cache /opt/odigos-<NAME>/skills
+# AF_NETLINK is required, not optional: `bwrap --unshare-all` brings up
+# loopback in the new net namespace over NETLINK_ROUTE. Without it bwrap dies
+# and the sandbox silently degrades to ulimit-only.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+# RestrictNamespaces and SystemCallFilter are deliberately NOT set: bubblewrap
+# needs user + mount namespaces, and deployment.mode=hosted refuses to boot
+# without bwrap. Re-verify the sandbox tier before tightening these.
+
+[Install]
+WantedBy=multi-user.target
