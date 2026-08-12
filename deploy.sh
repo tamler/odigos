@@ -160,8 +160,10 @@ for entry in "${INSTALLS[@]}"; do
     MAIN_PID=$(systemctl show "$SVC" --property=MainPID --value)
     POSTURE=""
     for _ in $(seq 1 60); do
+      # `|| true`: until the line is logged, grep exits 1, and under
+      # `set -e` + `pipefail` that would kill the script on the first poll.
       POSTURE=$(journalctl -u "$SVC" _PID="$MAIN_PID" --no-pager 2>/dev/null \
-                | grep -o 'security posture: .*' | tail -1)
+                | grep -o 'security posture: .*' | tail -1) || true
       [ -n "$POSTURE" ] && break
       if ! systemctl is-active --quiet "$SVC"; then
         echo "  WARNING: $SVC died during startup!"
