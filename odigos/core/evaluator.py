@@ -457,24 +457,6 @@ class Evaluator:
             temperature=0.2,
         )
 
-    async def find_qualified_evaluator(self, task_type: str) -> dict | None:
-        """Find a qualified peer to evaluate actions of this task type.
-
-        Requirements:
-        - Peer specialty matches task_type
-        - Peer is online
-        - Peer has allow_external_evaluation = 1
-        - Peer has evolution_score > qualified_evaluator_min_score
-        """
-        row = await self.db.fetch_one(
-            "SELECT * FROM agent_registry "
-            "WHERE specialty = ? AND status = 'online' "
-            "AND allow_external_evaluation = 1 AND evolution_score > ? "
-            "ORDER BY evolution_score DESC LIMIT 1",
-            (task_type, self._qualified_evaluator_min_score),
-        )
-        return dict(row) if row else None
-
     # -- Active tool output testing --
 
     async def evaluate_tool_output(

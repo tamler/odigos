@@ -114,18 +114,22 @@ class HeartbeatConfig(BaseModel):
     max_todos_per_tick: int = 3
     idle_think_interval: int = 900
     announce_interval_seconds: int = 60
-    morning_briefing: bool = True
+    # Was True in code and false in config.yaml.example ("Disabled by default --
+    # opt in per tier"). Aligned to the example.
+    morning_briefing: bool = False
 
 
 class ProactiveConfig(BaseModel):
-    enabled: bool = True
+    # Default was True in code and false in config.yaml.example. Aligned to the
+    # example: proactive work spends LLM budget unprompted, so it opts in.
+    enabled: bool = False
     interval_seconds: int = 900
     max_cycles_per_hour: int = 4
-    max_per_cycle: int = 1
-    safe_tools: list[str] = [
-        "find_tools", "search", "scrape", "lookup_fact",
-        "knowledge_lookup", "check_plan", "read_file",
-    ]
+    # Removed 2026-08-12: `max_per_cycle` and `safe_tools` were read nowhere.
+    # safe_tools is the worse of the two -- FEATURES.md advertised an enforced
+    # read-only mode for proactive runs, and the list backing that claim was
+    # never consulted by any code. A security control that exists only in the
+    # docs is the failure shape anti-patterns.md exists to catch.
 
 
 class DeploymentConfig(BaseModel):

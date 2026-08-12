@@ -8,8 +8,6 @@ discovered tool schemas in the same turn.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Callable
 
 from odigos.tools.base import BaseTool
 
@@ -17,14 +15,6 @@ logger = logging.getLogger(__name__)
 
 # find_tools is the ONLY always-loaded tool. Everything else is discovered
 # through it. The system prompt instructs the model to call find_tools first.
-
-
-@dataclass
-class ToolSpec:
-    """Declarative tool registration spec."""
-    tool_class: type
-    kwargs_factory: Callable[[Any], dict | None]  # Returns kwargs or None to skip
-    condition: Callable[[Any], bool] | None = None
 
 
 class ToolRegistry:
@@ -82,22 +72,3 @@ class ToolRegistry:
             logger.warning(w)
         return warnings
 
-    def register_from_specs(self, specs: list[ToolSpec], context: Any) -> int:
-        """Register tools from a declarative spec list. Returns count registered."""
-        count = 0
-        for spec in specs:
-            if spec.condition and not spec.condition(context):
-                continue
-            kwargs = spec.kwargs_factory(context)
-            if kwargs is None:
-                continue
-            try:
-                tool = spec.tool_class(**kwargs)
-                self.register(tool)
-                count += 1
-            except Exception:
-                import logging
-                logging.getLogger(__name__).warning(
-                    "Failed to register %s", spec.tool_class.__name__, exc_info=True,
-                )
-        return count

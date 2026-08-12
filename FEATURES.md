@@ -32,7 +32,7 @@ When idle, the agent doesn't just wait. A 4-stage pipeline runs in the backgroun
 
 1. **Scan** -- gathers signals from knowledge gaps, recent conversations, active goals, and cross-entity connections. No LLM call -- just fast DB queries.
 2. **Prioritize** -- ranks opportunities by user relevance and novelty. Respects feedback -- topics the user ignores are deprioritized over time.
-3. **Execute** -- researches the top opportunity using the full agent pipeline (search, RAG, tools) in a safe read-only mode.
+3. **Execute** -- researches the top opportunity using the full agent pipeline (search, RAG, tools). Note: this runs with the full tool registry, not a restricted set. A `proactive.safe_tools` allowlist existed in config but was read by no code, so the read-only mode this line used to claim was never enforced; the dead key was removed 2026-08-12 rather than left as documentation of a control that does not exist.
 4. **Publish** -- writes findings as markdown artifacts, sends push notifications, and surfaces results on the Activity page.
 
 The proactive engine learns from implicit feedback: opened findings are positive signals, ignored ones are negative. No manual thumbs up/down required -- engagement IS the signal.

@@ -151,7 +151,6 @@ proactive:
   enabled: false
   interval_seconds: 900
   max_cycles_per_hour: 4
-  max_per_cycle: 1
 
 # =============================================================================
 # EMBEDDINGS
