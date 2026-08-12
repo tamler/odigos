@@ -1,7 +1,8 @@
 .PHONY: test audit build up down logs
 
 test:
-	.venv/bin/python -m pytest tests/ -x -q
+	uv sync --extra dev
+	uv run pytest tests/ -x -q
 
 audit:
 	.venv/bin/pip-audit

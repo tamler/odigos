@@ -173,7 +173,7 @@ proactively when idle", `ROADMAP.md` fleet table. Plus the 8 `GEMINI-*` files in
 families, no re-tightening context budgets, no touching the failure taxonomy / `find_tools`
 guards / hybrid recall, no new features, no extraction, no tenancy changes.
 
-**Done when:** `uv run pytest tests/ -q` green, every A1 bug has a test that would've caught it,
+**Done when:** `uv sync --extra dev && uv run pytest tests/ -q` green, every A1 bug has a test that would've caught it,
 `build()` gone with its four features proven live, `DESIGN-DECISIONS.md` written, contract tests
 exist, two agents round-trip a peer reply, docs true.
 

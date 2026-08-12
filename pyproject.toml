@@ -56,6 +56,9 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
+    # tests/test_api_tool.py imports HTTPXMock; without this the whole suite
+    # fails at collection, not just that module.
+    "pytest-httpx>=0.30",
     "ruff>=0.9.0",
 ]
 stt = ["moonshine-voice>=0.0.40"]

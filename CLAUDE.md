@@ -75,7 +75,7 @@ Package at `odigos/core/heartbeat/` with phases:
 make up              # docker compose up -d
 make down            # docker compose down
 make build           # docker compose build
-make test            # pytest tests/ -x -q  (NOT `uv run pytest` -- see Notes)
+make test            # uv sync --extra dev && uv run pytest tests/ -x -q
 make audit           # pip-audit dependency vulnerability scan
 make logs            # tail odigos container logs
 cd dashboard && npm run dev    # frontend dev server
@@ -91,5 +91,5 @@ cd dashboard && npm run build  # production build
 - New API tools: extend `APITool` from `odigos/tools/api_tool.py`, implement `execute()` and optionally `complete_background()` for backgroundable tools
 - New CLI tools: extend `CLITool` from `odigos/tools/cli_tool.py`, use `run_cli()` or `run_json()`
 - Headless execution: heartbeat uses `build_headless()` for plan/todo steps (selective context, ~67% token savings)
-- Tests: use `make test` or `.venv/bin/python -m pytest`. `uv run pytest` fails -- pytest lives in the `dev` extra and isn't in the default sync
+- Tests: `uv sync --extra dev && uv run pytest tests/ -q` (or `make test`, which does both). The `--extra dev` is required -- pytest, pytest-asyncio and pytest-httpx all live in the `dev` extra, and a plain `uv sync` uninstalls them
 - Hosted deploys: `bash deploy.sh` (installs are branch-pinned in its `INSTALLS` table, one Unix user each). `deployment.mode=hosted` refuses to boot without working bubblewrap -- confirm `isolation=bwrap` in the startup log, since "active" alone doesn't mean the sandbox came up. See `docs/deployment/`
