@@ -4,7 +4,7 @@ You are working on the **kitchen sink**: the Odigos personal-agent harness. Your
 it work correctly, make it smaller, and **write down what it learned** so the sibling projects
 can start from it.
 
-Read first, in this order: `/THE-PLAN.md` (§3 is this charter's context),
+Read first, in this order: `/THE-PLAN.md` (§2 is this charter's context),
 `docs/superpowers/specs/2026-08-12-strategic-review.md` (the evidence, with file:line),
 `docs/superpowers/anti-patterns.md` (**why cleanup is dangerous here** — all 8 logged incidents
 were caused by changes that looked like cleanup).
@@ -38,35 +38,46 @@ were caused by changes that looked like cleanup).
 
 ## Work, in this order
 
-### 0. Get to a green suite first. Change no product code until it is green.
+### 0. Get to a trustworthy baseline. Change no product code until the suite is green.
 
 Phase 0 left 5 failures and a broken test invocation. **All of it is dependency and
 environment debt, not merge damage** — the branch was fast-forwarded, so there was no merge
 interaction to break anything. Fix these before touching anything in §1.
 
-**0a. `webauthn` is unpinned, and that is why 4 tests fail.** `pyproject.toml:38` declares a
-bare `"webauthn"` with no version constraint. `odigos/api/webauthn.py:75-96` wraps its imports
-in `try/except ImportError` and sets `_WEBAUTHN_AVAILABLE = False`. Every endpoint calls
-`_require_webauthn()` **first**, which raises **404 "WebAuthn not available"**.
+**0a. The venv's `webauthn` package is physically corrupted. Pinning alone will not fix it.**
 
-The proof is in which test passes: `test_login_begin_no_credentials` expects 404 and passes —
-it gets 404 either way. The three that expect 401/401/400 all fail *with 404*, and
-`test_webauthn_user.py::test_login_resolves_user_by_credential_user_id` fails for the same
-reason. That is a single cause, not four bugs.
+Diagnosed 2026-08-12 — and the obvious explanation is wrong, so don't act on it. This is **not**
+major-version drift. `webauthn 2.7.1` is installed and is the correct major:
+`from webauthn.helpers.structs import PublicKeyCredentialDescriptor` succeeds.
 
-Confirm, then fix:
+What actually fails is the *first* import block at `api/webauthn.py:76-82`. `webauthn.__file__`
+is `None` — the top-level package is resolving as a **namespace package**, because
+`webauthn/__init__.py` is missing from disk even though `webauthn-2.7.1.dist-info/RECORD` lists
+it at 664 bytes. So the five top-level names are unavailable while every `webauthn.helpers.*`
+import at `:83-92` works. `_WEBAUTHN_AVAILABLE` goes False, `_require_webauthn()` raises
+**404**, and four tests fail on that one cause.
 
-```
-uv run python -c "import webauthn; print(webauthn.__version__)"
-uv run python -c "from webauthn.helpers.structs import PublicKeyCredentialDescriptor; print('ok')"
-```
+Cause: a second distribution, **`py-webauthn 0.0.4`**, had been installed into the same
+`webauthn/` directory. Uninstalling it took the shared `__init__.py` with it. The subdirectories
+still date from 27 Mar; the parent directory's mtime is today.
 
-Pin it to the major that actually satisfies those imports (`py_webauthn` moved things between
-majors). Then **also fix the silent degradation**: `except ImportError: _WEBAUTHN_AVAILABLE =
-False` means passkey login has been dead in production with nothing said. Log at ERROR with the
-exception, and make `/api/state` or the startup banner report the capability as unavailable.
-This is exactly the failure shape `anti-patterns.md` exists to catch — a feature that reads as
-present and isn't. Audit for the same pattern elsewhere: `grep -rn "except ImportError" odigos/`.
+Fix, all four parts — the first is the one that's easy to miss:
+
+1. **Force a clean reinstall.** `uv sync` sees 2.7.1 as present and will not repair the missing
+   file. `rm -rf .venv && uv sync --extra dev`, or `uv pip install --force-reinstall webauthn`.
+   Verify with `uv run python -c "import webauthn; print(webauthn.__file__)"` — it must not be
+   `None`.
+2. **Make sure `py-webauthn` cannot come back.** It is not in `pyproject.toml` and has no
+   business in the venv. Find out how it got there before moving on: `uv pip list | grep -i
+   webauthn`, and check whether anything declares it transitively. A package that shadows
+   another package's import namespace and deletes its `__init__.py` on uninstall is a
+   supply-chain hazard, not just untidiness — the legitimate `py_webauthn` project publishes
+   *as* `webauthn`, so a separate `py-webauthn 0.0.4` distribution warrants a look before you
+   dismiss it.
+3. **Constrain the bare dependency.** `pyproject.toml:38` → `"webauthn>=2,<3"`.
+4. **Stop swallowing the error** — see 0f. Two independent availability flags exist for this one
+   capability, `api/webauthn.py:94` and `api/system/__init__.py:17`. Fixing one does not fix the
+   other.
 
 **0b. The test suite can't be invoked as documented.** `uv sync` removes `pytest` (it's in the
 dev extra) and `pytest-httpx` isn't declared at all, so collection fails on
@@ -83,14 +94,49 @@ on logs `partially failed (schema evolved): duplicate column` during test setup 
 Make them idempotent and stop swallowing the errors. **This matters twice over for Project B**,
 where provisioning means running the full migration chain against N fresh databases.
 
-**0e. Housekeeping the closeout couldn't finish.** Purge stale `__pycache__` (tracebacks
-reference `/Users/jacob/Projects/odigos/tests/...`, a path that no longer exists) and add
-`__pycache__/` to `.gitignore`. `git rm --cached` the 7 files tracked under `data/subagents/` —
-gitignoring a tracked file does nothing. Drop the redundant `data/*.db-wal` / `data/*.db-shm`
-entries now that `data/*.db-*` covers them.
+**0e. Closeout housekeeping — already done, do not redo.** Recorded here because an earlier
+draft of this charter got it backwards: it told you to `git rm --cached data/subagents/`. **Do
+not.** Those 7 files are shipped subagent personas, loaded by `core/subagent.py:75` — untracking
+them would ship a clone with an empty personas directory. The error was gitignoring them in the
+first place; that is fixed and all 7 remain tracked. `__pycache__/` was already ignored
+(`.gitignore:2`) and 28 stale dirs embedding the dead `/Users/jacob/Projects/odigos/` path have
+been purged. Redundant `data/*.db-wal` / `-shm` entries removed.
 
-**Done when:** `uv sync --extra dev && uv run pytest tests/ -q` is green, offline, from a clean
-sync, with no swallowed migration warnings.
+**0f. Silent degradation — 23 `except ImportError` sites. This is the real finding.**
+
+The webauthn bug is not special; it is one instance of a pattern that has already detonated
+silently and unnoticed for months. Audited 2026-08-12. **Five sites do it right** —
+`tools/translate.py:71`, `spreadsheet.py:264`, `text_analysis.py:78`, `ics.py:73`, `qr.py:57`
+return an error to the caller. **Make the other 18 look like those five.**
+
+Highest severity first:
+
+- **`providers/llm.py:503` and `:521` — `except ImportError: pass` around `jsonschema.validate`.
+  If `jsonschema` is ever absent, structured-output validation is skipped and the call returns
+  as valid.** Declared at `pyproject.toml:37`, so it is latent today — but it is a correctness
+  hole on the hot path, and webauthn is proof that "declared" does not mean "importable."
+- **`config.py:406` — `pass` on `dotenv`.** `.env` silently not loaded. That is how an API key
+  goes missing with no error.
+- `core/notifier.py:116` — bare `return`; web push silently no-ops. Same file as the
+  `priority=` bug in §1.
+- `api/webauthn.py:94` + `api/system/__init__.py:17` — two independent flags, one capability.
+- `core/profiler.py:131` — silently substitutes a word-count heuristic.
+- `tools/image.py:15` — `_OCR_AVAILABLE = False`; OCR off, nothing said.
+- Five copies of `TextBlob = None`: `classifier.py:13`, `evaluator.py:14`,
+  `content_filter.py:15`, `followups.py:9`, `template_index.py:18`. Declared at
+  `pyproject.toml:41`. Consolidate into one capability probe.
+- Debug-level only, invisible at default log level: `tools/catalog.py:35`, `knowledge.py:20`,
+  `knowledge.py:61`, `core/webpush.py:78`.
+
+The rule to apply: **a dependency declared in `pyproject.toml` failing to import is an error,
+not a feature flag.** Log at ERROR with the exception, surface the degraded capability in
+`/api/state` and the startup banner, and let genuinely-optional extras (§4's dependency groups)
+be the only things allowed to degrade quietly. This is the exact failure shape
+`anti-patterns.md` exists to catch — a feature that reads as present and isn't.
+
+**Done when:** `rm -rf .venv && uv sync --extra dev && uv run pytest tests/ -q` is green,
+offline, from a genuinely clean venv, with no swallowed migration warnings — and every
+declared-dependency `ImportError` now logs at ERROR instead of vanishing.
 
 ### 1. The live bugs
 
@@ -165,8 +211,10 @@ reaching through it at `:246, 268, 376`.
 ~40 hard dependencies, no extras, so `pip install odigos` drags torch. Split into
 `[project.optional-dependencies]`: `memory` (sentence-transformers, chonkie, sqlite-vec),
 `voice` (edge-tts, groq, webrtcvad-wheels), `browser` (scrapling, patchright), `channels`
-(python-telegram-bot), `docs` (markitdown, python-docx, openpyxl, pytesseract). Prerequisite
-for containers 03 and 04.
+(python-telegram-bot), `docs` (markitdown, python-docx, openpyxl, pytesseract).
+
+This is also what makes §0f enforceable: once optional extras are declared as extras, anything
+in the *core* dependency list failing to import is unambiguously an error.
 
 ### 5. `docs/DESIGN-DECISIONS.md` — **the reason this container gates the others**
 
