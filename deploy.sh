@@ -80,22 +80,26 @@ for entry in "${INSTALLS[@]}"; do
       "${OPENROUTER_API_KEY:-}" "${GROQ_API_KEY:-}" "${KIE_AI_API_KEY:-}" <<'REMOTE'
     set -euo pipefail
     DIR="$1"; SVC="$2"; SKIP="$3"; SVC_USER="$4"; FRESH="$5"; BRANCH="$6"
-    OR_KEY="$7"; GROQ_KEY="$8"; KIE_KEY="$9"
+    # Defaulted, not bare $7/$8/$9: ssh flattens argv into one command string
+    # that the remote shell re-parses, so unset provider keys arrive as nothing
+    # at all rather than as empty arguments, and `set -u` would abort here.
+    OR_KEY="${7:-}"; GROQ_KEY="${8:-}"; KIE_KEY="${9:-}"
     cd "$DIR"
 
-    # Pull latest (always — fresh-install runs after so it gets the new script)
-    git fetch origin "$BRANCH"
-    LOCAL=$(git rev-parse HEAD)
-    TARGET=$(git rev-parse "origin/$BRANCH")
+    # Pull latest (always — fresh-install runs after so it gets the new script).
+    # Run git AS the service user, not root: the tree is owned by the service
+    # user, so root git trips safe.directory ("dubious ownership"), and a root
+    # reset would leave every file root-owned for the service to choke on.
+    as_user() { sudo -u "$SVC_USER" env HOME="$DIR" "$@"; }
+
+    as_user git fetch origin "$BRANCH"
+    LOCAL=$(as_user git rev-parse HEAD)
+    TARGET=$(as_user git rev-parse "origin/$BRANCH")
     if [ "$LOCAL" = "$TARGET" ] && [ "$FRESH" != "true" ]; then
       echo "  Already up to date."
       exit 0
     fi
-    git reset --hard "origin/$BRANCH"
-
-    # Fix ownership IMMEDIATELY — git reset as root makes everything root-owned.
-    # Must happen before uv sync, npm build, or anything else touches the files.
-    chown -R "$SVC_USER:$SVC_USER" . 2>/dev/null || true
+    as_user git reset --hard "origin/$BRANCH"
 
     # Fresh-install mode: wipe config.yaml + .env and regenerate from scratch.
     # Service user owns the result so it can read its own config.
@@ -106,26 +110,24 @@ for entry in "${INSTALLS[@]}"; do
 
     # Sync dependencies. --frozen so a stale lockfile fails the deploy instead of
     # silently resolving something different from what CI tested.
-    sudo -u "$SVC_USER" env HOME="$DIR" uv sync --frozen --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
+    as_user uv sync --frozen --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
 
     # Ensure TextBlob NLTK data is present
-    sudo -u "$SVC_USER" env HOME="$DIR" bash -c "cd $DIR && source .venv/bin/activate && python -m textblob.download_corpora lite" &>/dev/null || true
+    as_user bash -c "cd $DIR && source .venv/bin/activate && python -m textblob.download_corpora lite" &>/dev/null || true
 
     # Rebuild dashboard if ANY frontend file changed (auto-detect)
     if [ -d dashboard ]; then
       # awk instead of grep -c: always exits 0, always prints a single integer,
       # so no "0\n0" artifact from a falling-through `|| echo 0` clause.
-      FRONTEND_CHANGED=$(git diff "$LOCAL"..HEAD --name-only 2>/dev/null | awk '/^dashboard\// {c++} END {print c+0}')
+      FRONTEND_CHANGED=$(as_user git diff "$LOCAL"..HEAD --name-only 2>/dev/null | awk '/^dashboard\// {c++} END {print c+0}')
       if [ "$SKIP" = "true" ] && [ "$FRONTEND_CHANGED" -gt 0 ]; then
         echo "  WARNING: --skip-build but $FRONTEND_CHANGED frontend files changed. Building anyway."
       fi
       if [ "$FRONTEND_CHANGED" -gt 0 ] || [ "$SKIP" != "true" ]; then
-        cd dashboard
-        if git diff "$LOCAL"..HEAD --name-only 2>/dev/null | grep -q 'package-lock.json'; then
-          sudo -u "$SVC_USER" env HOME="$DIR" npm ci --no-audit --no-fund 2>&1 | tail -3
+        if as_user git diff "$LOCAL"..HEAD --name-only 2>/dev/null | grep -q 'package-lock.json'; then
+          (cd dashboard && as_user npm ci --no-audit --no-fund 2>&1 | tail -3)
         fi
-        sudo -u "$SVC_USER" env HOME="$DIR" npm run build 2>&1 | tail -3
-        cd ..
+        (cd dashboard && as_user npm run build 2>&1 | tail -3)
       else
         echo "  No frontend changes, skipping build."
       fi
@@ -135,22 +137,52 @@ for entry in "${INSTALLS[@]}"; do
     # a recursive chown/reset flattens. Secrets stay owner-only.
     chown -R "$SVC_USER:$SVC_USER" . 2>/dev/null || true
     chmod 700 "$DIR" 2>/dev/null || true
-    [ -d "$DIR/data" ] && chmod 700 "$DIR/data"
-    [ -f "$DIR/.env" ] && chmod 600 "$DIR/.env"
-    [ -f "$DIR/config.yaml" ] && chmod 600 "$DIR/config.yaml"
+    { [ -d "$DIR/data" ] && chmod 700 "$DIR/data"; } || true
+    { [ -f "$DIR/.env" ] && chmod 600 "$DIR/.env"; } || true
+    { [ -f "$DIR/config.yaml" ] && chmod 600 "$DIR/config.yaml"; } || true
 
     # Restart service
     systemctl restart "$SVC"
 
-    # Wait and verify startup
+    # Wait for readiness, then check the posture this boot actually logged.
+    # `is-active` only means systemd started the process: the agent spends ~30s
+    # loading the embedding model before it serves, and a hosted install that
+    # fell back to the ulimit tier is "active" while having no filesystem
+    # isolation at all. Filter by the current MainPID so a stale posture line
+    # from the previous boot can't pass the check.
     sleep 3
-    if systemctl is-active --quiet "$SVC"; then
-      echo "  $SVC is running"
-    else
+    if ! systemctl is-active --quiet "$SVC"; then
       echo "  WARNING: $SVC failed to start!"
       journalctl -u "$SVC" -n 15 --no-pager 2>&1 | tail -15
       exit 1
     fi
+
+    MAIN_PID=$(systemctl show "$SVC" --property=MainPID --value)
+    POSTURE=""
+    for _ in $(seq 1 60); do
+      POSTURE=$(journalctl -u "$SVC" _PID="$MAIN_PID" --no-pager 2>/dev/null \
+                | grep -o 'security posture: .*' | tail -1)
+      [ -n "$POSTURE" ] && break
+      if ! systemctl is-active --quiet "$SVC"; then
+        echo "  WARNING: $SVC died during startup!"
+        journalctl -u "$SVC" -n 20 --no-pager 2>&1 | tail -20
+        exit 1
+      fi
+      sleep 2
+    done
+
+    if [ -z "$POSTURE" ]; then
+      echo "  WARNING: $SVC never logged a security posture line"
+      exit 1
+    fi
+    echo "  $SVC is running -- $POSTURE"
+    case "$POSTURE" in
+      *mode=hosted*isolation=bwrap*) ;;
+      *)
+        echo "  WARNING: $SVC expected mode=hosted and isolation=bwrap"
+        exit 1
+        ;;
+    esac
 REMOTE
   then
     log "  $service done"
@@ -176,31 +208,9 @@ for entry in "${INSTALLS[@]}"; do
   fi
 done
 
-# ── Fleet conformance: hosted installs must really be isolated ───────
-#
-# `systemctl is-active` says nothing about whether the sandbox came up. A
-# hosted install that resolved to the ulimit tier has no filesystem isolation
-# between agent-run code and the host, so treat it as a failed deploy.
-
-echo ""
-log "Fleet conformance (hosted mode + sandbox tier)..."
-
-for entry in "${INSTALLS[@]}"; do
-  IFS=':' read -r dir service user branch <<< "$entry"
-  posture=$(ssh "$ODIGOS_HOST" "sudo -n journalctl -u $service --no-pager -n 500 2>/dev/null | grep -o 'security posture: .*' | tail -1" || true)
-  if [ -z "$posture" ]; then
-    fail "  $service: no security posture line found in recent logs"
-    FAILURES=$((FAILURES + 1))
-    continue
-  fi
-  if echo "$posture" | grep -q "mode=hosted" && echo "$posture" | grep -q "isolation=bwrap"; then
-    echo -e "  ${GREEN}$(printf '%-20s %s' "$service" "$posture")${NC}"
-  else
-    fail "  $service: $posture"
-    fail "    expected mode=hosted and isolation=bwrap"
-    FAILURES=$((FAILURES + 1))
-  fi
-done
+# Fleet conformance (hosted mode + bwrap tier) is asserted per-install inside
+# the remote block above, where the current MainPID is known -- checking it from
+# here would race against a stale posture line from the previous boot.
 
 echo ""
 if [ "$FAILURES" -gt 0 ]; then
