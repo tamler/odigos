@@ -60,6 +60,7 @@ async def send_push_notification(
     body: str,
     vapid_private_key: str,
     vapid_claims: dict,
+    priority: str = "normal",
 ) -> bool:
     """Send a push notification to a subscription endpoint."""
     try:
@@ -73,6 +74,7 @@ async def send_push_notification(
             "badge": "/icon-192.png",
             "tag": "odigos-notification",
             "renotify": True,
+            "priority": priority,
         })
 
         await asyncio.to_thread(

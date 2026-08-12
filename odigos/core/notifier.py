@@ -41,8 +41,15 @@ class Notifier:
         conversation_id: str | None = None,
         source: str | None = None,
         channels: list[str] | None = None,
+        priority: str = "normal",
     ) -> str:
-        """Persist notification + push to all channels. Returns notification ID."""
+        """Persist notification + push to all channels. Returns notification ID.
+
+        `priority` is one of "low" | "normal" | "high". It is not persisted --
+        the notifications table has no such column and adding one needs a
+        migration, which is outside this container's fence -- but it is carried
+        into the web-push payload so a client can rank what it shows.
+        """
         import uuid as _uuid
         notif_id = _uuid.uuid4().hex
 
@@ -98,12 +105,12 @@ class Notifier:
                 )
 
         # Send web push notifications to all stored subscriptions
-        await self._send_push_notifications(title, body)
+        await self._send_push_notifications(title, body, priority=priority)
 
         return notif_id
 
     async def _send_push_notifications(
-        self, title: str, body: str
+        self, title: str, body: str, *, priority: str = "normal"
     ) -> None:
         """Send push notifications to all stored subscriptions."""
         if not self.db or not self.vapid_keys:
@@ -145,6 +152,7 @@ class Notifier:
                 body=body,
                 vapid_private_key=private_key,
                 vapid_claims=vapid_claims,
+                priority=priority,
             )
             if not ok:
                 # Remove expired/invalid subscriptions
