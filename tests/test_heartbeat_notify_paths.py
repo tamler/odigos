@@ -110,3 +110,26 @@ async def test_notify_failures_are_not_reported_as_work(func, attr, monkeypatch)
 
 async def _async(value):
     return value
+
+
+async def test_nudges_do_not_suppress_the_llm_phases(monkeypatch):
+    """A nudge costs no LLM budget and must not trip the did_work gate.
+
+    Charter §1 starvation item. Until notify() accepted priority=, send_nudges
+    always returned False and never tripped the gate; repairing it would have
+    started starving proactive/evolution/memory-evolution for the first time.
+    """
+    import inspect
+
+    from odigos.core.heartbeat import orchestrator
+
+    src = inspect.getsource(orchestrator)
+    assert "did_work |= await maintenance.send_nudges" not in src, (
+        "send_nudges feeds did_work again; a no-LLM notification would suppress "
+        "plan execution, proactive, evolution and memory evolution for that tick"
+    )
+    assert "did_work |= await maintenance.check_followups" not in src, (
+        "check_followups feeds did_work again -- same starvation problem"
+    )
+    assert "await maintenance.send_nudges(self)" in src, "phase 4c must still run"
+    assert "await maintenance.check_followups(self)" in src, "phase 4d must still run"

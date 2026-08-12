@@ -253,16 +253,53 @@ class Heartbeat:
                 did_work |= await maintenance.check_email(self)
 
         # Phase 4c: Proactive nudges (no LLM)
+        #
+        # Deliberately does NOT contribute to did_work -- see the note above the
+        # gate at Phase 4e. Sending a nudge costs no LLM budget, so it must not
+        # suppress the phases that the gate exists to ration.
         self._nudge_tick_counter += 1
         if self._nudge_tick_counter >= self._nudge_interval_ticks:
             self._nudge_tick_counter = 0
-            did_work |= await maintenance.send_nudges(self)
+            await maintenance.send_nudges(self)
 
-        # Phase 4d: Follow-up reminders (no LLM)
+        # Phase 4d: Follow-up reminders (no LLM). Same: not did_work.
         self._followup_tick_counter += 1
         if self._followup_tick_counter >= self._followup_interval_ticks:
             self._followup_tick_counter = 0
-            did_work |= await maintenance.check_followups(self)
+            await maintenance.check_followups(self)
+
+        # --- the did_work gate, and what it does and does not mean ------------
+        #
+        # Every phase from here down is gated `if not did_work`, so one unit of
+        # work earlier in the tick suppresses ALL of: plan execution, proactive,
+        # evolution, dreaming, experience extraction, memory evolution, notebook
+        # review and outcome evaluation. On a busy agent those are therefore the
+        # first things skipped -- the headline features starve while the
+        # mechanical ones always win.
+        #
+        # Kept, deliberately (charter §1 says decide and document, not invert).
+        # The gate is a budget rationer: every phase below spends LLM tokens,
+        # and firing them on top of a tick that already did real work is how you
+        # get cost spikes. It is also self-correcting on any reasonable interval
+        # -- a suppressed phase runs on the next quiet tick, and ticks are 30s.
+        # Inverting it would make the expensive phases pre-empt user-visible
+        # work, which is worse.
+        #
+        # What was actually wrong is what fed the gate. did_work must mean
+        # "this tick already spent LLM budget", not "something happened".
+        # Phases 4c and 4d are labelled "no LLM" in their own comments and still
+        # contributed, so a nudge could cancel evolution for that tick. They no
+        # longer do.
+        #
+        # This mattered more than it looks: until the priority= fix, notify()
+        # raised TypeError on every call, so send_nudges and check_followups
+        # ALWAYS returned False and never tripped the gate. Repairing them would
+        # have quietly started starving the LLM phases for the first time.
+        #
+        # Phases 3c and 4b are also marked "no LLM" but are left contributing:
+        # they poll external HTTP and IMAP, which is real latency in the tick,
+        # and changing them is not needed to fix the regression above.
+        # ---------------------------------------------------------------------
 
         # Phase 4e: Proactive plan execution (LLM calls — only when user is active)
         if not did_work and not _over_budget and not _idle:
