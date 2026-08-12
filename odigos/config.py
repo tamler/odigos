@@ -33,6 +33,11 @@ class AgentConfig(BaseModel):
     run_timeout_seconds: int = 300
     cite_sources: bool = True
     concise_mode: bool = False
+    # How many prior messages context assembly pulls into a conversation.
+    # core/context.py has always read this via getattr(..., 'history_limit', 20),
+    # but AgentConfig never declared it, so the knob read as configurable and
+    # was permanently pinned to the fallback.
+    history_limit: int = 20
     # When false, the LLM is never given a `tools` parameter — it MUST answer from
     # system prompt + history alone. Useful for tightly-scoped Q&A agents (e.g. a
     # public sales chat) where allowing tool calls leads the model to ignore identity

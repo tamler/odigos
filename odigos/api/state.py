@@ -214,7 +214,14 @@ async def get_state(
     # -- Cron --
     cron_info = None
     if cron_manager:
-        entries = getattr(cron_manager, "entries", [])
+        # CronManager has no `entries` attribute -- it exposes async list().
+        # The getattr default meant /api/state always reported 0 cron jobs, and
+        # the default is what made it silent.
+        try:
+            entries = await cron_manager.list()
+        except Exception:
+            logger.debug("Could not list cron entries", exc_info=True)
+            entries = []
         cron_info = {
             "total": len(entries),
             "enabled": sum(1 for e in entries if getattr(e, "enabled", True)),

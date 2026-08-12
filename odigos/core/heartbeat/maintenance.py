@@ -190,6 +190,17 @@ async def check_storage_quota(hb: "Heartbeat") -> None:
         total_bytes = await asyncio.to_thread(_calc_size)
         total_gb = total_bytes / (1024 ** 3)
 
+        # Record usage BEFORE notifying. This write is what tools consult before
+        # writing files, and it used to sit after the notify calls inside the
+        # same try -- so any notify failure skipped it. notify() raised
+        # TypeError on every call (the priority= bug), which meant the usage
+        # figure was recorded only while under the warn threshold and went stale
+        # exactly when it started to matter.
+        await hb.db.execute(
+            """INSERT OR REPLACE INTO kv (key, value) VALUES ('storage_usage_gb', ?)""",
+            (f"{total_gb:.4f}",),
+        )
+
         if total_gb >= cap_gb:
             logger.warning("Storage quota exceeded: %.2f GB / %.1f GB cap", total_gb, cap_gb)
             if hb.notifier:
@@ -214,11 +225,6 @@ async def check_storage_quota(hb: "Heartbeat") -> None:
                     priority="normal",
                 )
 
-        # Store current usage for tools to check before writing
-        await hb.db.execute(
-            """INSERT OR REPLACE INTO kv (key, value) VALUES ('storage_usage_gb', ?)""",
-            (f"{total_gb:.4f}",),
-        )
     except Exception:
         logger.debug("Storage quota check failed", exc_info=True)
 

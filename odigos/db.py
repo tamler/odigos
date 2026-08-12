@@ -351,6 +351,21 @@ class Database:
             await self.conn.commit()
         await _retry_on_busy(_do)
 
+    async def execute_returning_rowcount(self, sql: str, params: tuple = ()) -> int:
+        """Execute a statement and return how many rows it affected.
+
+        execute() returns None, so callers that needed a count were silently
+        getting zero -- see agent_client.mark_stale_peers.
+        """
+        result = 0
+        async def _do():
+            nonlocal result
+            cursor = await self.conn.execute(sql, params)
+            await self.conn.commit()
+            result = cursor.rowcount if cursor.rowcount is not None else 0
+        await _retry_on_busy(_do)
+        return result
+
     async def execute_returning_lastrowid(self, sql: str, params: tuple = ()) -> int:
         """Execute a single SQL statement and return lastrowid (for INSERT)."""
         result = None

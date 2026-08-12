@@ -441,12 +441,14 @@ class AgentClient:
         """Mark agents as offline if not seen within stale_minutes."""
         if not self._db:
             return 0
-        result = await self._db.execute(
+        # db.execute() returns None, so the old `isinstance(result, int)` guard
+        # made this function return 0 unconditionally -- stale peers were being
+        # marked offline but the count never reflected it.
+        return await self._db.execute_returning_rowcount(
             "UPDATE agent_registry SET status = 'offline' "
             "WHERE status = 'online' AND last_seen < datetime('now', ?)",
             (f"-{stale_minutes} minutes",),
         )
-        return result if isinstance(result, int) else 0
 
     async def get_unprocessed_inbound(self, limit: int = 10) -> list[dict]:
         """Fetch inbound peer messages that haven't been processed yet.

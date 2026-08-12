@@ -984,9 +984,7 @@ class ContextAssembler:
         if not self.db:
             return []
         try:
-            limit = 20
-            if self.settings:
-                limit = getattr(self.settings.agent, 'history_limit', 20)
+            limit = self.settings.agent.history_limit if self.settings else 20
             rows = await self.db.fetch_all(
                 "SELECT role, content FROM messages WHERE conversation_id = ? "
                 "ORDER BY created_at DESC LIMIT ?",
