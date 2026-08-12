@@ -44,16 +44,24 @@ def _split_sql_statements(script: str) -> list[str]:
     decide whether to keep reading -- so semicolons inside string literals and
     inside CREATE TRIGGER ... BEGIN ... END; blocks do not split incorrectly,
     which a naive split(";") would get wrong.
+
+    Completeness is tested at every semicolon rather than at line boundaries,
+    so two statements written on one line split correctly. sqlite3.execute()
+    accepts exactly one statement, so getting this wrong would turn an ordinary
+    formatting choice by a future migration author into a boot failure.
     """
     statements: list[str] = []
-    buf = ""
-    for line in script.splitlines(keepends=True):
-        buf += line
-        if sqlite3.complete_statement(buf):
-            statements.append(buf)
-            buf = ""
-    if buf.strip():
-        statements.append(buf)
+    start = 0
+    for i, ch in enumerate(script):
+        if ch != ";":
+            continue
+        candidate = script[start:i + 1]
+        if sqlite3.complete_statement(candidate):
+            statements.append(candidate)
+            start = i + 1
+    tail = script[start:]
+    if tail.strip():
+        statements.append(tail)
     return [s for s in statements if not _is_comment_only(s)]
 
 

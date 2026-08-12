@@ -20,6 +20,45 @@ import pytest
 from odigos.db import Database
 
 
+@pytest.mark.parametrize(
+    "script,expected",
+    [
+        # Two statements on one line: sqlite3.execute() takes exactly one, so
+        # collapsing these would raise ProgrammingError and refuse boot.
+        ("CREATE TABLE a(x); CREATE TABLE b(x);\n", 2),
+        # A semicolon inside a string literal must not split.
+        ("INSERT INTO x (v) VALUES ('a;b');\n", 1),
+        # CREATE TRIGGER carries internal semicolons and must stay whole.
+        ("CREATE TRIGGER t AFTER INSERT ON x BEGIN\n"
+         "  UPDATE y SET a = 1;\n"
+         "  UPDATE y SET b = 2;\n"
+         "END;\n", 1),
+        # Comment-only content contributes no statements.
+        ("-- just a comment\n", 0),
+        # A leading comment rides along with its statement.
+        ("-- explain\nALTER TABLE x ADD COLUMN y TEXT;\n", 1),
+    ],
+)
+def test_split_sql_statements(script, expected):
+    from odigos.db import _split_sql_statements
+
+    assert len(_split_sql_statements(script)) == expected
+
+
+def test_split_statements_are_individually_executable():
+    """Every produced chunk must be accepted by sqlite3.execute()."""
+    import sqlite3
+
+    from odigos.db import _split_sql_statements
+
+    conn = sqlite3.connect(":memory:")
+    for stmt in _split_sql_statements("CREATE TABLE a(x); CREATE TABLE b(x);\n"):
+        conn.execute(stmt)
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert names == {"a", "b"}
+    conn.close()
+
+
 @pytest.fixture
 def migrations_dir():
     with tempfile.TemporaryDirectory() as d:
