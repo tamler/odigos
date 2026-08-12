@@ -8,6 +8,10 @@ set -euo pipefail
 #   OPENROUTER_API_KEY=sk-... bash deploy.sh --fresh
 #       Wipes config.yaml + .env on every install and writes a fresh one.
 #       Required once after switching to the providers/models config shape.
+#
+# Target host is the ssh alias `odigos` (OVH VPS 51.81.82.221, reachable on
+# Tailscale at 100.80.26.2, public SSH firewalled). Override with ODIGOS_HOST.
+# We connect as an unprivileged user and escalate with sudo on the remote side.
 
 SKIP_BUILD=false
 FRESH=false
@@ -25,21 +29,24 @@ if [ "$FRESH" = "true" ] && [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${GROQ_API
     exit 1
 fi
 
-ODIGOS_ONE="root@82.25.91.86"
-UXRLS="root@100.89.147.103"
+ODIGOS_HOST="${ODIGOS_HOST:-odigos}"
 
-# Bare metal installs on odigos.one (systemd services)
-# Format: "directory:service_name:service_user"
-BARE_METAL=(
-  "/opt/odigos:odigos:odigos_agent"
-  "/opt/odigos-rachel:odigos-rachel:odigos_agent"
-  "/opt/odigos-sales:odigos-sales:odigos_sales"
-  "/opt/odigos-honey:odigos-honey:odigos_agent"
-  "/opt/odigos-homerun:odigos-homerun:odigos_agent"
+# Hosted installs on the OVH VPS (systemd services).
+# Format: "directory:service_name:service_user:branch"
+#
+# Every install MUST have its own service user. A shared user means each install
+# can read every sibling's .env, DB and data dir, which makes the "separate
+# filesystem root per account" isolation fiction. See
+# docs/deployment/2026-05-29-os-isolation-checklist.md. The preflight below
+# enforces this.
+#
+# Retired 2026-05-27: Rachel, HomeRun, old Bob, Jessica-on-uxrls.
+# Retired 2026-05-28: Sales (replaced by a static FAQ).
+# Bob and Jessica are not currently installed on this box; re-add rows here
+# when they are rebuilt, each with its own odigos_<name> user.
+INSTALLS=(
+  "/opt/odigos-honey:odigos-honey:odigos_honey:security/hardening-hosted-launch"
 )
-
-# Docker installs on uxrls.com
-DOCKER_DIR="/opt/odigos"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -50,30 +57,41 @@ log()  { echo -e "${GREEN}[deploy]${NC} $1"; }
 warn() { echo -e "${YELLOW}[deploy]${NC} $1"; }
 fail() { echo -e "${RED}[deploy]${NC} $1"; }
 
-# ── odigos.one: bare metal ──────────────────────────────────────────
+# ── Preflight: no two installs may share a service user ─────────────
 
-log "Deploying to odigos.one (bare metal)..."
+dupes=$(printf '%s\n' "${INSTALLS[@]}" | cut -d: -f3 | sort | uniq -d)
+if [ -n "$dupes" ]; then
+  fail "Service user(s) shared across installs: $(echo "$dupes" | tr '\n' ' ')"
+  fail "Each install needs its own Unix user, or they can read each other's secrets."
+  exit 1
+fi
 
-for entry in "${BARE_METAL[@]}"; do
-  IFS=':' read -r dir service user <<< "$entry"
-  log "  $service ($dir) [user: $user]"
+# ── Deploy ──────────────────────────────────────────────────────────
 
-  ssh "$ODIGOS_ONE" bash -s "$dir" "$service" "$SKIP_BUILD" "$user" "$FRESH" \
+log "Deploying to $ODIGOS_HOST..."
+
+FAILURES=0
+
+for entry in "${INSTALLS[@]}"; do
+  IFS=':' read -r dir service user branch <<< "$entry"
+  log "  $service ($dir) [user: $user, branch: $branch]"
+
+  if ssh "$ODIGOS_HOST" sudo -n bash -s "$dir" "$service" "$SKIP_BUILD" "$user" "$FRESH" "$branch" \
       "${OPENROUTER_API_KEY:-}" "${GROQ_API_KEY:-}" "${KIE_AI_API_KEY:-}" <<'REMOTE'
     set -euo pipefail
-    DIR="$1"; SVC="$2"; SKIP="$3"; SVC_USER="$4"; FRESH="$5"
-    OR_KEY="$6"; GROQ_KEY="$7"; KIE_KEY="$8"
+    DIR="$1"; SVC="$2"; SKIP="$3"; SVC_USER="$4"; FRESH="$5"; BRANCH="$6"
+    OR_KEY="$7"; GROQ_KEY="$8"; KIE_KEY="$9"
     cd "$DIR"
 
     # Pull latest (always — fresh-install runs after so it gets the new script)
-    git fetch origin main
+    git fetch origin "$BRANCH"
     LOCAL=$(git rev-parse HEAD)
-    REMOTE=$(git rev-parse origin/main)
-    if [ "$LOCAL" = "$REMOTE" ] && [ "$FRESH" != "true" ]; then
+    TARGET=$(git rev-parse "origin/$BRANCH")
+    if [ "$LOCAL" = "$TARGET" ] && [ "$FRESH" != "true" ]; then
       echo "  Already up to date."
       exit 0
     fi
-    git reset --hard origin/main
+    git reset --hard "origin/$BRANCH"
 
     # Fix ownership IMMEDIATELY — git reset as root makes everything root-owned.
     # Must happen before uv sync, npm build, or anything else touches the files.
@@ -83,15 +101,15 @@ for entry in "${BARE_METAL[@]}"; do
     # Service user owns the result so it can read its own config.
     if [ "$FRESH" = "true" ]; then
       OPENROUTER_API_KEY="$OR_KEY" GROQ_API_KEY="$GROQ_KEY" KIE_AI_API_KEY="$KIE_KEY" \
-        sudo -u "$SVC_USER" -E bash scripts/fresh-install.sh .
+        sudo -u "$SVC_USER" -E env HOME="$DIR" bash scripts/fresh-install.sh .
     fi
 
-    # Sync dependencies (new packages from pyproject.toml)
-    sudo -u "$SVC_USER" uv sync --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
-
+    # Sync dependencies. --frozen so a stale lockfile fails the deploy instead of
+    # silently resolving something different from what CI tested.
+    sudo -u "$SVC_USER" env HOME="$DIR" uv sync --frozen --quiet 2>&1 | tail -3 || echo "  uv sync skipped"
 
     # Ensure TextBlob NLTK data is present
-    sudo -u "$SVC_USER" bash -c "cd $DIR && source .venv/bin/activate && python -m textblob.download_corpora lite" &>/dev/null || true
+    sudo -u "$SVC_USER" env HOME="$DIR" bash -c "cd $DIR && source .venv/bin/activate && python -m textblob.download_corpora lite" &>/dev/null || true
 
     # Rebuild dashboard if ANY frontend file changed (auto-detect)
     if [ -d dashboard ]; then
@@ -104,17 +122,22 @@ for entry in "${BARE_METAL[@]}"; do
       if [ "$FRONTEND_CHANGED" -gt 0 ] || [ "$SKIP" != "true" ]; then
         cd dashboard
         if git diff "$LOCAL"..HEAD --name-only 2>/dev/null | grep -q 'package-lock.json'; then
-          npm ci --no-audit --no-fund 2>&1 | tail -3
+          sudo -u "$SVC_USER" env HOME="$DIR" npm ci --no-audit --no-fund 2>&1 | tail -3
         fi
-        npm run build 2>&1 | tail -3
+        sudo -u "$SVC_USER" env HOME="$DIR" npm run build 2>&1 | tail -3
         cd ..
       else
         echo "  No frontend changes, skipping build."
       fi
     fi
 
-    # Fix ownership again after build
+    # Fix ownership again after build, then re-assert the isolation perms that
+    # a recursive chown/reset flattens. Secrets stay owner-only.
     chown -R "$SVC_USER:$SVC_USER" . 2>/dev/null || true
+    chmod 700 "$DIR" 2>/dev/null || true
+    [ -d "$DIR/data" ] && chmod 700 "$DIR/data"
+    [ -f "$DIR/.env" ] && chmod 600 "$DIR/.env"
+    [ -f "$DIR/config.yaml" ] && chmod 600 "$DIR/config.yaml"
 
     # Restart service
     systemctl restart "$SVC"
@@ -125,140 +148,63 @@ for entry in "${BARE_METAL[@]}"; do
       echo "  $SVC is running"
     else
       echo "  WARNING: $SVC failed to start!"
-      journalctl -u "$SVC" -n 5 --no-pager 2>&1 | tail -5
+      journalctl -u "$SVC" -n 15 --no-pager 2>&1 | tail -15
       exit 1
     fi
 REMOTE
-
-  if [ $? -eq 0 ]; then
+  then
     log "  $service done"
   else
     fail "  $service FAILED"
+    FAILURES=$((FAILURES + 1))
   fi
 done
-
-# On --fresh, Sales's api_key rotated. Express (odigos-site) reads that key
-# from /opt/odigos-sales/config.yaml at startup, so it needs a restart to
-# pick up the new value. Cheap + idempotent; always safe to run after fresh.
-if [ "$FRESH" = "true" ]; then
-  log "Restarting odigos-site (picks up new Sales api_key)..."
-  ssh "$ODIGOS_ONE" 'systemctl restart odigos-site && systemctl is-active odigos-site'
-fi
-
-# ── uxrls.com: docker ───────────────────────────────────────────────
-
-log "Deploying to uxrls.com (Docker)..."
-
-ssh "$UXRLS" bash -s "$DOCKER_DIR" "$SKIP_BUILD" "$FRESH" \
-    "${OPENROUTER_API_KEY:-}" "${GROQ_API_KEY:-}" "${KIE_AI_API_KEY:-}" <<'REMOTE'
-  set -euo pipefail
-  DIR="$1"; SKIP="$2"; FRESH="$3"
-  OR_KEY="$4"; GROQ_KEY="$5"; KIE_KEY="$6"
-  cd "$DIR"
-
-  # Pull latest
-  git fetch origin main
-  LOCAL=$(git rev-parse HEAD)
-  REMOTE=$(git rev-parse origin/main)
-  if [ "$LOCAL" = "$REMOTE" ] && [ "$FRESH" != "true" ]; then
-    echo "  Already up to date."
-    exit 0
-  fi
-  git reset --hard origin/main
-
-  # Fresh-install mode: wipe + regenerate. The main /opt/odigos container
-  # uses this directory's own config.yaml + .env; the testers each live in
-  # their own subdirectory with bind-mounted configs.
-  if [ "$FRESH" = "true" ]; then
-    OPENROUTER_API_KEY="$OR_KEY" GROQ_API_KEY="$GROQ_KEY" KIE_AI_API_KEY="$KIE_KEY" \
-      bash "$DIR/scripts/fresh-install.sh" "$DIR"
-    for user in florence jessica; do
-      TDIR="/opt/odigos/testers/$user"
-      [ -d "$TDIR" ] || continue
-      OPENROUTER_API_KEY="$OR_KEY" GROQ_API_KEY="$GROQ_KEY" KIE_AI_API_KEY="$KIE_KEY" \
-        bash "$DIR/scripts/fresh-install.sh" "$TDIR"
-    done
-  fi
-
-  # Clean old images and build cache BEFORE building to prevent disk-full failures.
-  # Keeps images used by running containers; prunes everything else.
-  echo "  Cleaning stale Docker images and build cache..."
-  docker image prune -af --filter "until=24h" 2>/dev/null | tail -1
-  docker builder prune -af --keep-storage 5GB 2>/dev/null | tail -1
-
-  # Rebuild and restart the odigos service only (system Caddy handles TLS)
-  # Touch a file to bust Docker layer cache for code changes
-  date +%s > .docker-build-stamp
-  docker compose build --build-arg CACHE_BUST="$(cat .docker-build-stamp)" odigos 2>&1 | tail -5
-  docker compose up -d --no-deps odigos 2>&1 | tail -5
-
-  # Brief pause for image to be ready, don't block on health check
-  sleep 5
-
-  # Recreate user containers with new image
-  for user in florence jessica; do
-    CONTAINER="odigos-$user"
-    if docker inspect "$CONTAINER" &>/dev/null; then
-      PORT=$(docker inspect "$CONTAINER" --format '{{(index (index .NetworkSettings.Ports "8000/tcp") 0).HostPort}}' 2>/dev/null || echo "")
-      if [ -z "$PORT" ]; then
-        echo "  WARNING: Could not get port for $CONTAINER, skipping"
-        continue
-      fi
-      docker stop "$CONTAINER" 2>/dev/null || true
-      docker rm "$CONTAINER" 2>/dev/null || true
-      docker run -d \
-        --name "$CONTAINER" \
-        --restart unless-stopped \
-        --privileged \
-        --add-host host.docker.internal:host-gateway \
-        -p "127.0.0.1:$PORT:8000" \
-        -v "/opt/odigos/testers/$user/data:/app/data" \
-        -v "/opt/odigos/testers/$user/config.yaml:/app/config.yaml" \
-        -v "/opt/odigos/testers/$user/.env:/app/.env" \
-        -v "/opt/odigos/testers/$user/skills:/app/skills" \
-        -v "/opt/odigos/testers/$user/plugins:/app/plugins" \
-        --health-cmd "curl -f http://localhost:8000/health" \
-        --health-interval 30s \
-        --health-timeout 5s \
-        --health-retries 3 \
-        --health-start-period 120s \
-        ghcr.io/tamler/odigos:latest
-      echo "  Recreated $CONTAINER on port $PORT"
-    fi
-  done
-REMOTE
-
-if [ $? -eq 0 ]; then
-  log "uxrls.com done"
-else
-  fail "uxrls.com FAILED"
-fi
 
 # ── Verify ───────────────────────────────────────────────────────────
 
 log "Verifying services..."
-
 echo ""
-log "odigos.one:"
-FAILURES=0
-while IFS= read -r line; do
-  if echo "$line" | grep -q "active"; then
-    echo -e "  ${GREEN}$line${NC}"
+
+for entry in "${INSTALLS[@]}"; do
+  IFS=':' read -r dir service user branch <<< "$entry"
+  state=$(ssh "$ODIGOS_HOST" "systemctl is-active $service" 2>/dev/null || true)
+  if [ "$state" = "active" ]; then
+    echo -e "  ${GREEN}$(printf '%-20s %s' "$service" "$state")${NC}"
   else
-    echo -e "  ${RED}$line${NC}"
+    echo -e "  ${RED}$(printf '%-20s %s' "$service" "$state")${NC}"
     FAILURES=$((FAILURES + 1))
   fi
-done < <(ssh "$ODIGOS_ONE" 'for s in odigos odigos-rachel odigos-sales odigos-honey odigos-homerun; do
-  printf "%-20s %s\n" "$s" "$(systemctl is-active $s)"
-done')
+done
+
+# ── Fleet conformance: hosted installs must really be isolated ───────
+#
+# `systemctl is-active` says nothing about whether the sandbox came up. A
+# hosted install that resolved to the ulimit tier has no filesystem isolation
+# between agent-run code and the host, so treat it as a failed deploy.
 
 echo ""
-log "uxrls.com:"
-ssh "$UXRLS" 'docker ps --format "  {{.Names}}\t{{.Status}}" | grep odigos'
+log "Fleet conformance (hosted mode + sandbox tier)..."
+
+for entry in "${INSTALLS[@]}"; do
+  IFS=':' read -r dir service user branch <<< "$entry"
+  posture=$(ssh "$ODIGOS_HOST" "sudo -n journalctl -u $service --no-pager -n 500 2>/dev/null | grep -o 'security posture: .*' | tail -1" || true)
+  if [ -z "$posture" ]; then
+    fail "  $service: no security posture line found in recent logs"
+    FAILURES=$((FAILURES + 1))
+    continue
+  fi
+  if echo "$posture" | grep -q "mode=hosted" && echo "$posture" | grep -q "isolation=bwrap"; then
+    echo -e "  ${GREEN}$(printf '%-20s %s' "$service" "$posture")${NC}"
+  else
+    fail "  $service: $posture"
+    fail "    expected mode=hosted and isolation=bwrap"
+    FAILURES=$((FAILURES + 1))
+  fi
+done
 
 echo ""
-if [ $FAILURES -gt 0 ]; then
-  fail "$FAILURES service(s) failed. Check logs above."
+if [ "$FAILURES" -gt 0 ]; then
+  fail "$FAILURES check(s) failed. Check logs above."
   exit 1
 fi
 log "Deploy complete. All services running."

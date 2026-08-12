@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -113,6 +114,22 @@ def apply_update(branch: str = "main") -> tuple[bool, str]:
     return True, output
 
 
+def _own_systemd_unit() -> str | None:
+    """Return the systemd unit owning this process, or None.
+
+    Read from the cgroup rather than guessed from a list of known service
+    names: installs get added, renamed and retired, and a hardcoded list
+    silently stops matching, which downgrades every self-update to a bare
+    re-exec that leaves the unit's hardening behind.
+    """
+    try:
+        content = Path("/proc/self/cgroup").read_text()
+    except OSError:
+        return None
+    match = re.search(r"/([A-Za-z0-9@_.\-]+\.service)", content)
+    return match.group(1) if match else None
+
+
 def restart_service() -> None:
     """Restart the running service.
 
@@ -120,34 +137,26 @@ def restart_service() -> None:
     """
     pid = os.getpid()
 
-    # Check common service names
-    for service_name in [
-        "odigos", "odigos-honey", "odigos-rachel", "odigos-sales",
-    ]:
-        check = subprocess.run(
-            ["systemctl", "is-active", service_name],
+    service_name = _own_systemd_unit()
+    if service_name:
+        # Confirm the unit really owns us before handing it our lifecycle.
+        status = subprocess.run(
+            [
+                "systemctl", "show", service_name,
+                "--property=MainPID",
+            ],
             capture_output=True,
             text=True,
         )
-        if check.returncode == 0:
-            # Verify this service owns our process
-            status = subprocess.run(
-                [
-                    "systemctl", "show", service_name,
-                    "--property=MainPID",
-                ],
-                capture_output=True,
-                text=True,
+        if f"MainPID={pid}" in status.stdout:
+            logger.info(
+                "Restarting via systemd: %s", service_name,
             )
-            if f"MainPID={pid}" in status.stdout:
-                logger.info(
-                    "Restarting via systemd: %s", service_name,
-                )
-                os.execvp(
-                    "systemctl",
-                    ["systemctl", "restart", service_name],
-                )
-                return  # won't reach here
+            os.execvp(
+                "systemctl",
+                ["systemctl", "restart", service_name],
+            )
+            return  # won't reach here
 
     # Fallback: just re-exec ourselves
     logger.info("Restarting via exec: %s", sys.argv)

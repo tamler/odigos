@@ -7,19 +7,30 @@ Legend: ✅ shipped · 🔧 in design · ⏭️ planned · 💭 open question
 
 ---
 
-## Current fleet (2026-05-27)
+## Current fleet (verified on-box 2026-08-12)
 
-Single OVH VPS at `51.81.82.221` (Tailscale-only SSH, public 80/443 for Caddy).
+Single OVH VPS at `51.81.82.221` (Tailscale-only SSH at `100.80.26.2`, public 80/443 for Caddy).
 
-| Service | Path | Domain | Backend |
-|---------|------|--------|---------|
-| Bob (Jacob's personal agent) | `/opt/odigos` | `jacob.odigos.one` | Groq scout (fast) + OpenRouter mimo-pro (smart) |
-| Jessica (tester) | `/opt/odigos-jessica` | `jessica.odigos.one` | Same as Bob |
-| Site (marketing + auth UI) | `/opt/odigos-site` | `odigos.one` | Node/Express/SSR React |
-| Platform API | `/opt/odigos-platform` | `odigos.one/api/v1/*` | FastAPI + Postgres ([repo](https://github.com/tamler/odigos-platform), private) |
-| Postgres | docker `odigos-postgres` | (internal, 127.0.0.1:5432) | postgres:16-alpine |
+| Service | Path | Domain | Port | Backend |
+|---------|------|--------|------|---------|
+| Honey (tester) | `/opt/odigos-honey` | `honey.odigos.one` | 8002 | `deployment.mode=hosted`, needs a provider key |
+| Site (marketing + auth UI) | `/opt/odigos-site` | `odigos.one` | 3000 | Node/Express/SSR React |
+| Platform API | `/opt/odigos-platform` | `odigos.one/api/v1/*` | 8080 | FastAPI + Postgres ([repo](https://github.com/tamler/odigos-platform), private) |
+| Postgres | docker `odigos-postgres` | (internal, 127.0.0.1:5432) | 5432 | postgres:16-alpine |
+| SearXNG | docker `searxng-searxng-1` | (internal) | 8083 | search backend for agents |
 
-Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-metal); old Bob (data wiped); Jessica Docker on uxrls.com. Retired 2026-05-28: Sales (public chat widget) — replaced with static FAQ.
+**Bob and Jessica are not currently installed.** The earlier version of this table listed them at
+`/opt/odigos` and `/opt/odigos-jessica`; neither directory nor service exists on the box. The Unix
+users `odigos_jacob` and `odigos_jessica` survive with no home dirs. Rebuild them as rows in
+`deploy.sh`'s `INSTALLS` table, each with its own `odigos_<name>` user.
+
+Honey (2026-08-12) is the first install provisioned under the C0 isolation checklist: dedicated
+`odigos_honey` user, `0700` root, hardened systemd unit, `deployment.mode=hosted`, verified
+`isolation=bwrap`. Use it as the template for the rest of the fleet.
+
+Retired during 2026-05-27 migration: Rachel, HomeRun (odigos.one bare-metal); old Bob (data wiped);
+Jessica Docker on uxrls.com. Retired 2026-05-28: Sales (public chat widget) — replaced with static
+FAQ; unit is disabled but `/opt/odigos-sales` is retained as the FAQ content source.
 
 ---
 
@@ -68,7 +79,7 @@ Retired during 2026-05-27 migration: Rachel, Honey, HomeRun (odigos.one bare-met
 ## In flight / next up
 
 - 🔧 **Brittleness audit + robustness plan** ([spec](docs/superpowers/specs/2026-05-28-brittleness-audit-and-robustness.md)) — Today's session found 8 instances of the same pattern: "simplifications" that backfired against real LLM behavior (truncated IDs the model copied as values, sparse find_tools output, missing skill tool-blocks, missing kanban_create_board tool, opaque FK errors, identity-only persona loading, aggressive context pruning). All 8 fixed live. The spec catalogs the pattern, codifies operating principles ("LLM-facing output is contract, not display"), and lays out a 3-phase plan: audit + remaining fixes → robustness infrastructure (blank-slate smoke tests, skill validation, find_tools coverage, stable prefix order) → ongoing behavioral telemetry.
-- ⏭️ **Old VPS wipes** — `82.25.91.86` (old odigos.one bare-metal) and `100.89.147.103` (uxrls.com Jessica Docker) are still running but unused. Cancel contracts at leisure.
+- ⏭️ **Old VPS wipes** — `82.25.91.86` (old odigos.one bare-metal) and `100.89.147.103` (uxrls.com Jessica Docker) are dead as of 2026-08-12. `deploy.sh` no longer targets either, and `tests/test_deploy_install_table.py` fails if they reappear. Remaining work is registrar/contract cleanup and removing the stale `odigos-old` / uxrls entries from `~/.ssh/config`.
 - ⏭️ **Admin dashboard — dedicated Waitlist view** — Today the dashboard shows waitlist signups as duplicate generic rows (one in Recent Inquiries with name "Unknown" + "Waitlist signup for managed-hosting", one in Contacts with empty name + status badge). Replace with: (a) a top-level "Waitlist" section listing email + product (notes field) + signup date + mailto link; (b) stop the double-write in `/api/v1/waitlist` (skip the inquiry insert for waitlist source); (c) sort by recency, optional filter by product. Touches `src/pages/Dashboard.tsx`, `server/routes/pages.js` (apiFetch), and `platform/app/api/contacts.py`.
 - ⏭️ **OVH schema drift fix** — On 2026-05-28 we patched live OVH Postgres with `idx_contacts_email`, `idx_users_email`, and `idx_users_chosen_subdomain` UNIQUE indexes that the platform-team migration didn't carry over. Migration 001 declares these via `email TEXT UNIQUE NOT NULL` but the OVH dump lost them. Either add a `006_index_repair.sql` migration that recreates them idempotently, or add a CI check that compares live schema vs `pg_dump --schema-only` of the migrations folder.
 
