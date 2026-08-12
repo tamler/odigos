@@ -35,11 +35,14 @@ dependencies = [
     "py-vapid>=1.9.4",
     "deep-translator>=1.11.4",
     "jsonschema>=4.0",
-    # Must stay <3: api/webauthn.py imports the five top-level names that
-    # py_webauthn exports from webauthn/__init__.py in the 2.x line.
-    # Do NOT install the separate `py-webauthn` distribution — it writes into
-    # this same `webauthn/` package directory and removes __init__.py on
-    # uninstall, which is what broke this install (see 01-cleanup.md §0a).
+    # Upper bound is deliberate caution, NOT a technical requirement: 3.0.0 was
+    # checked and imports all five top-level names api/webauthn.py uses. The
+    # pin keeps a major bump off the passkey-auth path until someone reviews it.
+    # Widen to <4 once that review happens.
+    # Do NOT install the separate `py-webauthn` distribution — a different
+    # project that claims the same top-level `webauthn` import name, writes into
+    # the same package directory, and whose uninstall removes the shared
+    # __init__.py. That is what broke this install (see 01-cleanup.md §0a).
     "webauthn>=2,<3",
     "grokipedia-api>=0.3.0",
     "wikipedia>=1.4.0",
