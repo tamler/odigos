@@ -36,3 +36,7 @@ data/chroma/
 # OS
 .DS_Store
 .superpowers/
+
+# Never commit local credential scratch files
+docs/A_TEMP_SET_OF_KEYS.md
+*_KEYS.md
