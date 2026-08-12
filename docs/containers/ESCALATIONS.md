@@ -11,6 +11,43 @@ STOPS. It does not reach across. Whoever is orchestrating resolves these.
 
 ---
 
+## 2026-08-12 — 01-cleanup — two config default flips turn features OFF on this install
+
+**Wants:** confirmation, or a revert. Already done, flagged here because the effect is
+operational rather than cosmetic.
+
+**What changed:** charter §2 says to "align `config.py` defaults with
+`config.yaml.example` — `ProactiveConfig.enabled` and `HeartbeatConfig.morning_briefing`
+default `True` in code, `false` in the example." Both are now `False` (`c9f2e9d`).
+
+**Why it matters more than it reads:** the live `config.yaml` in this repo sets neither
+key — it has no `proactive:` block and no `morning_briefing` — so both features were
+running on the code default of `True`. Flipping the default therefore switches proactive
+research and the morning briefing **off on this installation**, not merely in the docs.
+Adversarial review raised this; it is correct.
+
+**Case for keeping it:** `config.yaml.example` is the documented intent and says
+`false`, with the comment "Disabled by default — opt in per tier". Both features spend
+LLM budget unprompted. A code default that contradicts the shipped example is the same
+class of untruth this whole section is removing.
+
+**To restore either, add to `config.yaml`:**
+
+```yaml
+heartbeat:
+  morning_briefing: true
+proactive:
+  enabled: true
+```
+
+Note `docs/superpowers/specs/2026-04-08-proactive-agent-design.md:80` still describes
+the old default plus `safe_tools` and `max_per_cycle`, both of which were dead keys and
+are now removed. That spec is dated design history, not current behaviour.
+
+**Decision:**
+
+---
+
 ## 2026-08-12 — 01-cleanup — four dead tables need dropping, and schema.sql is outside the fence
 
 **Wants:** drop four tables that no Python code reads or writes, and delete their

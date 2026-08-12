@@ -130,11 +130,15 @@ class Spawner:
         return {
             "source": "none",
             "identity": "",
+            # Do not name tools here that the agent cannot call. This text used
+            # to point at browse_agent_templates, which was removed with
+            # tools/template_tools.py on 2026-08-12 -- it had been in the
+            # catalog but was never registered, so the instruction was already
+            # unfollowable. Naming a nonexistent tool is anti-patterns #6.
             "suggestion": (
                 f"No template found for role='{role}' specialty='{specialty or 'general'}'. "
-                f"Use browse_agent_templates to search the catalog, or use research skills "
-                f"to build a custom identity for this specialization. You can create a "
-                f"custom template with create_custom_template for future spawns."
+                f"Use research skills to build a custom identity for this "
+                f"specialization."
             ),
         }
 

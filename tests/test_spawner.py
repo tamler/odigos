@@ -59,7 +59,9 @@ async def test_generate_seed_identity_no_template(db, mock_provider):
     assert result["source"] == "none"
     assert result["identity"] == ""
     assert "No template found" in result["suggestion"]
-    assert "browse_agent_templates" in result["suggestion"]
+    # The suggestion must not name a tool the agent cannot call.
+    # browse_agent_templates was removed with tools/template_tools.py.
+    assert "browse_agent_templates" not in result["suggestion"]
     # No LLM call wasted
     mock_provider.complete.assert_not_called()
 
