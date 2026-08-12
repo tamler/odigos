@@ -52,7 +52,7 @@ strawman: you have the registry, the tuned constants, the failure taxonomy. A re
 *reads* them starts ahead, not blind.
 
 The narrow true version of my point: what transfers is the lessons **already written down**. So
-write them down properly. That's a real deliverable — `docs/DESIGN-DECISIONS.md`, built in Project A (§3, A5) — the
+write them down properly. That's a real deliverable — `docs/DESIGN-DECISIONS.md`, built in Project A (§2, A5) — the
 distilled "what we learned and why" that any fresh implementation follows. It replaces the
 shared-engine idea, which was load-bearing only if ZOdigos were Python.
 
@@ -133,6 +133,12 @@ Deleting first silently drops a security control — that's anti-pattern entry #
 **A4. `pyproject.toml` → optional-dependency groups.** ~40 hard deps, so `pip install odigos`
 drags torch.
 
+**A0. Get to a trustworthy baseline** — the venv's `webauthn` install is physically corrupted
+(missing `__init__.py`, resolves as a namespace package), the suite can't be invoked as
+documented, migrations aren't idempotent, and there are **23 `except ImportError` sites** of
+which 18 degrade silently. Charter §0. Nothing else starts until the suite is green offline from
+a genuinely clean venv.
+
 **A5. `docs/DESIGN-DECISIONS.md` — the distillation artifact.** *This is why Project A gates C.*
 The written-down version of everything ZOdigos should start from:
 - the 4-category failure taxonomy and its retry policy, and which model behaviour caused each
@@ -193,6 +199,13 @@ exist, two agents round-trip a peer reply, docs true.
 ---
 
 ## 4. What's next
+
+> **Standing rule, learned the hard way 2026-08-12.** A container branch is cut from `main` at
+> one moment and read by a session later. Corrections to a charter land on `main`, not on the
+> branch — so a session launched on a stale branch will faithfully follow instructions we
+> already proved wrong. **Immediately before launching any container session, fast-forward its
+> branch:** `git merge --ff-only main` (or `git branch -f <branch> main` if it isn't checked
+> out, which is safe only when the branch is 0 commits ahead — check first).
 
 1. **Finish closeout** in the existing session: push main, delete the merged branch, repo
    hygiene, delete the consumed scaffolding, create branch `chore/cleanup`.
