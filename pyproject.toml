@@ -76,6 +76,11 @@ odigos = "odigos.main:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# A suite that can't pass offline can't gate anything. The three network tests
+# in tests/test_knowledge.py hit live Wikipedia/Grokipedia and were already
+# marked; nothing deselected them, so the default run depended on the network.
+# Run them explicitly with:  uv run pytest -m network
+addopts = ["-m", "not network"]
 markers = [
     "slow: tests that boot heavy subsystems (deselect with '-m \"not slow\"')",
     "network: tests that make live network calls (deselect with '-m \"not network\"')",
