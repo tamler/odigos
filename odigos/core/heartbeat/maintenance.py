@@ -16,11 +16,16 @@ logger = logging.getLogger(__name__)
 async def run_evolution(hb: "Heartbeat") -> None:
     """Phase 5: Score past actions, manage trials, run strategist, rollup domain perf."""
     try:
-        # evolution.enabled gates only the self-modifying parts: scoring,
-        # trials and the strategist. Promotion writes LLM text into
-        # data/agent/*.md, so it stays off unless explicitly enabled. Correction
-        # consolidation and skill re-verification below are user-driven features
-        # that happen to share this phase, and keep running either way.
+        # evolution.enabled gates EVERYTHING in this phase, because every part
+        # of it is LLM-driven self-modification:
+        #   - trials/strategist: promotion writes LLM text into data/agent/*.md
+        #   - consolidation: PromptConsolidator writes operational_rules.md and
+        #     behavioral_principles.md into data/agent/ via self._llm.complete()
+        #   - skill re-verification: LLM-scored, and demotes skills on failure
+        # An earlier version of this gate excused the last two as "user-driven
+        # features". That was wrong -- consolidation is grounded in user
+        # corrections but the text it writes is LLM-generated, into the same
+        # directory the charter is protecting.
         _evo = hb.settings.evolution if hb.settings else None
         _evo_enabled = bool(_evo.enabled) if _evo else False
 
@@ -36,8 +41,9 @@ async def run_evolution(hb: "Heartbeat") -> None:
             # Domain performance rollup (cheap, runs every evolution cycle)
             await hb.evolution_engine.rollup_domain_performance()
 
-        # Consolidate corrections into prompt sections
-        if hasattr(hb, "consolidator") and hb.consolidator:
+        # Consolidate corrections into prompt sections. Writes LLM-generated
+        # text into data/agent/, so it obeys evolution.enabled too.
+        if _evo_enabled and hasattr(hb, "consolidator") and hb.consolidator:
             try:
                 stats = await hb.consolidator.consolidate()
                 if stats.get("corrections_processed", 0) > 0:
@@ -50,8 +56,9 @@ async def run_evolution(hb: "Heartbeat") -> None:
             except Exception:
                 logger.debug("Consolidation failed", exc_info=True)
 
-        # Re-verify one skill per cycle if score diverges
-        if hasattr(hb, "skill_verifier") and hb.skill_verifier and hasattr(hb, "skill_registry") and hb.skill_registry:
+        # Re-verify one skill per cycle if score diverges. LLM-scored and can
+        # demote a skill, so it obeys evolution.enabled too.
+        if _evo_enabled and hasattr(hb, "skill_verifier") and hb.skill_verifier and hasattr(hb, "skill_registry") and hb.skill_registry:
             try:
                 await _reverify_one_skill(hb)
             except Exception:

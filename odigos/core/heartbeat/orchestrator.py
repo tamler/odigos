@@ -270,20 +270,24 @@ class Heartbeat:
 
         # --- the did_work gate, and what it does and does not mean ------------
         #
-        # Every phase from here down is gated `if not did_work`, so one unit of
-        # work earlier in the tick suppresses ALL of: plan execution, proactive,
-        # evolution, dreaming, experience extraction, memory evolution, notebook
-        # review and outcome evaluation. On a busy agent those are therefore the
-        # first things skipped -- the headline features starve while the
-        # mechanical ones always win.
+        # Most phases from here down are gated `if not did_work`, so one unit of
+        # work earlier in the tick suppresses plan execution, proactive,
+        # evolution, dreaming, experience extraction, memory evolution and
+        # outcome evaluation. On a busy agent those are the first things
+        # skipped -- the headline features starve while the mechanical ones
+        # always win. (Phase 9.6, notebook review, is gated only on _idle and
+        # its own flag, not on this.)
         #
         # Kept, deliberately (charter §1 says decide and document, not invert).
         # The gate is a budget rationer: every phase below spends LLM tokens,
         # and firing them on top of a tick that already did real work is how you
-        # get cost spikes. It is also self-correcting on any reasonable interval
-        # -- a suppressed phase runs on the next quiet tick, and ticks are 30s.
-        # Inverting it would make the expensive phases pre-empt user-visible
-        # work, which is worse.
+        # get cost spikes. Inverting it would make expensive background work
+        # pre-empt user-visible work, which is worse.
+        #
+        # Suppression defers rather than starves ONLY because the interval
+        # counters now advance every tick, above. While they incremented inside
+        # these blocks, a continuously busy agent never advanced them and the
+        # interval-based phases could starve permanently.
         #
         # What was actually wrong is what fed the gate. did_work must mean
         # "this tick already spent LLM budget", not "something happened".
@@ -318,16 +322,24 @@ class Heartbeat:
         if self.agent_client:
             await peers.peer_maintenance(self)
 
+        # Interval counters advance every tick, NOT only on unsuppressed ones.
+        # They previously incremented inside the `if not did_work` blocks, so a
+        # continuously busy agent never advanced them and dreaming, experience
+        # extraction and outcome evaluation could starve permanently rather than
+        # merely being deferred. Elapsed time is not a function of whether the
+        # tick was busy.
+        self._dream_tick_counter += 1
+        self._experience_tick_counter += 1
+        self._outcome_tick_counter += 1
+
         # Phase 8: User profile dreaming (LLM calls — only when user is active)
         if not did_work and not _over_budget and not _idle:
-            self._dream_tick_counter += 1
             if self._dream_tick_counter >= self._dream_interval_ticks:
                 self._dream_tick_counter = 0
                 await profiling.dream_analyze_user(self)
 
         # Phase 9: Experience extraction (LLM calls — only when user is active)
         if not did_work and not _over_budget and not _idle:
-            self._experience_tick_counter += 1
             if self._experience_tick_counter >= self._experience_interval_ticks:
                 self._experience_tick_counter = 0
                 try:
@@ -374,7 +386,6 @@ class Heartbeat:
 
         # Phase 10: Outcome evaluation (LLM calls — only when user is active)
         if not did_work and not _over_budget and not _idle:
-            self._outcome_tick_counter += 1
             if self._outcome_tick_counter >= self._outcome_interval_ticks:
                 self._outcome_tick_counter = 0
                 await profiling.evaluate_plan_outcomes(self)

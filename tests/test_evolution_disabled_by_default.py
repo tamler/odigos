@@ -61,20 +61,38 @@ async def test_enabled_heartbeat_still_runs_the_cycle():
     assert "strategist.should_run" in calls
 
 
-async def test_consolidation_still_runs_when_evolution_is_disabled():
-    """Correction consolidation is user-driven and shares this phase."""
-    hb, calls = _heartbeat(enabled=False)
-
+def _with_consolidator(hb, calls):
     class _Consolidator:
         async def consolidate(self):
             calls.append("consolidate")
             return {"corrections_processed": 0}
 
     hb.consolidator = _Consolidator()
-    await maintenance.run_evolution(hb)
-    assert "consolidate" in calls, (
-        "gating evolution must not disable correction consolidation"
+    return hb
+
+
+async def test_consolidation_is_gated_too():
+    """PromptConsolidator writes LLM text into data/agent/.
+
+    An earlier version of this test asserted the opposite, on the reasoning that
+    consolidation is "user-driven". Adversarial review showed that is false:
+    consolidation.py:44 takes sections_dir="data/agent" and generates the text
+    with self._llm.complete(), writing operational_rules.md and
+    behavioral_principles.md. It is grounded in user corrections, but the text
+    written is LLM-generated, into the directory evolution.enabled protects.
+    """
+    hb, calls = _heartbeat(enabled=False)
+    await maintenance.run_evolution(_with_consolidator(hb, calls))
+    assert "consolidate" not in calls, (
+        "consolidation writes LLM-generated text into data/agent/ and must obey "
+        "evolution.enabled"
     )
+
+
+async def test_consolidation_runs_when_evolution_is_enabled():
+    hb, calls = _heartbeat(enabled=True)
+    await maintenance.run_evolution(_with_consolidator(hb, calls))
+    assert "consolidate" in calls
 
 
 @pytest.mark.parametrize("settings", [None, SimpleNamespace(evolution=None)])
@@ -83,3 +101,25 @@ async def test_missing_settings_fails_closed(settings):
     hb.settings = settings
     await maintenance.run_evolution(hb)
     assert calls == [], "absent config must mean disabled, not enabled"
+
+
+async def test_skill_reverification_is_gated_too(monkeypatch):
+    """LLM-scored and can demote a skill, so it obeys evolution.enabled."""
+    called = []
+
+    async def _fake(hb):
+        called.append("reverify")
+
+    monkeypatch.setattr(maintenance, "_reverify_one_skill", _fake)
+
+    hb, _ = _heartbeat(enabled=False)
+    hb.skill_verifier = object()
+    hb.skill_registry = object()
+    await maintenance.run_evolution(hb)
+    assert called == [], "skill re-verification ran while evolution was disabled"
+
+    hb, _ = _heartbeat(enabled=True)
+    hb.skill_verifier = object()
+    hb.skill_registry = object()
+    await maintenance.run_evolution(hb)
+    assert called == ["reverify"]
