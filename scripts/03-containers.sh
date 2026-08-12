@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# 03-containers.sh — create the project containers. No file cleanup, no merges.
+# 03-containers.sh — create the project containers. Nothing else.
 #
 # Run:  cd ~/Projects/test/odigos && bash scripts/03-containers.sh
 #
@@ -9,11 +9,15 @@
 #   checked out to a different branch, sharing ONE .git and one history.
 #   Not a clone: no duplicated objects, no remote to sync, no drift.
 #
-#   That's what makes a container work — each worktree is its own Claude Code
-#   project with its own CLAUDE.md, so a session sees one slice of the tree and
-#   one set of fences, while still being one repository.
+#   Each worktree is its own Claude Code project. Undo any of them with:
+#     git worktree remove .worktrees/<name>
 #
-#   Undo any of them with:  git worktree remove .worktrees/<name>
+# NOTE (v2): an earlier version of this script copied each charter over the
+# worktree's CLAUDE.md. That was wrong on two counts — it clobbered the tracked
+# project CLAUDE.md and left every worktree permanently dirty, and it was
+# pointless: worktrees share the repo, so docs/containers/*.md is ALREADY
+# present in every worktree. The charter is referenced at session start
+# instead. Nothing is copied and no worktree starts dirty.
 # ============================================================================
 
 set -euo pipefail
@@ -25,15 +29,14 @@ ok()  { printf '   \033[32mok\033[0m  %s\n' "$*"; }
 find .git -name '*.lock' -delete 2>/dev/null || true
 
 [ -z "$(git status --porcelain --untracked-files=no)" ] || {
-  printf '\n   Working tree is dirty. Run scripts/02-git.sh first.\n\n'; exit 1; }
+  printf '\n   Working tree is dirty. Commit first.\n\n'; exit 1; }
 
 # ----------------------------------------------------------------------------
 say "In-repo containers (worktrees)"
 # ----------------------------------------------------------------------------
-# name | branch | charter
 for row in \
-  "cleanup|chore/cleanup|01-cleanup.md" \
-  "tier2|feat/tier2-provisioning|02-tier2.md"
+  "cleanup|chore/cleanup|docs/containers/01-cleanup.md" \
+  "tier2|feat/tier2-provisioning|docs/containers/02-tier2.md"
 do
   IFS='|' read -r name branch charter <<< "$row"
   path=".worktrees/$name"
@@ -49,20 +52,21 @@ do
     ok "worktree $path on branch $branch"
   fi
 
-  cp "docs/containers/$charter" "$path/CLAUDE.md"
-  ok "charter $charter -> $path/CLAUDE.md"
+  # Sanity: the charter must be visible from inside the worktree. It will be —
+  # same repo, same commit — this just proves it before you launch a session.
+  [ -f "$path/$charter" ] && ok "charter reachable at $path/$charter" \
+    || { printf '   MISSING: %s/%s — commit the charter first\n' "$path" "$charter"; exit 1; }
 done
 
 # ----------------------------------------------------------------------------
 say "Escalation log"
 # ----------------------------------------------------------------------------
-# A container that needs something outside its fence writes here and STOPS.
 if [ ! -f docs/containers/ESCALATIONS.md ]; then
   cat > docs/containers/ESCALATIONS.md <<'EOF'
 # Escalations
 
-A container that finds it needs something outside its fence writes an entry here
-and STOPS. It does not reach across. Whoever is orchestrating resolves these.
+A container that needs something outside its fence writes an entry here and
+STOPS. It does not reach across. Whoever is orchestrating resolves these.
 
 ## YYYY-MM-DD — <container> — <one-line summary>
 **Wants:** what it needs to do
@@ -72,15 +76,36 @@ and STOPS. It does not reach across. Whoever is orchestrating resolves these.
 
 ---
 EOF
-  ok "created docs/containers/ESCALATIONS.md"
+  ok "created docs/containers/ESCALATIONS.md — commit it"
 fi
+
+# ----------------------------------------------------------------------------
+say "Launching a container"
+# ----------------------------------------------------------------------------
+cat <<'EOF'
+   Open the worktree as its own Claude Code project, then open with:
+
+     Project A:  "Read docs/containers/01-cleanup.md. It is your charter and it
+                  is binding, especially the Hard non-goals. Start with section 0."
+
+     Project B:  "Read docs/containers/02-tier2.md. It is your charter and it is
+                  binding."
+
+   If you'd rather the charter load automatically every session, add ONE tracked
+   line to that worktree's CLAUDE.md (Claude Code follows @-imports):
+
+     echo '@docs/containers/01-cleanup.md' >> .worktrees/cleanup/CLAUDE.md
+
+   That's a deliberate 1-line commit rather than clobbering the file.
+EOF
 
 # ----------------------------------------------------------------------------
 say "Separate repos — NOT worktrees"
 # ----------------------------------------------------------------------------
-# C and D must not inherit Odigos's import graph. D's entire product thesis is
-# "zero Odigos imports"; C is a different language.
 cat <<'EOF'
+   C and D must not inherit Odigos's import graph. D's whole thesis is zero
+   Odigos imports; C is TypeScript.
+
    Project D — tool-router. Any time after Project A:
 
      mkdir -p ../tool-router && cd ../tool-router && git init
@@ -91,19 +116,10 @@ cat <<'EOF'
 
      mkdir -p ../zodigos && cd ../zodigos && git init
      cp ../odigos/docs/containers/03-zodigos.md CLAUDE.md
-     cp ../odigos/docs/DESIGN-DECISIONS.md .     # the bill of materials
+     cp ../odigos/docs/DESIGN-DECISIONS.md .
      cp ../odigos/docs/superpowers/anti-patterns.md .
-     touch DIVERGENCE.md
 EOF
 
 say "Worktrees now"
 git worktree list | sed 's/^/   /'
-
-cat <<'EOF'
-
-   Launch ONE Claude Code session: .worktrees/cleanup  (Project A).
-   Its CLAUDE.md is the charter. First action inside it: evolution.enabled: false.
-
-   B, C, D stay unstarted until A is done.
-
-EOF
+printf '\n'

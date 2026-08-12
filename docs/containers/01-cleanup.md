@@ -38,6 +38,60 @@ were caused by changes that looked like cleanup).
 
 ## Work, in this order
 
+### 0. Get to a green suite first. Change no product code until it is green.
+
+Phase 0 left 5 failures and a broken test invocation. **All of it is dependency and
+environment debt, not merge damage** — the branch was fast-forwarded, so there was no merge
+interaction to break anything. Fix these before touching anything in §1.
+
+**0a. `webauthn` is unpinned, and that is why 4 tests fail.** `pyproject.toml:38` declares a
+bare `"webauthn"` with no version constraint. `odigos/api/webauthn.py:75-96` wraps its imports
+in `try/except ImportError` and sets `_WEBAUTHN_AVAILABLE = False`. Every endpoint calls
+`_require_webauthn()` **first**, which raises **404 "WebAuthn not available"**.
+
+The proof is in which test passes: `test_login_begin_no_credentials` expects 404 and passes —
+it gets 404 either way. The three that expect 401/401/400 all fail *with 404*, and
+`test_webauthn_user.py::test_login_resolves_user_by_credential_user_id` fails for the same
+reason. That is a single cause, not four bugs.
+
+Confirm, then fix:
+
+```
+uv run python -c "import webauthn; print(webauthn.__version__)"
+uv run python -c "from webauthn.helpers.structs import PublicKeyCredentialDescriptor; print('ok')"
+```
+
+Pin it to the major that actually satisfies those imports (`py_webauthn` moved things between
+majors). Then **also fix the silent degradation**: `except ImportError: _WEBAUTHN_AVAILABLE =
+False` means passkey login has been dead in production with nothing said. Log at ERROR with the
+exception, and make `/api/state` or the startup banner report the capability as unavailable.
+This is exactly the failure shape `anti-patterns.md` exists to catch — a feature that reads as
+present and isn't. Audit for the same pattern elsewhere: `grep -rn "except ImportError" odigos/`.
+
+**0b. The test suite can't be invoked as documented.** `uv sync` removes `pytest` (it's in the
+dev extra) and `pytest-httpx` isn't declared at all, so collection fails on
+`tests/test_api_tool.py`. Add `pytest-httpx` to the dev extra. The correct command is
+`uv sync --extra dev && uv run pytest tests/ -q`; fix it wherever it's written down
+(`THE-PLAN.md` §2, `Makefile`, `CLAUDE.md`).
+
+**0c. `test_knowledge.py::test_lookup_wikipedia_explicit`** hits the network. Stub it or mark it
+`@pytest.mark.network` and deselect by default. A suite that can't pass offline can't gate
+anything.
+
+**0d. Migrations aren't idempotent and their failures are swallowed.** Every migration from 005
+on logs `partially failed (schema evolved): duplicate column` during test setup — nine of them.
+Make them idempotent and stop swallowing the errors. **This matters twice over for Project B**,
+where provisioning means running the full migration chain against N fresh databases.
+
+**0e. Housekeeping the closeout couldn't finish.** Purge stale `__pycache__` (tracebacks
+reference `/Users/jacob/Projects/odigos/tests/...`, a path that no longer exists) and add
+`__pycache__/` to `.gitignore`. `git rm --cached` the 7 files tracked under `data/subagents/` —
+gitignoring a tracked file does nothing. Drop the redundant `data/*.db-wal` / `data/*.db-shm`
+entries now that `data/*.db-*` covers them.
+
+**Done when:** `uv sync --extra dev && uv run pytest tests/ -q` is green, offline, from a clean
+sync, with no swallowed migration warnings.
+
 ### 1. The live bugs
 
 - **`Notifier.notify()` rejects `priority=`.** `notifier.py:32-42` has no such kwarg and no
@@ -165,8 +219,7 @@ library.**
 
 ## Definition of done
 
-- [ ] `uv sync && uv run pytest tests/ -q` green — the venv is currently dead
-      (`.venv/bin/python` is a broken symlink), so rebuild before trusting anything
+- [ ] `uv sync --extra dev && uv run pytest tests/ -q` green, offline, from a clean sync
 - [ ] Every §1 bug fixed, with a test that would have caught it
 - [ ] ~1,050 src LOC deleted, zero-callers re-verified at delete time
 - [ ] `build()` gone, its four live features demonstrably working in `build_planned`

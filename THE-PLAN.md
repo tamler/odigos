@@ -1,11 +1,18 @@
 # THE PLAN
 
-**The only plan doc.** Everything I wrote earlier is either absorbed here or deleted by
-`scripts/01-files.sh`. Two documents survive alongside it:
-`docs/superpowers/specs/2026-08-12-strategic-review.md` (the evidence, with file:line) and
-`docs/superpowers/anti-patterns.md` (your incident registry, referenced by every charter).
+**The only plan doc.** Six files survive from all of this planning:
 
-Run order is §2. Complete file inventory is §2.1. Nothing is left to figure out.
+| File | Role |
+|---|---|
+| `THE-PLAN.md` | this — decisions, Project A, what's outstanding |
+| `docs/containers/01-cleanup.md` … `04-tool-router.md` | the four project charters |
+| `docs/superpowers/specs/2026-08-12-strategic-review.md` | the evidence, with file:line |
+
+Plus `docs/superpowers/anti-patterns.md`, which was already yours and is referenced by every
+charter. The closeout scripts and prompt files were consumed and deleted.
+
+Phase 0 closeout is done — see the Appendix for what happened and how to revert. What's live
+now is §2 (Project A) and §3 (infrastructure teardown). §4 is the order.
 
 ---
 
@@ -85,8 +92,8 @@ undocumented and a SQLite-file harness needs durable disk. Verify first; a VPS s
 
 | | Project | Repo | Gated on |
 |---|---|---|---|
-| **A** | `odigos` cleanup — kitchen sink works, smaller, engine visible | existing repo, `chore/cleanup` worktree | Phase 0 |
-| **B** | tier 2 — provisioning + admin management | existing repo, `feat/tier2-provisioning` worktree | A |
+| **A** | `odigos` cleanup — works, smaller, lessons written down | existing repo, branch `chore/cleanup` | Phase 0 ✅ |
+| **B** | tier 2 — provisioning + admin management | existing repo, branch `feat/tier2-provisioning` | A |
 | **C** | `zodigos` — the race car | **new repo** | A's `DESIGN-DECISIONS.md` |
 | **D** | `tool-router` — `find_tools` as a standalone MCP router | **new repo** | A |
 
@@ -94,122 +101,9 @@ A gates everything. B, C, D are independent of each other.
 
 ---
 
-## 2. Execution — three scripts, one job each
+## 2. Project A — cleanup
 
-Run in order, in a **real terminal**. Not through Cowork: the device bridge mount cannot
-`unlink()`, which is why git stranded lock files earlier.
-
-```bash
-cd ~/Projects/test/odigos
-bash scripts/01-files.sh        # every file/dir operation. no git branch work.
-bash scripts/02-git.sh          # merge + branch deletes + commit. no file surgery.
-uv sync && uv run pytest tests/ -q | tail -40    # READ THIS before pushing
-git push origin main
-bash scripts/03-containers.sh   # worktrees + charters
-```
-
-`01` deletes and ignores. `02` touches branches and commits. `03` creates containers. Nothing
-overlaps, each is re-runnable, and none of them push.
-
-### 2.1 The complete file inventory — nothing else to figure out
-
-Verified against the actual tree, 2026-08-12. This is the whole list.
-
-**DELETED by `01-files.sh` — junk (434MB)**
-
-| Path | Why |
-|---|---|
-| `_to_delete/odigos.db-wal` (360MB) | orphaned WAL; `data/odigos.db` gone since 13 Apr. SQLite cannot replay a WAL with no database — unrecoverable, and you approved discarding it |
-| `_to_delete/odigos.db-shm` | same |
-| `_to_delete/odigos-snap.tgz` (77MB) | my analysis snapshot |
-| `_to_delete/gitlocks/*.lock` (3) | git locks the bridge stranded |
-| `_to_delete/local-mods/{uv.lock,project.yml}` | backups; both regenerate (`uv sync`, serena) |
-| `_to_delete/.__writetest` | my probe file |
-| `.snap/` | empty dir left behind |
-| `odigos.db` (root, 0 bytes) | stray; the real DB is `data/odigos.db` |
-| `.DS_Store` | Finder litter, now gitignored |
-| `data/test_final.db-{shm,wal}` | orphaned test-DB sidecars |
-| `data/test_evolution.db-{shm,wal}` | orphaned test-DB sidecars |
-
-**DELETED by `01-files.sh` — stale docs (11 GEMINI handoffs, all April, all landed)**
-
-| Location | Files |
-|---|---|
-| root | `GEMINI.md`, `GEMINI-BACKGROUND-TASKS-HANDOFF.md`, `GEMINI-POLISH-HANDOFF.md`, `GEMINI-SERVICES-HANDOFF.md` |
-| `docs/` | `GEMINI-HANDOFF.md`, `GEMINI-BUBBLE-HANDOFF.md`, `GEMINI-IMAGES-HANDOFF.md`, `GEMINI-PHASE5-HANDOFF.md`, `GEMINI-PWA-HANDOFF.md`, `GEMINI-VOICE-HANDOFF.md`, `GEMINI-WORKSPACE-HANDOFF.md` |
-
-**DELETED by `01-files.sh` — my own scaffolding, superseded**
-
-`docs/superpowers/plans/2026-08-12-decommission-and-rebuild.md` ·
-`docs/superpowers/plans/2026-08-12-tiers-revision.md` · `docs/containers/README.md` ·
-`docs/containers/setup-containers.sh` · `phase0-cleanup.sh`
-
-Two sources of truth is the failure mode this whole exercise is about. These go.
-
-**KEPT — the nine files that survive from all of this**
-
-| Path | Role |
-|---|---|
-| `THE-PLAN.md` (root) | this file. the plan |
-| `scripts/01-files.sh`, `02-git.sh`, `03-containers.sh` | execution |
-| `docs/containers/01-cleanup.md` … `04-tool-router.md` | the four charters, copied in as each project's `CLAUDE.md` |
-| `docs/superpowers/specs/2026-08-12-strategic-review.md` | the evidence, with file:line |
-
-**KEPT — untouched, don't let any container delete these**
-
-`docs/superpowers/anti-patterns.md` (the incident registry — referenced by every charter) ·
-`docs/superpowers/specs/` (46 design docs, project history) ·
-`docs/superpowers/plans/` (34 after the two above are removed) ·
-`docs/ARCHITECTURE.md`, `PRD.md`, `integration-api.md`, `deployment/`, `images/`, `plans/` ·
-all install/deploy scripts (Projects A and B decide their fate, not this cleanup)
-
-**GITIGNORED by `01-files.sh`** — `.DS_Store`, `_to_delete/`, `.snap/`, `data/*.db{,-wal,-shm}`,
-`data/{artifacts,uploads,conversations,chroma,subagents,subagent_workspace,audio,files}/`,
-`data/vapid_keys.json`
-
-**LEFT VISIBLE ON PURPOSE — your call, not the script's**
-
-| Path | Size | Why it's your decision |
-|---|---|---|
-| `data/brain/` | 8K | durable persona knowledge. `memory/brain_writer.py` writes it, `brain_reader.py` rebuilds the DB from it. Content, not state |
-| `data/agent/` | 36K | identity, capabilities, guardrails, sources. Same |
-| `data/kanban/` | 6.9M | user content from the dead local instance |
-| `data/notebooks/` | 6.8M | same |
-| `data/{prompts,sources,wiki,plugins}/` | ~200K | same |
-
-Commit them as fixtures or move them out of the repo — but the script won't silently hide 14MB
-of your content behind a gitignore.
-
-**CREATED by `03-containers.sh`**
-
-`.worktrees/cleanup/` on branch `chore/cleanup` (+ its `CLAUDE.md`) ·
-`.worktrees/tier2/` on branch `feat/tier2-provisioning` (+ its `CLAUDE.md`) ·
-`docs/containers/ESCALATIONS.md`
-
-**CREATED BY YOU, later, outside the repo**
-
-`../tool-router/` (Project D, after A) · `../zodigos/` (Project C, after A writes
-`docs/DESIGN-DECISIONS.md`). Both are separate repos, not worktrees — D's whole thesis is zero
-Odigos imports, and C is a different language.
-
-### 2.2 Not in any script — infrastructure, do it yourself
-
-- **Verify the archive before cancelling anything.** `tar tzf` every tarball listed in
-  `~/odigos-vps-archive/MANIFEST.md`, take a final `pg_dump` of `odigos-postgres`, and restore
-  it into a throwaway container to prove it works. It's your only offsite copy.
-- **Then** cancel: `51.81.82.221` (current), `82.25.91.86` (old bare-metal), `100.89.147.103`
-  (uxrls.com Jessica). The last two have been billing unused since May.
-- DNS at the registrar: `odigos.one`, `jacob.`, `jessica.`, and the orphaned
-  `trading.odigos.one`.
-- Revoke keys — they outlive the servers: OpenRouter, Groq, Kie.ai, the VAPID pair,
-  `PLATFORM_AGENT_JWT_SECRET`, any `card-sk-*` mesh keys.
-- **Archive, don't delete,** `github.com/tamler/odigos-platform` — tier 3 needs it.
-
----
-
-## 3. Project A — cleanup. What Claude Code actually does.
-
-Charter is `docs/containers/01-cleanup.md`, installed as the worktree's `CLAUDE.md`. In order:
+Charter: `docs/containers/01-cleanup.md`. Run it on branch `chore/cleanup` in this repo — no worktree. In order:
 
 **A1. The live bugs.**
 - `Notifier.notify()` has no `priority` kwarg (`notifier.py:32-42`) but all 8 call sites in
@@ -279,22 +173,48 @@ exist, two agents round-trip a peer reply, docs true.
 
 ---
 
+
 ---
 
-## 4. Order of operations
+## 3. Still outstanding — infrastructure teardown
 
-```
-scripts/01-files.sh  →  scripts/02-git.sh  →  uv sync + pytest  →  git push
-                                                     │
-                                        scripts/03-containers.sh
-                                                     │
-                            Project A  .worktrees/cleanup   ← launch Claude Code HERE, only here
-                                                     │
-                        ┌────────────────────────────┼────────────────────────────┐
-                   Project B                    Project C                    Project D
-              .worktrees/tier2                 ../zodigos                 ../tool-router
-              02-tier2.md                      03-zodigos.md (TS)         04-tool-router.md
-                                          needs DESIGN-DECISIONS.md
-```
+- **Verify the archive before cancelling anything.** `tar tzf` every tarball listed in
+  `~/odigos-vps-archive/MANIFEST.md`, take a final `pg_dump` of `odigos-postgres`, and restore
+  it into a throwaway container to prove it works. It's your only offsite copy.
+- **Then** cancel: `51.81.82.221` (current), `82.25.91.86` (old bare-metal), `100.89.147.103`
+  (uxrls.com Jessica). The last two have been billing unused since May.
+- DNS at the registrar: `odigos.one`, `jacob.`, `jessica.`, and the orphaned
+  `trading.odigos.one`.
+- Revoke keys — they outlive the servers: OpenRouter, Groq, Kie.ai, the VAPID pair,
+  `PLATFORM_AGENT_JWT_SECRET`, any `card-sk-*` mesh keys.
+- **Archive, don't delete,** `github.com/tamler/odigos-platform` — tier 3 needs it.
 
-Separately and in parallel: the infrastructure teardown in §2.2.
+
+---
+
+## 4. What's next
+
+1. **Finish closeout** in the existing session: push main, delete the merged branch, repo
+   hygiene, delete the consumed scaffolding, create branch `chore/cleanup`.
+2. **Project A** — fresh session, same folder, on `chore/cleanup`. Brief it with
+   `docs/containers/01-cleanup.md`. Start at its section 0: the suite must be green offline
+   from a clean `uv sync --extra dev` before any product code changes.
+3. **Then** B, C or D — see §1.6. A gates all three; C additionally needs
+   `docs/DESIGN-DECISIONS.md` from A.
+4. **Independently, whenever:** the teardown in §3. Three servers are still billing.
+
+---
+
+## Appendix — Phase 0, done 2026-08-12
+
+Reverting point: **`git tag pre-cleanup-2026-08-12`** (`ef22dea`, on the remote).
+
+- 433MB junk deleted, 11 stale GEMINI handoffs, 4 orphaned test-DB sidecars, my own
+  planning scaffolding. Repo 2.1G → 1.5G, `data/` 18M.
+- `main` fast-forwarded over **42** commits of multi-tenant security hardening (sandbox
+  fail-closed, SSRF/arg/URL guards, `api/rate_limit.py`, security event log, CSRF + cookie +
+  session-epoch hardening, ~35 tests). 7 dead `feat/*` branches deleted with `-d`.
+- Suite: **1620 passed, 5 failed, 8 skipped.** Four of the five are one cause — an unpinned
+  `webauthn` whose import failure is swallowed, so every endpoint 404s and passkey login is
+  silently dead. The fifth hits the network. All of it is Project A §0.
+- `data/brain/`, `data/agent/`, `data/kanban/`, `data/notebooks/` untouched by design.
