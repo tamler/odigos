@@ -40,3 +40,14 @@ data/chroma/
 # Never commit local credential scratch files
 docs/A_TEMP_SET_OF_KEYS.md
 *_KEYS.md
+
+# --- closeout 2026-08-12 ---
+_to_delete/
+.snap/
+data/*.db-wal
+data/*.db-shm
+data/artifacts/
+data/subagents/
+data/subagent_workspace/
+data/audio/
+data/vapid_keys.json
