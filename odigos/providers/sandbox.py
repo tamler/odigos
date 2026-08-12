@@ -74,12 +74,16 @@ class SandboxProvider:
         # Try bubblewrap first (best isolation)
         if _IS_LINUX and shutil.which("bwrap"):
             try:
-                # Use symlinks for /lib and /lib64 (they're often symlinks in slim images)
+                # Use symlinks for /lib and /lib64 (they're often symlinks in slim images).
+                # /lib64 matters: on x86_64 the ELF loader is /lib64/ld-linux-x86-64.so.2,
+                # so without it every binary in the probe fails with ENOENT and the whole
+                # tier silently degrades to ulimit-only. Must mirror the exec path below.
                 probe_cmd = [
                     "bwrap",
                     "--ro-bind", "/usr", "/usr",
                     "--ro-bind", "/bin", "/bin",
                     "--symlink", "/usr/lib", "/lib",
+                    "--symlink", "/usr/lib64", "/lib64",
                     "--proc", "/proc",
                     "--dev-bind", "/dev/null", "/dev/null",
                     "--dev-bind", "/dev/zero", "/dev/zero",

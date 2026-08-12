@@ -25,8 +25,9 @@ From Bob's app process it must be impossible to read Jessica's install files, re
 - [ ] `ProtectHome=yes`
 - [ ] `PrivateTmp=yes`
 - [ ] `ReadWritePaths=/opt/odigos/data` (only this install's data; equivalent for Jessica)
-- [ ] `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`
-- [ ] **Verify bubblewrap still works under the chosen `RestrictNamespaces`/`SystemCallFilter`** — bwrap needs user namespaces; do not lock these so tight that the sandbox (C1) breaks. Run the sandbox self-test after applying the unit.
+- [ ] `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX **AF_NETLINK**` — AF_NETLINK is required, not optional. `bwrap --unshare-all` brings up loopback in the new net namespace over `NETLINK_ROUTE`; without it bwrap dies with `Failed to create NETLINK_ROUTE socket: Address family not supported by protocol` and the sandbox silently degrades. Verified on `odigos-honey` 2026-08-12.
+- [ ] **Verify bubblewrap still works under the chosen `RestrictNamespaces`/`SystemCallFilter`** — bwrap needs user namespaces; do not lock these so tight that the sandbox (C1) breaks. Leave both unset unless you re-verify. Run the sandbox self-test after applying the unit.
+- [ ] **Confirm the resolved tier is actually `bwrap`**, not just that the unit started: `journalctl -u <svc> | grep "Sandbox isolation"`. A line reading `ulimit only` means no filesystem isolation regardless of what the unit says.
 
 ### Backups
 - [ ] Backup/export artifacts (from `storage.py` / `core/data_export.py`) write under the install's `0700` data dir, owned by the install user. No world/group read. No install user can read another's backups.

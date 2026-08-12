@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def _enforce_hosted_security(settings, bwrap_present: bool | None = None) -> None:
-    """In hosted mode, refuse insecure dev overrides and require bubblewrap."""
+    """In hosted mode, refuse insecure dev overrides and require working bubblewrap."""
     if settings.deployment.mode != "hosted":
         return
     if os.environ.get("ODIGOS_SANDBOX_ALLOW_INSECURE"):
@@ -31,11 +31,23 @@ def _enforce_hosted_security(settings, bwrap_present: bool | None = None) -> Non
             "ODIGOS_SANDBOX_ALLOW_INSECURE is set but deployment.mode=hosted; "
             "refusing to start."
         )
-    present = shutil.which("bwrap") is not None if bwrap_present is None else bwrap_present
+    if bwrap_present is None:
+        # Gate on the tier the sandbox actually resolved to, not on `which bwrap`.
+        # The binary being on PATH says nothing about whether it can construct a
+        # namespace here: seccomp, AppArmor userns limits, or a systemd unit that
+        # drops AF_NETLINK all make bwrap present but non-functional, and the
+        # provider then falls back to ulimit-only with no filesystem isolation.
+        from odigos.providers.sandbox import SandboxProvider
+
+        SandboxProvider()  # runs (and caches) tier detection
+        present = SandboxProvider._isolation == "bwrap"
+    else:
+        present = bwrap_present
     if not present:
         raise RuntimeError(
-            "deployment.mode=hosted requires bubblewrap (bwrap) for sandbox isolation; "
-            "refusing to start."
+            "deployment.mode=hosted requires working bubblewrap (bwrap) isolation, but "
+            "the sandbox probe did not resolve to the bwrap tier; refusing to start. "
+            "Run the probe by hand to see the failure."
         )
 
 
