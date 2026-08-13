@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import jsonschema
 
-from odigos.core.context import ContextAssembler, estimate_tokens
+from odigos.core.context import CANARY_TOKEN, ContextAssembler, estimate_tokens
 from odigos.db import Database
 from odigos.providers.base import LLMProvider, LLMResponse, ToolCall
 from odigos.tools.base import auto_distill
@@ -683,15 +683,18 @@ class Executor:
                 model="system", tokens_in=0, tokens_out=0, cost_usd=0.0,
             )
 
-        # Check for canary token leak (system prompt exfiltration)
+        # Check for canary token leak (system prompt exfiltration).
+        #
+        # Imported from core.context, which is what actually emits the token now.
+        # It used to come from personality.prompt_builder, reachable only from
+        # the unreachable ContextAssembler.build() -- so no live prompt ever
+        # contained the canary and this check could not fire. The import is also
+        # no longer wrapped in `except Exception: pass`: silently disabling a
+        # prompt-leak control is the §0f failure shape (charter §3).
         content = last_response.content or ""
-        try:
-            from odigos.personality.prompt_builder import CANARY_TOKEN
-            if CANARY_TOKEN in content:
-                logger.warning("CANARY TOKEN DETECTED in LLM output -- possible prompt exfiltration")
-                content = content.replace(CANARY_TOKEN, "[REDACTED]")
-        except Exception:
-            pass
+        if CANARY_TOKEN in content:
+            logger.warning("CANARY TOKEN DETECTED in LLM output -- possible prompt exfiltration")
+            content = content.replace(CANARY_TOKEN, "[REDACTED]")
 
         # Session-level cache hit summary for observability
         if total_tokens_in > 0:
