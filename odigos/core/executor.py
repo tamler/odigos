@@ -318,9 +318,22 @@ class Executor:
             if not _expose_tools:
                 tools = None
         else:
-            # No plan available — minimal context with find_tools only
+            # No plan available — minimal context with find_tools only.
+            #
+            # agent.py:213 reaches here deliberately when classification raises,
+            # so this is a LIVE path, not a fallback that never runs. It must
+            # still carry the security preamble: a turn that skips it is a turn
+            # with no instruction hierarchy and no canary, which is exactly the
+            # gap charter §3 exists to close. Adversarial review caught this
+            # being missed by the port.
             messages = [
-                {"role": "system", "content": f"You are {self.context_assembler.agent_name}."},
+                {
+                    "role": "system",
+                    "content": (
+                        f"{self.context_assembler.security_preamble}\n\n"
+                        f"You are {self.context_assembler.agent_name}."
+                    ),
+                },
                 {"role": "user", "content": message_content},
             ]
             tools = self.tool_registry.tool_definitions() if (_expose_tools and self.tool_registry) else None
@@ -691,10 +704,15 @@ class Executor:
         # contained the canary and this check could not fire. The import is also
         # no longer wrapped in `except Exception: pass`: silently disabling a
         # prompt-leak control is the §0f failure shape (charter §3).
+        # The token comes from the assembler so both halves agree on the live,
+        # per-install value; CANARY_TOKEN is only the no-settings fallback.
+        canary = getattr(self.context_assembler, "canary_token", None)
+        if not isinstance(canary, str) or not canary:
+            canary = CANARY_TOKEN
         content = last_response.content or ""
-        if CANARY_TOKEN in content:
+        if canary in content:
             logger.warning("CANARY TOKEN DETECTED in LLM output -- possible prompt exfiltration")
-            content = content.replace(CANARY_TOKEN, "[REDACTED]")
+            content = content.replace(canary, "[REDACTED]")
 
         # Session-level cache hit summary for observability
         if total_tokens_in > 0:

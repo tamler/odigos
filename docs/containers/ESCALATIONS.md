@@ -11,6 +11,39 @@ STOPS. It does not reach across. Whoever is orchestrating resolves these.
 
 ---
 
+## 2026-08-13 — 01-cleanup — canary redaction does not cover streamed output
+
+**Wants:** a decision on whether prompt-leak redaction should apply to the token
+stream, not just the final response.
+
+**Blocked by:** it is a behavioural change to the streaming path rather than a
+port, and charter §3's scope is "port build()'s features, then delete build()".
+Fixing it properly means filtering chunks as they are emitted, which needs care
+around token boundaries.
+
+**Case:** now that the canary actually reaches live prompts (`d1b8e6d`), the
+control it feeds is worth being honest about. `executor.py` emits chunks to the
+client as they arrive (~line 416); the canary check and redaction happen only
+after the stream completes (~line 700). So if a model leaks the system prompt
+mid-stream, the dashboard has already rendered the token by the time redaction
+runs. The final stored response is clean; what the user saw is not.
+
+This predates the port — the check has always been post-hoc — but before the
+port no live prompt contained the canary, so it could never trigger either way.
+It is now a real, reachable gap.
+
+**Complication worth knowing:** a naive per-chunk `if canary in chunk` misses a
+token split across chunk boundaries, which is the normal case for a 23-character
+string. A correct fix buffers a trailing window of at least the token length
+across chunks.
+
+**Recommendation:** buffer `len(canary) - 1` characters between chunks and scan
+the join. Low cost, and it makes the control mean what it says.
+
+**Decision:**
+
+---
+
 ## 2026-08-13 — 01-cleanup — the frontend sends page context that nothing consumes
 
 **Wants:** a decision on restoring page-context injection into `build_planned()`.

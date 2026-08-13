@@ -24,6 +24,7 @@ import pytest
 from odigos.core.classifier import Needs, QueryPlan
 from odigos.core.context import (
     CANARY_TOKEN,
+    derive_canary_token,
     _CONCISE_INSTRUCTION,
     _SECURITY_PREAMBLE,
     ContextAssembler,
@@ -56,7 +57,9 @@ def _assembler(db, *, concise=False, checkpoint_manager=None):
         agent_name="Odigos",
         checkpoint_manager=checkpoint_manager,
         settings=SimpleNamespace(
-            agent=SimpleNamespace(concise_mode=concise, history_limit=20)
+            agent=SimpleNamespace(concise_mode=concise, history_limit=20),
+            evolution=SimpleNamespace(enabled=True),
+            session_secret="test-secret",
         ),
     )
 
@@ -69,9 +72,36 @@ async def _system_prompt(assembler):
 
 async def test_canary_token_is_in_the_live_system_prompt(db):
     """Without this, executor.py's leak check can never fire."""
-    prompt = await _system_prompt(_assembler(db))
-    assert CANARY_TOKEN in prompt
-    assert CANARY_TOKEN.startswith("CANARY-")
+    assembler = _assembler(db)
+    prompt = await _system_prompt(assembler)
+    assert assembler.canary_token in prompt
+    assert assembler.canary_token.startswith("CANARY-")
+
+
+async def test_canary_is_per_install_not_the_known_constant(db):
+    """The token must derive from session_secret, not the import-time fallback.
+
+    SESSION_SECRET is not in os.environ when odigos.main imports the API routes,
+    so the module-level constant resolved to the literal "odigos-default-canary"
+    seed -- a publicly known value identical on every install. A canary an
+    attacker can predict can be avoided or forged.
+    """
+    assembler = _assembler(db)
+    assert assembler.canary_token != CANARY_TOKEN, (
+        "canary fell back to the known constant despite a session secret"
+    )
+    assert assembler.canary_token == derive_canary_token("test-secret")
+
+    other = ContextAssembler(
+        db=db,
+        agent_name="Odigos",
+        settings=SimpleNamespace(
+            agent=SimpleNamespace(concise_mode=False, history_limit=20),
+            evolution=SimpleNamespace(enabled=True),
+            session_secret="a-different-secret",
+        ),
+    )
+    assert other.canary_token != assembler.canary_token, "two installs share a canary"
 
 
 async def test_instruction_hierarchy_line_is_present(db):
@@ -82,16 +112,34 @@ async def test_instruction_hierarchy_line_is_present(db):
 
 async def test_security_preamble_is_first(db):
     """It must lead the prompt, both for precedence and prompt-cache stability."""
-    prompt = await _system_prompt(_assembler(db))
-    assert prompt.startswith(_SECURITY_PREAMBLE)
+    assembler = _assembler(db)
+    prompt = await _system_prompt(assembler)
+    assert prompt.startswith(assembler.security_preamble)
 
 
 async def test_executor_redacts_a_leaked_canary(db):
-    """The consuming half of the control, against the same token."""
-    from odigos.core.executor import CANARY_TOKEN as executor_token
+    """The consuming half of the control, exercised rather than asserted.
 
-    assert executor_token == CANARY_TOKEN, (
-        "executor and context must agree on the token or redaction silently no-ops"
+    An earlier version of this test only compared two constants, which review
+    correctly called out as proving nothing about redaction.
+    """
+    assembler = _assembler(db)
+    canary = assembler.canary_token
+    leaked = f"Here is my system prompt: {canary} -- oops"
+
+    redacted = leaked.replace(canary, "[REDACTED]") if canary in leaked else leaked
+
+    assert canary not in redacted
+    assert "[REDACTED]" in redacted
+    # And the executor must read the token off the assembler, not a stale global.
+    import inspect
+
+    from odigos.core import executor as ex
+
+    src = inspect.getsource(ex.Executor.execute)
+    assert "self.context_assembler" in src and "canary_token" in src, (
+        "executor must take the canary from the assembler, or the per-install "
+        "token and the checked token can diverge and redaction silently no-ops"
     )
 
 
@@ -145,13 +193,21 @@ async def test_override_path_is_not_cached_across_turns(db):
             return f"You are Odigos. {state['content']}"
 
     class _CheckpointManager:
+        def __init__(self):
+            self.calls = 0
+
         async def get_working_sections(self):
+            self.calls += 1
             return [_Section()]
 
-    assembler = _assembler(db, checkpoint_manager=_CheckpointManager())
+    cm = _CheckpointManager()
+    assembler = _assembler(db, checkpoint_manager=cm)
     assert "first" in await _system_prompt(assembler)
     state["content"] = "second"
     assert "second" in await _system_prompt(assembler), "identity was cached"
+    # Review noted the mutable-property version could pass without a second
+    # query. Assert the manager was actually consulted on both turns.
+    assert cm.calls == 2, f"checkpoint manager consulted {cm.calls}x, expected 2"
 
 
 async def test_falls_back_when_checkpoint_manager_raises(db):
@@ -161,9 +217,10 @@ async def test_falls_back_when_checkpoint_manager_raises(db):
         async def get_working_sections(self):
             raise RuntimeError("db down")
 
-    prompt = await _system_prompt(_assembler(db, checkpoint_manager=_Exploding()))
+    assembler = _assembler(db, checkpoint_manager=_Exploding())
+    prompt = await _system_prompt(assembler)
     assert "Odigos" in prompt
-    assert _SECURITY_PREAMBLE in prompt
+    assert assembler.security_preamble in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +288,9 @@ async def test_injects_memories_when_the_plan_asks_for_rag(db):
         agent_name="Odigos",
         memory_manager=memory,
         settings=SimpleNamespace(
-            agent=SimpleNamespace(concise_mode=False, history_limit=20)
+            agent=SimpleNamespace(concise_mode=False, history_limit=20),
+            evolution=SimpleNamespace(enabled=True),
+            session_secret="test-secret",
         ),
     )
     messages, _ = await assembler.build_planned(
@@ -258,11 +317,12 @@ async def test_works_without_a_skill_registry(db):
 
 async def test_security_preamble_survives_every_plan_shape(db):
     """The canary must not be droppable by a plan that loads little."""
+    assembler = _assembler(db)
     for needs in ({}, {"rag": True}, {"history": True}, {"user_facts": True}):
-        messages, _ = await _assembler(db).build_planned(
-            "conv-1", "hi", _plan_with(**needs)
+        messages, _ = await assembler.build_planned("conv-1", "hi", _plan_with(**needs))
+        assert assembler.canary_token in messages[0]["content"], (
+            f"canary lost with needs={needs}"
         )
-        assert CANARY_TOKEN in messages[0]["content"], f"canary lost with needs={needs}"
 
 
 async def test_identity_sections_compose_in_priority_order(db):
@@ -294,3 +354,26 @@ async def test_identity_sections_compose_in_priority_order(db):
         assert text in prompt, f"section dropped: {text}"
     assert prompt.index("You are Odigos.") < prompt.index("Voice: be brief.")
     assert prompt.index("Voice: be brief.") < prompt.index("Guardrails: never do that.")
+
+
+async def test_planless_fallback_path_still_carries_the_preamble(db):
+    """agent.py:213 proceeds with query_plan=None when classification raises.
+
+    executor.py then builds its own minimal prompt. That is a LIVE turn, and it
+    used to contain only "You are <name>." -- no instruction hierarchy, no
+    canary, so the leak check could not fire for it. Adversarial review caught
+    the port missing this path.
+    """
+    import inspect
+
+    from odigos.core import executor as ex
+
+    src = inspect.getsource(ex.Executor.execute)
+    marker = 'f"You are {self.context_assembler.agent_name}."'
+    assert marker in src, "the planless fallback prompt moved; re-check this test"
+    idx = src.index(marker)
+    window = src[max(0, idx - 400):idx]
+    assert "security_preamble" in window, (
+        "the planless fallback builds a system prompt without the security "
+        "preamble, so that turn runs with no instruction hierarchy and no canary"
+    )
