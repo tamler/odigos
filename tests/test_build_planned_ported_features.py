@@ -164,3 +164,133 @@ async def test_falls_back_when_checkpoint_manager_raises(db):
     prompt = await _system_prompt(_assembler(db, checkpoint_manager=_Exploding()))
     assert "Odigos" in prompt
     assert _SECURITY_PREAMBLE in prompt
+
+
+# ---------------------------------------------------------------------------
+# Behaviour ported from the build() tests in test_core.py.
+#
+# Those eight tests exercised a code path unreachable in production while
+# build_planned -- the path executor.py:313 actually calls -- had no coverage of
+# its own. Deleting build() would have deleted the only tests for these
+# behaviours, so they move here rather than disappearing.
+# ---------------------------------------------------------------------------
+
+
+def _plan_with(**needs):
+    return QueryPlan(
+        classification="simple",
+        confidence=1.0,
+        response_style="direct",
+        needs=Needs(**needs),
+        skill_hint=None,
+    )
+
+
+async def test_builds_a_messages_list_with_system_and_user(db):
+    assembler = _assembler(db)
+    messages, _ = await assembler.build_planned("conv-1", "Hello there", _plan_with())
+
+    assert messages[0]["role"] == "system"
+    assert "Odigos" in messages[0]["content"]
+    assert messages[-1]["role"] == "user"
+    assert messages[-1]["content"] == "Hello there"
+
+
+async def test_includes_conversation_history(db):
+    await db.execute(
+        "INSERT INTO conversations (id, channel) VALUES (?, ?)", ("conv-1", "telegram")
+    )
+    for mid, role, content in [
+        ("msg-1", "user", "Previous message"),
+        ("msg-2", "assistant", "Previous response"),
+    ]:
+        await db.execute(
+            "INSERT INTO messages (id, conversation_id, role, content) VALUES (?, ?, ?, ?)",
+            (mid, "conv-1", role, content),
+        )
+
+    assembler = _assembler(db)
+    messages, _ = await assembler.build_planned(
+        "conv-1", "New message", _plan_with(history=True)
+    )
+
+    contents = [m["content"] for m in messages]
+    assert "Previous message" in contents
+    assert "Previous response" in contents
+    assert messages[-1]["content"] == "New message"
+
+
+async def test_injects_memories_when_the_plan_asks_for_rag(db):
+    from unittest.mock import AsyncMock
+
+    memory = AsyncMock()
+    memory.recall.return_value = "## Relevant memories\n- Alice prefers morning meetings."
+
+    assembler = ContextAssembler(
+        db=db,
+        agent_name="Odigos",
+        memory_manager=memory,
+        settings=SimpleNamespace(
+            agent=SimpleNamespace(concise_mode=False, history_limit=20)
+        ),
+    )
+    messages, _ = await assembler.build_planned(
+        "conv-1", "When should we meet?", _plan_with(rag=True)
+    )
+
+    system_content = messages[0]["content"]
+    assert "Relevant memories" in system_content
+    assert "Alice prefers morning meetings" in system_content
+
+
+async def test_works_without_a_memory_manager(db):
+    messages, _ = await _assembler(db).build_planned(
+        "conv-1", "Hello", _plan_with(rag=True)
+    )
+    assert messages[0]["role"] == "system"
+    assert "Odigos" in messages[0]["content"]
+
+
+async def test_works_without_a_skill_registry(db):
+    messages, _ = await _assembler(db).build_planned("conv-1", "Hello", _plan_with())
+    assert messages[0]["role"] == "system"
+
+
+async def test_security_preamble_survives_every_plan_shape(db):
+    """The canary must not be droppable by a plan that loads little."""
+    for needs in ({}, {"rag": True}, {"history": True}, {"user_facts": True}):
+        messages, _ = await _assembler(db).build_planned(
+            "conv-1", "hi", _plan_with(**needs)
+        )
+        assert CANARY_TOKEN in messages[0]["content"], f"canary lost with needs={needs}"
+
+
+async def test_identity_sections_compose_in_priority_order(db):
+    """Ported from test_prompt_builder_dynamic.py.
+
+    build_system_prompt sorted sections by priority; _load_identity now does.
+    Registry entry #1 was a persona loader that dropped all but one section, so
+    the composition order and completeness are worth pinning.
+    """
+
+    class _S:
+        def __init__(self, priority, content):
+            self.priority = priority
+            self.content = content
+
+    class _CheckpointManager:
+        async def get_working_sections(self):
+            # deliberately out of order
+            return [
+                _S(20, "Voice: be brief."),
+                _S(10, "You are {name}."),
+                _S(30, "Guardrails: never do that."),
+            ]
+
+    prompt = await _system_prompt(_assembler(db, checkpoint_manager=_CheckpointManager()))
+
+    assert "You are Odigos." in prompt, "{name} was not substituted"
+    for text in ("You are Odigos.", "Voice: be brief.", "Guardrails: never do that."):
+        assert text in prompt, f"section dropped: {text}"
+    assert prompt.index("You are Odigos.") < prompt.index("Voice: be brief.")
+    assert prompt.index("Voice: be brief.") < prompt.index("Guardrails: never do that.")

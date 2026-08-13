@@ -22,10 +22,15 @@ from odigos.tools.skill_tool import ActivateSkillTool
 @pytest.fixture
 def mock_assembler():
     assembler = AsyncMock()
-    assembler.build = AsyncMock(return_value=[
-        {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Hello"},
-    ])
+    # build_planned returns (messages, tools). This used to stub `build`, which
+    # the executor has not called for some time and which no longer exists.
+    assembler.build_planned = AsyncMock(return_value=(
+        [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello"},
+        ],
+        None,
+    ))
     return assembler
 
 

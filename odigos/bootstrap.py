@@ -1196,15 +1196,11 @@ class Bootstrapper:
                 "127.0.0.1 for local-only access."
             )
 
-        # Validate routing rules
-        from odigos.core.routing import load_routing_rules
-        _routing_warnings = self.container.tool_registry.validate_routing_rules(
-            load_routing_rules(),
-        )
-        if _routing_warnings:
-            logger.warning(
-                "Routing rule warnings: %d issues found", len(_routing_warnings),
-            )
+        # Routing-rule validation removed 2026-08-13 with core/routing.py and
+        # data/agent/routing_rules.md. The rules were loaded only by
+        # ContextAssembler.build(), which was unreachable, so this validated a
+        # file whose contents nothing applied -- it warned about tool names in a
+        # config that could not affect behaviour. Charter §3.
 
         # Heavy file processing pool
         self.container.heavy_pool = ThreadPoolExecutor(max_workers=4)

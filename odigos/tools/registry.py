@@ -51,24 +51,4 @@ class ToolRegistry:
             },
         }
 
-    def validate_routing_rules(self, routing_rules: dict) -> list[str]:
-        """Validate that routing rules reference tools that actually exist.
-        Returns list of warning messages for unknown tool references.
-        """
-        warnings = []
-        tool_names = set(self._tools.keys())
-        for classification, route in routing_rules.items():
-            allowed = route.get("tools", "all")
-            if allowed == "all":
-                continue
-            if isinstance(allowed, str):
-                referenced = {t.strip() for t in allowed.split(",")}
-            else:
-                referenced = set(allowed)
-            unknown = referenced - tool_names
-            for name in unknown:
-                warnings.append(f"Routing rule [{classification}] references unknown tool '{name}'")
-        for w in warnings:
-            logger.warning(w)
-        return warnings
 

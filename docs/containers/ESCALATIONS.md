@@ -11,6 +11,50 @@ STOPS. It does not reach across. Whoever is orchestrating resolves these.
 
 ---
 
+## 2026-08-13 — 01-cleanup — the frontend sends page context that nothing consumes
+
+**Wants:** a decision on restoring page-context injection into `build_planned()`.
+
+**Blocked by:** charter §3 lists exactly four features to port out of
+`ContextAssembler.build()` before deleting it. There are at least two more, and
+porting them is feature restoration rather than the mechanical port §3 describes,
+so it needs an explicit yes.
+
+**Case:** `build()` also consumed `context_metadata` for two keys the four-item
+list does not mention (see `git show d1b8e6d:odigos/core/context.py`, lines
+~540-580):
+
+- `notebook_id` → injected the notebook's title, mode, collaboration setting and
+  its 10 most recent entries
+- `board_id` → injected the kanban board's title and description
+
+That data is still being sent. `dashboard/src/components/AgentInputBar.tsx:87`
+puts `context: pageContext` on the outgoing websocket message, `api/ws.py:171`
+copies it to `msg_metadata["context"]`, `core/agent.py:125` reads it into
+`context_metadata`, and it reaches `executor.py:288` — where **only `goal_id` is
+ever read**. Everything else is dropped on the floor.
+
+So the user opens a notebook, types a question about it, the UI faithfully sends
+which notebook they are looking at, and the agent never sees it. This was already
+true before today — `build()` was unreachable, so nothing consumed these keys —
+but deleting `build()` removes the reference implementation, which is why it is
+recorded here rather than lost.
+
+Same situation, lower stakes: `self.summarizer` is still triggered by
+`api/ws.py:447` and `memory/manager.py:251`, so conversation summaries are
+generated, but `build_planned` never injects them into the prompt. Only `build()`
+did. Summaries are being written and not read.
+
+**Recommendation:** restore the notebook/board injection. It is roughly 40 lines
+in `build_planned` plus threading `context_metadata` through the one
+`build_planned` call at `executor.py:313`, and it makes a feature the UI already
+advertises actually work. The summarizer question is separate and worth its own
+look — either inject the summaries or stop generating them.
+
+**Decision:**
+
+---
+
 ## 2026-08-12 — 01-cleanup — two config default flips turn features OFF on this install
 
 **Wants:** confirmation, or a revert. Already done, flagged here because the effect is
