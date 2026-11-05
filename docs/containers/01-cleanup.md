@@ -99,7 +99,7 @@ draft of this charter got it backwards: it told you to `git rm --cached data/sub
 not.** Those 7 files are shipped subagent personas, loaded by `core/subagent.py:75` — untracking
 them would ship a clone with an empty personas directory. The error was gitignoring them in the
 first place; that is fixed and all 7 remain tracked. `__pycache__/` was already ignored
-(`.gitignore:2`) and 28 stale dirs embedding the dead `/Users/jacob/Projects/odigos/` path have
+(`.gitignore:2`) and 28 stale dirs embedding a dead checkout path under the maintainer's home directory have
 been purged. Redundant `data/*.db-wal` / `-shm` entries removed.
 
 **0f. Silent degradation — 23 `except ImportError` sites. This is the real finding.**

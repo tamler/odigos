@@ -112,7 +112,7 @@ class TestSkillFramingInjection:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_skill_framing.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_skill_framing.py -x -q`
 Expected: FAIL — `Skill.overrides` doesn't exist, `_build_skill_activation_message` doesn't exist.
 
 - [ ] **Step 3: Add overrides field to Skill**
@@ -262,7 +262,7 @@ overrides: [tone]
 
 - [ ] **Step 8: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_skill_framing.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_skill_framing.py -v`
 Expected: PASS (4 tests).
 
 Also run existing skill tests for regressions:
@@ -354,7 +354,7 @@ class TestSubagentSchema:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py::TestSubagentSchema -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent.py::TestSubagentSchema -x -q`
 Expected: FAIL — columns don't exist.
 
 - [ ] **Step 3: Update schema.sql**
@@ -418,7 +418,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_parent ON conversations(parent_conv
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py::TestSubagentSchema -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent.py::TestSubagentSchema -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 6: Commit**
@@ -673,7 +673,7 @@ class TestPersonaLoader:
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py::TestPersonaLoader -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent.py::TestPersonaLoader -x -q`
 Expected: FAIL — `odigos.core.subagent` doesn't exist.
 
 - [ ] **Step 4: Create the subagent module (initial version)**
@@ -812,7 +812,7 @@ def resolve_tools(
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py::TestPersonaLoader -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent.py::TestPersonaLoader -v`
 Expected: PASS (6 tests).
 
 - [ ] **Step 6: Commit**
@@ -911,7 +911,7 @@ class TestSubagentDispatch:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py::TestSubagentDispatch -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent.py::TestSubagentDispatch -x -q`
 Expected: FAIL — `run_subagent` doesn't exist.
 
 - [ ] **Step 3: Add run_subagent to subagent.py**
@@ -1019,7 +1019,7 @@ async def run_subagent(
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py::TestSubagentDispatch -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent.py::TestSubagentDispatch -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Commit**
@@ -1164,7 +1164,7 @@ class TestWorkerOrphanRecovery:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent_worker.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent_worker.py -x -q`
 Expected: FAIL — `subagent_worker` module doesn't exist.
 
 - [ ] **Step 3: Create the worker module (gating + orphan recovery first)**
@@ -1314,7 +1314,7 @@ async def _execute_subagent_task(hb, task_row: dict) -> None:
 
 - [ ] **Step 4: Run gating + orphan recovery tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent_worker.py::TestWorkerGating tests/test_subagent_worker.py::TestWorkerOrphanRecovery -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent_worker.py::TestWorkerGating tests/test_subagent_worker.py::TestWorkerOrphanRecovery -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Wire worker into orchestrator**
@@ -1472,7 +1472,7 @@ class TestWorkerExecution:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent_worker.py::TestWorkerExecution -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent_worker.py::TestWorkerExecution -x -q`
 Expected: FAIL — execution doesn't produce result, no notification.
 
 - [ ] **Step 3: Flesh out `_execute_subagent_task`**
@@ -1728,12 +1728,12 @@ def build_scoped_system_prompt(
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent_worker.py::TestWorkerExecution -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent_worker.py::TestWorkerExecution -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 6: Run all sub-agent tests for regressions**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py tests/test_subagent_worker.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent.py tests/test_subagent_worker.py -v`
 Expected: all pass.
 
 - [ ] **Step 7: Commit**
@@ -1856,7 +1856,7 @@ class TestChaining:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent_worker.py::TestChaining -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent_worker.py::TestChaining -x -q`
 Expected: FAIL — chaining not implemented.
 
 - [ ] **Step 3: Implement chaining**
@@ -1963,7 +1963,7 @@ async def _dispatch_failure_handler(hb, parent_row: dict, error: str, on_failure
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent_worker.py::TestChaining -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent_worker.py::TestChaining -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
@@ -2106,7 +2106,7 @@ class TestCancelSubagentTool:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent_tools.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent_tools.py -x -q`
 Expected: FAIL — module doesn't exist.
 
 - [ ] **Step 3: Create the tool module**
@@ -2335,7 +2335,7 @@ class CancelSubagentTool(BaseTool):
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent_tools.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent_tools.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Register tools in bootstrap**
@@ -2389,7 +2389,7 @@ Available personas for run_subagent:
 
 - [ ] **Step 7: Run full test suite for regressions**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py tests/test_subagent_worker.py tests/test_subagent_tools.py tests/test_skill_framing.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_subagent.py tests/test_subagent_worker.py tests/test_subagent_tools.py tests/test_skill_framing.py -v`
 Expected: all pass.
 
 - [ ] **Step 8: Commit**
@@ -2406,19 +2406,19 @@ git commit -m "feat(subagents): orchestration tools and capabilities rubric"
 
 - [ ] **Step 1: Run all new sub-agent tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_skill_framing.py tests/test_subagent.py tests/test_subagent_worker.py tests/test_subagent_tools.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_skill_framing.py tests/test_subagent.py tests/test_subagent_worker.py tests/test_subagent_tools.py -v`
 Expected: all pass.
 
 - [ ] **Step 2: Run broader test suite for regressions**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_skill_maturity.py tests/test_memory_store.py tests/test_memory_recall.py tests/test_memory_evolution.py tests/test_notebooks_notes.py tests/test_notebook_review.py tests/test_api_plans.py -q`
+Run: `cd $REPO && python3 -m pytest tests/test_skill_maturity.py tests/test_memory_store.py tests/test_memory_recall.py tests/test_memory_evolution.py tests/test_notebooks_notes.py tests/test_notebook_review.py tests/test_api_plans.py -q`
 Expected: all pass.
 
 - [ ] **Step 3: Import sanity check**
 
 Run:
 ```
-cd /Users/jacob/Projects/odigos && python3 -c "
+cd $REPO && python3 -c "
 from odigos.core.subagent import run_subagent, load_persona, SubagentDispatchResult
 from odigos.core.heartbeat.subagent_worker import poll_subagent_tasks, recover_orphaned_tasks
 from odigos.tools.subagent_tools import RunSubagentTool, RunParallelSubagentsTool, SubagentStatusTool, CancelSubagentTool
@@ -2429,7 +2429,7 @@ Expected: `all imports ok`.
 
 - [ ] **Step 4: Docker smoke test**
 
-Run: `cd /Users/jacob/Projects/odigos && make build && make up && sleep 5 && make logs 2>&1 | tail -30`
+Run: `cd $REPO && make build && make up && sleep 5 && make logs 2>&1 | tail -30`
 Expected: Container starts cleanly, no import errors, heartbeat running.
 
 - [ ] **Step 5: Commit any final cleanup**

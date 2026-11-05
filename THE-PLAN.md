@@ -189,7 +189,7 @@ exist, two agents round-trip a peer reply, docs true.
   it into a throwaway container to prove it works. It's your only offsite copy.
 - **Then** cancel: `51.81.82.221` (current), `82.25.91.86` (old bare-metal), `100.89.147.103`
   (uxrls.com Jessica). The last two have been billing unused since May.
-- DNS at the registrar: `odigos.one`, `jacob.`, `jessica.`, and the orphaned
+- DNS at the registrar: `odigos.one`, `<owner>.`, `jessica.`, and the orphaned
   `trading.odigos.one`.
 - Revoke keys — they outlive the servers: OpenRouter, Groq, Kie.ai, the VAPID pair,
   `PLATFORM_AGENT_JWT_SECRET`, any `card-sk-*` mesh keys.

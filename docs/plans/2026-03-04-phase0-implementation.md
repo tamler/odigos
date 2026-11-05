@@ -32,7 +32,7 @@
 **Step 1: Initialize git repo**
 
 ```bash
-cd /Users/jacob/Projects/odigos
+cd $REPO
 git init
 ```
 
@@ -194,7 +194,7 @@ def test_settings(tmp_db_path: str) -> Settings:
 **Step 10: Install dependencies**
 
 ```bash
-cd /Users/jacob/Projects/odigos
+cd $REPO
 uv sync --all-extras
 ```
 

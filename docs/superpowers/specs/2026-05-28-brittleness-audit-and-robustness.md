@@ -3,7 +3,7 @@
 **Status:** Phase A + Phase B complete; Phase C pending (gated on hosted launch)
 **Date:** 2026-05-28
 **Revised:** 2026-05-28 (post-review v2; Phase B execution log appended §10)
-**Owner:** Jacob (rotating; re-read quarterly — next: 2026-08-28)
+**Owner:** Maintainer (rotating; re-read quarterly — next: 2026-08-28)
 **Living anti-pattern registry:** [`docs/superpowers/anti-patterns.md`](../anti-patterns.md)
 
 ---
@@ -281,7 +281,7 @@ Every item below specifies its acceptance criteria — what artifact says "done.
 - `subagent_status` failure rate (task not found): <1%
 
 **Action thresholds:**
-- 2× SLO sustained 24h → page on-call (Jacob)
+- 2× SLO sustained 24h → page on-call (maintainer)
 - 5× SLO → automatic rollback of last prompt/tool change (Phase C.3)
 
 #### C.3 Canary + rollback

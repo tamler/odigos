@@ -873,7 +873,7 @@ ssh root@82.25.91.86 "cd /opt/odigos && git fetch origin main && git reset --har
 
 - [ ] **Step 4: Verify Activity page loads**
 
-Open browser to `https://jacob.odigos.one/activity`
+Open browser to `https://<owner>.odigos.one/activity`
 Expected: Empty state — "No activity yet. Your agent will post findings here."
 
 - [ ] **Step 5: Verify notification bar**

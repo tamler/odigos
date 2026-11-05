@@ -68,7 +68,7 @@ ALTER TABLE evaluations ADD COLUMN evaluator_agent TEXT;
 
 **Step 2: Verify migration applies**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "import asyncio; from odigos.db import Database; asyncio.run(Database(':memory:', migrations_dir='migrations').initialize()); print('Migration OK')"`
+Run: `cd $REPO && python3 -c "import asyncio; from odigos.db import Database; asyncio.run(Database(':memory:', migrations_dir='migrations').initialize()); print('Migration OK')"`
 Expected: `Migration OK`
 
 **Step 3: Commit**
@@ -124,7 +124,7 @@ def test_peer_config_has_netbird_fields():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_config_agent_identity.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_config_agent_identity.py -v`
 Expected: FAIL (AgentConfig doesn't have `role` field)
 
 **Step 3: Update config.py**
@@ -156,7 +156,7 @@ class PeerConfig(BaseModel):
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_config_agent_identity.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_config_agent_identity.py -v`
 Expected: All 3 tests PASS
 
 **Step 5: Commit**
@@ -345,7 +345,7 @@ async def test_specialization_proposal_stored(db, mock_provider, mock_evolution)
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_strategist.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_strategist.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 **Step 3: Write the implementation**
@@ -580,7 +580,7 @@ def _parse_json(text: str) -> dict | None:
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_strategist.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_strategist.py -v`
 Expected: All 4 tests PASS
 
 **Step 5: Commit**
@@ -649,7 +649,7 @@ async def test_tick_runs_strategist_when_should_run():
 
 **Step 2: Run to verify failure**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_heartbeat_strategist.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_heartbeat_strategist.py -v`
 Expected: FAIL (Heartbeat doesn't have `strategist`)
 
 **Step 3: Update heartbeat.py**
@@ -715,7 +715,7 @@ Pass `strategist=strategist` to the Heartbeat constructor.
 
 **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_heartbeat_strategist.py tests/test_heartbeat_evolution.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_heartbeat_strategist.py tests/test_heartbeat_evolution.py -v`
 Expected: All PASS
 
 **Step 6: Commit**
@@ -862,7 +862,7 @@ async def test_approve_proposal(client, db):
 
 **Step 2: Run to verify failures**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_api_evolution.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_api_evolution.py -v`
 Expected: FAIL
 
 **Step 3: Write the implementation**
@@ -1028,7 +1028,7 @@ app.state.evolution_engine = evolution_engine
 
 **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_api_evolution.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_api_evolution.py -v`
 Expected: All 5 tests PASS
 
 **Step 6: Commit**
@@ -1141,7 +1141,7 @@ async def test_maybe_auto_title_skips_after_first_exchange(db, mock_provider):
 
 **Step 2: Run to verify failure**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_auto_title.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_auto_title.py -v`
 Expected: FAIL
 
 **Step 3: Write the implementation**
@@ -1241,7 +1241,7 @@ The exact wiring depends on what variables are in scope — read the ws.py file 
 
 **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_auto_title.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_auto_title.py -v`
 Expected: All 4 tests PASS
 
 **Step 6: Commit**
@@ -1565,7 +1565,7 @@ In the sidebar, add a link to `/evolution` alongside the Settings link. Use the 
 
 **Step 4: Verify it builds**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npm run build`
+Run: `cd $REPO/dashboard && npm run build`
 Expected: Build succeeds
 
 **Step 5: Commit**
@@ -1757,7 +1757,7 @@ app.include_router(agents_router)
 
 **Step 5: Verify build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npm run build`
+Run: `cd $REPO/dashboard && npm run build`
 Expected: Build succeeds
 
 **Step 6: Commit**
@@ -1815,7 +1815,7 @@ if (msg.type === 'title_updated' && msg.conversation_id && msg.title) {
 
 **Step 3: Verify build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npm run build`
+Run: `cd $REPO/dashboard && npm run build`
 Expected: Build succeeds
 
 **Step 4: Commit**
@@ -1833,22 +1833,22 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 
 **Step 1: Run all Python tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -v`
+Run: `cd $REPO && python3 -m pytest tests/ -v`
 Expected: All tests PASS
 
 **Step 2: Verify all imports**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "from odigos.core.strategist import Strategist; from odigos.core.auto_title import generate_title; from odigos.api.evolution import router; from odigos.api.agents import router; print('All imports OK')"`
+Run: `cd $REPO && python3 -c "from odigos.core.strategist import Strategist; from odigos.core.auto_title import generate_title; from odigos.api.evolution import router; from odigos.api.agents import router; print('All imports OK')"`
 Expected: `All imports OK`
 
 **Step 3: Verify dashboard builds**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npm run build`
+Run: `cd $REPO/dashboard && npm run build`
 Expected: Build succeeds
 
 **Step 4: Verify migration chain**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "import asyncio; from odigos.db import Database; asyncio.run(Database(':memory:', migrations_dir='migrations').initialize()); print('All migrations OK')"`
+Run: `cd $REPO && python3 -c "import asyncio; from odigos.db import Database; asyncio.run(Database(':memory:', migrations_dir='migrations').initialize()); print('All migrations OK')"`
 Expected: `All migrations OK`
 
 **Step 5: Final commit if anything remains**

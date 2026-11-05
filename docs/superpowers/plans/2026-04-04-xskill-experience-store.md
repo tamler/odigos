@@ -330,7 +330,7 @@ Check if `tests/conftest.py` exists first — if it does, add the fixture to it.
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_xskill.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_xskill.py -v`
 Expected: FAIL — functions don't exist yet
 
 - [ ] **Step 4: Commit test file**
@@ -460,7 +460,7 @@ Run: `python3 -c "from odigos.core.context import _get_likely_tools, _FALLBACK_T
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_xskill.py::TestGetLikelyTools tests/test_xskill.py::TestFallbackTools -v`
+Run: `cd $REPO && python3 -m pytest tests/test_xskill.py::TestGetLikelyTools tests/test_xskill.py::TestFallbackTools -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -531,12 +531,12 @@ Place the feedback call BEFORE the `if result.success:` return block but AFTER t
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_xskill.py::TestExperienceFeedback -v`
+Run: `cd $REPO && python3 -m pytest tests/test_xskill.py::TestExperienceFeedback -v`
 Expected: All PASS
 
 - [ ] **Step 4: Run all existing tests to verify no breakage**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_executor_validation.py tests/test_xskill.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_executor_validation.py tests/test_xskill.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -587,12 +587,12 @@ Find the end of `extract_experiences()` (after the insertion loop completes, aro
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_xskill.py::TestExperiencePruning -v`
+Run: `cd $REPO && python3 -m pytest tests/test_xskill.py::TestExperiencePruning -v`
 Expected: All PASS
 
 - [ ] **Step 4: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_xskill.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_xskill.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -608,7 +608,7 @@ git commit -m "feat(xskill): prune stale and low-confidence experiences"
 
 - [ ] **Step 1: Run all tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q`
 Expected: All tests pass
 
 - [ ] **Step 2: Verify imports**

@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS direction_log (
 
 **Step 2: Verify migration applies**
 
-Run: `cd /Users/jacob/Projects/odigos && python -c "import asyncio; from odigos.db import Database; db = Database('data/test_evolution.db'); asyncio.run(db.initialize()); print('Migration OK'); import os; os.remove('data/test_evolution.db')"`
+Run: `cd $REPO && python -c "import asyncio; from odigos.db import Database; db = Database('data/test_evolution.db'); asyncio.run(db.initialize()); print('Migration OK'); import os; os.remove('data/test_evolution.db')"`
 Expected: `Migration OK`
 
 **Step 3: Commit**
@@ -216,7 +216,7 @@ def test_missing_dir_returns_empty():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_section_registry.py -v`
+Run: `cd $REPO && python -m pytest tests/test_section_registry.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 **Step 3: Write the implementation**
@@ -360,7 +360,7 @@ You have an evolution system that tests changes to your behavior. If you notice 
 
 **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_section_registry.py -v`
+Run: `cd $REPO && python -m pytest tests/test_section_registry.py -v`
 Expected: All 6 tests PASS
 
 **Step 6: Commit**
@@ -545,7 +545,7 @@ async def test_revert_trial_deletes_overrides(db, sections_dir):
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_checkpoint.py -v`
+Run: `cd $REPO && python -m pytest tests/test_checkpoint.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 **Step 3: Write the implementation**
@@ -722,7 +722,7 @@ def _extract_frontmatter(text: str) -> str:
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_checkpoint.py -v`
+Run: `cd $REPO && python -m pytest tests/test_checkpoint.py -v`
 Expected: All 7 tests PASS
 
 **Step 5: Commit**
@@ -879,7 +879,7 @@ async def test_get_unscored_messages(db, mock_provider):
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_evaluator.py -v`
+Run: `cd $REPO && python -m pytest tests/test_evaluator.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 **Step 3: Write the implementation**
@@ -1148,7 +1148,7 @@ def _parse_json(text: str) -> dict | None:
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_evaluator.py -v`
+Run: `cd $REPO && python -m pytest tests/test_evaluator.py -v`
 Expected: All 4 tests PASS
 
 **Step 5: Commit**
@@ -1338,7 +1338,7 @@ async def test_get_failed_trials(db, mock_checkpoint, mock_evaluator, mock_provi
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_evolution.py -v`
+Run: `cd $REPO && python -m pytest tests/test_evolution.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 **Step 3: Write the implementation**
@@ -1621,7 +1621,7 @@ class EvolutionEngine:
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_evolution.py -v`
+Run: `cd $REPO && python -m pytest tests/test_evolution.py -v`
 Expected: All 5 tests PASS
 
 **Step 5: Commit**
@@ -1685,7 +1685,7 @@ def test_build_without_sections_falls_back():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_prompt_builder_dynamic.py -v`
+Run: `cd $REPO && python -m pytest tests/test_prompt_builder_dynamic.py -v`
 Expected: FAIL (build_system_prompt doesn't accept `sections` parameter)
 
 **Step 3: Update prompt_builder.py**
@@ -1767,11 +1767,11 @@ system_prompt = build_system_prompt(
 
 **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_prompt_builder_dynamic.py tests/test_section_registry.py -v`
+Run: `cd $REPO && python -m pytest tests/test_prompt_builder_dynamic.py tests/test_section_registry.py -v`
 Expected: All PASS
 
 Run full test suite to check nothing broke:
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x --timeout=30`
 Expected: All existing tests still PASS
 
 **Step 6: Commit**
@@ -1839,7 +1839,7 @@ async def test_tick_runs_evolution_when_idle():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_heartbeat_evolution.py -v`
+Run: `cd $REPO && python -m pytest tests/test_heartbeat_evolution.py -v`
 Expected: FAIL (Heartbeat doesn't have `evolution_engine` attribute)
 
 **Step 3: Update heartbeat.py**
@@ -1924,11 +1924,11 @@ agent.context_assembler.checkpoint_manager = checkpoint_manager
 
 **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_heartbeat_evolution.py -v`
+Run: `cd $REPO && python -m pytest tests/test_heartbeat_evolution.py -v`
 Expected: PASS
 
 Run full suite:
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x --timeout=30`
 Expected: All PASS
 
 **Step 6: Commit**
@@ -2128,12 +2128,12 @@ async def test_full_cycle_revert(db, sections_dir, mock_provider):
 
 **Step 2: Run the test**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_evolution_integration.py -v`
+Run: `cd $REPO && python -m pytest tests/test_evolution_integration.py -v`
 Expected: All 2 tests PASS
 
 **Step 3: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x --timeout=30`
 Expected: All PASS
 
 **Step 4: Commit**
@@ -2149,17 +2149,17 @@ git commit -m "test: add integration tests for full evolution promote/revert cyc
 
 **Step 1: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -v --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -v --timeout=30`
 Expected: All tests PASS including new evolution tests
 
 **Step 2: Verify no import errors in new modules**
 
-Run: `cd /Users/jacob/Projects/odigos && python -c "from odigos.core.evaluator import Evaluator; from odigos.core.evolution import EvolutionEngine; from odigos.core.checkpoint import CheckpointManager; from odigos.personality.section_registry import SectionRegistry; print('All imports OK')"`
+Run: `cd $REPO && python -c "from odigos.core.evaluator import Evaluator; from odigos.core.evolution import EvolutionEngine; from odigos.core.checkpoint import CheckpointManager; from odigos.personality.section_registry import SectionRegistry; print('All imports OK')"`
 Expected: `All imports OK`
 
 **Step 3: Verify migration applies cleanly**
 
-Run: `cd /Users/jacob/Projects/odigos && python -c "import asyncio; from odigos.db import Database; db = Database('data/test_final.db'); asyncio.run(db.initialize()); print('All migrations OK'); import os; os.remove('data/test_final.db')"`
+Run: `cd $REPO && python -c "import asyncio; from odigos.db import Database; db = Database('data/test_final.db'); asyncio.run(db.initialize()); print('All migrations OK'); import os; os.remove('data/test_final.db')"`
 Expected: `All migrations OK`
 
 **Step 4: Verify prompt section files exist**

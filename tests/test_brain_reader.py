@@ -21,30 +21,30 @@ def wiki_entity_file(tmp_path: Path) -> Path:
     """Create a sample entity page matching wiki_writer.py output format."""
     entities_dir = tmp_path / "entities"
     entities_dir.mkdir()
-    filepath = entities_dir / "jacob.md"
+    filepath = entities_dir / "sam.md"
     filepath.write_text(
         "---\n"
         "id: abc123def456\n"
         "type: person\n"
-        "aliases: [Jake, J]\n"
+        "aliases: [Sammy, S]\n"
         "confidence: 0.95\n"
         "sources: [conv:aaa111, doc:bbb222]\n"
         "updated_at: 2026-04-07T08:30:00Z\n"
         "---\n"
         "\n"
-        "# Jacob\n"
+        "# Sam\n"
         "\n"
         "## Facts\n"
-        "- Jacob prefers Groq [conv:aaa111]\n"
-        "- Jacob lives in Amsterdam [doc:bbb222]\n"
-        "- Jacob is a developer\n"
+        "- Sam prefers Groq [conv:aaa111]\n"
+        "- Sam lives in Amsterdam [doc:bbb222]\n"
+        "- Sam is a developer\n"
         "\n"
         "## Relationships\n"
         "- **owns** -> Odigos\n"
         "- **works_on** -> MusicGen\n"
         "\n"
         "## Backlinks\n"
-        "- Kie.ai **uses** -> Jacob\n"
+        "- Kie.ai **uses** -> Sam\n"
         "\n"
     )
     return filepath
@@ -81,16 +81,16 @@ def test_parse_entity_page(wiki_entity_file: Path):
 
     assert result["id"] == "abc123def456"
     assert result["type"] == "person"
-    assert result["name"] == "Jacob"
-    assert result["aliases"] == ["Jake", "J"]
+    assert result["name"] == "Sam"
+    assert result["aliases"] == ["Sammy", "S"]
     assert result["confidence"] == 0.95
     assert result["sources"] == ["conv:aaa111", "doc:bbb222"]
 
     assert len(result["facts"]) == 3
-    assert result["facts"][0]["fact"] == "Jacob prefers Groq"
+    assert result["facts"][0]["fact"] == "Sam prefers Groq"
     assert result["facts"][0]["source_type"] == "conv"
     assert result["facts"][0]["source_id"] == "aaa111"
-    assert result["facts"][2]["fact"] == "Jacob is a developer"
+    assert result["facts"][2]["fact"] == "Sam is a developer"
     assert result["facts"][2]["source_type"] is None
 
     rels = result["relationships"]
@@ -137,7 +137,7 @@ def test_parse_facts_with_sources(tmp_path: Path):
         "# Test Entity\n"
         "\n"
         "## Facts\n"
-        "- Jacob prefers Groq [conv:abc123]\n"
+        "- Sam prefers Groq [conv:abc123]\n"
         "- Uses dark mode always [doc:xyz789]\n"
         "- Likes coffee\n"
         "\n"
@@ -147,7 +147,7 @@ def test_parse_facts_with_sources(tmp_path: Path):
     facts = result["facts"]
 
     assert len(facts) == 3
-    assert facts[0]["fact"] == "Jacob prefers Groq"
+    assert facts[0]["fact"] == "Sam prefers Groq"
     assert facts[0]["source_type"] == "conv"
     assert facts[0]["source_id"] == "abc123"
 
@@ -181,7 +181,7 @@ def test_parse_relationships(tmp_path: Path):
         "- **depends_on** -> FastAPI\n"
         "\n"
         "## Backlinks\n"
-        "- Jacob **created** -> Odigos\n"
+        "- Sam **created** -> Odigos\n"
         "- Kie.ai **uses** -> Odigos\n"
         "\n"
     )
@@ -199,7 +199,7 @@ def test_parse_relationships(tmp_path: Path):
     assert forward[1]["to"] == "FastAPI"
 
     assert len(backlinks) == 2
-    assert backlinks[0]["from"] == "Jacob"
+    assert backlinks[0]["from"] == "Sam"
     assert backlinks[0]["relationship"] == "created"
     assert backlinks[0]["to"] == "Odigos"
     assert backlinks[1]["from"] == "Kie.ai"
@@ -219,21 +219,21 @@ async def test_rebuild_from_brain(tmp_path: Path):
     sources_dir.mkdir(parents=True)
 
     # Entity page with 2 facts and 1 relationship
-    (entities_dir / "jacob.md").write_text(
+    (entities_dir / "sam.md").write_text(
         "---\n"
         "id: ent001\n"
         "type: person\n"
-        "aliases: [Jake]\n"
+        "aliases: [Sammy]\n"
         "confidence: 0.95\n"
         "sources: [conv:s1]\n"
         "updated_at: 2026-04-07T08:30:00Z\n"
         "---\n"
         "\n"
-        "# Jacob\n"
+        "# Sam\n"
         "\n"
         "## Facts\n"
-        "- Jacob prefers Groq [conv:s1]\n"
-        "- Jacob lives in Amsterdam\n"
+        "- Sam prefers Groq [conv:s1]\n"
+        "- Sam lives in Amsterdam\n"
         "\n"
         "## Relationships\n"
         "- **owns** -> Odigos\n"
@@ -328,13 +328,13 @@ async def test_rebuild_from_brain(tmp_path: Path):
 
         stats = await rebuild_from_brain(db, brain_dir)
 
-        # 1 entity page (Jacob) + 1 stub (Odigos from relationship) + 2 from topic index
+        # 1 entity page (Sam) + 1 stub (Odigos from relationship) + 2 from topic index
         # = 4 entities total
         entities = await db.fetch_all("SELECT * FROM entities")
         assert len(entities) == 4, f"Expected 4 entities, got {len(entities)}"
         assert stats["entities"] == 3  # 1 from page + 2 from topic (stub doesn't count)
 
-        # 2 facts from Jacob's page
+        # 2 facts from Sam's page
         facts = await db.fetch_all("SELECT * FROM memories WHERE memory_type = 'fact'")
         assert len(facts) == 2
         assert stats["facts"] == 2

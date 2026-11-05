@@ -2,7 +2,7 @@
 #
 # This is the C0 template. It is the unit odigos-honey actually runs, with the
 # install name parameterised. To add an install, replace <NAME> throughout
-# (e.g. honey, jacob, jessica), install as /etc/systemd/system/odigos-<NAME>.service,
+# (e.g. honey, owner, jessica), install as /etc/systemd/system/odigos-<NAME>.service,
 # and add a matching row to deploy.sh's INSTALLS array.
 #
 # Prerequisites, in order:

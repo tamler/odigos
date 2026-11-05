@@ -13,8 +13,8 @@
 ### Task 1: Add STT/TTS Config Models and Optional Dependencies
 
 **Files:**
-- Modify: `/Users/jacob/Projects/odigos/odigos/config.py:100-172`
-- Modify: `/Users/jacob/Projects/odigos/pyproject.toml:26-31`
+- Modify: `$REPO/odigos/config.py:100-172`
+- Modify: `$REPO/pyproject.toml:26-31`
 
 **Step 1: Add config models to config.py**
 
@@ -66,12 +66,12 @@ git commit -m "feat: add STT/TTS config models and optional dependencies"
 ### Task 2: STT Provider (MoonshineSTT)
 
 **Files:**
-- Create: `/Users/jacob/Projects/odigos/plugins/stt/provider.py`
-- Test: `/Users/jacob/Projects/odigos/tests/test_stt_provider.py`
+- Create: `$REPO/plugins/stt/provider.py`
+- Test: `$REPO/tests/test_stt_provider.py`
 
 **Step 1: Write the failing test**
 
-Create `/Users/jacob/Projects/odigos/tests/test_stt_provider.py`:
+Create `$REPO/tests/test_stt_provider.py`:
 
 ```python
 """Tests for the MoonshineSTT provider."""
@@ -129,7 +129,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'plugins.stt'`
 
 **Step 3: Write the STT provider**
 
-Create `/Users/jacob/Projects/odigos/plugins/stt/provider.py`:
+Create `$REPO/plugins/stt/provider.py`:
 
 ```python
 """Moonshine speech-to-text provider with file and streaming support."""
@@ -210,7 +210,7 @@ class MoonshineSTT:
 
 Also create empty `__init__.py` so Python can find the module:
 
-Create `/Users/jacob/Projects/odigos/plugins/stt/__init__.py` (leave empty for now — registration comes in Task 4).
+Create `$REPO/plugins/stt/__init__.py` (leave empty for now — registration comes in Task 4).
 
 **Step 4: Run test to verify it passes**
 
@@ -229,12 +229,12 @@ git commit -m "feat: add MoonshineSTT provider with file and streaming transcrip
 ### Task 3: TTS Provider (PocketTTSProvider)
 
 **Files:**
-- Create: `/Users/jacob/Projects/odigos/plugins/tts/provider.py`
-- Test: `/Users/jacob/Projects/odigos/tests/test_tts_provider.py`
+- Create: `$REPO/plugins/tts/provider.py`
+- Test: `$REPO/tests/test_tts_provider.py`
 
 **Step 1: Write the failing test**
 
-Create `/Users/jacob/Projects/odigos/tests/test_tts_provider.py`:
+Create `$REPO/tests/test_tts_provider.py`:
 
 ```python
 """Tests for the PocketTTSProvider."""
@@ -302,7 +302,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'plugins.tts'`
 
 **Step 3: Write the TTS provider**
 
-Create `/Users/jacob/Projects/odigos/plugins/tts/provider.py`:
+Create `$REPO/plugins/tts/provider.py`:
 
 ```python
 """Pocket-TTS text-to-speech provider with file and streaming support."""
@@ -382,7 +382,7 @@ class PocketTTSProvider:
 
 Also create empty `__init__.py`:
 
-Create `/Users/jacob/Projects/odigos/plugins/tts/__init__.py` (leave empty for now).
+Create `$REPO/plugins/tts/__init__.py` (leave empty for now).
 
 **Step 4: Run test to verify it passes**
 
@@ -401,15 +401,15 @@ git commit -m "feat: add PocketTTSProvider with file and streaming generation"
 ### Task 4: Plugin Registration (STT + TTS)
 
 **Files:**
-- Modify: `/Users/jacob/Projects/odigos/plugins/stt/__init__.py`
-- Create: `/Users/jacob/Projects/odigos/plugins/stt/plugin.yaml`
-- Modify: `/Users/jacob/Projects/odigos/plugins/tts/__init__.py`
-- Create: `/Users/jacob/Projects/odigos/plugins/tts/plugin.yaml`
-- Test: `/Users/jacob/Projects/odigos/tests/test_plugin_registration.py`
+- Modify: `$REPO/plugins/stt/__init__.py`
+- Create: `$REPO/plugins/stt/plugin.yaml`
+- Modify: `$REPO/plugins/tts/__init__.py`
+- Create: `$REPO/plugins/tts/plugin.yaml`
+- Test: `$REPO/tests/test_plugin_registration.py`
 
 **Step 1: Write the failing test**
 
-Create `/Users/jacob/Projects/odigos/tests/test_plugin_registration.py`:
+Create `$REPO/tests/test_plugin_registration.py`:
 
 ```python
 """Tests for STT and TTS plugin registration."""
@@ -484,7 +484,7 @@ Expected: FAIL — `ImportError` or `AttributeError` (register function not defi
 
 **Step 3: Write STT plugin registration**
 
-Write `/Users/jacob/Projects/odigos/plugins/stt/__init__.py`:
+Write `$REPO/plugins/stt/__init__.py`:
 
 ```python
 """STT plugin — speech-to-text via Moonshine (local CPU, ONNX).
@@ -522,7 +522,7 @@ def register(ctx):
     logger.info("STT plugin loaded (model=%s, lang=%s)", settings.stt.model, settings.stt.language)
 ```
 
-Create `/Users/jacob/Projects/odigos/plugins/stt/plugin.yaml`:
+Create `$REPO/plugins/stt/plugin.yaml`:
 
 ```yaml
 id: stt
@@ -539,7 +539,7 @@ config_keys:
 
 **Step 4: Write TTS plugin registration**
 
-Write `/Users/jacob/Projects/odigos/plugins/tts/__init__.py`:
+Write `$REPO/plugins/tts/__init__.py`:
 
 ```python
 """TTS plugin — text-to-speech via Pocket-TTS (local CPU, PyTorch).
@@ -575,7 +575,7 @@ def register(ctx):
     logger.info("TTS plugin loaded (voice=%s)", settings.tts.voice)
 ```
 
-Create `/Users/jacob/Projects/odigos/plugins/tts/plugin.yaml`:
+Create `$REPO/plugins/tts/plugin.yaml`:
 
 ```yaml
 id: tts
@@ -607,12 +607,12 @@ git commit -m "feat: add STT and TTS plugin registration with config gating"
 ### Task 5: transcribe_audio Tool
 
 **Files:**
-- Create: `/Users/jacob/Projects/odigos/odigos/tools/transcribe.py`
-- Test: `/Users/jacob/Projects/odigos/tests/test_transcribe_tool.py`
+- Create: `$REPO/odigos/tools/transcribe.py`
+- Test: `$REPO/tests/test_transcribe_tool.py`
 
 **Step 1: Write the failing test**
 
-Create `/Users/jacob/Projects/odigos/tests/test_transcribe_tool.py`:
+Create `$REPO/tests/test_transcribe_tool.py`:
 
 ```python
 """Tests for the transcribe_audio tool."""
@@ -692,7 +692,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'odigos.tools.transcrib
 
 **Step 3: Write the tool**
 
-Create `/Users/jacob/Projects/odigos/odigos/tools/transcribe.py`:
+Create `$REPO/odigos/tools/transcribe.py`:
 
 ```python
 """transcribe_audio tool — transcribe audio files via STT provider."""
@@ -784,12 +784,12 @@ git commit -m "feat: add transcribe_audio tool with memory auto-ingestion"
 ### Task 6: speak Tool
 
 **Files:**
-- Create: `/Users/jacob/Projects/odigos/odigos/tools/speak.py`
-- Test: `/Users/jacob/Projects/odigos/tests/test_speak_tool.py`
+- Create: `$REPO/odigos/tools/speak.py`
+- Test: `$REPO/tests/test_speak_tool.py`
 
 **Step 1: Write the failing test**
 
-Create `/Users/jacob/Projects/odigos/tests/test_speak_tool.py`:
+Create `$REPO/tests/test_speak_tool.py`:
 
 ```python
 """Tests for the speak tool."""
@@ -863,7 +863,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'odigos.tools.speak'`
 
 **Step 3: Write the tool**
 
-Create `/Users/jacob/Projects/odigos/odigos/tools/speak.py`:
+Create `$REPO/odigos/tools/speak.py`:
 
 ```python
 """speak tool — generate speech audio via TTS provider."""
@@ -946,13 +946,13 @@ git commit -m "feat: add speak tool for text-to-speech generation"
 ### Task 7: Audio WebSocket Endpoints
 
 **Files:**
-- Create: `/Users/jacob/Projects/odigos/odigos/api/audio.py`
-- Modify: `/Users/jacob/Projects/odigos/odigos/main.py:55-56,640-659`
-- Test: `/Users/jacob/Projects/odigos/tests/test_audio_ws.py`
+- Create: `$REPO/odigos/api/audio.py`
+- Modify: `$REPO/odigos/main.py:55-56,640-659`
+- Test: `$REPO/tests/test_audio_ws.py`
 
 **Step 1: Write the failing test**
 
-Create `/Users/jacob/Projects/odigos/tests/test_audio_ws.py`:
+Create `$REPO/tests/test_audio_ws.py`:
 
 ```python
 """Tests for audio WebSocket endpoints."""
@@ -1013,7 +1013,7 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'odigos.api.audio'`
 
 **Step 3: Write the audio WebSocket router**
 
-Create `/Users/jacob/Projects/odigos/odigos/api/audio.py`:
+Create `$REPO/odigos/api/audio.py`:
 
 ```python
 """WebSocket endpoints for streaming audio (STT and TTS)."""
@@ -1151,7 +1151,7 @@ async def ws_speak(websocket: WebSocket):
 
 **Step 4: Wire the router into main.py**
 
-Add import at `/Users/jacob/Projects/odigos/odigos/main.py` near line 56 (with other router imports):
+Add import at `$REPO/odigos/main.py` near line 56 (with other router imports):
 
 ```python
 from odigos.api.audio import router as audio_router
@@ -1186,12 +1186,12 @@ git commit -m "feat: add WebSocket endpoints for streaming STT and TTS audio"
 ### Task 8: Upload Endpoint Audio Detection
 
 **Files:**
-- Modify: `/Users/jacob/Projects/odigos/odigos/api/upload.py`
-- Test: `/Users/jacob/Projects/odigos/tests/test_upload_audio.py`
+- Modify: `$REPO/odigos/api/upload.py`
+- Test: `$REPO/tests/test_upload_audio.py`
 
 **Step 1: Write the failing test**
 
-Create `/Users/jacob/Projects/odigos/tests/test_upload_audio.py`:
+Create `$REPO/tests/test_upload_audio.py`:
 
 ```python
 """Tests for audio file detection in upload endpoint."""
@@ -1232,7 +1232,7 @@ Expected: FAIL — `ImportError: cannot import name 'is_audio_file' from 'odigos
 
 **Step 3: Modify upload endpoint to detect and transcribe audio**
 
-Add to `/Users/jacob/Projects/odigos/odigos/api/upload.py`, after the imports:
+Add to `$REPO/odigos/api/upload.py`, after the imports:
 
 ```python
 from odigos.tools.transcribe import AUDIO_EXTENSIONS
@@ -1302,12 +1302,12 @@ git commit -m "feat: auto-transcribe audio files via STT in upload endpoint"
 ### Task 9: Telegram Voice Note Integration
 
 **Files:**
-- Modify: `/Users/jacob/Projects/odigos/odigos/channels/telegram.py`
-- Modify: `/Users/jacob/Projects/odigos/plugins/channels/telegram/__init__.py`
+- Modify: `$REPO/odigos/channels/telegram.py`
+- Modify: `$REPO/plugins/channels/telegram/__init__.py`
 
 **Step 1: Add voice note handler to TelegramChannel**
 
-In `/Users/jacob/Projects/odigos/odigos/channels/telegram.py`, add a new method after `_handle_document` (around line 209):
+In `$REPO/odigos/channels/telegram.py`, add a new method after `_handle_document` (around line 209):
 
 ```python
     async def _handle_voice(self, update: Update, context) -> None:
@@ -1422,7 +1422,7 @@ In the `start()` method of `TelegramChannel`, find where document handler is reg
 
 **Step 3: Wire STT/TTS providers to AgentService**
 
-In `/Users/jacob/Projects/odigos/odigos/main.py`, after line 446 (`plugin_context.set_service(agent_service)`), add:
+In `$REPO/odigos/main.py`, after line 446 (`plugin_context.set_service(agent_service)`), add:
 
 ```python
     # Wire audio providers to service for channel access
@@ -1446,7 +1446,7 @@ git commit -m "feat: add Telegram voice note transcription and TTS voice replies
 ### Task 10: Full Registration Test + Wiring Verification
 
 **Files:**
-- Test: `/Users/jacob/Projects/odigos/tests/test_plugin_registration.py` (update existing)
+- Test: `$REPO/tests/test_plugin_registration.py` (update existing)
 
 **Step 1: Run the enabled plugin registration tests that depend on tools**
 

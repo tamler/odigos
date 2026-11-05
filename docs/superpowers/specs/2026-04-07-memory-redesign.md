@@ -21,7 +21,7 @@ data/
     index.md                  # Master catalog of all entities and topic pages
     log.md                    # Append-only record of wiki operations
     entities/                 # Full entity pages (graduated entities only)
-      jacob.md
+      sam.md
       odigos.md
       ...
     topics/                   # Type-level index files (small entities live here)
@@ -71,7 +71,7 @@ The extraction is a single cheap LLM call with structured JSON output:
     {"name": "Kie.ai", "type": "tool", "summary": "Music generation API"}
   ],
   "facts": [
-    {"text": "Jacob prefers Groq for STT", "category": "preference", "about": "Jacob"}
+    {"text": "Sam prefers Groq for STT", "category": "preference", "about": "Sam"}
   ],
   "relationships": [
     {"from": "Odigos", "relationship": "uses", "to": "Kie.ai"}
@@ -91,19 +91,19 @@ Uses the background/cheap model to keep cost low.
 
 Every wiki file has YAML frontmatter that serves as both human-readable metadata and the rebuild seed for DB reconstruction.
 
-**Entity page** (`data/wiki/entities/jacob.md`):
+**Entity page** (`data/wiki/entities/sam.md`):
 
 ```markdown
 ---
 id: a1b2c3d4e5f6
 type: person
-aliases: [Jake, J]
+aliases: [Sammy, S]
 confidence: 0.95
 sources: [conv:abc123, conv:def456, doc:2026-04-07-profile]
 updated_at: 2026-04-07T08:30:00Z
 ---
 
-# Jacob
+# Sam
 
 Project owner of Odigos. Prefers direct communication, no time estimates.
 
@@ -155,7 +155,7 @@ a short horror story -- "The Mirror" about a woman whose reflection stops
 following her movements.
 
 ## Key Facts Extracted
-- User exploring agent capabilities [-> jacob.md]
+- User exploring agent capabilities [-> sam.md]
 ```
 
 **Source file** (`data/sources/2026-04-07-karpathy-llm-wiki.md`):

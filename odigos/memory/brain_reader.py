@@ -35,7 +35,7 @@ def _parse_frontmatter(text: str) -> dict:
         key = key.strip()
         value = value.strip()
 
-        # Parse list values like [Jake, J] or [conv:abc123, conv:def456]
+        # Parse list values like [Sammy, S] or [conv:abc123, conv:def456]
         if value.startswith("[") and value.endswith("]"):
             inner = value[1:-1].strip()
             if inner:

@@ -438,7 +438,7 @@ async def test_publish_metadata_stored_as_json(bus_db):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_message_bus.py -v`
+Run: `cd $REPO && python -m pytest tests/test_message_bus.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'odigos.core.message_bus'`
 
 - [ ] **Step 3: Implement MessageBus**
@@ -560,7 +560,7 @@ class MessageBus:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_message_bus.py -v`
+Run: `cd $REPO && python -m pytest tests/test_message_bus.py -v`
 Expected: All 10 tests PASS
 
 - [ ] **Step 5: Commit**
@@ -648,7 +648,7 @@ In `odigos/channels/web.py`, update `_make_event_handler` at line 103. Remove th
 
 - [ ] **Step 5: Run existing tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_channels.py tests/test_webchannel.py -v`
+Run: `cd $REPO && python -m pytest tests/test_channels.py tests/test_webchannel.py -v`
 Expected: PASS (or skip if these tests don't exist — check first)
 
 - [ ] **Step 6: Commit**
@@ -698,7 +698,7 @@ In `odigos/bootstrap.py`, after the WebChannel is created and registered (around
 
 - [ ] **Step 3: Run the test suite to check nothing breaks**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x -q --timeout=30`
 Expected: PASS (existing tests should still work)
 
 - [ ] **Step 4: Commit**
@@ -790,7 +790,7 @@ Delete the block entirely.
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x -q --timeout=30`
 Expected: PASS
 
 - [ ] **Step 6: Commit**
@@ -856,7 +856,7 @@ The `message_id` parameter is passed down from ws.py (the pre-allocated streamin
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_reflector_cost.py -v`
+Run: `cd $REPO && python -m pytest tests/test_reflector_cost.py -v`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
@@ -995,7 +995,7 @@ await websocket.send_json({
 
 - [ ] **Step 7: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_api_ws.py tests/test_api_ws_integration.py -v`
+Run: `cd $REPO && python -m pytest tests/test_api_ws.py tests/test_api_ws_integration.py -v`
 Expected: Some tests may need updating for the new conversation_id format. Fix as needed.
 
 - [ ] **Step 8: Commit**
@@ -1068,7 +1068,7 @@ The heartbeat needs access to `message_bus`. Check how the heartbeat gets its de
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x -q --timeout=30`
 Expected: PASS
 
 - [ ] **Step 4: Commit**
@@ -1173,7 +1173,7 @@ Files and specific changes:
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x -q --timeout=30`
 Expected: PASS (or failures only in tests that also need column name updates — those are fixed in Task 10)
 
 - [ ] **Step 4: Commit**
@@ -1267,7 +1267,7 @@ Same pattern: `started_at` → `created_at` in INSERT statements, `timestamp` �
 
 - [ ] **Step 4: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x -q --timeout=30`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -1354,7 +1354,7 @@ Also update `finalizeStreaming`:
 
 - [ ] **Step 5: Verify syntax**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && node --check src/stores/chatStore.ts 2>&1 || npx tsc --noEmit src/stores/chatStore.ts 2>&1 | head -20`
+Run: `cd $REPO/dashboard && node --check src/stores/chatStore.ts 2>&1 || npx tsc --noEmit src/stores/chatStore.ts 2>&1 | head -20`
 
 - [ ] **Step 6: Commit**
 
@@ -1471,7 +1471,7 @@ Remove this block. The bus `message` event now handles injecting the system mess
 
 - [ ] **Step 5: Verify syntax**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit 2>&1 | head -30`
+Run: `cd $REPO/dashboard && npx tsc --noEmit 2>&1 | head -30`
 
 - [ ] **Step 6: Commit**
 
@@ -1555,7 +1555,7 @@ Both files have a Trial type with `started_at` — these reference the `trials` 
 
 - [ ] **Step 7: Build check**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit 2>&1 | head -30`
+Run: `cd $REPO/dashboard && npx tsc --noEmit 2>&1 | head -30`
 
 - [ ] **Step 8: Commit**
 
@@ -1575,27 +1575,27 @@ Drop the existing database and recreate from the updated schema.sql. This is a d
 
 - [ ] **Step 1: Stop the running server (if any)**
 
-Run: `cd /Users/jacob/Projects/odigos && make down 2>/dev/null; true`
+Run: `cd $REPO && make down 2>/dev/null; true`
 
 - [ ] **Step 2: Delete the database file**
 
-Run: `rm -f /Users/jacob/Projects/odigos/data/odigos.db`
+Run: `rm -f $REPO/data/odigos.db`
 
 (The exact path may differ — check `config.yaml` for the database path. Default is `data/odigos.db`.)
 
 - [ ] **Step 3: Verify schema.sql creates cleanly**
 
-Run: `cd /Users/jacob/Projects/odigos && sqlite3 /tmp/test-schema.db < schema.sql && echo "OK" && rm /tmp/test-schema.db`
+Run: `cd $REPO && sqlite3 /tmp/test-schema.db < schema.sql && echo "OK" && rm /tmp/test-schema.db`
 Expected: `OK`
 
 - [ ] **Step 4: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q --timeout=30`
+Run: `cd $REPO && python -m pytest tests/ -x -q --timeout=30`
 Expected: All PASS
 
 - [ ] **Step 5: Build frontend**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npm run build`
+Run: `cd $REPO/dashboard && npm run build`
 Expected: Build succeeds with no errors
 
 - [ ] **Step 6: Commit (no file changes, just verification)**
@@ -1610,7 +1610,7 @@ Start the server and verify the full flow works end-to-end.
 
 - [ ] **Step 1: Start server**
 
-Run: `cd /Users/jacob/Projects/odigos && make up`
+Run: `cd $REPO && make up`
 
 - [ ] **Step 2: Verify database created with new schema**
 

@@ -2,13 +2,13 @@
 
 ## Overview
 
-The odigos.one VPS (82.25.91.86) runs three services:
+The odigos.one VPS (82.25.91.86) runs three services. `<owner>` stands in for the real install name:
 
 | Service | Port | URL | Purpose |
 |---|---|---|---|
 | Node website | 3000 | odigos.one | Company landing page |
 | Sales agent | 8001 | odigos.one/api/*, /ws | Public-facing sales/demo agent |
-| Jacob's agent | 8000 | jacob.odigos.one | Private personal agent |
+| Owner's agent | 8000 | `<owner>.odigos.one` | Private personal agent |
 
 Caddy handles TLS and routing. Wildcard DNS (*.odigos.one) is configured.
 
@@ -30,7 +30,7 @@ Routes:
 - `odigos.one /ws` → sales agent WebSocket (localhost:8001)
 - `odigos.one /health` → sales agent health check
 - `odigos.one /*` (everything else) → Node website (localhost:3000)
-- `jacob.odigos.one` → personal agent (localhost:8000)
+- `<owner>.odigos.one` → personal agent (localhost:8000)
 
 ## Sales Agent
 
@@ -58,7 +58,7 @@ Routes:
 ### Config
 - **Models:** Gemini 3 Flash (default), DeepSeek V3.2 (fallback), Gemini 3.1 Flash Lite (background)
 - **Budget:** $5/day, $50/month
-- **Mesh:** Enabled, peers with Jacob's personal agent
+- **Mesh:** Enabled, peers with the owner's personal agent
 - **API Key:** `y8nsWkQ1yKSR76Tb7MIEogJUJXV9pvM7ZRfEfeg1_5c`
 - **Admin:** username `admin`, temp password `odigos-sales-2026` (forced change)
 
@@ -68,12 +68,12 @@ The Node website at odigos.one can reach the sales agent via:
 - **WebSocket:** `wss://odigos.one/ws`
 - **Auth:** `Authorization: Bearer y8nsWkQ1yKSR76Tb7MIEogJUJXV9pvM7ZRfEfeg1_5c`
 
-## Jacob's Personal Agent
+## Owner's Personal Agent
 
 **Location:** `/opt/odigos/`
 **Service:** `systemctl {start|stop|restart|status} odigos`
 **Logs:** `journalctl -u odigos -f`
-**URL:** https://jacob.odigos.one
+**URL:** `https://<owner>.odigos.one`
 
 ### Config
 - **Models:** Gemini 3 Flash (default + reasoning), DeepSeek V3.2 (fallback), Gemini 3.1 Flash Lite (background)
@@ -84,8 +84,8 @@ The Node website at odigos.one can reach the sales agent via:
 ## Mesh Networking
 
 Both agents are peers:
-- Sales agent → can message Jacob's agent for questions it can't answer
-- Jacob's agent → can message sales agent (e.g., check on visitor interactions)
+- Sales agent → can message the owner's agent for questions it can't answer
+- Owner's agent → can message sales agent (e.g., check on visitor interactions)
 
 ## Tester Deployment (separate VPS)
 

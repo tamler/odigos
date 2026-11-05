@@ -123,7 +123,7 @@ class TestSchema:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_consolidation.py -x -q`
+Run: `cd $REPO && python -m pytest tests/test_consolidation.py -x -q`
 Expected: FAIL — tables/column don't exist yet.
 
 - [ ] **Step 3: Add tables to schema.sql**
@@ -209,12 +209,12 @@ CREATE TABLE IF NOT EXISTS consolidation_log (
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_consolidation.py -x -q`
+Run: `cd $REPO && python -m pytest tests/test_consolidation.py -x -q`
 Expected: PASS (3 tests)
 
 - [ ] **Step 6: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All existing tests still pass.
 
 - [ ] **Step 7: Commit**
@@ -246,7 +246,7 @@ def test_skill_has_verification_fields():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_skill_maturity.py::test_skill_has_verification_fields -v`
+Run: `cd $REPO && python -m pytest tests/test_skill_maturity.py::test_skill_has_verification_fields -v`
 Expected: FAIL — `Skill` has no attribute `verification_score`.
 
 - [ ] **Step 3: Add fields to Skill dataclass**
@@ -261,7 +261,7 @@ In `odigos/skills/registry.py`, add three new fields after `last_used_at: str = 
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_skill_maturity.py -v`
+Run: `cd $REPO && python -m pytest tests/test_skill_maturity.py -v`
 Expected: All tests PASS (existing + new).
 
 - [ ] **Step 5: Commit**
@@ -365,7 +365,7 @@ def test_no_demotion_if_verification_passing():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_skill_maturity.py -k "verified or verification or demotion_on_failed" -v`
+Run: `cd $REPO && python -m pytest tests/test_skill_maturity.py -k "verified or verification or demotion_on_failed" -v`
 Expected: FAIL — existing `evaluate_maturity` doesn't check `verified`, and `demote_on_failed_verification` doesn't exist.
 
 - [ ] **Step 3: Update maturity.py**
@@ -488,12 +488,12 @@ def test_committed_to_mature():
 
 - [ ] **Step 5: Run all maturity tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_skill_maturity.py -v`
+Run: `cd $REPO && python -m pytest tests/test_skill_maturity.py -v`
 Expected: All tests PASS.
 
 - [ ] **Step 6: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 7: Commit**
@@ -885,7 +885,7 @@ class TestEscalation:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_skill_verifier.py -x -q`
+Run: `cd $REPO && python -m pytest tests/test_skill_verifier.py -x -q`
 Expected: FAIL — `odigos.skills.verifier` doesn't exist.
 
 - [ ] **Step 3: Implement verifier.py**
@@ -1145,12 +1145,12 @@ class SkillVerifier:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_skill_verifier.py -v`
+Run: `cd $REPO && python -m pytest tests/test_skill_verifier.py -v`
 Expected: All PASS.
 
 - [ ] **Step 5: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 6: Commit**
@@ -1215,7 +1215,7 @@ In `UpdateSkillTool.__init__`, add `verifier=None` parameter. At the end of `exe
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass. (Existing tests don't pass a verifier, so `self._verifier` is None and verification is skipped.)
 
 - [ ] **Step 4: Commit**
@@ -1518,7 +1518,7 @@ class TestConsolidation:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_consolidation.py::TestConsolidation -x -q`
+Run: `cd $REPO && python -m pytest tests/test_consolidation.py::TestConsolidation -x -q`
 Expected: FAIL — `odigos.core.consolidation` doesn't exist.
 
 - [ ] **Step 3: Implement consolidation.py**
@@ -1789,12 +1789,12 @@ class PromptConsolidator:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_consolidation.py -v`
+Run: `cd $REPO && python -m pytest tests/test_consolidation.py -v`
 Expected: All PASS.
 
 - [ ] **Step 5: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 6: Commit**
@@ -1875,7 +1875,7 @@ async def _reverify_one_skill(hb) -> None:
 
 - [ ] **Step 2: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass. (Heartbeat tests don't exercise evolution with real consolidator/verifier.)
 
 - [ ] **Step 3: Commit**
@@ -1928,12 +1928,12 @@ Note: The exact file depends on how the bootstrap is structured. Look in `odigos
 
 - [ ] **Step 2: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 3: Smoke test with make up**
 
-Run: `cd /Users/jacob/Projects/odigos && make build && make up && make logs`
+Run: `cd $REPO && make build && make up && make logs`
 Expected: Container starts without import errors. Check logs for any startup exceptions.
 
 - [ ] **Step 4: Commit**
@@ -2024,12 +2024,12 @@ class TestIntegrationWithDB:
 
 - [ ] **Step 2: Run test**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_skill_verifier.py::TestIntegrationWithDB -v`
+Run: `cd $REPO && python -m pytest tests/test_skill_verifier.py::TestIntegrationWithDB -v`
 Expected: PASS.
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 4: Commit**
@@ -2128,12 +2128,12 @@ class TestConsolidationIntegration:
 
 - [ ] **Step 2: Run test**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_consolidation.py::TestConsolidationIntegration -v`
+Run: `cd $REPO && python -m pytest tests/test_consolidation.py::TestConsolidationIntegration -v`
 Expected: PASS.
 
 - [ ] **Step 3: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 4: Commit**
@@ -2149,17 +2149,17 @@ git commit -m "test: add integration test for full consolidation flow with secti
 
 - [ ] **Step 1: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 2: Lint check**
 
-Run: `cd /Users/jacob/Projects/odigos && ruff check odigos/skills/verifier.py odigos/core/consolidation.py`
+Run: `cd $REPO && ruff check odigos/skills/verifier.py odigos/core/consolidation.py`
 Expected: No errors.
 
 - [ ] **Step 3: Docker build + smoke test**
 
-Run: `cd /Users/jacob/Projects/odigos && make build && make up && sleep 5 && make logs`
+Run: `cd $REPO && make build && make up && sleep 5 && make logs`
 Expected: Clean startup, no import errors, heartbeat running.
 
 - [ ] **Step 4: Final commit (if any lint fixes needed)**

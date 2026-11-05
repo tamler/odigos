@@ -178,7 +178,7 @@ Replace the `isAuthenticated()` check with `/api/auth/status` call. The three st
 After LLM configuration, optionally prompt:
 ```
 Create owner account? [Y/n]:
-Username: jacob
+Username: sam
 Password: ********
 ```
 

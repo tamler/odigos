@@ -148,7 +148,7 @@ class TestSchema:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_store.py::TestSchema -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_store.py::TestSchema -x -q`
 Expected: FAIL — tables don't exist.
 
 - [ ] **Step 3: Update schema.sql**
@@ -307,7 +307,7 @@ CREATE TABLE IF NOT EXISTS evolution_queue (
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_store.py::TestSchema -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_store.py::TestSchema -x -q`
 Expected: PASS (4 tests). Note: the `test_old_tables_removed` test may need adjustment depending on whether the migration fully removes old tables on fresh DBs.
 
 - [ ] **Step 6: Commit**
@@ -415,7 +415,7 @@ class TestClassifier:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_classifier.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_classifier.py -x -q`
 Expected: FAIL — module doesn't exist.
 
 - [ ] **Step 3: Create the classification prompt**
@@ -561,7 +561,7 @@ class MemoryClassifier:
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_classifier.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_classifier.py -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 6: Commit**
@@ -689,7 +689,7 @@ class TestMemoryStore:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_store.py::TestMemoryStore -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_store.py::TestMemoryStore -x -q`
 Expected: FAIL — module doesn't exist.
 
 - [ ] **Step 3: Create the link prompt**
@@ -1016,7 +1016,7 @@ class MemoryStore:
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_store.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_store.py -v`
 Expected: All PASS.
 
 - [ ] **Step 6: Commit**
@@ -1183,7 +1183,7 @@ class TestRecall:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_recall.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_recall.py -x -q`
 Expected: FAIL — module doesn't exist.
 
 - [ ] **Step 3: Implement recall.py**
@@ -1480,7 +1480,7 @@ class MemoryRecall:
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_recall.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_recall.py -v`
 Expected: All PASS.
 
 - [ ] **Step 5: Commit**
@@ -1642,7 +1642,7 @@ class TestEvolutionQueue:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_evolution.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_evolution.py -x -q`
 Expected: FAIL.
 
 - [ ] **Step 3: Create prompts**
@@ -1999,7 +1999,7 @@ class MemoryEvolution:
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_evolution.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_evolution.py -v`
 Expected: All PASS.
 
 - [ ] **Step 6: Commit**
@@ -2041,7 +2041,7 @@ Key changes in `recall()`:
 
 - [ ] **Step 2: Run existing tests that use MemoryManager**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q -k "memory" 2>&1 | tail -20`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q -k "memory" 2>&1 | tail -20`
 Expected: Some tests may fail if they reference VectorMemory directly. Fix as needed.
 
 - [ ] **Step 3: Commit**
@@ -2112,7 +2112,7 @@ Replace `self.vector_memory.search(...)` with a direct DB query against `memorie
 
 - [ ] **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q 2>&1 | tail -20`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q 2>&1 | tail -20`
 Expected: All pass (or identify which tests need fixture updates).
 
 - [ ] **Step 6: Commit**
@@ -2162,7 +2162,7 @@ Search for `from odigos.memory.vectors import` and remove/replace all occurrence
 
 - [ ] **Step 4: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q`
 
 - [ ] **Step 5: Commit**
 
@@ -2202,7 +2202,7 @@ Create MemoryStore, MemoryRecall, MemoryEvolution instances. Pass MemoryStore to
 
 - [ ] **Step 3: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q`
 
 - [ ] **Step 4: Commit**
 
@@ -2340,7 +2340,7 @@ class TestFullPipeline:
 
 - [ ] **Step 2: Run test**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_integration.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_integration.py -v`
 Expected: PASS.
 
 - [ ] **Step 3: Commit**
@@ -2356,17 +2356,17 @@ git commit -m "test: add full pipeline integration test for structured memory"
 
 - [ ] **Step 1: Run all new memory tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_memory_store.py tests/test_memory_recall.py tests/test_memory_evolution.py tests/test_memory_classifier.py tests/test_memory_integration.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_memory_store.py tests/test_memory_recall.py tests/test_memory_evolution.py tests/test_memory_classifier.py tests/test_memory_integration.py -v`
 Expected: All pass.
 
 - [ ] **Step 2: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 3: Docker build + smoke test**
 
-Run: `cd /Users/jacob/Projects/odigos && make build && make up && sleep 5 && make logs`
+Run: `cd $REPO && make build && make up && sleep 5 && make logs`
 Expected: Clean startup, no import errors.
 
 - [ ] **Step 4: Commit any fixes**

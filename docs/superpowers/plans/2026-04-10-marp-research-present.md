@@ -180,7 +180,7 @@ class TestMarpTool:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_marp_tool.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_marp_tool.py -x -q`
 Expected: FAIL — module doesn't exist.
 
 - [ ] **Step 3: Create MarpTool**
@@ -350,7 +350,7 @@ class MarpTool(CLITool):
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_marp_tool.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_marp_tool.py -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: Register in bootstrap**
@@ -460,7 +460,7 @@ npm install -g @marp-team/marp-cli
 - [ ] **Step 2: Run all new tests**
 
 ```bash
-cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_marp_tool.py tests/test_subagent.py tests/test_subagent_worker.py tests/test_subagent_tools.py -v
+cd $REPO && python3 -m pytest tests/test_marp_tool.py tests/test_subagent.py tests/test_subagent_worker.py tests/test_subagent_tools.py -v
 ```
 
 Expected: all pass.

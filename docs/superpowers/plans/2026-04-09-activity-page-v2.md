@@ -115,7 +115,7 @@ class TestGoalProgress:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_goal_store.py::TestGoalProgress -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_goal_store.py::TestGoalProgress -x -q`
 Expected: FAIL — `progress` column does not exist.
 
 - [ ] **Step 3: Update schema.sql**
@@ -166,12 +166,12 @@ The `create_goal` method doesn't need changes — the DB default of 0 handles it
 
 - [ ] **Step 6: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_goal_store.py::TestGoalProgress -v`
+Run: `cd $REPO && python3 -m pytest tests/test_goal_store.py::TestGoalProgress -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 7: Run full goal/api tests for regressions**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q -k "goal"`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q -k "goal"`
 Expected: All pass.
 
 - [ ] **Step 8: Commit**
@@ -290,7 +290,7 @@ class TestPlansActive:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_api_plans.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_api_plans.py -x -q`
 Expected: FAIL — endpoint doesn't exist.
 
 - [ ] **Step 3: Create plans.py endpoint**
@@ -384,7 +384,7 @@ app.include_router(plans_router)
 
 - [ ] **Step 5: Run tests to verify pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_api_plans.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_api_plans.py -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 6: Commit**
@@ -462,7 +462,7 @@ class TestHeartbeatStatus:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_heartbeat_status.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_heartbeat_status.py -x -q`
 Expected: FAIL — method doesn't exist.
 
 - [ ] **Step 3: Add get_status to Heartbeat class**
@@ -489,7 +489,7 @@ Add this method to the Heartbeat class (anywhere after `__init__`):
 
 - [ ] **Step 4: Run tests to verify pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_heartbeat_status.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_heartbeat_status.py -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Wire phase tracking into the orchestrator loop**
@@ -533,7 +533,7 @@ And in the `finally` or after the call:
 
 - [ ] **Step 6: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 7: Commit**
@@ -608,7 +608,7 @@ class TestStateEndpoint:
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_state_api.py::TestStateEndpoint::test_state_includes_heartbeat_status_fields -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_state_api.py::TestStateEndpoint::test_state_includes_heartbeat_status_fields -x -q`
 Expected: FAIL — fields not in response.
 
 - [ ] **Step 4: Add caching helper + update endpoint**
@@ -685,7 +685,7 @@ Note: the exact existing code in `/api/state` will determine the precise integra
 
 - [ ] **Step 5: Run tests to verify pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_state_api.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_state_api.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -866,7 +866,7 @@ export function useActivityData(): ActivityData & { refresh: () => Promise<void>
 
 - [ ] **Step 2: Type-check**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -1006,7 +1006,7 @@ export function HeroSection({ state, budget, errors }: HeroSectionProps) {
 
 - [ ] **Step 2: Type-check**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -1292,7 +1292,7 @@ export function TodosSection({ todos, error, onComplete }: TodosSectionProps) {
 
 - [ ] **Step 4: Type-check**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: clean.
 
 - [ ] **Step 5: Commit**
@@ -1529,7 +1529,7 @@ export function ActivityFeedSection() {
 
 - [ ] **Step 2: Type-check**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -1616,12 +1616,12 @@ async def complete_todo_endpoint(
 
 - [ ] **Step 3: Type-check**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: clean.
 
 - [ ] **Step 4: Build dashboard**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npm run build 2>&1 | tail -20`
+Run: `cd $REPO/dashboard && npm run build 2>&1 | tail -20`
 Expected: build succeeds (no TS or bundle errors).
 
 - [ ] **Step 5: Commit**
@@ -1637,17 +1637,17 @@ git commit -m "feat(dashboard): rewrite ActivityPage as compositional hub"
 
 - [ ] **Step 1: Run full backend test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q`
 Expected: All pass.
 
 - [ ] **Step 2: Type-check + build dashboard**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit && npm run build 2>&1 | tail -10`
+Run: `cd $REPO/dashboard && npx tsc --noEmit && npm run build 2>&1 | tail -10`
 Expected: Both succeed.
 
 - [ ] **Step 3: Docker smoke test**
 
-Run: `cd /Users/jacob/Projects/odigos && make build && make up && sleep 5 && make logs 2>&1 | tail -20`
+Run: `cd $REPO && make build && make up && sleep 5 && make logs 2>&1 | tail -20`
 Expected: Container starts cleanly.
 
 - [ ] **Step 4: Manual verification**

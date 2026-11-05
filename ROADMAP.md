@@ -7,7 +7,7 @@ Legend: ✅ shipped · 🔧 in design · ⏭️ planned · 💭 open question
 
 ---
 
-## Current fleet (verified on-box 2026-08-12)
+## Current fleet (verified on-box 2026-08-12; `<owner>` stands in for the real install name)
 
 Single OVH VPS at `51.81.82.221` (Tailscale-only SSH at `100.80.26.2`, public 80/443 for Caddy).
 
@@ -21,7 +21,7 @@ Single OVH VPS at `51.81.82.221` (Tailscale-only SSH at `100.80.26.2`, public 80
 
 **Bob and Jessica are not currently installed.** The earlier version of this table listed them at
 `/opt/odigos` and `/opt/odigos-jessica`; neither directory nor service exists on the box. The Unix
-users `odigos_jacob` and `odigos_jessica` survive with no home dirs. Rebuild them as rows in
+users `odigos_<owner>` and `odigos_jessica` survive with no home dirs. Rebuild them as rows in
 `deploy.sh`'s `INSTALLS` table, each with its own `odigos_<name>` user.
 
 Honey (2026-08-12) is the first install provisioned under the C0 isolation checklist: dedicated
@@ -72,7 +72,7 @@ FAQ; unit is disabled but `/opt/odigos-sales` is retained as the FAQ content sou
 ### Infrastructure migration (2026-05-27)
 - ✅ Migrated odigos.one off bare-metal OVH (Ubuntu 24.04, 5 systemd agents) to a new OVH VPS (Ubuntu 26.04, 4 vCPU / 7.6 GB / 72 GB)
 - ✅ Tailscale-only SSH (public port 22 firewalled, key auth only)
-- ✅ Caddy + Let's Encrypt for `odigos.one`, `jacob.odigos.one`, `jessica.odigos.one`
+- ✅ Caddy + Let's Encrypt for `odigos.one`, `<owner>.odigos.one`, `jessica.odigos.one`
 - ✅ Postgres dump (~90 MB) restored to new VPS; site + platform reconnected
 - ✅ All hand-curated Sales customizations (`data/agent/identity.md`, `capabilities.md`, `guardrails.md`, sources, skills) restored from salvage
 - ✅ `~/odigos-vps-archive/` holds salvage tarballs (manifest, code, postgres dump, systemd units) as offsite backup

@@ -57,7 +57,7 @@ CREATE INDEX IF NOT EXISTS idx_spawned_status ON spawned_agents(status);
 
 **Step 2: Verify migration applies**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "import asyncio; from odigos.db import Database; asyncio.run(Database(':memory:', migrations_dir='migrations').initialize()); print('Migration OK')"`
+Run: `cd $REPO && python3 -c "import asyncio; from odigos.db import Database; asyncio.run(Database(':memory:', migrations_dir='migrations').initialize()); print('Migration OK')"`
 Expected: `Migration OK`
 
 **Step 3: Commit**
@@ -113,7 +113,7 @@ def test_settings_has_deploy_targets():
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_config_deploy_targets.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_config_deploy_targets.py -v`
 Expected: FAIL (DeployTargetConfig doesn't exist)
 
 **Step 3: Update config.py**
@@ -137,7 +137,7 @@ deploy_targets: list[DeployTargetConfig] = []
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_config_deploy_targets.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_config_deploy_targets.py -v`
 Expected: All 3 tests PASS
 
 **Step 5: Commit**
@@ -269,7 +269,7 @@ async def test_announce_self(db, mock_peers):
     client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
     msg = client.build_announce(
         role="personal_assistant",
-        description="Jacob's AI",
+        description="Sam's AI",
         capabilities=["search", "code"],
     )
     assert msg.type == "registry_announce"
@@ -304,7 +304,7 @@ async def test_handle_incoming_announce(db, mock_peers):
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_agent_client.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_agent_client.py -v`
 Expected: FAIL with `ModuleNotFoundError`
 
 **Step 3: Write the implementation**
@@ -627,7 +627,7 @@ class AgentClient:
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_agent_client.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_agent_client.py -v`
 Expected: All 5 tests PASS
 
 **Step 5: Commit**
@@ -710,7 +710,7 @@ def test_agent_ws_accepts_with_auth(app):
 
 **Step 2: Run to verify failure**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_agent_ws.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_agent_ws.py -v`
 
 **Step 3: Write the implementation**
 
@@ -797,7 +797,7 @@ async def agent_websocket(websocket: WebSocket):
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_agent_ws.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_agent_ws.py -v`
 Expected: All tests PASS
 
 **Step 5: Mount in main.py**
@@ -924,7 +924,7 @@ async def test_no_qualified_evaluator_not_opted_in(db, mock_provider):
 
 **Step 2: Run to verify failure**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_cross_agent_eval.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_cross_agent_eval.py -v`
 Expected: FAIL (`find_qualified_evaluator` doesn't exist)
 
 **Step 3: Add find_qualified_evaluator to Evaluator**
@@ -953,7 +953,7 @@ Read `odigos/core/evaluator.py` first. Add this method to the `Evaluator` class:
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_cross_agent_eval.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_cross_agent_eval.py -v`
 Expected: All 4 tests PASS
 
 **Step 5: Commit**
@@ -1093,7 +1093,7 @@ async def test_record_spawn(db, mock_provider):
 
 **Step 2: Run to verify failure**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_spawner.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_spawner.py -v`
 
 **Step 3: Write the implementation**
 
@@ -1269,7 +1269,7 @@ class Spawner:
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_spawner.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_spawner.py -v`
 Expected: All 4 tests PASS
 
 **Step 5: Commit**
@@ -1388,7 +1388,7 @@ async def test_list_deploy_targets(client, db):
 
 **Step 2: Run to verify failure**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_api_agents_spawn.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_api_agents_spawn.py -v`
 
 **Step 3: Update agents.py**
 
@@ -1444,7 +1444,7 @@ You'll need to add `from fastapi import Request` to the imports (and `from pydan
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_api_agents_spawn.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_api_agents_spawn.py -v`
 Expected: All 3 tests PASS
 
 **Step 5: Commit**
@@ -1520,7 +1520,7 @@ async def test_tick_announces_periodically():
 
 **Step 2: Run to verify failure**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_heartbeat_announce.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_heartbeat_announce.py -v`
 
 **Step 3: Update heartbeat.py**
 
@@ -1608,7 +1608,7 @@ app.state.spawner = spawner
 
 **Step 5: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_heartbeat_announce.py tests/test_heartbeat_strategist.py tests/test_heartbeat_evolution.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_heartbeat_announce.py tests/test_heartbeat_strategist.py tests/test_heartbeat_evolution.py -v`
 Expected: All PASS
 
 **Step 6: Commit**
@@ -1855,7 +1855,7 @@ export default function AgentsPage() {
 
 **Step 2: Verify build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npm run build`
+Run: `cd $REPO/dashboard && npm run build`
 Expected: Build succeeds
 
 **Step 3: Commit**
@@ -1873,27 +1873,27 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 
 **Step 1: Run all Phase 2b Python tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_config_deploy_targets.py tests/test_agent_client.py tests/test_agent_ws.py tests/test_cross_agent_eval.py tests/test_spawner.py tests/test_api_agents_spawn.py tests/test_heartbeat_announce.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_config_deploy_targets.py tests/test_agent_client.py tests/test_agent_ws.py tests/test_cross_agent_eval.py tests/test_spawner.py tests/test_api_agents_spawn.py tests/test_heartbeat_announce.py -v`
 Expected: All tests PASS
 
 **Step 2: Run all Phase 1 + 2a tests (regression)**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_strategist.py tests/test_config_agent_identity.py tests/test_auto_title.py tests/test_api_evolution.py tests/test_heartbeat_strategist.py tests/test_heartbeat_evolution.py tests/test_evolution.py tests/test_evolution_integration.py tests/test_checkpoint.py tests/test_evaluator.py tests/test_section_registry.py tests/test_prompt_builder_dynamic.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_strategist.py tests/test_config_agent_identity.py tests/test_auto_title.py tests/test_api_evolution.py tests/test_heartbeat_strategist.py tests/test_heartbeat_evolution.py tests/test_evolution.py tests/test_evolution_integration.py tests/test_checkpoint.py tests/test_evaluator.py tests/test_section_registry.py tests/test_prompt_builder_dynamic.py -v`
 Expected: All 43 tests PASS
 
 **Step 3: Verify all imports**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "from odigos.core.agent_client import AgentClient; from odigos.core.spawner import Spawner; from odigos.api.agent_ws import router; print('All imports OK')"`
+Run: `cd $REPO && python3 -c "from odigos.core.agent_client import AgentClient; from odigos.core.spawner import Spawner; from odigos.api.agent_ws import router; print('All imports OK')"`
 Expected: `All imports OK`
 
 **Step 4: Verify migration chain**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "import asyncio; from odigos.db import Database; asyncio.run(Database(':memory:', migrations_dir='migrations').initialize()); print('All migrations OK')"`
+Run: `cd $REPO && python3 -c "import asyncio; from odigos.db import Database; asyncio.run(Database(':memory:', migrations_dir='migrations').initialize()); print('All migrations OK')"`
 Expected: `All migrations OK`
 
 **Step 5: Verify dashboard builds**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npm run build`
+Run: `cd $REPO/dashboard && npm run build`
 Expected: Build succeeds
 
 **Step 6: Final commit if anything remains**
