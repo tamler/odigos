@@ -149,7 +149,7 @@ If nothing needs to be compiled, return:
 - [ ] **Step 2: Verify persona loads**
 
 ```bash
-cd /Users/jacob/Projects/odigos && python3 -c "
+cd $REPO && python3 -c "
 from odigos.core.subagent import load_persona
 p = load_persona('brain-compiler')
 assert p is not None
@@ -354,7 +354,7 @@ class TestApplyManifest:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_brain_apply.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_brain_apply.py -x -q`
 Expected: FAIL — module doesn't exist.
 
 - [ ] **Step 3: Implement brain_apply.py**
@@ -544,7 +544,7 @@ def _append_log(brain: Path, summary: str, stats: dict) -> None:
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_brain_apply.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_brain_apply.py -v`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: Commit**
@@ -682,7 +682,7 @@ class TestBuildContext:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_brain_compiler.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_brain_compiler.py -x -q`
 Expected: FAIL.
 
 - [ ] **Step 3: Implement brain_compiler.py**
@@ -972,7 +972,7 @@ async def check_compilation(hb: "Heartbeat") -> bool:
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_brain_compiler.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_brain_compiler.py -v`
 Expected: PASS (7 tests).
 
 - [ ] **Step 5: Wire into orchestrator**
@@ -992,7 +992,7 @@ except Exception:
 
 - [ ] **Step 6: Run full test suite for regressions**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_brain_compiler.py tests/test_brain_apply.py tests/test_subagent.py -q`
+Run: `cd $REPO && python3 -m pytest tests/test_brain_compiler.py tests/test_brain_apply.py tests/test_subagent.py -q`
 Expected: all pass.
 
 - [ ] **Step 7: Commit**
@@ -1068,7 +1068,7 @@ BRAIN_DIR = "data/brain"
 
 - [ ] **Step 3: Run existing brain_maintenance tests for regressions**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q -k "brain"`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q -k "brain"`
 Expected: no new failures.
 
 - [ ] **Step 4: Commit**
@@ -1085,7 +1085,7 @@ git commit -m "fix(brain): skip entity page overwrite when compiler version is n
 - [ ] **Step 1: Run all brain-related tests**
 
 ```bash
-cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_brain_compiler.py tests/test_brain_apply.py -v
+cd $REPO && python3 -m pytest tests/test_brain_compiler.py tests/test_brain_apply.py -v
 ```
 
 Expected: all pass.
@@ -1093,7 +1093,7 @@ Expected: all pass.
 - [ ] **Step 2: Import smoke test**
 
 ```bash
-cd /Users/jacob/Projects/odigos && python3 -c "
+cd $REPO && python3 -c "
 from odigos.core.subagent import load_persona
 from odigos.core.heartbeat.brain_compiler import should_compile, build_compilation_context, check_compilation
 from odigos.core.brain_apply import apply_compilation
@@ -1111,7 +1111,7 @@ Expected: prints persona info + "all imports ok".
 - [ ] **Step 3: Broader regression check**
 
 ```bash
-cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_subagent.py tests/test_subagent_worker.py tests/test_subagent_tools.py tests/test_marp_tool.py tests/test_skill_framing.py -q
+cd $REPO && python3 -m pytest tests/test_subagent.py tests/test_subagent_worker.py tests/test_subagent_tools.py tests/test_marp_tool.py tests/test_skill_framing.py -q
 ```
 
 Expected: all pass.

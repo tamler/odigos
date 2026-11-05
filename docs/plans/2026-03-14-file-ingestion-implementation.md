@@ -33,7 +33,7 @@ Save this to `migrations/023_document_provenance.sql`.
 
 **Step 2: Verify migration applies**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "import asyncio; from odigos.db import Database; db = Database('data/test_migration.db'); asyncio.run(db.initialize()); print('OK')"`
+Run: `cd $REPO && python3 -c "import asyncio; from odigos.db import Database; db = Database('data/test_migration.db'); asyncio.run(db.initialize()); print('OK')"`
 Expected: OK (no errors)
 
 Clean up: `rm -f data/test_migration.db`
@@ -184,7 +184,7 @@ def test_ingest_sets_status_failed_on_error(db, ingester, fake_vector_memory, ev
 
 **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_ingester_dedup.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_ingester_dedup.py -v`
 Expected: FAIL — `ingest()` doesn't accept `file_path`, `content_hash`, etc.
 
 **Step 3: Update DocumentIngester**
@@ -323,7 +323,7 @@ class DocumentIngester:
 
 **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_ingester_dedup.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_ingester_dedup.py -v`
 Expected: All 4 tests PASS
 
 **Step 5: Commit**
@@ -603,7 +603,7 @@ def test_recall_includes_document_source(event_loop):
 
 **Step 2: Run test to verify it fails (or passes — when_to_use already contains filename)**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_recall_provenance.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_recall_provenance.py -v`
 
 If it already passes because `when_to_use` contains the filename from Task 2's ingester changes, great — the provenance is already surfaced through the existing `when_to_use` field. No further changes needed to the recall path.
 
@@ -636,7 +636,7 @@ To:
 
 **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_recall_provenance.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_recall_provenance.py -v`
 Expected: PASS
 
 **Step 5: Commit**
@@ -687,7 +687,7 @@ Change the `_ingest` method:
 
 **Step 2: Verify import works**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "from odigos.tools.document import DocTool; print('OK')"`
+Run: `cd $REPO && python3 -c "from odigos.tools.document import DocTool; print('OK')"`
 Expected: OK
 
 **Step 3: Commit**
@@ -822,7 +822,7 @@ def test_duplicate_upload_replaces(db, tmp_path, event_loop):
 
 **Step 2: Run integration tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_upload_integration.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_upload_integration.py -v`
 
 Note: This requires `sentence-transformers` to be installed for embedding. If running locally without the model, skip this test and verify via the Docker containers instead.
 

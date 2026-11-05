@@ -283,7 +283,7 @@ A lightweight file the agent reads on every request. Gives instant context witho
 # Context
 
 ## Me
-Jacob. Building Odigos (personal AI agent). Based in [location].
+Sam. Building Odigos (personal AI agent). Based in [location].
 
 ## People
 | Who | Context |
@@ -329,7 +329,7 @@ This is the agent's "working memory of who you are." It covers ~90% of decoding 
 - **Entity-Relationship graph (SQLite tables):** Stores entities and their connections
   - `entities` table: people, projects, preferences, events, documents — each with a type, name, and JSON properties
   - `edges` table: relationships between entities (`entity_a, relationship, entity_b, metadata`)
-  - Examples: `(Jacob) --knows--> (Alex, {context: "business partner"})`, `(Odigos) --part_of--> (Goal: "build personal AI")`
+  - Examples: `(Sam) --knows--> (Alex, {context: "business partner"})`, `(Odigos) --part_of--> (Goal: "build personal AI")`
   - Graph traversal via recursive CTEs: `WITH RECURSIVE path AS (...)` — SQLite handles this natively
   - No Cypher, but the LLM can generate these SQL queries just as easily
 - **Vector (sqlite-vec extension):** Stores embedded memories for semantic search
@@ -363,25 +363,25 @@ store(event) → processes through:
 
 **Entity resolution (preventing graph fragmentation):**
 
-Without entity resolution, the graph silently fragments. You mention "Jacob," "Jake," "Jacob S.," and "my brother" in different conversations — the agent creates four separate entities for the same person. Over weeks, relationships get split across duplicates, memory recall becomes unreliable, and the graph bloats.
+Without entity resolution, the graph silently fragments. You mention "Sam," "Sammy," "Sam S.," and "my brother" in different conversations — the agent creates four separate entities for the same person. Over weeks, relationships get split across duplicates, memory recall becomes unreliable, and the graph bloats.
 
 The resolution pipeline runs during every `store()` call:
 
 ```
-New entity candidate: "Jake"
-  1. Exact match     → SELECT FROM entities WHERE name = 'Jake'
-  2. Fuzzy match     → SELECT FROM entities WHERE name LIKE '%Jak%' AND type = 'person'
-  3. Alias match     → Check properties_json for {"aliases": ["Jake", "Jacob"]}
-  4. Vector match    → Embed "Jake" → cosine similarity against existing entity embeddings
+New entity candidate: "Sammy"
+  1. Exact match     → SELECT FROM entities WHERE name = 'Sammy'
+  2. Fuzzy match     → SELECT FROM entities WHERE name LIKE '%Sam%' AND type = 'person'
+  3. Alias match     → Check properties_json for {"aliases": ["Sammy", "Sam"]}
+  4. Vector match    → Embed "Sammy" → cosine similarity against existing entity embeddings
   5. LLM tiebreaker  → If multiple candidates, ask cheap model:
-                        "Is 'Jake' from this context the same as 'Jacob S.' (business partner)?"
+                        "Is 'Sammy' from this context the same as 'Sam S.' (business partner)?"
 
 If match found: merge (update properties, add alias, keep strongest edges)
 If no match:    create new entity with the extracted name
 If uncertain:   create entity with low confidence (0.3), flag for promotion if referenced again
 ```
 
-**Alias tracking:** Each entity stores known aliases in `properties_json`: `{"aliases": ["Jacob", "Jake", "Jacob S."]}`. New aliases are added on merge. The recall system searches across all aliases when looking up entities.
+**Alias tracking:** Each entity stores known aliases in `properties_json`: `{"aliases": ["Sam", "Sammy", "Sam S."]}`. New aliases are added on merge. The recall system searches across all aliases when looking up entities.
 
 **Merge policy:** When two entities are confirmed as duplicates, the newer one is merged into the older one (preserving creation history). Edges from both are combined. Conflicting properties are flagged for user review. The merge is logged in the correction system so it can be undone.
 
@@ -782,7 +782,7 @@ The reactive loop (you ask → it responds) is table stakes. What makes a VA use
 
 ```
 GOALS     — long-lived, checked infrequently
-            "Help Jacob build Odigos"
+            "Help Sam build Odigos"
             "Keep inbox under 20 unread"
             "Find investment opportunities in AI infrastructure"
             → Reviewed every few hours or on idle. The agent asks itself:
@@ -796,7 +796,7 @@ TODOS     — concrete, checked frequently
               scheduled_at timestamp. The agent works through these.
 
 REMINDERS — time-triggered, checked on schedule
-            "Remind Jacob about the dentist appointment at 2pm"
+            "Remind Sam about the dentist appointment at 2pm"
             "Every Monday at 8am, prepare a weekly brief"
             "In 3 days, follow up on the proposal"
             → Checked against current time on each tick. Fire and done,
@@ -864,10 +864,10 @@ CREATE TABLE reminders (
 
 The agent doesn't need a hardcoded list of idle behaviors. It reads its goals, looks at recent context, and asks itself: "Given my goals and what I know, is there something I should be doing right now?" The LLM decides. Some examples of what it might think to do:
 
-- "Jacob cares about AI infrastructure — let me scan for relevant news"
+- "Sam cares about AI infrastructure — let me scan for relevant news"
 - "It's been 4 hours since I checked email — let me triage the inbox"
 - "I noticed 3 unresolved entities in today's conversations — let me clean those up"
-- "Jacob's goal is to launch Odigos by April — is there anything blocking that I can help with?"
+- "Sam's goal is to launch Odigos by April — is there anything blocking that I can help with?"
 
 This is more organic than a task queue. The agent has a mental model of what matters and fills idle time productively.
 
@@ -1713,7 +1713,7 @@ CREATE TABLE entities (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,              -- "person", "project", "preference", "event", "document", "rule", "concept"
     name TEXT NOT NULL,
-    aliases_json TEXT,               -- JSON array of known aliases: ["Jake", "Jacob S."] (§4.2 entity resolution)
+    aliases_json TEXT,               -- JSON array of known aliases: ["Sammy", "Sam S."] (§4.2 entity resolution)
     confidence REAL DEFAULT 1.0,     -- 0.0-1.0: casual mentions start at 0.3, confirmed entities at 1.0
     status TEXT DEFAULT 'active',    -- "active", "dormant" (archived after 30 days unreferenced)
     properties_json TEXT,            -- flexible JSON for type-specific fields
@@ -1740,12 +1740,12 @@ CREATE INDEX idx_edges_target ON edges(target_id);
 CREATE INDEX idx_edges_rel ON edges(relationship);
 CREATE INDEX idx_entities_type ON entities(type);
 
--- Example graph traversal: "Who does Jacob know who works on AI projects?"
+-- Example graph traversal: "Who does Sam know who works on AI projects?"
 -- WITH RECURSIVE connected AS (
 --     SELECT e2.* FROM entities e1
 --     JOIN edges ON edges.source_id = e1.id AND edges.relationship = 'knows'
 --     JOIN entities e2 ON e2.id = edges.target_id
---     WHERE e1.name = 'Jacob'
+--     WHERE e1.name = 'Sam'
 -- )
 -- SELECT c.name FROM connected c
 -- JOIN edges ON edges.source_id = c.id AND edges.relationship = 'works_on'
@@ -2126,7 +2126,7 @@ If we ever hit genuine graph-scale problems (millions of entities, complex short
 
 ### Why graph + vector together?
 
-Graph and vector serve different retrieval patterns. "Who does Jacob work with?" is a relationship traversal (entity-relationship tables). "What did we discuss about the marketing strategy?" is a vector similarity search. Combining both gives the agent a much richer recall system than either alone — and since both live in the same SQLite database, cross-referencing is just a JOIN.
+Graph and vector serve different retrieval patterns. "Who does Sam work with?" is a relationship traversal (entity-relationship tables). "What did we discuss about the marketing strategy?" is a vector similarity search. Combining both gives the agent a much richer recall system than either alone — and since both live in the same SQLite database, cross-referencing is just a JOIN.
 
 ### Why OpenRouter instead of direct API keys?
 
@@ -2254,11 +2254,11 @@ Each tenant gets their own complete `data/` directory and their own SQLite datab
 /opt/odigos/
 ├── odigos/                    # Shared engine (stateless, identical for all tenants)
 ├── tenants/
-│   ├── jacob/                 # Primary owner
-│   │   ├── odigos.db          # Jacob's database (memory, entities, conversations)
-│   │   ├── prompts/           # Jacob's system prompt files (identity, rules, delegation)
-│   │   ├── profile.yaml       # Jacob's owner profile
-│   │   ├── skills/            # Jacob's skills (built-in + self-created)
+│   ├── sam/                   # Primary owner
+│   │   ├── odigos.db          # Sam's database (memory, entities, conversations)
+│   │   ├── prompts/           # Sam's system prompt files (identity, rules, delegation)
+│   │   ├── profile.yaml       # Sam's owner profile
+│   │   ├── skills/            # Sam's skills (built-in + self-created)
 │   │   ├── custom_tools/
 │   │   └── documents/
 │   │
@@ -2281,7 +2281,7 @@ Each tenant gets their own complete `data/` directory and their own SQLite datab
 **Why per-directory, not per-table?**
 
 A shared database with `tenant_id` on every table is the traditional approach, but it's wrong here. Personal agents are intimate — every query, every memory, every entity relationship belongs to one person. Per-directory isolation means:
-- **Zero cross-talk** — a bug in entity resolution can't leak Jacob's memories into Alex's context
+- **Zero cross-talk** — a bug in entity resolution can't leak Sam's memories into Alex's context
 - **Independent backups** — back up, restore, or delete a single tenant without touching others
 - **Easy onboarding** — create a tenant by copying the template directory
 - **Easy offboarding** — delete a tenant by removing their directory
@@ -2305,7 +2305,7 @@ class TenantResolver:
         Resolve a channel + user_id to a tenant.
 
         Examples:
-          telegram:123456789 → TenantContext(path="tenants/jacob/", ...)
+          telegram:123456789 → TenantContext(path="tenants/sam/", ...)
           telegram:987654321 → TenantContext(path="tenants/alex/", ...)
           unknown user       → None (reject or prompt for onboarding)
         """
@@ -2324,9 +2324,9 @@ class TenantResolver:
 ```yaml
 # tenants/tenant_registry.yaml
 tenants:
-  jacob:
+  sam:
     channels:
-      - telegram:123456789     # Jacob's Telegram user ID
+      - telegram:123456789     # Sam's Telegram user ID
     role: owner                # Full permissions, admin access
     tier_limits:               # Can override global limits
       daily_paid_budget: 2.00
@@ -2392,7 +2392,7 @@ Strategy: Proportional rate allocation
 Each tenant has an independent budget cap in `tenant_registry.yaml`. The budget system (§4.12) already tracks per-message costs — it just needs to scope by tenant.
 
 ```
-Jacob:  daily_paid_budget: $2.00  (owner, full access)
+Sam:    daily_paid_budget: $2.00  (owner, full access)
 Alex:   daily_paid_budget: $0.50  (tester, limited)
 ```
 
@@ -2405,10 +2405,10 @@ Litestream supports multiple database files. Each tenant's `odigos.db` gets its 
 ```yaml
 # litestream.yml (multi-tenant)
 dbs:
-  - path: /opt/odigos/tenants/jacob/odigos.db
+  - path: /opt/odigos/tenants/sam/odigos.db
     replicas:
       - type: file
-        path: /opt/odigos/backups/jacob/
+        path: /opt/odigos/backups/sam/
   - path: /opt/odigos/tenants/alex/odigos.db
     replicas:
       - type: file

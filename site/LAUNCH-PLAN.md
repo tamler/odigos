@@ -82,8 +82,8 @@ Prospect visits odigos.one
 │  - Asks about their needs       │
 │  - Explains services            │
 │  - Qualifies the lead           │
-│  - Schedules a call with Jacob  │
-│  - Sends Jacob a summary        │
+│  - Schedules a call with founder│
+│  - Sends founder a summary      │
 │                                 │
 │  Backed by: Odigos codebase     │
 │  With: Sales-specific skills    │
@@ -92,7 +92,7 @@ Prospect visits odigos.one
 └─────────────────────────────────┘
         │
         ▼
-  Jacob gets a Telegram message:
+  The founder gets a Telegram message:
   "New lead: [name], [company], [need].
    They booked a call for [time].
    Summary: [3 sentences]"
@@ -125,7 +125,7 @@ For serious prospects (post-call), spin up a temporary Odigos instance:
 - [ ] Register odigos.one domain (if not already done)
 - [ ] Set up DNS pointing to a VPS or static host (Cloudflare Pages, Vercel, or Netlify for the static site)
 - [ ] Deploy the landing page
-- [ ] Set up jacob@odigos.one email (Google Workspace or Zoho free tier)
+- [ ] Set up hello@odigos.one email (Google Workspace or Zoho free tier)
 - [ ] Create a Telegram bot for the sales agent (@OdigosBot or @OdigosAgent)
 - [ ] Deploy a basic Odigos instance configured as a sales agent
 - [ ] Update LinkedIn headline to "Founder, Odigos — AI Systems That Actually Work"
@@ -173,7 +173,7 @@ Post cadence: 3x/week on LinkedIn minimum. Mix of insight posts, build updates, 
 
 1. **Domain registrar:** Where are you buying/managing odigos.one?
 2. **Hosting:** Where does the landing page live? (Cloudflare Pages is free and fast)
-3. **Email:** Google Workspace (~$6/mo) vs Zoho free tier for jacob@odigos.one?
+3. **Email:** Google Workspace (~$6/mo) vs Zoho free tier for hello@odigos.one?
 4. **Telegram bot name:** @OdigosBot? @OdigosAgent? @AskOdigos?
 5. **LinkedIn URL:** Can you get linkedin.com/in/odigos or similar?
 6. **Legal entity:** Do you need a registered business in PH? (Can operate as sole proprietor initially)

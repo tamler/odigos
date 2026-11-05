@@ -316,7 +316,7 @@ async def test_announce_builds_envelope(db, mock_peers):
     client = AgentClient(peers=mock_peers, agent_name="Odigos", db=db)
     env = client.build_announce(
         role="personal_assistant",
-        description="Jacob's AI",
+        description="Sam's AI",
         capabilities=["search", "code"],
     )
     assert env.type == "registry_announce"

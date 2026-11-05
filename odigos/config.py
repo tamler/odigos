@@ -338,7 +338,7 @@ class Settings(BaseSettings):
     # When set, GET /api/auth/sso?token=<jwt> exchanges a platform JWT for an agent session.
     # Secret is shared with the platform's PLATFORM_AGENT_JWT_SECRET (HS256).
     platform_jwt_secret: str = ""
-    platform_audience: str = ""  # Required: this agent's full URL, e.g. "https://jacob.odigos.one"
+    platform_audience: str = ""  # Required: this agent's full URL, e.g. "https://owner.odigos.one"
     sso_auto_provision: bool = False  # Unknown emails must NOT auto-create local users by default
 
     deployment: DeploymentConfig = DeploymentConfig()

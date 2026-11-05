@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Date:** March 4, 2026
-**Owner:** Jacob
+**Owner:** Maintainer
 **Status:** Draft
 
 ---
@@ -17,7 +17,7 @@ The name comes from the Greek word for "guide."
 
 ## Who Is It For?
 
-**Primary user:** Jacob (the owner). This is a single-user system. There is one owner and one agent.
+**Primary user:** the owner. This is a single-user system. There is one owner and one agent.
 
 **Secondary audience:** If the project is open-sourced, technically capable individuals who want to self-host a personal AI assistant and are comfortable running a VPS, managing API keys, and editing YAML config files. Not a consumer product — a power-user tool.
 

@@ -87,7 +87,7 @@ class TestToolResultForwardCompat:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_tools.py::TestFormatForContext -v && python -m pytest tests/test_tools.py::TestToolResultForwardCompat -v`
+Run: `cd $REPO && python -m pytest tests/test_tools.py::TestFormatForContext -v && python -m pytest tests/test_tools.py::TestToolResultForwardCompat -v`
 Expected: FAIL — `format_for_context` not defined, `status`/`task_id` not fields on `ToolResult`
 
 - [ ] **Step 3: Implement changes to base.py**
@@ -152,7 +152,7 @@ class BaseTool(ABC):
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_tools.py -v`
+Run: `cd $REPO && python -m pytest tests/test_tools.py -v`
 Expected: All PASS (existing tests + new tests)
 
 - [ ] **Step 5: Commit**
@@ -390,12 +390,12 @@ class TestAPIToolFormatForContext:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_api_tool.py -v`
+Run: `cd $REPO && python -m pytest tests/test_api_tool.py -v`
 Expected: FAIL — `odigos.tools.api_tool` does not exist
 
 - [ ] **Step 3: Check if pytest-httpx is available, install if needed**
 
-Run: `cd /Users/jacob/Projects/odigos && python -c "import pytest_httpx; print('installed')" 2>/dev/null || uv pip install pytest-httpx`
+Run: `cd $REPO && python -c "import pytest_httpx; print('installed')" 2>/dev/null || uv pip install pytest-httpx`
 
 The `httpx_mock` fixture comes from `pytest-httpx`. If it's not installed, add it as a dev dependency.
 
@@ -525,7 +525,7 @@ class APITool(BaseTool):
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_api_tool.py -v`
+Run: `cd $REPO && python -m pytest tests/test_api_tool.py -v`
 Expected: All PASS
 
 - [ ] **Step 6: Commit**
@@ -714,7 +714,7 @@ class TestCLIToolFormatForContext:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_cli_tool.py -v`
+Run: `cd $REPO && python -m pytest tests/test_cli_tool.py -v`
 Expected: FAIL — `odigos.tools.cli_tool` does not exist
 
 - [ ] **Step 3: Implement cli_tool.py**
@@ -887,7 +887,7 @@ def _auto_distill(text: str) -> str:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_cli_tool.py -v`
+Run: `cd $REPO && python -m pytest tests/test_cli_tool.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Commit**
@@ -989,7 +989,7 @@ class TestCoerceAndValidate:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_executor_validation.py -v`
+Run: `cd $REPO && python -m pytest tests/test_executor_validation.py -v`
 Expected: FAIL — `_coerce_and_validate` not importable from executor
 
 - [ ] **Step 3: Implement _coerce_and_validate in executor.py**
@@ -1031,7 +1031,7 @@ Note: `auto_distill` is imported from `odigos.tools.base` (defined in Task 1), n
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_executor_validation.py -v`
+Run: `cd $REPO && python -m pytest tests/test_executor_validation.py -v`
 Expected: All PASS
 
 - [ ] **Step 5: Integrate into _execute_tool method**
@@ -1068,7 +1068,7 @@ After the result is returned (around line 664, where `return result.data` is), r
 
 - [ ] **Step 6: Run full test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/test_executor_validation.py tests/test_tools.py -v`
+Run: `cd $REPO && python -m pytest tests/test_executor_validation.py tests/test_tools.py -v`
 Expected: All PASS
 
 - [ ] **Step 7: Commit**
@@ -1126,7 +1126,7 @@ In `odigos/bootstrap.py`, in `init_database` (Phase 1), add after `ensure_dirs()
 
 - [ ] **Step 4: Verify node --check equivalent (syntax check)**
 
-Run: `cd /Users/jacob/Projects/odigos && python -c "from odigos.container import Container; print('OK')" && python -c "from odigos.bootstrap import Bootstrapper; print('OK')"`
+Run: `cd $REPO && python -c "from odigos.container import Container; print('OK')" && python -c "from odigos.bootstrap import Bootstrapper; print('OK')"`
 Expected: Both print "OK"
 
 - [ ] **Step 5: Commit**
@@ -1376,7 +1376,7 @@ With:
 
 - [ ] **Step 3: Verify syntax**
 
-Run: `cd /Users/jacob/Projects/odigos && python -c "from odigos.tools.image_gen import GenerateImageTool; print('OK')"`
+Run: `cd $REPO && python -c "from odigos.tools.image_gen import GenerateImageTool; print('OK')"`
 Expected: "OK"
 
 - [ ] **Step 4: Commit**
@@ -1691,7 +1691,7 @@ With:
 
 - [ ] **Step 3: Verify syntax**
 
-Run: `cd /Users/jacob/Projects/odigos && python -c "from odigos.tools.music_gen import GenerateMusicTool; print('OK')"`
+Run: `cd $REPO && python -c "from odigos.tools.music_gen import GenerateMusicTool; print('OK')"`
 Expected: "OK"
 
 - [ ] **Step 4: Commit**
@@ -1710,7 +1710,7 @@ git commit -m "refactor(music_gen): migrate to APITool base class"
 
 - [ ] **Step 1: Check current jsonschema version**
 
-Run: `cd /Users/jacob/Projects/odigos && uv pip show jsonschema 2>/dev/null | grep Version`
+Run: `cd $REPO && uv pip show jsonschema 2>/dev/null | grep Version`
 
 - [ ] **Step 2: Add jsonschema to pyproject.toml dependencies**
 
@@ -1718,7 +1718,7 @@ Add `"jsonschema>=4.0"` to the `dependencies` list in `pyproject.toml`. Even tho
 
 - [ ] **Step 3: Verify install**
 
-Run: `cd /Users/jacob/Projects/odigos && uv sync`
+Run: `cd $REPO && uv sync`
 Expected: No errors
 
 - [ ] **Step 4: Commit**
@@ -1734,14 +1734,14 @@ git commit -m "deps: add jsonschema as explicit dependency"
 
 - [ ] **Step 1: Run complete test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python -m pytest tests/ -x -q`
+Run: `cd $REPO && python -m pytest tests/ -x -q`
 Expected: All tests pass
 
 - [ ] **Step 2: Verify imports chain**
 
 Run:
 ```bash
-cd /Users/jacob/Projects/odigos && python -c "
+cd $REPO && python -c "
 from odigos.tools.base import BaseTool, ToolResult
 from odigos.tools.api_tool import APITool, ToolAPIError
 from odigos.tools.cli_tool import CLITool, CLIToolError, CLIResult
@@ -1764,7 +1764,7 @@ ToolResult fields: ['success', 'data', 'error', 'side_effect', 'failure_category
 
 - [ ] **Step 3: Verify no ruff lint issues**
 
-Run: `cd /Users/jacob/Projects/odigos && ruff check odigos/tools/api_tool.py odigos/tools/cli_tool.py odigos/tools/base.py odigos/tools/image_gen.py odigos/tools/music_gen.py odigos/core/executor.py`
+Run: `cd $REPO && ruff check odigos/tools/api_tool.py odigos/tools/cli_tool.py odigos/tools/base.py odigos/tools/image_gen.py odigos/tools/music_gen.py odigos/core/executor.py`
 Expected: No errors (or only pre-existing ones)
 
 - [ ] **Step 4: Final commit if any lint fixes needed**

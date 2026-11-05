@@ -151,7 +151,7 @@ class TestSchemaExtensions:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py::TestSchemaExtensions -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py::TestSchemaExtensions -x -q`
 Expected: FAIL — columns don't exist.
 
 - [ ] **Step 3: Update schema.sql**
@@ -209,12 +209,12 @@ ALTER TABLE notebooks ADD COLUMN last_reviewed_at TEXT;
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py::TestSchemaExtensions -v`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py::TestSchemaExtensions -v`
 Expected: PASS (4 tests).
 
 - [ ] **Step 6: Run full notebook test suite**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q -k "notebook"`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q -k "notebook"`
 Expected: No new failures.
 
 - [ ] **Step 7: Commit**
@@ -311,7 +311,7 @@ class TestEntryFilters:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py::TestEntryFilters -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py::TestEntryFilters -x -q`
 Expected: FAIL.
 
 - [ ] **Step 3: Extend request models**
@@ -417,7 +417,7 @@ No change needed — the existing accept_suggestion endpoint already uses `entry
 
 - [ ] **Step 7: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py::TestEntryFilters -v`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py::TestEntryFilters -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 8: Commit**
@@ -489,7 +489,7 @@ class TestViewTracking:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py::TestViewTracking -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py::TestViewTracking -x -q`
 Expected: FAIL — endpoints don't exist.
 
 - [ ] **Step 3: Add view endpoints**
@@ -535,7 +535,7 @@ async def mark_all_entries_viewed(
 
 - [ ] **Step 4: Run tests to verify pass**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py::TestViewTracking -v`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py::TestViewTracking -v`
 Expected: PASS (2 tests). If the `marked` count is 0 despite the update working, the cursor might not expose rowcount — in that case, do a SELECT COUNT(*) before the UPDATE instead:
 
 ```python
@@ -662,7 +662,7 @@ class TestSplitBackup:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py::TestSplitBackup -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py::TestSplitBackup -x -q`
 Expected: FAIL — sidecar file not written, or only one file exists.
 
 - [ ] **Step 3: Rewrite `_backup_to_disk`**
@@ -835,12 +835,12 @@ import asyncio
 
 - [ ] **Step 4: Run tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py::TestSplitBackup -v`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py::TestSplitBackup -v`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Run full notebook tests for regressions**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q -k "notebook"`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q -k "notebook"`
 Expected: No new failures. Any pre-existing failures should be documented as such.
 
 - [ ] **Step 6: Commit**
@@ -1133,7 +1133,7 @@ class TestReviewExecution:
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebook_review.py -x -q`
+Run: `cd $REPO && python3 -m pytest tests/test_notebook_review.py -x -q`
 Expected: FAIL — `odigos.core.heartbeat.notes_review` module does not exist.
 
 - [ ] **Step 4: Implement `notes_review.py`**
@@ -1377,7 +1377,7 @@ def _parse_observations(text: str) -> dict:
 
 - [ ] **Step 5: Run the review tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebook_review.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_notebook_review.py -v`
 Expected: PASS (7 tests).
 
 - [ ] **Step 6: Commit**
@@ -1428,12 +1428,12 @@ If there's a configuration flag pattern, follow it. Otherwise set it uncondition
 
 - [ ] **Step 3: Verify imports work**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -c "from odigos.core.heartbeat.orchestrator import Heartbeat; from odigos.core.heartbeat import notes_review"`
+Run: `cd $REPO && python3 -c "from odigos.core.heartbeat.orchestrator import Heartbeat; from odigos.core.heartbeat import notes_review"`
 Expected: no errors.
 
 - [ ] **Step 4: Run the review tests again**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebook_review.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_notebook_review.py -v`
 Expected: still PASS.
 
 - [ ] **Step 5: Commit**
@@ -1649,7 +1649,7 @@ export function NoteTableOfContents({ entries, onJumpTo }: NoteTableOfContentsPr
 
 - [ ] **Step 3: Type check**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: clean.
 
 - [ ] **Step 4: Commit**
@@ -1875,7 +1875,7 @@ export function NoteSidecar({ notebookId, onQuoteClick, onReplyClick }: NoteSide
 
 - [ ] **Step 2: Type check**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: clean.
 
 - [ ] **Step 3: Commit**
@@ -2038,7 +2038,7 @@ Pass the prefill to the existing AgentInputBar:
 
 - [ ] **Step 3: Type check + build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit && npm run build 2>&1 | tail -10`
+Run: `cd $REPO/dashboard && npx tsc --noEmit && npm run build 2>&1 | tail -10`
 Expected: type check clean, build succeeds.
 
 - [ ] **Step 4: Commit**
@@ -2054,22 +2054,22 @@ git commit -m "feat(dashboard): integrate NoteSidecar into NotebookPage with spl
 
 - [ ] **Step 1: Run all new backend tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_notebooks_notes.py tests/test_notebook_review.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_notebooks_notes.py tests/test_notebook_review.py -v`
 Expected: All pass.
 
 - [ ] **Step 2: Run full backend test suite for regressions**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q`
 Expected: No new failures compared to baseline.
 
 - [ ] **Step 3: Dashboard type check + build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit && npm run build 2>&1 | tail -10`
+Run: `cd $REPO/dashboard && npx tsc --noEmit && npm run build 2>&1 | tail -10`
 Expected: clean.
 
 - [ ] **Step 4: Docker smoke test**
 
-Run: `cd /Users/jacob/Projects/odigos && make build && make up && sleep 5 && make logs 2>&1 | tail -20`
+Run: `cd $REPO && make build && make up && sleep 5 && make logs 2>&1 | tail -20`
 Expected: Container starts cleanly, no import errors.
 
 - [ ] **Step 5: Manual verification**

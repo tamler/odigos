@@ -7,7 +7,7 @@
 #   bash scripts/seed-account.sh <install_dir> <username> <email> <temp_password> [display_name]
 #
 # Example:
-#   bash scripts/seed-account.sh /opt/odigos-honey jacob jacob@example.com 'TempPass123' Jacob
+#   bash scripts/seed-account.sh /opt/odigos-honey sam sam@example.com 'TempPass123' Sam
 #   systemctl restart odigos-honey
 #
 # After the agent restarts, the tester can log in with the username + temp
@@ -21,7 +21,7 @@ if [ $# -lt 4 ]; then
 Usage: $0 <install_dir> <username> <email> <temp_password> [display_name]
 
 Example:
-  $0 /opt/odigos-honey jacob jacob@example.com TempPass123 Jacob
+  $0 /opt/odigos-honey sam sam@example.com TempPass123 Sam
 USAGE
     exit 1
 fi

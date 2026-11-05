@@ -22,8 +22,8 @@ class TestWriteEntityPage:
         entity = {
             "id": "a1b2c3d4e5f6",
             "type": "person",
-            "name": "Jacob",
-            "aliases_json": '["Jake", "J"]',
+            "name": "Sam",
+            "aliases_json": '["Sammy", "S"]',
             "confidence": 0.95,
             "source_type": "conv",
             "source_id": "abc123",
@@ -35,14 +35,14 @@ class TestWriteEntityPage:
              "source_type": "conv", "source_id": "def456"},
         ]
         relationships = [
-            {"from": "Jacob", "relationship": "owns", "to": "Odigos"},
-            {"from": "Odigos", "relationship": "owned_by", "to": "Jacob",
+            {"from": "Sam", "relationship": "owns", "to": "Odigos"},
+            {"from": "Odigos", "relationship": "owned_by", "to": "Sam",
              "direction": "backlink"},
         ]
 
         path = _run(writer.write_entity_page(entity, facts, relationships))
 
-        filepath = tmp_path / "entities" / "jacob.md"
+        filepath = tmp_path / "entities" / "sam.md"
         assert filepath.exists()
         assert path == str(filepath)
 
@@ -50,20 +50,20 @@ class TestWriteEntityPage:
         # Frontmatter checks
         assert "id: a1b2c3d4e5f6" in content
         assert "type: person" in content
-        assert "aliases: [Jake, J]" in content
+        assert "aliases: [Sammy, S]" in content
         assert "confidence: 0.95" in content
         assert "sources: [" in content
         assert "conv:abc123" in content
         assert "updated_at:" in content
 
         # Body checks
-        assert "# Jacob" in content
+        assert "# Sam" in content
         assert "## Facts" in content
         assert "- Prefers Groq for STT [conv:abc123]" in content
         assert "## Relationships" in content
         assert "- **owns** -> Odigos" in content
         assert "## Backlinks" in content
-        assert "Odigos **owned_by** -> Jacob" in content
+        assert "Odigos **owned_by** -> Sam" in content
 
 
 class TestWriteTopicIndex:
@@ -103,7 +103,7 @@ class TestWriteTopicIndex:
 class TestWriteIndex:
     def test_write_index_md(self, writer, tmp_path):
         entities = [
-            {"name": "Jacob", "type": "person", "description": "Project owner",
+            {"name": "Sam", "type": "person", "description": "Project owner",
              "has_page": True},
             {"name": "Odigos", "type": "project", "description": "AI agent platform",
              "has_page": True},
@@ -130,7 +130,7 @@ class TestWriteIndex:
 
         # All entities
         assert "## All Entities" in content
-        assert "**Jacob** (person) -- Project owner [entities/jacob.md]" in content
+        assert "**Sam** (person) -- Project owner [entities/sam.md]" in content
         assert "**Odigos** (project) -- AI agent platform [entities/odigos.md]" in content
         # Groq has no page, so no file link
         assert "**Groq** (tool) -- LLM provider" in content

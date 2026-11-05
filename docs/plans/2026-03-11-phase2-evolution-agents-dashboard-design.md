@@ -20,7 +20,7 @@ No central orchestrator. The generalist becomes a natural coordinator because it
 agent:
   name: "Odigos"
   role: "personal_assistant"
-  description: "Jacob's personal AI. Manages scheduling, communications, task delegation."
+  description: "Sam's personal AI. Manages scheduling, communications, task delegation."
   parent: null
   allow_external_evaluation: false
 ```

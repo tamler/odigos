@@ -119,17 +119,17 @@ def test_hash_and_verify():
 
 def test_session_create_and_validate():
     secret = "test-secret-key-for-signing-sessions-1234"
-    token = _create_session("user-123", "jacob", False, secret)
+    token = _create_session("user-123", "sam", False, secret)
     data = _validate_session(token, secret)
     assert data["user_id"] == "user-123"
-    assert data["username"] == "jacob"
+    assert data["username"] == "sam"
 
 
 def test_setup_creates_user():
     db = FakeDB()
     app = _make_app(db)
     client = TestClient(app)
-    resp = client.post("/api/auth/setup", json={"username": "jacob", "password": "securepass1"})
+    resp = client.post("/api/auth/setup", json={"username": "sam", "password": "securepass1"})
     assert resp.status_code == 200
     assert "odigos_session" in resp.cookies
 
@@ -138,7 +138,7 @@ def test_setup_blocked_when_user_exists():
     db = FakeDB()
     app = _make_app(db)
     client = TestClient(app)
-    client.post("/api/auth/setup", json={"username": "jacob", "password": "securepass1"})
+    client.post("/api/auth/setup", json={"username": "sam", "password": "securepass1"})
     resp = client.post("/api/auth/setup", json={"username": "hacker", "password": "tryagain1"})
     assert resp.status_code == 403
 
@@ -147,8 +147,8 @@ def test_login_success():
     db = FakeDB()
     app = _make_app(db)
     client = TestClient(app)
-    client.post("/api/auth/setup", json={"username": "jacob", "password": "securepass1"})
-    resp = client.post("/api/auth/login", json={"username": "jacob", "password": "securepass1"})
+    client.post("/api/auth/setup", json={"username": "sam", "password": "securepass1"})
+    resp = client.post("/api/auth/login", json={"username": "sam", "password": "securepass1"})
     assert resp.status_code == 200
     assert "odigos_session" in resp.cookies
 
@@ -157,8 +157,8 @@ def test_login_wrong_password():
     db = FakeDB()
     app = _make_app(db)
     client = TestClient(app)
-    client.post("/api/auth/setup", json={"username": "jacob", "password": "securepass1"})
-    resp = client.post("/api/auth/login", json={"username": "jacob", "password": "wrong"})
+    client.post("/api/auth/setup", json={"username": "sam", "password": "securepass1"})
+    resp = client.post("/api/auth/login", json={"username": "sam", "password": "wrong"})
     assert resp.status_code == 401
 
 
@@ -166,7 +166,7 @@ def test_password_too_short():
     db = FakeDB()
     app = _make_app(db)
     client = TestClient(app)
-    resp = client.post("/api/auth/setup", json={"username": "jacob", "password": "short"})
+    resp = client.post("/api/auth/setup", json={"username": "sam", "password": "short"})
     assert resp.status_code == 400
 
 
@@ -184,9 +184,9 @@ def test_change_password():
     db = FakeDB()
     app = _make_app(db)
     client = TestClient(app)
-    client.post("/api/auth/setup", json={"username": "jacob", "password": "securepass1"})
+    client.post("/api/auth/setup", json={"username": "sam", "password": "securepass1"})
     # Login to get session
-    login_resp = client.post("/api/auth/login", json={"username": "jacob", "password": "securepass1"})
+    login_resp = client.post("/api/auth/login", json={"username": "sam", "password": "securepass1"})
     cookies = login_resp.cookies
     resp = client.post(
         "/api/auth/change-password",
@@ -195,7 +195,7 @@ def test_change_password():
     )
     assert resp.status_code == 200
     # Verify new password works
-    resp2 = client.post("/api/auth/login", json={"username": "jacob", "password": "newpassword1"})
+    resp2 = client.post("/api/auth/login", json={"username": "sam", "password": "newpassword1"})
     assert resp2.status_code == 200
 ```
 

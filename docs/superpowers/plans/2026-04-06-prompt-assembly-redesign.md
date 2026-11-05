@@ -117,7 +117,7 @@ class TestQueryPlan:
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/test_classifier_plan.py -v`
+Run: `cd $REPO && python3 -m pytest tests/test_classifier_plan.py -v`
 Expected: FAIL — QueryPlan and Needs don't exist
 
 - [ ] **Step 3: Implement QueryPlan and Needs**

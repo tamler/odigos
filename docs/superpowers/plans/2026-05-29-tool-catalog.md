@@ -1032,7 +1032,7 @@ git push origin main
 - [ ] **Step 4: Deploy to Bob + Jessica and verify clean boot**
 
 ```bash
-ssh odigos 'for spec in "/opt/odigos:odigos_jacob" "/opt/odigos-jessica:odigos_jessica"; do
+ssh odigos 'for spec in "/opt/odigos:odigos_<owner>" "/opt/odigos-jessica:odigos_jessica"; do
   ROOT=${spec%%:*}; USR=${spec##*:}
   sudo -u "$USR" bash -c "cd $ROOT && git checkout -- uv.lock 2>/dev/null; git pull --rebase -q | tail -1"
 done

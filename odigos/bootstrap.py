@@ -1258,10 +1258,10 @@ async def _seed_user(db) -> None:
 
     Expected JSON shape:
         {
-          "username": "jacob",
-          "email": "jacob@example.com",
+          "username": "sam",
+          "email": "sam@example.com",
           "password": "TempPass123",
-          "display_name": "Jacob",          # optional
+          "display_name": "Sam",            # optional
           "must_change_password": true       # optional, default true
         }
     """

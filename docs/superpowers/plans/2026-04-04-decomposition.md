@@ -64,7 +64,7 @@ This task converts `heartbeat.py` from a single file to a package. We start by c
 
 - [ ] **Step 1: Create the package directory**
 
-Run: `mkdir -p /Users/jacob/Projects/odigos/odigos/core/heartbeat`
+Run: `mkdir -p $REPO/odigos/core/heartbeat`
 
 - [ ] **Step 2: Create utils.py with shared utility functions**
 
@@ -310,7 +310,7 @@ __all__ = ["Heartbeat"]
 
 - [ ] **Step 3: Delete the original monolith**
 
-Run: `rm /Users/jacob/Projects/odigos/odigos/core/heartbeat.py`
+Run: `rm $REPO/odigos/core/heartbeat.py`
 
 Note: This file was already replaced by the package directory. If git sees it as a conflict (file vs directory), the `git rm` + `git add` in the commit step handles it.
 
@@ -345,7 +345,7 @@ Start with the simplest extractions — three small inline components that have 
 
 - [ ] **Step 1: Create chat/ directory**
 
-Run: `mkdir -p /Users/jacob/Projects/odigos/dashboard/src/components/chat`
+Run: `mkdir -p $REPO/dashboard/src/components/chat`
 
 - [ ] **Step 2: Extract WelcomeView**
 
@@ -372,7 +372,7 @@ Remove the inline component code from ChatPanel.tsx.
 
 - [ ] **Step 6: Verify build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: No type errors
 
 - [ ] **Step 7: Commit**
@@ -437,7 +437,7 @@ return (
 
 - [ ] **Step 5: Verify build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: No type errors
 
 - [ ] **Step 6: Commit**
@@ -460,7 +460,7 @@ Start with the two simplest hooks.
 
 - [ ] **Step 1: Create hooks/ directory**
 
-Run: `mkdir -p /Users/jacob/Projects/odigos/dashboard/src/layouts/hooks`
+Run: `mkdir -p $REPO/dashboard/src/layouts/hooks`
 
 - [ ] **Step 2: Create useRouteState hook**
 
@@ -499,7 +499,7 @@ Remove the inline code that was extracted.
 
 - [ ] **Step 5: Verify build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 
 - [ ] **Step 6: Commit**
 
@@ -546,7 +546,7 @@ const {
 
 - [ ] **Step 3: Verify build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 
 - [ ] **Step 4: Commit**
 
@@ -594,7 +594,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 - [ ] **Step 4: Verify build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 
 - [ ] **Step 5: Commit**
 
@@ -609,7 +609,7 @@ git commit -m "refactor(AppLayout): extract WebSocket handler and sidebar"
 
 - [ ] **Step 1: Run backend tests**
 
-Run: `cd /Users/jacob/Projects/odigos && python3 -m pytest tests/ -x -q`
+Run: `cd $REPO && python3 -m pytest tests/ -x -q`
 Expected: All tests pass
 
 - [ ] **Step 2: Verify heartbeat import chain**
@@ -627,12 +627,12 @@ Expected: All imports succeed, module is `odigos.core.heartbeat.orchestrator`
 
 - [ ] **Step 3: Verify frontend build**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx tsc --noEmit`
+Run: `cd $REPO/dashboard && npx tsc --noEmit`
 Expected: No type errors
 
 - [ ] **Step 4: Verify frontend dev server starts**
 
-Run: `cd /Users/jacob/Projects/odigos/dashboard && npx vite build 2>&1 | tail -5`
+Run: `cd $REPO/dashboard && npx vite build 2>&1 | tail -5`
 Expected: Build succeeds
 
 - [ ] **Step 5: Check file sizes achieved targets**
